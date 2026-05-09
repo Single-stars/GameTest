@@ -18,6 +18,7 @@
   box-sizing: border-box;
   padding: 0;
   margin: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -42,7 +43,21 @@ textarea {
 }
 
 button {
+  outline: none;
   touch-action: manipulation;
+}
+
+button:focus,
+textarea:focus,
+[role="button"]:focus {
+  outline: none;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
 }
 
 .app-shell {
@@ -63,13 +78,9 @@ button {
 }
 
 .home-screen {
+  position: relative;
   justify-content: center;
   gap: 24px;
-}
-
-.home-brand {
-  font-size: 28px;
-  font-weight: 950;
 }
 
 .hero-copy.compact h1 {
@@ -81,6 +92,31 @@ button {
 
 .hero-button {
   min-width: 170px;
+}
+
+.icon-button {
+  width: 46px;
+  height: 46px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.84);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.icon-button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.home-share-button {
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 .intro-screen {
@@ -947,18 +983,6 @@ h1 {
   padding: 16px;
 }
 
-textarea {
-  width: 100%;
-  min-height: 104px;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--surface);
-  color: var(--ink);
-  line-height: 1.6;
-}
-
 .action-row {
   display: flex;
   flex-wrap: wrap;
@@ -980,10 +1004,6 @@ textarea {
   .home-screen,
   .intro-screen {
     gap: 18px;
-  }
-
-  .home-brand {
-    font-size: 28px;
   }
 
   .hero-copy.compact h1 {

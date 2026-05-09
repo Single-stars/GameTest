@@ -11,14 +11,17 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import QRCode from "qrcode";
 import {
   buildShareText,
   DINO_SAFE_STOP_WINDOW_MS,
   getPersonaResult,
   resolveArrowTrajectoryShot,
   resolveDinoStop,
+  type PersonaResult,
   type PointerKind,
   type RoundId,
+  type ScoreAxis,
   type TrialEvent,
 } from "@/lib/scoring";
 
@@ -140,6 +143,7 @@ export default function Home() {
   const [roundIndex, setRoundIndex] = useState(0);
   const [trials, setTrials] = useState<TrialEvent[]>([]);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [imageShareState, setImageShareState] = useState<"idle" | "sharing" | "saved" | "failed">("idle");
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const currentRound = rounds[roundIndex];
@@ -152,6 +156,7 @@ export default function Home() {
     setRoundIndex(0);
     roundIndexRef.current = 0;
     setCopyState("idle");
+    setImageShareState("idle");
     roundCompletionLockedRef.current = false;
     setStage("intro");
   };
@@ -206,6 +211,29 @@ export default function Home() {
     }
   };
 
+  const shareImage = useCallback(
+    async (kind: "home" | "result") => {
+      try {
+        setImageShareState("sharing");
+        const url = window.location.href;
+        const dataUrl =
+          kind === "home"
+            ? await createShareImage({ kind: "home", url })
+            : await createShareImage({ kind: "result", url, result });
+        const fileName = kind === "home" ? "game-persona.png" : `game-rank-${result.name}.png`;
+        await shareOrSaveImage(dataUrl, fileName, kind === "home" ? "测测你的段位" : result.name);
+        setImageShareState("saved");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setImageShareState("idle");
+          return;
+        }
+        setImageShareState("failed");
+      }
+    },
+    [result],
+  );
+
   useEffect(() => {
     if (stage !== "result") return;
 
@@ -223,14 +251,15 @@ export default function Home() {
   return (
     <main className="app-shell">
       {stage === "home" ? (
-        <HomeScreen onStart={startTest} />
+        <HomeScreen imageShareState={imageShareState} onShareImage={() => shareImage("home")} onStart={startTest} />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           trials={safeTrials}
-          shareText={shareText}
           copyState={copyState}
+          imageShareState={imageShareState}
           onCopy={copyShareText}
           onRestart={startTest}
+          onShareImage={() => shareImage("result")}
         />
       ) : stage === "intro" ? (
         <RoundIntro round={currentRound} index={roundIndex} onStart={startCurrentRound} />
@@ -241,22 +270,39 @@ export default function Home() {
       ) : (
         <ResultScreen
           trials={trials}
-          shareText={shareText}
           copyState={copyState}
+          imageShareState={imageShareState}
           onCopy={copyShareText}
           onRestart={startTest}
+          onShareImage={() => shareImage("result")}
         />
       )}
     </main>
   );
 }
 
-function HomeScreen({ onStart }: { onStart: () => void }) {
+function HomeScreen({
+  imageShareState,
+  onShareImage,
+  onStart,
+}: {
+  imageShareState: "idle" | "sharing" | "saved" | "failed";
+  onShareImage: () => void;
+  onStart: () => void;
+}) {
   return (
     <section className="home-screen">
-      <header className="home-brand">游戏人格测试</header>
+      <button
+        aria-label="分享图片"
+        className="icon-button home-share-button"
+        disabled={imageShareState === "sharing"}
+        type="button"
+        onPointerDown={onShareImage}
+      >
+        <ShareIcon />
+      </button>
       <div className="hero-copy compact">
-        <h1>测测你的操作段位</h1>
+        <h1>测测你的段位</h1>
       </div>
       <button className="primary-button hero-button" type="button" onPointerDown={onStart}>
         开始
@@ -288,6 +334,16 @@ function RoundIntro({
         开始
       </button>
     </section>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <path d="M12 4v11" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="m7 8 5-5 5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M6 14v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    </svg>
   );
 }
 
@@ -365,7 +421,7 @@ function ReactionRound({ onComplete }: RoundProps) {
     setStep(nextStep);
     setStatus("waiting");
     setFeedbackTone("idle");
-    setMessage(nextStep === 0 ? "练习：等变色" : "等变色");
+    setMessage(nextStep === 0 ? "试一次" : "等变色");
     const scheduledAt = now();
     const delay = rand(900, 2200);
     scheduledAtRef.current = scheduledAt;
@@ -474,7 +530,7 @@ function ReactionRound({ onComplete }: RoundProps) {
   return (
     <div className={`test-pad reaction-pad ${status} ${feedbackTone}`} role="button" tabIndex={0} onPointerDown={tap}>
       <span>{message}</span>
-      <small>{step === 0 ? "练习" : `${step}/3`}</small>
+      <small>{step === 0 ? "试一次" : `${step}/3`}</small>
     </div>
   );
 }
@@ -1543,6 +1599,8 @@ function BrakingRound({ onComplete }: RoundProps) {
     else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 520);
   };
 
+  const showThreat = status === "danger" || status === "stopped" || status === "crashed";
+
   return (
     <div className={`braking-panel dino-panel ${status}`}>
       <div className="mini-score">
@@ -1550,7 +1608,7 @@ function BrakingRound({ onComplete }: RoundProps) {
         <span>{status === "danger" ? "松手" : holding ? "前进" : "长按"}</span>
       </div>
       <div className="dino-track" aria-hidden="true">
-        <span className="dino-threat" style={{ left: `${threatX}%` }} />
+        {showThreat ? <span className="dino-threat" style={{ left: `${threatX}%` }} /> : null}
         <span className="dino-runner" ref={runnerRef} style={{ left: `${progress}%` }}>
           <span />
         </span>
@@ -1645,15 +1703,17 @@ function PatienceRound({ onComplete }: RoundProps) {
 
 function ResultScreen({
   trials,
-  shareText,
   copyState,
+  imageShareState,
   onCopy,
+  onShareImage,
   onRestart,
 }: {
   trials: TrialEvent[];
-  shareText: string;
   copyState: "idle" | "copied" | "failed";
+  imageShareState: "idle" | "sharing" | "saved" | "failed";
   onCopy: () => void;
+  onShareImage: () => void;
   onRestart: () => void;
 }) {
   const result = getPersonaResult(trials);
@@ -1706,18 +1766,22 @@ function ResultScreen({
       </div>
 
       <div className="share-panel">
-        <label htmlFor="share-copy">分享</label>
-        <textarea id="share-copy" readOnly value={shareText} />
+        <label>分享</label>
         <div className="action-row">
           <button className="primary-button" type="button" onPointerDown={onCopy}>
             复制文案
+          </button>
+          <button className="secondary-button" disabled={imageShareState === "sharing"} type="button" onPointerDown={onShareImage}>
+            {imageShareState === "sharing" ? "生成中" : "保存图片"}
           </button>
           <button className="secondary-button" type="button" onPointerDown={onRestart}>
             重新测试
           </button>
         </div>
         {copyState === "copied" ? <p className="status-text">已复制。</p> : null}
-        {copyState === "failed" ? <p className="status-text">可手动复制。</p> : null}
+        {copyState === "failed" ? <p className="status-text">复制失败。</p> : null}
+        {imageShareState === "saved" ? <p className="status-text">图片已生成。</p> : null}
+        {imageShareState === "failed" ? <p className="status-text">图片生成失败。</p> : null}
       </div>
     </section>
   );
@@ -1774,4 +1838,190 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
       </div>
     </section>
   );
+}
+
+type ShareImageInput =
+  | {
+      kind: "home";
+      url: string;
+    }
+  | {
+      kind: "result";
+      result: PersonaResult;
+      url: string;
+    };
+
+async function createShareImage(input: ShareImageInput) {
+  const canvas = document.createElement("canvas");
+  const width = 900;
+  const height = 1040;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available");
+
+  ctx.fillStyle = "#f7f4ee";
+  ctx.fillRect(0, 0, width, height);
+
+  const qrDataUrl = await QRCode.toDataURL(input.url, {
+    color: { dark: "#181818", light: "#fffdf8" },
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 150,
+  });
+  const qrImage = await loadCanvasImage(qrDataUrl);
+
+  if (input.kind === "home") {
+    drawCard(ctx, 24, 24, 852, 300);
+    drawText(ctx, "测测你的段位", 58, 112, "900 68px", "#181818");
+    drawText(ctx, "30 秒小游戏测试", 60, 190, "850 34px", "#665f55");
+    drawText(ctx, "8 个短小游戏", 60, 236, "850 28px", "#1b9aaa");
+
+    drawCard(ctx, 24, 354, 852, 560);
+    drawText(ctx, "打开就能玩", 60, 450, "900 56px", "#181818");
+    drawText(ctx, "反应 / 精准 / 搜索 / 节奏", 62, 524, "850 30px", "#665f55");
+    drawText(ctx, "测完生成段位", 62, 584, "850 30px", "#665f55");
+  } else {
+    drawCard(ctx, 24, 24, 852, 168);
+    drawText(ctx, input.result.name, 58, 126, "950 74px", "#181818");
+
+    drawCard(ctx, 24, 222, 852, 692);
+    drawRadarOnCanvas(ctx, input.result.axis, 450, 548, 190);
+  }
+
+  const qrX = 704;
+  const qrY = 838;
+  drawCard(ctx, qrX - 14, qrY - 14, 178, 178);
+  ctx.drawImage(qrImage, qrX, qrY, 150, 150);
+  drawText(ctx, "扫码来测", 636, 992, "850 24px", "#665f55");
+
+  return canvas.toDataURL("image/png");
+}
+
+async function shareOrSaveImage(dataUrl: string, fileName: string, title: string) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const file = new File([blob], fileName, { type: "image/png" });
+  const shareData: ShareData & { files: File[] } = {
+    files: [file],
+    title,
+  };
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData & { files?: File[] }) => boolean;
+    share?: (data: ShareData & { files?: File[] }) => Promise<void>;
+  };
+
+  if (nav.share && (!nav.canShare || nav.canShare(shareData))) {
+    await nav.share(shareData);
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function drawRadarOnCanvas(ctx: CanvasRenderingContext2D, axis: ScoreAxis[], centerX: number, centerY: number, radius: number) {
+  const angleFor = (index: number) => -Math.PI / 2 + (index / axis.length) * Math.PI * 2;
+  const point = (index: number, scale: number) => {
+    const angle = angleFor(index);
+    return {
+      x: centerX + Math.cos(angle) * radius * scale,
+      y: centerY + Math.sin(angle) * radius * scale,
+    };
+  };
+
+  ctx.lineWidth = 3;
+  for (const scale of [0.25, 0.5, 0.75, 1]) {
+    ctx.beginPath();
+    axis.forEach((_, index) => {
+      const current = point(index, scale);
+      if (index === 0) ctx.moveTo(current.x, current.y);
+      else ctx.lineTo(current.x, current.y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = "rgba(24, 24, 24, 0.12)";
+    ctx.stroke();
+  }
+
+  axis.forEach((_, index) => {
+    const outer = point(index, 1);
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(outer.x, outer.y);
+    ctx.strokeStyle = "rgba(24, 24, 24, 0.12)";
+    ctx.stroke();
+  });
+
+  ctx.beginPath();
+  axis.forEach((item, index) => {
+    const current = point(index, item.score / 100);
+    if (index === 0) ctx.moveTo(current.x, current.y);
+    else ctx.lineTo(current.x, current.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = "rgba(27, 154, 170, 0.22)";
+  ctx.strokeStyle = "#1b9aaa";
+  ctx.lineWidth = 9;
+  ctx.fill();
+  ctx.stroke();
+
+  axis.forEach((item, index) => {
+    const labelPoint = point(index, 1.22);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    drawText(ctx, item.label, labelPoint.x, labelPoint.y, "850 30px", "#665f55", "center");
+  });
+}
+
+function drawText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  font: string,
+  color: string,
+  align: CanvasTextAlign = "left",
+) {
+  ctx.fillStyle = color;
+  ctx.font = `${font} Inter, "Microsoft YaHei", sans-serif`;
+  ctx.textAlign = align;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(text, x, y);
+}
+
+function drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
+  roundedRect(ctx, x, y, width, height, 16);
+  ctx.fillStyle = "#fffdf8";
+  ctx.fill();
+  ctx.strokeStyle = "#d8d0c4";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const right = x + width;
+  const bottom = y + height;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(right - radius, y);
+  ctx.quadraticCurveTo(right, y, right, y + radius);
+  ctx.lineTo(right, bottom - radius);
+  ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+  ctx.lineTo(x + radius, bottom);
+  ctx.quadraticCurveTo(x, bottom, x, bottom - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function loadCanvasImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
 }
