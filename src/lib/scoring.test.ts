@@ -9,7 +9,9 @@ import {
   DINO_SAFE_STOP_WINDOW_MS,
   getPersonaResult,
   resolveArrowShot,
+  resolveArrowTrajectoryShot,
   resolveDinoStop,
+  segmentCircleHit,
   type RoundId,
   type TrialEvent,
 } from "./scoring.ts";
@@ -314,6 +316,61 @@ test("arrow shot resolution uses the impact target as the visible stuck position
   assert.equal(hit.stuckInTarget, true);
   assert.equal(miss.hit, false);
   assert.equal(miss.displayXPercent, 36);
+  assert.equal(miss.stuckInTarget, false);
+});
+
+test("segment circle collision detects fast arrow paths that pass through the target", () => {
+  assert.equal(
+    segmentCircleHit(
+      { x: 20, y: 120 },
+      { x: 360, y: 120 },
+      { x: 190, y: 120, radius: 24 },
+    ),
+    true,
+  );
+  assert.equal(
+    segmentCircleHit(
+      { x: 20, y: 170 },
+      { x: 360, y: 170 },
+      { x: 190, y: 120, radius: 24 },
+    ),
+    false,
+  );
+});
+
+test("arrow trajectory resolution hits when the path crosses even if the final tip is past the target", () => {
+  const resolution = resolveArrowTrajectoryShot({
+    oldTip: { x: 180, y: 360 },
+    newTip: { x: 180, y: 80 },
+    target: { x: 180, y: 150, radius: 26 },
+    tolerancePx: 6,
+  });
+
+  assert.equal(resolution.hit, true);
+  assert.equal(resolution.stuckInTarget, true);
+  assert.equal(resolution.displayPoint.x, 180);
+  assert.equal(resolution.displayPoint.y, 150);
+  assert.equal(resolution.offsetFromTarget.x, 0);
+  assert.equal(resolution.offsetFromTarget.y, 0);
+});
+
+test("arrow trajectory resolution uses tolerance for visual edge hits but keeps clear misses out", () => {
+  const edge = resolveArrowTrajectoryShot({
+    oldTip: { x: 210, y: 360 },
+    newTip: { x: 210, y: 80 },
+    target: { x: 180, y: 150, radius: 24 },
+    tolerancePx: 7,
+  });
+  const miss = resolveArrowTrajectoryShot({
+    oldTip: { x: 220, y: 360 },
+    newTip: { x: 220, y: 80 },
+    target: { x: 180, y: 150, radius: 24 },
+    tolerancePx: 7,
+  });
+
+  assert.equal(edge.hit, true);
+  assert.equal(edge.errorPx, 30);
+  assert.equal(miss.hit, false);
   assert.equal(miss.stuckInTarget, false);
 });
 

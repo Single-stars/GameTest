@@ -116,6 +116,15 @@ export const ARROW_AIM_HIT_RADIUS_MULTIPLIER = 1.18;
 export const DINO_SAFE_STOP_WINDOW_MS = 340;
 const DINO_FULL_SCORE_STOP_MS = 240;
 
+export type Point2D = {
+  x: number;
+  y: number;
+};
+
+export type CircleHitTarget = Point2D & {
+  radius: number;
+};
+
 export type ArrowShotResolution = {
   hit: boolean;
   errorPx: number;
@@ -123,6 +132,64 @@ export type ArrowShotResolution = {
   displayXPercent: number;
   stuckInTarget: boolean;
 };
+
+export type ArrowTrajectoryResolution = {
+  hit: boolean;
+  errorPx: number;
+  normalizedError: number;
+  displayPoint: Point2D;
+  offsetFromTarget: Point2D;
+  stuckInTarget: boolean;
+};
+
+export function closestPointOnSegment(start: Point2D, end: Point2D, point: Point2D) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const rawT = lengthSquared === 0 ? 0 : ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
+  const t = Math.max(0, Math.min(1, rawT));
+  const closest = {
+    x: start.x + dx * t,
+    y: start.y + dy * t,
+  };
+  const distance = Math.hypot(closest.x - point.x, closest.y - point.y);
+
+  return { point: closest, distance, t };
+}
+
+export function segmentCircleHit(start: Point2D, end: Point2D, target: CircleHitTarget) {
+  return closestPointOnSegment(start, end, target).distance <= target.radius;
+}
+
+export function resolveArrowTrajectoryShot({
+  oldTip,
+  newTip,
+  target,
+  tolerancePx = 0,
+}: {
+  oldTip: Point2D;
+  newTip: Point2D;
+  target: CircleHitTarget;
+  tolerancePx?: number;
+}): ArrowTrajectoryResolution {
+  const visibleRadius = Math.max(1, target.radius);
+  const hitRadius = Math.max(1, target.radius + tolerancePx);
+  const closest = closestPointOnSegment(oldTip, newTip, target);
+  const hit = closest.distance <= hitRadius;
+  const displayPoint = hit ? closest.point : newTip;
+
+  return {
+    hit,
+    errorPx: Math.round(closest.distance),
+    normalizedError: Number((closest.distance / visibleRadius).toFixed(2)),
+    displayPoint,
+    offsetFromTarget: {
+      x: displayPoint.x - target.x,
+      y: displayPoint.y - target.y,
+    },
+    stuckInTarget: hit,
+  };
+}
 
 export function resolveArrowShot({
   fieldWidthPx,

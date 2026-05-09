@@ -15,7 +15,7 @@ import {
   buildShareText,
   DINO_SAFE_STOP_WINDOW_MS,
   getPersonaResult,
-  resolveArrowShot,
+  resolveArrowTrajectoryShot,
   resolveDinoStop,
   type PointerKind,
   type RoundId,
@@ -40,56 +40,56 @@ const rounds: RoundConfig[] = [
   {
     id: "reaction",
     title: "变色点我",
-    measure: "简单反应时",
-    rule: "等待区域变色后立刻点击。第一轮是练习，不计入画像。",
-    action: "变色前点击会记录为提前出手。",
+    measure: "反应",
+    rule: "变绿再点。",
+    action: "第一轮练习，后 3 轮计分。",
   },
   {
     id: "aim",
     title: "移动靶",
-    measure: "发射精准",
-    rule: "靶子会左右移动。点击屏幕任意位置，箭矢会从同一横向位置向上飞。",
-    action: "共 8 发，命中次数就是主要分数，后面靶子更快也更小。",
+    measure: "精准",
+    rule: "点屏幕发射。",
+    action: "箭尖碰到靶子算命中。",
   },
   {
     id: "search",
     title: "相似红点",
-    measure: "视觉搜索",
-    rule: "观察飘过的点，只数实心红圆点。",
-    action: "播放结束后选择数量，不需要边看边点。",
+    measure: "搜索",
+    rule: "只数实心红圆点。",
+    action: "看完选数量。",
   },
   {
     id: "stroop",
     title: "字色判断",
     measure: "抗干扰",
-    rule: "只看字的颜色，不看字写的内容。",
-    action: "没有单题倒计时，结果看错误率和总耗时。",
+    rule: "点字体颜色。",
+    action: "不要看字义。",
   },
   {
     id: "rhythm",
     title: "双圈节拍",
-    measure: "节奏稳定",
-    rule: "圆圈会随机出现在左边或右边，缩到判定线附近时点击。",
-    action: "可能连续出现在同一边，偏早、偏晚、点错边都会记录。",
+    measure: "节奏",
+    rule: "圈贴近内圈时点。",
+    action: "点错边也会记录。",
   },
   {
     id: "memory",
     title: "色块记忆",
-    measure: "视觉短时记忆",
-    rule: "先记住 4 个色块。遮住后，根据标记位置选择刚才的颜色。",
-    action: "不考文字，只考颜色和位置保持。",
+    measure: "记忆",
+    rule: "记住 4 个色块。",
+    action: "遮住后选指定位置的颜色。",
   },
   {
     id: "braking",
     title: "小方块急停",
-    measure: "操作刹车",
-    rule: "长按跑步键让小方块前进。前方突然出现危险时，立刻松手停下。",
-    action: "危险出现得很突然，太早松手或撞上都会记录。",
+    measure: "刹车",
+    rule: "长按前进。",
+    action: "见危险松手。",
   },
   {
     id: "patience",
     title: "进度等待",
-    measure: "等待耐受",
+    measure: "等待",
     rule: "",
     action: "",
   },
@@ -256,7 +256,7 @@ function HomeScreen({ onStart }: { onStart: () => void }) {
     <section className="home-screen">
       <header className="home-brand">游戏人格测试</header>
       <div className="hero-copy compact">
-        <h1>测一下你的操作画像</h1>
+        <h1>测测你的操作段位</h1>
       </div>
       <button className="primary-button hero-button" type="button" onPointerDown={onStart}>
         开始
@@ -282,10 +282,10 @@ function RoundIntro({
       <h1>{round.title}</h1>
       <div className="rule-card">
         <p>{round.rule}</p>
-        <small>{round.action}</small>
+        {round.action ? <small>{round.action}</small> : null}
       </div>
       <button className="primary-button" type="button" onPointerDown={onStart}>
-        开始本关
+        开始
       </button>
     </section>
   );
@@ -493,13 +493,20 @@ type ArrowShotState = {
   id: number;
   launchX: number;
   x: number;
+  tipY: number;
+  bottomPx: number;
   status: "flying" | "hit" | "miss";
+  offsetXPercent?: number;
+  offsetYPx?: number;
   stuckInTarget?: boolean;
 };
 
 const AIM_SHOT_COUNT = 8;
 const AIM_TARGET_Y = 28;
 const AIM_ARROW_FLIGHT_MS = 520;
+const AIM_ARROW_START_BOTTOM_PX = 26;
+const AIM_ARROW_TIP_TO_BOTTOM_PX = 52;
+const AIM_ARROW_HIT_TOLERANCE_PX = 8;
 
 function AimRound({ onComplete }: RoundProps) {
   const [target, setTarget] = useState<TargetState>(() => makeTarget(-1));
@@ -510,19 +517,26 @@ function AimRound({ onComplete }: RoundProps) {
   const timeoutRef = useRef<number | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
+  const shotFrameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef(0);
   const answeredRef = useRef(false);
   const targetRef = useRef<TargetState>(target);
+  const shotRef = useRef<ArrowShotState | null>(null);
+  const targetElRef = useRef<HTMLSpanElement | null>(null);
+  const shotElRef = useRef<HTMLSpanElement | null>(null);
   const targetFrozenRef = useRef(false);
 
   const startTarget = useCallback((index: number) => {
     const next = makeTarget(index);
     targetRef.current = next;
     setTarget(next);
+    shotRef.current = null;
     setShot(null);
     setFeedback(null);
     answeredRef.current = false;
     targetFrozenRef.current = false;
+    if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
+    shotFrameRef.current = null;
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
       if (answeredRef.current) return;
@@ -558,6 +572,7 @@ function AimRound({ onComplete }: RoundProps) {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
       if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
     };
   }, [startTarget]);
 
@@ -567,12 +582,29 @@ function AimRound({ onComplete }: RoundProps) {
       const lastFrameAt = lastFrameAtRef.current || frameNow;
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
-      setTarget((current) => {
-        if (targetFrozenRef.current) return current;
-        const next = moveTarget(current, delta);
+      if (!targetFrozenRef.current) {
+        const next = moveTarget(targetRef.current, delta);
         targetRef.current = next;
-        return next;
-      });
+        if (targetElRef.current) {
+          targetElRef.current.style.left = `${next.x}%`;
+        }
+        const stuckShot = shotRef.current;
+        if (stuckShot?.stuckInTarget) {
+          const rect = areaRef.current?.getBoundingClientRect();
+          const targetCenterY = rect ? rect.height * (AIM_TARGET_Y / 100) : stuckShot.tipY;
+          const nextShot = {
+            ...stuckShot,
+            x: clamp(next.x + (stuckShot.offsetXPercent ?? 0), 4, 96),
+            tipY: targetCenterY + (stuckShot.offsetYPx ?? 0),
+            bottomPx: arrowBottomFromTip(targetCenterY + (stuckShot.offsetYPx ?? 0), rect?.height),
+          };
+          shotRef.current = nextShot;
+          if (shotElRef.current) {
+            shotElRef.current.style.left = `${nextShot.x}%`;
+            shotElRef.current.style.bottom = `${nextShot.bottomPx}px`;
+          }
+        }
+      }
       frameRef.current = requestAnimationFrame(tick);
     };
     frameRef.current = requestAnimationFrame(tick);
@@ -583,52 +615,86 @@ function AimRound({ onComplete }: RoundProps) {
 
   const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (answeredRef.current) return;
-    answeredRef.current = true;
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     const rect = areaRef.current?.getBoundingClientRect();
     if (!rect) return;
+    answeredRef.current = true;
+    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+    if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
+    shotFrameRef.current = null;
     const shotAt = now();
     const current = targetRef.current;
+    const pointerType = pointerKind(event.pointerType);
     const shotX = clamp(((event.clientX - rect.left) / rect.width) * 100, 6, 94);
+    const shotXPx = (shotX / 100) * rect.width;
+    const startTipY = rect.height - AIM_ARROW_START_BOTTOM_PX - AIM_ARROW_TIP_TO_BOTTOM_PX;
+    const endTipY = Math.max(18, rect.height * 0.1);
     setFeedback(null);
-    setShot({ id: current.index, launchX: shotX, x: shotX, status: "flying" });
+    const initialShot = {
+      id: current.index,
+      launchX: shotX,
+      x: shotX,
+      tipY: startTipY,
+      bottomPx: AIM_ARROW_START_BOTTOM_PX,
+      status: "flying" as const,
+    };
+    shotRef.current = initialShot;
+    setShot(initialShot);
 
-    window.setTimeout(() => {
-      const impactTarget = targetRef.current;
-      const targetXAtImpact = impactTarget.x;
-      const resolution = resolveArrowShot({
-        fieldWidthPx: rect.width,
-        shotXPercent: shotX,
-        targetXPercentAtImpact: targetXAtImpact,
-        targetSizePx: impactTarget.size,
-      });
-      targetFrozenRef.current = true;
+    let previousTip = { x: shotXPx, y: startTipY };
+    let bestMiss = {
+      errorPx: Number.POSITIVE_INFINITY,
+      normalizedError: 99,
+    };
+
+    const completeShot = (
+      hit: boolean,
+      impactTarget: TargetState,
+      tipY: number,
+      errorPx: number,
+      normalizedError: number,
+      offsetXPercent = 0,
+      offsetYPx = 0,
+    ) => {
+      if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
+      shotFrameRef.current = null;
+      targetFrozenRef.current = !hit;
       targetRef.current = impactTarget;
       setTarget(impactTarget);
-      setShot({
+      const displayX = hit ? clamp(impactTarget.x + offsetXPercent, 4, 96) : shotX;
+      const displayTipY = hit ? rect.height * (AIM_TARGET_Y / 100) + offsetYPx : tipY;
+      const nextShot = {
         id: current.index,
         launchX: shotX,
-        x: resolution.displayXPercent,
-        status: resolution.hit ? "hit" : "miss",
-        stuckInTarget: resolution.stuckInTarget,
+        x: displayX,
+        tipY: displayTipY,
+        bottomPx: arrowBottomFromTip(displayTipY, rect.height),
+        status: hit ? ("hit" as const) : ("miss" as const),
+        offsetXPercent,
+        offsetYPx,
+        stuckInTarget: hit,
+      };
+      shotRef.current = nextShot;
+      setShot({
+        ...nextShot,
       });
-      setFeedback(resolution.hit ? "hit" : "miss");
+      setFeedback(hit ? "hit" : "miss");
       trialsRef.current.push(
         trial("aim", current.index, {
           shownAt: current.shownAt,
           responseAt: shotAt,
-          correct: resolution.hit,
-          errorType: resolution.hit ? undefined : "miss",
-          pointerType: pointerKind(event.pointerType),
-          target: arrowTargetPayload({ ...current, x: targetXAtImpact }, rect),
+          correct: hit,
+          errorType: hit ? undefined : "miss",
+          pointerType,
+          target: arrowTargetPayload(impactTarget, rect),
           value: {
             mode: "arrow",
             practice: current.practice,
-            shotHit: resolution.hit,
+            shotHit: hit,
             shotX: Math.round(shotX),
-            targetXAtImpact: Math.round(targetXAtImpact),
-            shotErrorPx: resolution.errorPx,
-            normalizedError: resolution.normalizedError,
+            targetXAtImpact: Math.round(impactTarget.x),
+            shotErrorPx: errorPx,
+            normalizedError,
+            trajectoryHit: hit,
             targetSpeed: current.speed,
             flightMs: AIM_ARROW_FLIGHT_MS,
           },
@@ -637,19 +703,79 @@ function AimRound({ onComplete }: RoundProps) {
 
       if (!current.practice && current.index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
       else transitionTimerRef.current = window.setTimeout(() => startTarget(current.practice ? 0 : current.index + 1), 640);
-    }, AIM_ARROW_FLIGHT_MS);
+    };
+
+    const animateShot = () => {
+      const elapsed = now() - shotAt;
+      const progress = clamp(elapsed / AIM_ARROW_FLIGHT_MS, 0, 1);
+      const tipY = startTipY + (endTipY - startTipY) * progress;
+      const newTip = { x: shotXPx, y: tipY };
+      const impactTarget = targetRef.current;
+      const targetCenter = {
+        x: (impactTarget.x / 100) * rect.width,
+        y: rect.height * (AIM_TARGET_Y / 100),
+        radius: impactTarget.size / 2,
+      };
+      const resolution = resolveArrowTrajectoryShot({
+        oldTip: previousTip,
+        newTip,
+        target: targetCenter,
+        tolerancePx: AIM_ARROW_HIT_TOLERANCE_PX,
+      });
+      if (resolution.errorPx < bestMiss.errorPx) {
+        bestMiss = {
+          errorPx: resolution.errorPx,
+          normalizedError: resolution.normalizedError,
+        };
+      }
+      if (resolution.hit) {
+        completeShot(
+          true,
+          impactTarget,
+          resolution.displayPoint.y,
+          resolution.errorPx,
+          resolution.normalizedError,
+          (resolution.offsetFromTarget.x / rect.width) * 100,
+          resolution.offsetFromTarget.y,
+        );
+        return;
+      }
+
+      const nextShot = {
+        id: current.index,
+        launchX: shotX,
+        x: shotX,
+        tipY,
+        bottomPx: arrowBottomFromTip(tipY, rect.height),
+        status: "flying" as const,
+      };
+      shotRef.current = nextShot;
+      if (shotElRef.current) {
+        shotElRef.current.style.bottom = `${nextShot.bottomPx}px`;
+      }
+      previousTip = newTip;
+
+      if (progress >= 1) {
+        completeShot(false, impactTarget, tipY, bestMiss.errorPx, bestMiss.normalizedError);
+        return;
+      }
+      shotFrameRef.current = requestAnimationFrame(animateShot);
+    };
+
+    shotFrameRef.current = requestAnimationFrame(animateShot);
   };
 
   return (
     <div className={`game-area aim-area arrow-aim ${feedback ?? ""}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score">
         <span>{target.practice ? "练习" : `${target.index + 1}/${AIM_SHOT_COUNT}`}</span>
-        <span>点击任意位置发射</span>
+        <span>点屏发射</span>
       </div>
       <div className="aim-lane" aria-hidden="true">
         {feedback ? <div className={`aim-feedback ${feedback}`}>{feedback === "hit" ? "命中！" : "偏了！"}</div> : null}
         <span
           className={`moving-target ${feedback ?? ""}`}
+          ref={targetElRef}
           style={{
             left: `${target.x}%`,
             top: `${AIM_TARGET_Y}%`,
@@ -663,15 +789,15 @@ function AimRound({ onComplete }: RoundProps) {
           <span
             className={`arrow-shot ${shot.status} ${shot.status === "flying" ? "flying" : "settled"} ${shot.stuckInTarget ? "stuck" : ""}`}
             key={`${shot.id}-${shot.status}`}
+            ref={shotElRef}
             style={{
               left: `${shot.x}%`,
-              animationDuration: `${AIM_ARROW_FLIGHT_MS}ms`,
-              "--aim-impact-bottom": `${100 - AIM_TARGET_Y}%`,
+              bottom: `${shot.bottomPx}px`,
             } as CSSProperties}
           />
         ) : null}
       </div>
-      <div className="aim-fire-strip">点哪里，就从哪里发射</div>
+      <div className="aim-fire-strip">点击发射</div>
     </div>
   );
 }
@@ -711,6 +837,11 @@ function arrowTargetPayload(target: TargetState, rect?: Pick<DOMRect, "width" | 
     distance: rect ? (target.speed / 100) * rect.width * AIM_ARROW_FLIGHT_MS : target.speed * AIM_ARROW_FLIGHT_MS,
     difficulty: 1 + target.index * 0.18,
   };
+}
+
+function arrowBottomFromTip(tipY: number, fieldHeight?: number) {
+  if (!fieldHeight) return AIM_ARROW_START_BOTTOM_PX;
+  return Math.max(0, fieldHeight - tipY - AIM_ARROW_TIP_TO_BOTTOM_PX);
 }
 
 type SearchDot = {
@@ -1033,9 +1164,9 @@ const rhythmSequence = [
 
 function RhythmRound({ onComplete }: RoundProps) {
   const [index, setIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const startedAtRef = useRef(now());
+  const ringRef = useRef<HTMLSpanElement | null>(null);
   const trialsRef = useRef<TrialEvent[]>([]);
   const doneRef = useRef(false);
   const transitionTimerRef = useRef<number | null>(null);
@@ -1045,10 +1176,12 @@ function RhythmRound({ onComplete }: RoundProps) {
   const start = useCallback((nextIndex: number) => {
     if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
     setIndex(nextIndex);
-    setProgress(0);
     setIsTransitioning(false);
     startedAtRef.current = now();
     doneRef.current = false;
+    if (ringRef.current) {
+      ringRef.current.style.transform = "scale(1.72)";
+    }
   }, []);
 
   useEffect(() => {
@@ -1062,7 +1195,11 @@ function RhythmRound({ onComplete }: RoundProps) {
     let frame = 0;
     const tick = () => {
       const elapsed = now() - startedAtRef.current;
-      setProgress(elapsed / targetMs);
+      const progress = elapsed / targetMs;
+      const ringScale = progress <= 1 ? 1.72 - progress * 0.72 : Math.max(0.18, 1 - (progress - 1) * 1.35);
+      if (ringRef.current) {
+        ringRef.current.style.transform = `scale(${ringScale})`;
+      }
       if (elapsed >= targetMs + RHYTHM_LATE_WINDOW_MS && !doneRef.current) {
         doneRef.current = true;
         setIsTransitioning(true);
@@ -1105,13 +1242,11 @@ function RhythmRound({ onComplete }: RoundProps) {
     else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 140);
   };
 
-  const ringScale = progress <= 1 ? 1.72 - progress * 0.72 : Math.max(0.18, 1 - (progress - 1) * 1.35);
-
   return (
     <div className="rhythm-panel dual">
       <div className="mini-score">
         <span>{index + 1}/10</span>
-        <span>{activeLane === "left" ? "左圈" : "右圈"}</span>
+        <span>{activeLane === "left" ? "左" : "右"}</span>
       </div>
       {(["left", "right"] as const).map((lane) => {
         const laneIsActive = lane === activeLane && !isTransitioning;
@@ -1124,7 +1259,7 @@ function RhythmRound({ onComplete }: RoundProps) {
             aria-label={lane === "left" ? "左节奏圈" : "右节奏圈"}
           >
             <span className="judge-line" />
-            {laneIsActive ? <span className="shrinking-ring" style={{ transform: `scale(${ringScale})` }} /> : null}
+            {laneIsActive ? <span className="shrinking-ring" ref={ringRef} style={{ transform: "scale(1.72)" }} /> : null}
           </button>
         );
       })}
@@ -1256,6 +1391,7 @@ function BrakingRound({ onComplete }: RoundProps) {
   const collisionTimerRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef(0);
+  const runnerRef = useRef<HTMLSpanElement | null>(null);
   const answeredRef = useRef(false);
   const holdingRef = useRef(false);
   const progressRef = useRef(8);
@@ -1295,11 +1431,11 @@ function BrakingRound({ onComplete }: RoundProps) {
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
       if (holdingRef.current && (statusRef.current === "running" || statusRef.current === "danger")) {
-        setProgress((current) => {
-          const next = clamp(current + delta * 0.026, 8, 78);
-          progressRef.current = next;
-          return next;
-        });
+        const next = clamp(progressRef.current + delta * 0.026, 8, 78);
+        progressRef.current = next;
+        if (runnerRef.current) {
+          runnerRef.current.style.left = `${next}%`;
+        }
       }
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -1328,11 +1464,13 @@ function BrakingRound({ onComplete }: RoundProps) {
     if (answeredRef.current || !holdingRef.current) return;
     hazardShownAtRef.current = now();
     const nextThreatX = clamp(progressRef.current + rand(10, 16), 28, 82);
+    setProgress(progressRef.current);
     setThreatX(nextThreatX);
     setStatus("danger");
     statusRef.current = "danger";
     collisionTimerRef.current = window.setTimeout(() => {
       if (answeredRef.current || !holdingRef.current) return;
+      setProgress(progressRef.current);
       setStatus("crashed");
       statusRef.current = "crashed";
       completeTrial({
@@ -1373,6 +1511,7 @@ function BrakingRound({ onComplete }: RoundProps) {
     if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
     setHolding(false);
     holdingRef.current = false;
+    setProgress(progressRef.current);
     const releasedAt = now();
     const hazardShownAt = hazardShownAtRef.current;
     const stopResult = resolveDinoStop({ hazardShownAt, releasedAt });
@@ -1408,23 +1547,22 @@ function BrakingRound({ onComplete }: RoundProps) {
     <div className={`braking-panel dino-panel ${status}`}>
       <div className="mini-score">
         <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
-        <span>{status === "danger" ? "松手" : holding ? "跑" : "按住"}</span>
+        <span>{status === "danger" ? "松手" : holding ? "前进" : "长按"}</span>
       </div>
       <div className="dino-track" aria-hidden="true">
         <span className="dino-threat" style={{ left: `${threatX}%` }} />
-        <span className="dino-runner" style={{ left: `${progress}%` }}>
+        <span className="dino-runner" ref={runnerRef} style={{ left: `${progress}%` }}>
           <span />
         </span>
       </div>
       <button
         className={`run-button ${holding ? "active" : ""}`}
+        aria-label="长按前进，危险出现时松手"
         type="button"
         onPointerCancel={releaseRun}
         onPointerDown={beginRun}
         onPointerUp={releaseRun}
-      >
-        按住前进
-      </button>
+      />
     </div>
   );
 }
@@ -1433,6 +1571,7 @@ function PatienceRound({ onComplete }: RoundProps) {
   const [progress, setProgress] = useState(0);
   const [canSkip, setCanSkip] = useState(false);
   const startRef = useRef(now());
+  const lastProgressPaintRef = useRef(0);
   const doneRef = useRef(false);
   const duration = 9000;
 
@@ -1440,8 +1579,13 @@ function PatienceRound({ onComplete }: RoundProps) {
     const skipTimer = window.setTimeout(() => setCanSkip(true), 2500);
     let frame = 0;
     const tick = () => {
-      const elapsed = now() - startRef.current;
-      setProgress(clamp((elapsed / duration) * 100, 0, 100));
+      const frameNow = now();
+      const elapsed = frameNow - startRef.current;
+      const nextProgress = clamp((elapsed / duration) * 100, 0, 100);
+      if (frameNow - lastProgressPaintRef.current >= 90 || elapsed >= duration) {
+        lastProgressPaintRef.current = frameNow;
+        setProgress(nextProgress);
+      }
       if (elapsed >= duration && !doneRef.current) {
         doneRef.current = true;
         onComplete([
@@ -1493,7 +1637,7 @@ function PatienceRound({ onComplete }: RoundProps) {
           跳过
         </button>
       ) : (
-        <span className="quiet-text">先等一会儿。</span>
+        <span className="quiet-text">等待中</span>
       )}
     </div>
   );
@@ -1562,7 +1706,7 @@ function ResultScreen({
       </div>
 
       <div className="share-panel">
-        <label htmlFor="share-copy">分享文案</label>
+        <label htmlFor="share-copy">分享</label>
         <textarea id="share-copy" readOnly value={shareText} />
         <div className="action-row">
           <button className="primary-button" type="button" onPointerDown={onCopy}>
@@ -1573,7 +1717,7 @@ function ResultScreen({
           </button>
         </div>
         {copyState === "copied" ? <p className="status-text">已复制。</p> : null}
-        {copyState === "failed" ? <p className="status-text">复制被浏览器拦截，可以手动选择上方文案。</p> : null}
+        {copyState === "failed" ? <p className="status-text">可手动复制。</p> : null}
       </div>
     </section>
   );

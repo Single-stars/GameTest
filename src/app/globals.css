@@ -50,6 +50,7 @@ button {
   min-height: 100svh;
   margin: 0 auto;
   padding: 18px;
+  overflow: hidden;
 }
 
 .home-screen,
@@ -63,7 +64,7 @@ button {
 
 .home-screen {
   justify-content: center;
-  gap: 28px;
+  gap: 24px;
 }
 
 .home-brand {
@@ -73,7 +74,7 @@ button {
 
 .hero-copy.compact h1 {
   max-width: 720px;
-  font-size: 64px;
+  font-size: 58px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -96,7 +97,7 @@ button {
 }
 
 h1 {
-  font-size: 56px;
+  font-size: 50px;
   line-height: 1.02;
   letter-spacing: 0;
 }
@@ -104,7 +105,7 @@ h1 {
 .rule-card {
   max-width: 640px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 18px;
@@ -119,8 +120,8 @@ h1 {
 .result-card p,
 .result-card small {
   color: var(--muted);
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .primary-button,
@@ -158,7 +159,7 @@ h1 {
 }
 
 .play-screen {
-  gap: 14px;
+  gap: 12px;
 }
 
 .round-header {
@@ -171,7 +172,7 @@ h1 {
 
 .round-header h1 {
   margin-top: 6px;
-  font-size: 42px;
+  font-size: 36px;
 }
 
 .progress-pill {
@@ -215,6 +216,7 @@ h1 {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  contain: layout paint;
 }
 
 .test-pad {
@@ -227,7 +229,7 @@ h1 {
 }
 
 .test-pad span {
-  font-size: 72px;
+  font-size: 64px;
   font-weight: 950;
 }
 
@@ -244,7 +246,7 @@ h1 {
 
 .game-area {
   position: relative;
-  min-height: 62svh;
+  min-height: 60svh;
   overflow: hidden;
 }
 
@@ -321,6 +323,7 @@ h1 {
     background 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
+  will-change: left, transform;
 }
 
 .moving-target.hit {
@@ -349,13 +352,24 @@ h1 {
   min-height: 72px;
   justify-self: center;
   margin: 0 16px 16px;
-  border: 0;
+  border: 1px dashed rgba(24, 24, 24, 0.24);
   border-radius: 8px;
-  background: var(--ink);
-  color: #ffffff;
-  font-size: 20px;
-  font-weight: 950;
+  background: rgba(255, 253, 248, 0.84);
   cursor: pointer;
+  touch-action: none;
+}
+
+.run-button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  translate: -50% -50%;
+  border: 2px solid rgba(24, 24, 24, 0.32);
+  border-radius: 50%;
+  background: var(--surface);
 }
 
 .aim-fire-strip {
@@ -381,16 +395,14 @@ h1 {
   translate: -50% 0;
   border-radius: 999px;
   background: var(--ink);
+  will-change: bottom, left;
 }
 
 .arrow-shot.flying {
-  animation-name: arrow-rise;
-  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-  animation-fill-mode: forwards;
+  transition: bottom 16ms linear;
 }
 
 .arrow-shot.settled {
-  bottom: calc(var(--aim-impact-bottom, 72%) - 44px);
   animation: none;
 }
 
@@ -495,6 +507,7 @@ h1 {
   animation-name: barrage-float;
   animation-timing-function: linear;
   animation-fill-mode: both;
+  will-change: left, top, opacity;
 }
 
 .search-dot.barrage.hollow {
@@ -575,23 +588,23 @@ h1 {
 .memory-panel,
 .braking-panel,
 .patience-panel {
-  min-height: 62svh;
+  min-height: 60svh;
   position: relative;
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 24px;
-  padding: 24px;
+  gap: 20px;
+  padding: 20px;
 }
 
 .stroop-word {
-  font-size: 130px;
+  font-size: 112px;
   font-weight: 950;
   line-height: 1;
 }
 
 .stroop-word-placeholder {
-  height: 130px;
+  height: 112px;
 }
 
 .color-grid {
@@ -602,7 +615,7 @@ h1 {
 }
 
 .color-button {
-  min-height: 56px;
+  min-height: 54px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -622,7 +635,7 @@ h1 {
 
 .rhythm-target {
   position: relative;
-  width: min(38vw, 250px);
+  width: min(36vw, 230px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -650,6 +663,7 @@ h1 {
   aspect-ratio: 1;
   border: 8px solid var(--blue);
   border-radius: 50%;
+  will-change: transform;
 }
 
 .memory-grid {
@@ -708,7 +722,7 @@ h1 {
 .dino-track {
   position: relative;
   width: min(100%, 680px);
-  min-height: 260px;
+  min-height: 230px;
   overflow: hidden;
   border-bottom: 4px solid rgba(24, 24, 24, 0.18);
   background:
@@ -726,6 +740,7 @@ h1 {
   transition:
     filter 120ms ease,
     transform 120ms ease;
+  will-change: left, transform;
 }
 
 .dino-runner::before {
@@ -758,6 +773,7 @@ h1 {
   transition:
     opacity 80ms ease,
     transform 80ms ease;
+  will-change: opacity, transform;
 }
 
 .dino-threat::before {
@@ -788,7 +804,13 @@ h1 {
 }
 
 .run-button.active {
-  background: var(--green);
+  border-color: rgba(47, 155, 104, 0.52);
+  background: rgba(47, 155, 104, 0.08);
+}
+
+.run-button.active::after {
+  border-color: var(--green);
+  background: rgba(47, 155, 104, 0.16);
 }
 
 .patience-bar {
@@ -816,22 +838,22 @@ h1 {
 }
 
 .result-screen {
-  gap: 14px;
-  padding-block: 12px;
+  gap: 12px;
+  padding-block: 8px;
 }
 
 .result-card {
-  padding: 28px;
+  padding: 24px;
 }
 
 .rank-card {
   display: grid;
-  gap: 10px;
-  padding: 30px 28px;
+  gap: 8px;
+  padding: 26px 24px;
 }
 
 .result-card h1 {
-  font-size: 58px;
+  font-size: 52px;
 }
 
 .rank-card p {
@@ -850,7 +872,7 @@ h1 {
   grid-template-columns: 1fr;
   align-items: center;
   gap: 18px;
-  padding: 18px;
+  padding: 14px;
 }
 
 .radar-visual {
@@ -897,7 +919,7 @@ h1 {
 }
 
 .score-item {
-  min-height: 112px;
+  min-height: 102px;
   display: grid;
   gap: 4px;
   border: 1px solid var(--line);
@@ -915,7 +937,7 @@ h1 {
 }
 
 .score-item strong {
-  font-size: 34px;
+  font-size: 32px;
   line-height: 1;
 }
 
@@ -927,7 +949,7 @@ h1 {
 
 textarea {
   width: 100%;
-  min-height: 124px;
+  min-height: 104px;
   resize: vertical;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -945,31 +967,41 @@ textarea {
 
 @media (max-width: 760px) {
   .app-shell {
-    padding: 16px;
+    padding: 12px;
   }
 
   .home-screen,
   .intro-screen,
   .play-screen,
   .result-screen {
-    min-height: calc(100svh - 32px);
+    min-height: calc(100svh - 24px);
+  }
+
+  .home-screen,
+  .intro-screen {
+    gap: 18px;
   }
 
   .home-brand {
-    font-size: 24px;
+    font-size: 28px;
   }
 
   .hero-copy.compact h1 {
-    font-size: 46px;
+    font-size: 42px;
   }
 
   h1,
   .result-card h1 {
-    font-size: 42px;
+    font-size: 38px;
   }
 
   .round-header {
     display: grid;
+    gap: 8px;
+  }
+
+  .round-header h1 {
+    font-size: 30px;
   }
 
   .progress-pill {
@@ -983,16 +1015,16 @@ textarea {
   .memory-panel,
   .braking-panel,
   .patience-panel {
-    min-height: 64svh;
+    min-height: 62svh;
   }
 
   .test-pad span,
   .stroop-word {
-    font-size: 72px;
+    font-size: 64px;
   }
 
   .stroop-word-placeholder {
-    height: 72px;
+    height: 64px;
   }
 
   .color-grid,
@@ -1010,7 +1042,7 @@ textarea {
   }
 
   .rhythm-target {
-    width: min(42vw, 210px);
+    width: min(40vw, 190px);
   }
 
   .memory-options {
@@ -1025,7 +1057,39 @@ textarea {
   }
 
   .score-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .score-item {
+    min-height: 90px;
+    padding: 12px;
+  }
+
+  .score-item strong {
+    font-size: 28px;
+  }
+
+  .rank-card {
+    padding: 22px 20px;
+  }
+
+  .result-card h1 {
+    font-size: 34px;
+  }
+
+  .radar-visual svg {
+    width: min(100%, 300px);
+  }
+
+  .dino-track {
+    min-height: 210px;
+  }
+
+  .run-button,
+  .aim-fire-strip {
+    margin-inline: 12px;
+    width: calc(100% - 24px);
   }
 
 }
