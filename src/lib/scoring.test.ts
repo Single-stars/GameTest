@@ -6,7 +6,10 @@ import {
   calculateRankScore,
   calculateScores,
   deriveMetrics,
+  DINO_SAFE_STOP_WINDOW_MS,
   getPersonaResult,
+  resolveArrowShot,
+  resolveDinoStop,
   type RoundId,
   type TrialEvent,
 } from "./scoring.ts";
@@ -246,7 +249,7 @@ test("very slow all-correct decisions can lose a small amount", () => {
         value: { setSize: 4, color: "blue", targetIndex: index },
       }),
     ),
-    ...dinoBrakeTrials(Array.from({ length: 8 }, () => ({ safeStop: true, stopLatencyMs: 520 }))),
+    ...dinoBrakeTrials(Array.from({ length: 8 }, () => ({ safeStop: true, stopLatencyMs: 320 }))),
   ]);
 
   assert.equal(scores.search < 100 && scores.search >= 88, true);
@@ -292,6 +295,28 @@ test("arrow precision ignores the practice shot", () => {
   assert.equal(result.metrics.aimTotal, 8);
 });
 
+test("arrow shot resolution uses the impact target as the visible stuck position on hits", () => {
+  const hit = resolveArrowShot({
+    fieldWidthPx: 390,
+    shotXPercent: 48,
+    targetXPercentAtImpact: 50,
+    targetSizePx: 54,
+  });
+  const miss = resolveArrowShot({
+    fieldWidthPx: 390,
+    shotXPercent: 36,
+    targetXPercentAtImpact: 50,
+    targetSizePx: 54,
+  });
+
+  assert.equal(hit.hit, true);
+  assert.equal(hit.displayXPercent, 50);
+  assert.equal(hit.stuckInTarget, true);
+  assert.equal(miss.hit, false);
+  assert.equal(miss.displayXPercent, 36);
+  assert.equal(miss.stuckInTarget, false);
+});
+
 test("dinosaur braking metrics capture safe stops and collisions", () => {
   const metrics = deriveMetrics(
     dinoBrakeTrials([
@@ -306,6 +331,16 @@ test("dinosaur braking metrics capture safe stops and collisions", () => {
   assert.equal(metrics.dinoCollisionRate, 0.25);
   assert.equal(metrics.dinoEarlyStopRate, 0.25);
   assert.equal(metrics.dinoAvgStopMs, 200);
+});
+
+test("dinosaur stop resolution is stricter than the old 420ms window", () => {
+  const fastStop = resolveDinoStop({ hazardShownAt: 1000, releasedAt: 1000 + DINO_SAFE_STOP_WINDOW_MS });
+  const oldWindowStop = resolveDinoStop({ hazardShownAt: 1000, releasedAt: 1420 });
+
+  assert.equal(fastStop.safeStop, true);
+  assert.equal(fastStop.stopLatencyMs, DINO_SAFE_STOP_WINDOW_MS);
+  assert.equal(oldWindowStop.safeStop, false);
+  assert.equal(oldWindowStop.collision, true);
 });
 
 test("high average with a weak braking dimension is capped below top rank", () => {

@@ -13,7 +13,10 @@ import {
 } from "react";
 import {
   buildShareText,
+  DINO_SAFE_STOP_WINDOW_MS,
   getPersonaResult,
+  resolveArrowShot,
+  resolveDinoStop,
   type PointerKind,
   type RoundId,
   type TrialEvent,
@@ -488,8 +491,10 @@ type TargetState = {
 
 type ArrowShotState = {
   id: number;
+  launchX: number;
   x: number;
   status: "flying" | "hit" | "miss";
+  stuckInTarget?: boolean;
 };
 
 const AIM_SHOT_COUNT = 8;
@@ -508,6 +513,7 @@ function AimRound({ onComplete }: RoundProps) {
   const lastFrameAtRef = useRef(0);
   const answeredRef = useRef(false);
   const targetRef = useRef<TargetState>(target);
+  const targetFrozenRef = useRef(false);
 
   const startTarget = useCallback((index: number) => {
     const next = makeTarget(index);
@@ -516,11 +522,13 @@ function AimRound({ onComplete }: RoundProps) {
     setShot(null);
     setFeedback(null);
     answeredRef.current = false;
+    targetFrozenRef.current = false;
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
       if (answeredRef.current) return;
       answeredRef.current = true;
       const current = targetRef.current;
+      targetFrozenRef.current = true;
       setFeedback("miss");
       trialsRef.current.push(
         trial("aim", index, {
@@ -560,6 +568,7 @@ function AimRound({ onComplete }: RoundProps) {
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
       setTarget((current) => {
+        if (targetFrozenRef.current) return current;
         const next = moveTarget(current, delta);
         targetRef.current = next;
         return next;
@@ -582,32 +591,44 @@ function AimRound({ onComplete }: RoundProps) {
     const current = targetRef.current;
     const shotX = clamp(((event.clientX - rect.left) / rect.width) * 100, 6, 94);
     setFeedback(null);
-    setShot({ id: current.index, x: shotX, status: "flying" });
+    setShot({ id: current.index, launchX: shotX, x: shotX, status: "flying" });
 
     window.setTimeout(() => {
       const impactTarget = targetRef.current;
       const targetXAtImpact = impactTarget.x;
-      const targetRadiusPx = impactTarget.size / 2;
-      const errorPx = Math.abs(((shotX - targetXAtImpact) / 100) * rect.width);
-      const hit = errorPx <= targetRadiusPx * 1.12;
-      setShot({ id: current.index, x: shotX, status: hit ? "hit" : "miss" });
-      setFeedback(hit ? "hit" : "miss");
+      const resolution = resolveArrowShot({
+        fieldWidthPx: rect.width,
+        shotXPercent: shotX,
+        targetXPercentAtImpact: targetXAtImpact,
+        targetSizePx: impactTarget.size,
+      });
+      targetFrozenRef.current = true;
+      targetRef.current = impactTarget;
+      setTarget(impactTarget);
+      setShot({
+        id: current.index,
+        launchX: shotX,
+        x: resolution.displayXPercent,
+        status: resolution.hit ? "hit" : "miss",
+        stuckInTarget: resolution.stuckInTarget,
+      });
+      setFeedback(resolution.hit ? "hit" : "miss");
       trialsRef.current.push(
         trial("aim", current.index, {
           shownAt: current.shownAt,
           responseAt: shotAt,
-          correct: hit,
-          errorType: hit ? undefined : "miss",
+          correct: resolution.hit,
+          errorType: resolution.hit ? undefined : "miss",
           pointerType: pointerKind(event.pointerType),
           target: arrowTargetPayload({ ...current, x: targetXAtImpact }, rect),
           value: {
             mode: "arrow",
             practice: current.practice,
-            shotHit: hit,
+            shotHit: resolution.hit,
             shotX: Math.round(shotX),
             targetXAtImpact: Math.round(targetXAtImpact),
-            shotErrorPx: Math.round(errorPx),
-            normalizedError: Number((errorPx / targetRadiusPx).toFixed(2)),
+            shotErrorPx: resolution.errorPx,
+            normalizedError: resolution.normalizedError,
             targetSpeed: current.speed,
             flightMs: AIM_ARROW_FLIGHT_MS,
           },
@@ -640,12 +661,13 @@ function AimRound({ onComplete }: RoundProps) {
         </span>
         {shot ? (
           <span
-            className={`arrow-shot ${shot.status}`}
+            className={`arrow-shot ${shot.status} ${shot.status === "flying" ? "flying" : "settled"} ${shot.stuckInTarget ? "stuck" : ""}`}
             key={`${shot.id}-${shot.status}`}
             style={{
               left: `${shot.x}%`,
               animationDuration: `${AIM_ARROW_FLIGHT_MS}ms`,
-            }}
+              "--aim-impact-bottom": `${100 - AIM_TARGET_Y}%`,
+            } as CSSProperties}
           />
         ) : null}
       </div>
@@ -1216,7 +1238,6 @@ function shuffle<T>(items: T[]) {
 }
 
 const DINO_TRIAL_COUNT = 8;
-const DINO_STOP_WINDOW_MS = 420;
 
 type DinoStatus = "ready" | "running" | "danger" | "stopped" | "crashed" | "early";
 
@@ -1330,7 +1351,7 @@ function BrakingRound({ onComplete }: RoundProps) {
           threatX: nextThreatX,
         },
       });
-    }, DINO_STOP_WINDOW_MS);
+    }, DINO_SAFE_STOP_WINDOW_MS);
   }, [completeTrial]);
 
   const beginRun = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1354,9 +1375,10 @@ function BrakingRound({ onComplete }: RoundProps) {
     holdingRef.current = false;
     const releasedAt = now();
     const hazardShownAt = hazardShownAtRef.current;
-    const earlyStop = hazardShownAt === null;
-    const stopLatencyMs = earlyStop ? null : Math.max(0, Math.round(releasedAt - hazardShownAt));
-    const safeStop = !earlyStop && (stopLatencyMs ?? Infinity) <= DINO_STOP_WINDOW_MS;
+    const stopResult = resolveDinoStop({ hazardShownAt, releasedAt });
+    const earlyStop = stopResult.earlyStop;
+    const stopLatencyMs = stopResult.stopLatencyMs;
+    const safeStop = stopResult.safeStop;
     setStatus(earlyStop ? "early" : "stopped");
     statusRef.current = earlyStop ? "early" : "stopped";
     trialsRef.current.push(
@@ -1370,7 +1392,7 @@ function BrakingRound({ onComplete }: RoundProps) {
           mode: "dino",
           signal: "threat",
           safeStop,
-          collision: !safeStop && !earlyStop,
+          collision: stopResult.collision,
           earlyStop,
           stopLatencyMs,
           hazardDelayMs: hazardDelayRef.current,

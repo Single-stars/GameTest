@@ -374,15 +374,24 @@ h1 {
 
 .arrow-shot {
   position: absolute;
+  z-index: 5;
   bottom: 26px;
   width: 6px;
   height: 44px;
   translate: -50% 0;
   border-radius: 999px;
   background: var(--ink);
+}
+
+.arrow-shot.flying {
   animation-name: arrow-rise;
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
   animation-fill-mode: forwards;
+}
+
+.arrow-shot.settled {
+  bottom: calc(var(--aim-impact-bottom, 72%) - 44px);
+  animation: none;
 }
 
 .arrow-shot::before {
@@ -400,6 +409,12 @@ h1 {
 .arrow-shot.hit {
   background: var(--green);
   box-shadow: 0 0 0 8px rgba(47, 155, 104, 0.18);
+}
+
+.arrow-shot.hit.stuck {
+  width: 8px;
+  height: 52px;
+  box-shadow: 0 0 0 10px rgba(47, 155, 104, 0.2), 0 16px 28px rgba(47, 155, 104, 0.22);
 }
 
 .arrow-shot.miss {
@@ -436,7 +451,7 @@ h1 {
   }
 
   to {
-    bottom: 70%;
+    bottom: calc(var(--aim-impact-bottom, 72%) - 44px);
   }
 }
 

@@ -112,6 +112,74 @@ export type PersonaResult = {
   confidence: number;
 };
 
+export const ARROW_AIM_HIT_RADIUS_MULTIPLIER = 1.18;
+export const DINO_SAFE_STOP_WINDOW_MS = 340;
+const DINO_FULL_SCORE_STOP_MS = 240;
+
+export type ArrowShotResolution = {
+  hit: boolean;
+  errorPx: number;
+  normalizedError: number;
+  displayXPercent: number;
+  stuckInTarget: boolean;
+};
+
+export function resolveArrowShot({
+  fieldWidthPx,
+  shotXPercent,
+  targetXPercentAtImpact,
+  targetSizePx,
+  radiusMultiplier = ARROW_AIM_HIT_RADIUS_MULTIPLIER,
+}: {
+  fieldWidthPx: number;
+  shotXPercent: number;
+  targetXPercentAtImpact: number;
+  targetSizePx: number;
+  radiusMultiplier?: number;
+}): ArrowShotResolution {
+  const width = Math.max(1, fieldWidthPx);
+  const targetRadiusPx = Math.max(1, targetSizePx / 2);
+  const errorPx = Math.abs(((shotXPercent - targetXPercentAtImpact) / 100) * width);
+  const hit = errorPx <= targetRadiusPx * radiusMultiplier;
+
+  return {
+    hit,
+    errorPx: Math.round(errorPx),
+    normalizedError: Number((errorPx / targetRadiusPx).toFixed(2)),
+    displayXPercent: hit ? targetXPercentAtImpact : shotXPercent,
+    stuckInTarget: hit,
+  };
+}
+
+export function resolveDinoStop({
+  hazardShownAt,
+  releasedAt,
+  safeWindowMs = DINO_SAFE_STOP_WINDOW_MS,
+}: {
+  hazardShownAt: number | null;
+  releasedAt: number;
+  safeWindowMs?: number;
+}) {
+  if (hazardShownAt === null) {
+    return {
+      earlyStop: true,
+      safeStop: false,
+      collision: false,
+      stopLatencyMs: null,
+    };
+  }
+
+  const stopLatencyMs = Math.max(0, Math.round(releasedAt - hazardShownAt));
+  const safeStop = stopLatencyMs <= safeWindowMs;
+
+  return {
+    earlyStop: false,
+    safeStop,
+    collision: !safeStop,
+    stopLatencyMs,
+  };
+}
+
 const clamp = (value: number, min = 0, max = 100) =>
   Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
 
@@ -351,7 +419,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
   const goSuccess = metrics.goMissRate === null ? 0 : 1 - metrics.goMissRate;
   const braking =
     metrics.dinoSafeStopRate !== null
-      ? clamp(metrics.dinoSafeStopRate * 100 - Math.max(0, ((metrics.dinoAvgStopMs ?? 0) - 300) / 350) * 12)
+      ? clamp(metrics.dinoSafeStopRate * 100 - Math.max(0, ((metrics.dinoAvgStopMs ?? 0) - DINO_FULL_SCORE_STOP_MS) / 260) * 18)
       : clamp(stopSuccess * 60 + goSuccess * 40 - Math.max(0, ((metrics.goAvgMs ?? 0) - 420) / 500) * 12);
 
   const waiting = clamp(metrics.patiencePct ?? 0);
