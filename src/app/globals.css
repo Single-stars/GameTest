@@ -37,6 +37,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body,
+button,
+[role="button"],
+.play-screen,
+.test-pad,
+.game-area,
+.stroop-panel,
+.rhythm-panel,
+.memory-panel,
+.braking-panel,
+.patience-panel {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 button,
 textarea {
   font: inherit;
@@ -393,6 +409,9 @@ h1 {
   background: rgba(255, 253, 248, 0.84);
   cursor: pointer;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .run-button::after {
@@ -866,11 +885,6 @@ h1 {
 .progress-readout strong {
   font-size: 56px;
   line-height: 1;
-}
-
-.progress-readout span {
-  color: var(--muted);
-  font-size: 15px;
 }
 
 .result-screen {

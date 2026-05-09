@@ -149,7 +149,6 @@ export default function Home() {
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getPersonaResult(safeTrials), [safeTrials]);
-  const shareText = useMemo(() => buildShareText(result), [result]);
 
   const startTest = () => {
     setTrials([]);
@@ -204,24 +203,35 @@ export default function Home() {
 
   const copyShareText = async () => {
     try {
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(buildShareText(result, window.location.href));
       setCopyState("copied");
     } catch {
       setCopyState("failed");
     }
   };
 
+  const shareHomeText = useCallback(async () => {
+    const text = `来测测你的段位吧！\n${window.location.href}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text, title: "测测你的段位" });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      setCopyState("copied");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setCopyState("failed");
+    }
+  }, []);
+
   const shareImage = useCallback(
-    async (kind: "home" | "result") => {
+    async () => {
       try {
         setImageShareState("sharing");
         const url = window.location.href;
-        const dataUrl =
-          kind === "home"
-            ? await createShareImage({ kind: "home", url })
-            : await createShareImage({ kind: "result", url, result });
-        const fileName = kind === "home" ? "game-persona.png" : `game-rank-${result.name}.png`;
-        await shareOrSaveImage(dataUrl, fileName, kind === "home" ? "测测你的段位" : result.name);
+        const dataUrl = await createShareImage({ kind: "result", url, result });
+        await shareOrSaveImage(dataUrl, `game-rank-${result.name}.png`, result.name);
         setImageShareState("saved");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -251,7 +261,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       {stage === "home" ? (
-        <HomeScreen imageShareState={imageShareState} onShareImage={() => shareImage("home")} onStart={startTest} />
+        <HomeScreen onShareText={shareHomeText} onStart={startTest} />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           trials={safeTrials}
@@ -259,7 +269,7 @@ export default function Home() {
           imageShareState={imageShareState}
           onCopy={copyShareText}
           onRestart={startTest}
-          onShareImage={() => shareImage("result")}
+          onShareImage={shareImage}
         />
       ) : stage === "intro" ? (
         <RoundIntro round={currentRound} index={roundIndex} onStart={startCurrentRound} />
@@ -274,7 +284,7 @@ export default function Home() {
           imageShareState={imageShareState}
           onCopy={copyShareText}
           onRestart={startTest}
-          onShareImage={() => shareImage("result")}
+          onShareImage={shareImage}
         />
       )}
     </main>
@@ -282,22 +292,19 @@ export default function Home() {
 }
 
 function HomeScreen({
-  imageShareState,
-  onShareImage,
+  onShareText,
   onStart,
 }: {
-  imageShareState: "idle" | "sharing" | "saved" | "failed";
-  onShareImage: () => void;
+  onShareText: () => void;
   onStart: () => void;
 }) {
   return (
     <section className="home-screen">
       <button
-        aria-label="分享图片"
+        aria-label="分享"
         className="icon-button home-share-button"
-        disabled={imageShareState === "sharing"}
         type="button"
-        onPointerDown={onShareImage}
+        onPointerDown={onShareText}
       >
         <ShareIcon />
       </button>
@@ -1688,7 +1695,6 @@ function PatienceRound({ onComplete }: RoundProps) {
       </div>
       <div className="progress-readout">
         <strong>{Math.round(progress)}%</strong>
-        <span>{((duration - (progress / 100) * duration) / 1000).toFixed(1)}s</span>
       </div>
       {canSkip ? (
         <button className="secondary-button" type="button" onPointerDown={skip}>
@@ -1840,16 +1846,11 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
   );
 }
 
-type ShareImageInput =
-  | {
-      kind: "home";
-      url: string;
-    }
-  | {
-      kind: "result";
-      result: PersonaResult;
-      url: string;
-    };
+type ShareImageInput = {
+  kind: "result";
+  result: PersonaResult;
+  url: string;
+};
 
 async function createShareImage(input: ShareImageInput) {
   const canvas = document.createElement("canvas");
@@ -1871,29 +1872,18 @@ async function createShareImage(input: ShareImageInput) {
   });
   const qrImage = await loadCanvasImage(qrDataUrl);
 
-  if (input.kind === "home") {
-    drawCard(ctx, 24, 24, 852, 300);
-    drawText(ctx, "测测你的段位", 58, 112, "900 68px", "#181818");
-    drawText(ctx, "30 秒小游戏测试", 60, 190, "850 34px", "#665f55");
-    drawText(ctx, "8 个短小游戏", 60, 236, "850 28px", "#1b9aaa");
+  drawCard(ctx, 24, 24, 852, 168);
+  drawText(ctx, input.result.name, 58, 126, "950 74px", "#181818");
 
-    drawCard(ctx, 24, 354, 852, 560);
-    drawText(ctx, "打开就能玩", 60, 450, "900 56px", "#181818");
-    drawText(ctx, "反应 / 精准 / 搜索 / 节奏", 62, 524, "850 30px", "#665f55");
-    drawText(ctx, "测完生成段位", 62, 584, "850 30px", "#665f55");
-  } else {
-    drawCard(ctx, 24, 24, 852, 168);
-    drawText(ctx, input.result.name, 58, 126, "950 74px", "#181818");
-
-    drawCard(ctx, 24, 222, 852, 692);
-    drawRadarOnCanvas(ctx, input.result.axis, 450, 548, 190);
-  }
+  drawCard(ctx, 24, 222, 852, 692);
+  drawRadarOnCanvas(ctx, input.result.axis, 450, 548, 190);
 
   const qrX = 704;
-  const qrY = 838;
-  drawCard(ctx, qrX - 14, qrY - 14, 178, 178);
+  const qrY = 790;
+  const qrCenterX = qrX + 75;
+  drawCard(ctx, qrX - 18, qrY - 18, 186, 218);
   ctx.drawImage(qrImage, qrX, qrY, 150, 150);
-  drawText(ctx, "扫码来测", 636, 992, "850 24px", "#665f55");
+  drawText(ctx, "扫码来测", qrCenterX, qrY + 190, "850 24px", "#665f55", "center");
 
   return canvas.toDataURL("image/png");
 }

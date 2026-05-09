@@ -543,8 +543,10 @@ test("insufficient data lowers confidence and returns the lowest rank", () => {
 test("buildShareText uses compact rank challenge copy", () => {
   const result = getPersonaResult(strongBaseline());
   const text = buildShareText(result);
+  const textWithLink = buildShareText(result, "https://example.com/test");
 
   assert.equal(text, `我的段位是【${result.name}】 来挑战我吧！`);
+  assert.equal(textWithLink, `我的段位是【${result.name}】 来挑战我吧！\nhttps://example.com/test`);
   assert.equal(text.includes("游戏操作画像"), false);
   assert.equal(text.includes("responseAt"), false);
 });

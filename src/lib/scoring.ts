@@ -586,6 +586,7 @@ export function getPersonaResult(trials: TrialEvent[]): PersonaResult {
   };
 }
 
-export function buildShareText(result: PersonaResult) {
-  return `我的段位是【${result.name}】 来挑战我吧！`;
+export function buildShareText(result: PersonaResult, url?: string) {
+  const text = `我的段位是【${result.name}】 来挑战我吧！`;
+  return url ? `${text}\n${url}` : text;
 }
