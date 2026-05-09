@@ -160,7 +160,7 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     reactionMedianMs === null ? null : median(reactionTimes.map((value) => Math.abs(value - reactionMedianMs)));
   const earlyReactions = reactionTrials.filter((trial) => trial.errorType === "early").length;
 
-  const aimTrials = byRound("aim");
+  const aimTrials = byRound("aim").filter((trial) => trial.value?.practice !== true);
   const aimHits = correctTrials(aimTrials);
   const aimTimes = aimHits
     .map((trial) => validRt(trial, 80, 2400))

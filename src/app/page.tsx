@@ -478,6 +478,7 @@ function ReactionRound({ onComplete }: RoundProps) {
 
 type TargetState = {
   index: number;
+  practice: boolean;
   x: number;
   size: number;
   shownAt: number;
@@ -493,10 +494,10 @@ type ArrowShotState = {
 
 const AIM_SHOT_COUNT = 8;
 const AIM_TARGET_Y = 28;
-const AIM_ARROW_FLIGHT_MS = 440;
+const AIM_ARROW_FLIGHT_MS = 520;
 
 function AimRound({ onComplete }: RoundProps) {
-  const [target, setTarget] = useState<TargetState>(() => makeTarget(0));
+  const [target, setTarget] = useState<TargetState>(() => makeTarget(-1));
   const [shot, setShot] = useState<ArrowShotState | null>(null);
   const [feedback, setFeedback] = useState<"hit" | "miss" | null>(null);
   const areaRef = useRef<HTMLDivElement | null>(null);
@@ -544,7 +545,7 @@ function AimRound({ onComplete }: RoundProps) {
   }, [onComplete]);
 
   useEffect(() => {
-    startTarget(0);
+    startTarget(-1);
     return () => {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
       if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
@@ -580,14 +581,15 @@ function AimRound({ onComplete }: RoundProps) {
     const shotAt = now();
     const current = targetRef.current;
     const shotX = clamp(((event.clientX - rect.left) / rect.width) * 100, 6, 94);
-    const targetXAtImpact = projectTargetX(current.x, current.direction, current.speed, AIM_ARROW_FLIGHT_MS);
-    const targetRadiusPx = current.size / 2;
-    const errorPx = Math.abs(((shotX - targetXAtImpact) / 100) * rect.width);
-    const hit = errorPx <= targetRadiusPx;
     setFeedback(null);
     setShot({ id: current.index, x: shotX, status: "flying" });
 
     window.setTimeout(() => {
+      const impactTarget = targetRef.current;
+      const targetXAtImpact = impactTarget.x;
+      const targetRadiusPx = impactTarget.size / 2;
+      const errorPx = Math.abs(((shotX - targetXAtImpact) / 100) * rect.width);
+      const hit = errorPx <= targetRadiusPx * 1.12;
       setShot({ id: current.index, x: shotX, status: hit ? "hit" : "miss" });
       setFeedback(hit ? "hit" : "miss");
       trialsRef.current.push(
@@ -600,6 +602,7 @@ function AimRound({ onComplete }: RoundProps) {
           target: arrowTargetPayload({ ...current, x: targetXAtImpact }, rect),
           value: {
             mode: "arrow",
+            practice: current.practice,
             shotHit: hit,
             shotX: Math.round(shotX),
             targetXAtImpact: Math.round(targetXAtImpact),
@@ -611,15 +614,15 @@ function AimRound({ onComplete }: RoundProps) {
         }),
       );
 
-      if (current.index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => startTarget(current.index + 1), 560);
+      if (!current.practice && current.index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
+      else transitionTimerRef.current = window.setTimeout(() => startTarget(current.practice ? 0 : current.index + 1), 640);
     }, AIM_ARROW_FLIGHT_MS);
   };
 
   return (
     <div className={`game-area aim-area arrow-aim ${feedback ?? ""}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score">
-        <span>{target.index + 1}/{AIM_SHOT_COUNT}</span>
+        <span>{target.practice ? "练习" : `${target.index + 1}/${AIM_SHOT_COUNT}`}</span>
         <span>点击任意位置发射</span>
       </div>
       <div className="aim-lane" aria-hidden="true">
@@ -652,12 +655,14 @@ function AimRound({ onComplete }: RoundProps) {
 }
 
 function makeTarget(index: number): TargetState {
+  const practice = index < 0;
   return {
     index,
+    practice,
     x: rand(20, 80),
     direction: Math.random() > 0.5 ? 1 : -1,
-    speed: 0.028 + index * 0.0045,
-    size: Math.max(46, 62 - index * 2.2),
+    speed: practice ? 0.022 : 0.028 + index * 0.0045,
+    size: practice ? 64 : Math.max(46, 62 - index * 2.2),
     shownAt: now(),
   };
 }
@@ -674,23 +679,6 @@ function moveTarget(target: TargetState, deltaMs: number): TargetState {
     direction = 1;
   }
   return { ...target, x, direction };
-}
-
-function projectTargetX(startX: number, startDirection: 1 | -1, speed: number, ms: number) {
-  let x = startX;
-  let direction = startDirection;
-  let remaining = ms;
-  while (remaining > 0) {
-    const boundary = direction > 0 ? 88 : 12;
-    const timeToBoundary = Math.abs(boundary - x) / speed;
-    if (timeToBoundary >= remaining) {
-      return x + direction * speed * remaining;
-    }
-    x = boundary;
-    direction = direction > 0 ? -1 : 1;
-    remaining -= timeToBoundary;
-  }
-  return x;
 }
 
 function arrowTargetPayload(target: TargetState, rect?: Pick<DOMRect, "width" | "height">) {
@@ -1318,7 +1306,7 @@ function BrakingRound({ onComplete }: RoundProps) {
   const showHazard = useCallback(() => {
     if (answeredRef.current || !holdingRef.current) return;
     hazardShownAtRef.current = now();
-    const nextThreatX = clamp(progressRef.current + rand(18, 27), 34, 82);
+    const nextThreatX = clamp(progressRef.current + rand(10, 16), 28, 82);
     setThreatX(nextThreatX);
     setStatus("danger");
     statusRef.current = "danger";
@@ -1353,7 +1341,7 @@ function BrakingRound({ onComplete }: RoundProps) {
     holdingRef.current = true;
     setStatus("running");
     statusRef.current = "running";
-    hazardDelayRef.current = Math.round(rand(620, 1450) - Math.min(index * 42, 210));
+    hazardDelayRef.current = Math.round(rand(580, 1400) - Math.min(index * 46, 230));
     hazardTimerRef.current = window.setTimeout(showHazard, hazardDelayRef.current);
   };
 

@@ -436,7 +436,7 @@ h1 {
   }
 
   to {
-    bottom: 68%;
+    bottom: 70%;
   }
 }
 
@@ -732,12 +732,12 @@ h1 {
   position: absolute;
   left: 68%;
   bottom: 0;
-  width: 38px;
-  height: 92px;
+  width: 48px;
+  height: 104px;
   opacity: 0;
   border-radius: 7px 7px 2px 2px;
   background: var(--red);
-  box-shadow: 0 0 0 10px rgba(230, 83, 73, 0.14);
+  box-shadow: 0 0 0 12px rgba(230, 83, 73, 0.16), 0 18px 34px rgba(230, 83, 73, 0.2);
   translate: -50% 0;
   transform: translateY(16px) scaleY(0.88);
   transition:

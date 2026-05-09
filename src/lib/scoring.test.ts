@@ -268,6 +268,30 @@ test("arrow precision scores primarily by hits out of eight", () => {
   assert.equal(sixHits, 75);
 });
 
+test("arrow precision ignores the practice shot", () => {
+  const practiceMiss = trial("aim", -1, {
+    correct: false,
+    errorType: "miss",
+    target: { x: 50, y: 28, size: 62, distance: 0, difficulty: 0 },
+    value: {
+      mode: "arrow",
+      practice: true,
+      shotHit: false,
+      shotErrorPx: 120,
+      normalizedError: 4,
+      targetSpeed: 0.8,
+    },
+  });
+  const result = getPersonaResult([
+    practiceMiss,
+    ...arrowAimTrials(Array.from({ length: 8 }, () => ({ hit: true, errorPx: 14, targetSize: 54, speed: 1.2 }))),
+  ]);
+
+  assert.equal(result.scores.targeting, 100);
+  assert.equal(result.metrics.aimHits, 8);
+  assert.equal(result.metrics.aimTotal, 8);
+});
+
 test("dinosaur braking metrics capture safe stops and collisions", () => {
   const metrics = deriveMetrics(
     dinoBrakeTrials([
