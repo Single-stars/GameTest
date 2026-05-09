@@ -45,7 +45,7 @@ const rounds: RoundConfig[] = [
     id: "aim",
     title: "移动靶",
     measure: "发射精准",
-    rule: "靶子会左右移动。点击底部发射区，箭矢会从点击位置向上飞。",
+    rule: "靶子会左右移动。点击屏幕任意位置，箭矢会从同一横向位置向上飞。",
     action: "共 8 发，命中次数就是主要分数，后面靶子更快也更小。",
   },
   {
@@ -78,9 +78,9 @@ const rounds: RoundConfig[] = [
   },
   {
     id: "braking",
-    title: "急停反应",
+    title: "小方块急停",
     measure: "操作刹车",
-    rule: "长按跑步键让小恐龙前进。路上出现危险时，立刻松手停下。",
+    rule: "长按跑步键让小方块前进。前方突然出现危险时，立刻松手停下。",
     action: "危险出现得很突然，太早松手或撞上都会记录。",
   },
   {
@@ -498,6 +498,7 @@ const AIM_ARROW_FLIGHT_MS = 440;
 function AimRound({ onComplete }: RoundProps) {
   const [target, setTarget] = useState<TargetState>(() => makeTarget(0));
   const [shot, setShot] = useState<ArrowShotState | null>(null);
+  const [feedback, setFeedback] = useState<"hit" | "miss" | null>(null);
   const areaRef = useRef<HTMLDivElement | null>(null);
   const trialsRef = useRef<TrialEvent[]>([]);
   const timeoutRef = useRef<number | null>(null);
@@ -512,12 +513,14 @@ function AimRound({ onComplete }: RoundProps) {
     targetRef.current = next;
     setTarget(next);
     setShot(null);
+    setFeedback(null);
     answeredRef.current = false;
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
       if (answeredRef.current) return;
       answeredRef.current = true;
       const current = targetRef.current;
+      setFeedback("miss");
       trialsRef.current.push(
         trial("aim", index, {
           shownAt: current.shownAt,
@@ -536,7 +539,7 @@ function AimRound({ onComplete }: RoundProps) {
         }),
       );
       if (index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => startTarget(index + 1), 260);
+      else transitionTimerRef.current = window.setTimeout(() => startTarget(index + 1), 520);
     }, 3600);
   }, [onComplete]);
 
@@ -568,7 +571,7 @@ function AimRound({ onComplete }: RoundProps) {
     };
   }, []);
 
-  const shoot = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (answeredRef.current) return;
     answeredRef.current = true;
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
@@ -581,10 +584,12 @@ function AimRound({ onComplete }: RoundProps) {
     const targetRadiusPx = current.size / 2;
     const errorPx = Math.abs(((shotX - targetXAtImpact) / 100) * rect.width);
     const hit = errorPx <= targetRadiusPx;
+    setFeedback(null);
     setShot({ id: current.index, x: shotX, status: "flying" });
 
     window.setTimeout(() => {
       setShot({ id: current.index, x: shotX, status: hit ? "hit" : "miss" });
+      setFeedback(hit ? "hit" : "miss");
       trialsRef.current.push(
         trial("aim", current.index, {
           shownAt: current.shownAt,
@@ -607,19 +612,20 @@ function AimRound({ onComplete }: RoundProps) {
       );
 
       if (current.index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => startTarget(current.index + 1), 340);
+      else transitionTimerRef.current = window.setTimeout(() => startTarget(current.index + 1), 560);
     }, AIM_ARROW_FLIGHT_MS);
   };
 
   return (
-    <div className="game-area aim-area arrow-aim" ref={areaRef}>
+    <div className={`game-area aim-area arrow-aim ${feedback ?? ""}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score">
         <span>{target.index + 1}/{AIM_SHOT_COUNT}</span>
-        <span>点击底部发射</span>
+        <span>点击任意位置发射</span>
       </div>
       <div className="aim-lane" aria-hidden="true">
+        {feedback ? <div className={`aim-feedback ${feedback}`}>{feedback === "hit" ? "命中！" : "偏了！"}</div> : null}
         <span
-          className="moving-target"
+          className={`moving-target ${feedback ?? ""}`}
           style={{
             left: `${target.x}%`,
             top: `${AIM_TARGET_Y}%`,
@@ -640,9 +646,7 @@ function AimRound({ onComplete }: RoundProps) {
           />
         ) : null}
       </div>
-      <button className="launcher-zone" type="button" onPointerDown={shoot}>
-        发射
-      </button>
+      <div className="aim-fire-strip">点哪里，就从哪里发射</div>
     </div>
   );
 }
@@ -1225,7 +1229,6 @@ function shuffle<T>(items: T[]) {
 
 const DINO_TRIAL_COUNT = 8;
 const DINO_STOP_WINDOW_MS = 420;
-const DINO_HAZARD_DELAYS = [1150, 980, 1320, 860, 1080, 760, 930, 680] as const;
 
 type DinoStatus = "ready" | "running" | "danger" | "stopped" | "crashed" | "early";
 
@@ -1233,9 +1236,11 @@ function BrakingRound({ onComplete }: RoundProps) {
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<DinoStatus>("ready");
   const [progress, setProgress] = useState(8);
+  const [threatX, setThreatX] = useState(68);
   const [holding, setHolding] = useState(false);
   const trialStartedAtRef = useRef(now());
   const hazardShownAtRef = useRef<number | null>(null);
+  const hazardDelayRef = useRef(1000);
   const trialsRef = useRef<TrialEvent[]>([]);
   const transitionTimerRef = useRef<number | null>(null);
   const hazardTimerRef = useRef<number | null>(null);
@@ -1244,6 +1249,7 @@ function BrakingRound({ onComplete }: RoundProps) {
   const lastFrameAtRef = useRef(0);
   const answeredRef = useRef(false);
   const holdingRef = useRef(false);
+  const progressRef = useRef(8);
   const statusRef = useRef<DinoStatus>("ready");
 
   const start = useCallback((nextIndex: number) => {
@@ -1251,6 +1257,8 @@ function BrakingRound({ onComplete }: RoundProps) {
     setStatus("ready");
     statusRef.current = "ready";
     setProgress(8);
+    progressRef.current = 8;
+    setThreatX(68);
     setHolding(false);
     holdingRef.current = false;
     hazardShownAtRef.current = null;
@@ -1278,7 +1286,11 @@ function BrakingRound({ onComplete }: RoundProps) {
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
       if (holdingRef.current && (statusRef.current === "running" || statusRef.current === "danger")) {
-        setProgress((current) => clamp(current + delta * 0.026, 8, 78));
+        setProgress((current) => {
+          const next = clamp(current + delta * 0.026, 8, 78);
+          progressRef.current = next;
+          return next;
+        });
       }
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -1306,6 +1318,8 @@ function BrakingRound({ onComplete }: RoundProps) {
   const showHazard = useCallback(() => {
     if (answeredRef.current || !holdingRef.current) return;
     hazardShownAtRef.current = now();
+    const nextThreatX = clamp(progressRef.current + rand(18, 27), 34, 82);
+    setThreatX(nextThreatX);
     setStatus("danger");
     statusRef.current = "danger";
     collisionTimerRef.current = window.setTimeout(() => {
@@ -1324,11 +1338,12 @@ function BrakingRound({ onComplete }: RoundProps) {
           collision: true,
           earlyStop: false,
           stopLatencyMs: null,
-          hazardDelayMs: DINO_HAZARD_DELAYS[index],
+          hazardDelayMs: hazardDelayRef.current,
+          threatX: nextThreatX,
         },
       });
     }, DINO_STOP_WINDOW_MS);
-  }, [completeTrial, index]);
+  }, [completeTrial]);
 
   const beginRun = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (answeredRef.current || statusRef.current !== "ready") return;
@@ -1338,7 +1353,8 @@ function BrakingRound({ onComplete }: RoundProps) {
     holdingRef.current = true;
     setStatus("running");
     statusRef.current = "running";
-    hazardTimerRef.current = window.setTimeout(showHazard, DINO_HAZARD_DELAYS[index]);
+    hazardDelayRef.current = Math.round(rand(620, 1450) - Math.min(index * 42, 210));
+    hazardTimerRef.current = window.setTimeout(showHazard, hazardDelayRef.current);
   };
 
   const releaseRun = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1369,7 +1385,8 @@ function BrakingRound({ onComplete }: RoundProps) {
           collision: !safeStop && !earlyStop,
           earlyStop,
           stopLatencyMs,
-          hazardDelayMs: DINO_HAZARD_DELAYS[index],
+          hazardDelayMs: hazardDelayRef.current,
+          threatX,
         },
       }),
     );
@@ -1384,7 +1401,7 @@ function BrakingRound({ onComplete }: RoundProps) {
         <span>{status === "danger" ? "松手" : holding ? "跑" : "按住"}</span>
       </div>
       <div className="dino-track" aria-hidden="true">
-        <span className="dino-threat" />
+        <span className="dino-threat" style={{ left: `${threatX}%` }} />
         <span className="dino-runner" style={{ left: `${progress}%` }}>
           <span />
         </span>
@@ -1396,7 +1413,7 @@ function BrakingRound({ onComplete }: RoundProps) {
         onPointerDown={beginRun}
         onPointerUp={releaseRun}
       >
-        按住跑步
+        按住前进
       </button>
     </div>
   );
