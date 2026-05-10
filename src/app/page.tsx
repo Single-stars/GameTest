@@ -45,7 +45,7 @@ const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_IMAGE_WIDTH = 900;
 const SHARE_IMAGE_HEIGHT = 820;
-const SHARE_COPY_TOAST_DELAY_MS = 1000;
+const SHARE_COPY_TOAST_DELAY_MS = 500;
 
 const rounds: RoundConfig[] = [
   {
@@ -1067,7 +1067,7 @@ function SearchRound({ onComplete }: RoundProps) {
   );
 }
 
-const searchProfiles = [
+const searchConfigs = [
   { totalDots: 16, targetMin: 3, targetMax: 4, durationMs: 4200, dotMinMs: 3200, dotMaxMs: 3900, slope: 6 },
   { totalDots: 20, targetMin: 3, targetMax: 5, durationMs: 4400, dotMinMs: 2900, dotMaxMs: 3600, slope: 9 },
   { totalDots: 24, targetMin: 4, targetMax: 6, durationMs: 4600, dotMinMs: 2500, dotMaxMs: 3300, slope: 12 },
@@ -1075,19 +1075,19 @@ const searchProfiles = [
 ] as const;
 
 function makeSearchScene(roundIndex: number): SearchScene {
-  const profile = searchProfiles[Math.min(roundIndex, searchProfiles.length - 1)];
-  const targetCount = Math.floor(rand(profile.targetMin, profile.targetMax + 1));
+  const config = searchConfigs[Math.min(roundIndex, searchConfigs.length - 1)];
+  const targetCount = Math.floor(rand(config.targetMin, config.targetMax + 1));
   const targetSlots = new Set<number>();
   while (targetSlots.size < targetCount) {
-    targetSlots.add(Math.floor(rand(0, profile.totalDots)));
+    targetSlots.add(Math.floor(rand(0, config.totalDots)));
   }
 
-  const dots = Array.from({ length: profile.totalDots }, (_, dotIndex) => {
+  const dots = Array.from({ length: config.totalDots }, (_, dotIndex) => {
     const target = targetSlots.has(dotIndex);
     const leftToRight = Math.random() > 0.5;
     const fromY = rand(18, 82);
-    const durationMs = rand(profile.dotMinMs, profile.dotMaxMs);
-    const delayMs = rand(0, Math.max(0, profile.durationMs - durationMs));
+    const durationMs = rand(config.dotMinMs, config.dotMaxMs);
+    const delayMs = rand(0, Math.max(0, config.durationMs - durationMs));
     const distractor = target ? null : makeSearchDistractor(roundIndex, dotIndex);
 
     return {
@@ -1095,7 +1095,7 @@ function makeSearchScene(roundIndex: number): SearchScene {
       fromX: leftToRight ? -14 : 114,
       fromY,
       toX: leftToRight ? 114 : -14,
-      toY: clamp(fromY + rand(-profile.slope, profile.slope), 14, 86),
+      toY: clamp(fromY + rand(-config.slope, config.slope), 14, 86),
       size: target ? rand(34, 43) : rand(30, 45),
       color: target ? "#e1251b" : distractor?.color ?? "#2f80ed",
       shape: target ? "circle" : distractor?.shape ?? "circle",
@@ -1109,10 +1109,10 @@ function makeSearchScene(roundIndex: number): SearchScene {
   return {
     dots,
     targetCount,
-    totalDots: profile.totalDots,
-    durationMs: profile.durationMs,
+    totalDots: config.totalDots,
+    durationMs: config.durationMs,
     difficulty: roundIndex + 1,
-    options: makeCountOptions(targetCount, profile.totalDots),
+    options: makeCountOptions(targetCount, config.totalDots),
   };
 }
 

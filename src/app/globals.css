@@ -704,10 +704,6 @@ h1 {
 
 .rhythm-panel .mini-score {
   grid-column: 1 / -1;
-  top: 0;
-  left: 0;
-  right: auto;
-  width: auto;
   justify-content: flex-start;
 }
 

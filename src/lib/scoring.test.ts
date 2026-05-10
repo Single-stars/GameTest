@@ -550,7 +550,7 @@ test("buildScoreAxis uses the public eight-dimension names", () => {
   );
 });
 
-test("buildShareText uses game rank challenge copy without old profile wording", () => {
+test("buildShareText uses game rank challenge copy without old wording", () => {
   const result = getGameRankResult(strongBaseline());
   const text = buildShareText(result);
   const textWithLink = buildShareText(result, "https://example.com/test");

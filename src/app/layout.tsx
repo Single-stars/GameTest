@@ -1,9 +1,38 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const siteUrl = "https://gametest.p8.ink";
+const title = "测测你的游戏段位";
+const description = "8个小游戏测测你的段位";
+const shareImage = "/share-card.png";
+
 export const metadata: Metadata = {
-  title: "测测你的游戏段位",
-  description: "8个小游戏测测你的段位",
+  metadataBase: new URL(siteUrl),
+  title,
+  description,
+  applicationName: title,
+  openGraph: {
+    title,
+    description,
+    url: "/",
+    siteName: title,
+    locale: "zh_CN",
+    type: "website",
+    images: [
+      {
+        url: shareImage,
+        width: 855,
+        height: 856,
+        alt: title,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: [shareImage],
+  },
 };
 
 export default function RootLayout({
