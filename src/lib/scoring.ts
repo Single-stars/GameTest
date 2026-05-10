@@ -103,7 +103,7 @@ export type ScoreAxis = {
   score: number;
 };
 
-export type PersonaResult = {
+export type GameRankResult = {
   name: RankName;
   rankScore: number;
   axis: ScoreAxis[];
@@ -507,14 +507,14 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
 
 export function buildScoreAxis(scores: ScoreSummary): ScoreAxis[] {
   return [
-    { key: "reaction", label: "反应", score: scores.reaction },
-    { key: "targeting", label: "精准", score: scores.targeting },
-    { key: "search", label: "搜索", score: scores.search },
-    { key: "interference", label: "抗扰", score: scores.interference },
-    { key: "rhythm", label: "节奏", score: scores.rhythm },
-    { key: "memory", label: "记忆", score: scores.memory },
-    { key: "braking", label: "刹车", score: scores.braking },
-    { key: "waiting", label: "等待", score: scores.waiting },
+    { key: "reaction", label: "反应力", score: scores.reaction },
+    { key: "targeting", label: "精准度", score: scores.targeting },
+    { key: "search", label: "侦察力", score: scores.search },
+    { key: "interference", label: "专注力", score: scores.interference },
+    { key: "rhythm", label: "节奏感", score: scores.rhythm },
+    { key: "memory", label: "记忆力", score: scores.memory },
+    { key: "braking", label: "控制力", score: scores.braking },
+    { key: "waiting", label: "耐心", score: scores.waiting },
   ];
 }
 
@@ -571,7 +571,7 @@ export function rankFromScores(scores: ScoreSummary, rankScore = calculateRankSc
   return "最强王者";
 }
 
-export function getPersonaResult(trials: TrialEvent[]): PersonaResult {
+export function getGameRankResult(trials: TrialEvent[]): GameRankResult {
   const scores = calculateScores(trials);
   const metrics = deriveMetrics(trials);
   const rankScore = calculateRankScore(scores);
@@ -586,7 +586,7 @@ export function getPersonaResult(trials: TrialEvent[]): PersonaResult {
   };
 }
 
-export function buildShareText(result: PersonaResult, url?: string) {
-  const text = `我的段位是【${result.name}】 来挑战我吧！`;
+export function buildShareText(result: GameRankResult | null, url?: string) {
+  const text = result ? `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！` : "8个小游戏测测你的段位";
   return url ? `${text}\n${url}` : text;
 }

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "游戏人格测试",
-  description: "基于 8 个短操作任务生成段位结果。",
+  title: "测测你的游戏段位",
+  description: "8个小游戏测测你的段位",
 };
 
 export default function RootLayout({

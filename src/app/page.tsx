@@ -2,6 +2,7 @@
 
 /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
 
+import NextImage from "next/image";
 import {
   useCallback,
   useEffect,
@@ -15,17 +16,18 @@ import QRCode from "qrcode";
 import {
   buildShareText,
   DINO_SAFE_STOP_WINDOW_MS,
-  getPersonaResult,
+  getGameRankResult,
   resolveArrowTrajectoryShot,
   resolveDinoStop,
-  type PersonaResult,
+  type GameRankResult,
   type PointerKind,
   type RoundId,
   type ScoreAxis,
   type TrialEvent,
 } from "@/lib/scoring";
 
-type Stage = "home" | "intro" | "playing" | "result";
+type Stage = "home" | "intro" | "playing" | "result" | "share";
+type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 type RoundConfig = {
   id: RoundId;
@@ -39,62 +41,65 @@ type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
 };
 
+const APP_TITLE = "测测你的游戏段位";
+const APP_TAGLINE = "8个小游戏测测你的段位";
+
 const rounds: RoundConfig[] = [
   {
     id: "reaction",
     title: "变色点我",
-    measure: "反应",
-    rule: "变绿再点。",
-    action: "第一轮练习，后 3 轮计分。",
+    measure: "反应力",
+    rule: "等区域变绿后再点，提前点会记为误点。",
+    action: "首轮练习，后 3 轮计分。",
   },
   {
     id: "aim",
     title: "移动靶",
-    measure: "精准",
-    rule: "点屏幕发射。",
-    action: "箭尖碰到靶子算命中。",
+    measure: "精准度",
+    rule: "点击屏幕发射箭，命中移动靶得分。",
+    action: "越往后靶子越快越小。",
   },
   {
     id: "search",
     title: "相似红点",
-    measure: "搜索",
-    rule: "只数实心红圆点。",
-    action: "看完选数量。",
+    measure: "侦察力",
+    rule: "只数实心红圆点，空心、方形和偏色点都不算。",
+    action: "看完后从相近数字里选答案。",
   },
   {
     id: "stroop",
     title: "字色判断",
-    measure: "抗干扰",
-    rule: "点字体颜色。",
-    action: "不要看字义。",
+    measure: "专注力",
+    rule: "只看字体颜色，不看字义。",
+    action: "连续 5 题，错点和慢点都会扣分。",
   },
   {
     id: "rhythm",
     title: "双圈节拍",
-    measure: "节奏",
-    rule: "圈贴近内圈时点。",
-    action: "点错边也会记录。",
+    measure: "节奏感",
+    rule: "圆环贴近内圈时点对应一侧。",
+    action: "太早、太晚、漏点或点错边都会扣分。",
   },
   {
     id: "memory",
     title: "色块记忆",
-    measure: "记忆",
-    rule: "记住 4 个色块。",
-    action: "遮住后选指定位置的颜色。",
+    measure: "记忆力",
+    rule: "记住 4 格颜色，遮住后按提示位置选择颜色。",
+    action: "答对越多、反应越快分越高。",
   },
   {
     id: "braking",
     title: "小方块急停",
-    measure: "刹车",
-    rule: "长按前进。",
-    action: "见危险松手。",
+    measure: "控制力",
+    rule: "长按前进，危险出现时立刻松手。",
+    action: "提前松手或撞上危险都会扣分。",
   },
   {
     id: "patience",
     title: "进度等待",
-    measure: "等待",
-    rule: "",
-    action: "",
+    measure: "耐心",
+    rule: "等待进度条推进，越完整分越高。",
+    action: "中途跳过会按已等待比例计分。",
   },
 ];
 
@@ -142,20 +147,25 @@ export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
   const [roundIndex, setRoundIndex] = useState(0);
   const [trials, setTrials] = useState<TrialEvent[]>([]);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const [imageShareState, setImageShareState] = useState<"idle" | "sharing" | "saved" | "failed">("idle");
+  const [imageShareState, setImageShareState] = useState<ImageShareState>("idle");
+  const [shareImageDataUrl, setShareImageDataUrl] = useState<string | null>(null);
+  const [shareImageResult, setShareImageResult] = useState<GameRankResult | null>(null);
+  const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
-  const result = useMemo(() => getPersonaResult(safeTrials), [safeTrials]);
+  const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
 
   const startTest = () => {
     setTrials([]);
     setRoundIndex(0);
     roundIndexRef.current = 0;
-    setCopyState("idle");
     setImageShareState("idle");
+    setShareImageDataUrl(null);
+    setShareImageResult(null);
+    setShareLinkCopied(false);
     roundCompletionLockedRef.current = false;
     setStage("intro");
   };
@@ -201,78 +211,64 @@ export default function Home() {
     setStage("playing");
   };
 
-  const copyShareText = async () => {
-    try {
-      await navigator.clipboard.writeText(buildShareText(result, window.location.href));
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  };
+  const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "home" | "result") => {
+    setShareReturnStage(returnStage);
+    setShareImageResult(input.kind === "result" ? input.result : null);
+    setShareImageDataUrl(null);
+    setShareLinkCopied(false);
+    setImageShareState("sharing");
+    setStage("share");
 
-  const shareHomeText = useCallback(async () => {
-    const text = `来测测你的段位吧！\n${window.location.href}`;
     try {
-      if (navigator.share) {
-        await navigator.share({ text, title: "测测你的段位" });
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      setCopyState("copied");
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setCopyState("failed");
+      await navigator.clipboard.writeText(buildShareText(input.kind === "result" ? input.result : null, input.url));
+      setShareLinkCopied(true);
+    } catch {
+      setShareLinkCopied(false);
+    }
+
+    try {
+      const dataUrl = await createShareImage(input);
+      setShareImageDataUrl(dataUrl);
+      setImageShareState("saved");
+    } catch {
+      setShareImageDataUrl(null);
+      setImageShareState("failed");
     }
   }, []);
 
-  const shareImage = useCallback(
-    async () => {
-      try {
-        setImageShareState("sharing");
-        const url = window.location.href;
-        const dataUrl = await createShareImage({ kind: "result", url, result });
-        await shareOrSaveImage(dataUrl, `game-rank-${result.name}.png`, result.name);
-        setImageShareState("saved");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          setImageShareState("idle");
-          return;
-        }
-        setImageShareState("failed");
-      }
-    },
-    [result],
-  );
+  const openCurrentShareImage = useCallback(() => {
+    void openShareImage({ kind: "result", url: window.location.href, result }, "result");
+  }, [openShareImage, result]);
 
-  useEffect(() => {
-    if (stage !== "result") return;
+  const openDefaultShareImage = useCallback(() => {
+    void openShareImage({ kind: "default", url: window.location.href }, "home");
+  }, [openShareImage]);
 
-    localStorage.setItem(
-      "gaming-persona:last-result",
-      JSON.stringify({
-        savedAt: new Date().toISOString(),
-        result,
-        trials: safeTrials,
-        testVersion: "trial-v2",
-      }),
-    );
-  }, [result, safeTrials, stage]);
+  const closeShareImage = useCallback(() => {
+    setStage(shareReturnStage);
+  }, [shareReturnStage]);
 
   return (
     <main className="app-shell">
-      {stage === "home" ? (
-        <HomeScreen onShareText={shareHomeText} onStart={startTest} />
+      {stage === "share" ? (
+        <ShareImageScreen
+          dataUrl={shareImageDataUrl}
+          imageShareState={imageShareState}
+          onBack={closeShareImage}
+          result={shareImageResult}
+          shareLinkCopied={shareLinkCopied}
+        />
+      ) : stage === "home" ? (
+        <HomeScreen onShareImage={openDefaultShareImage} onStart={startTest} />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           trials={safeTrials}
-          copyState={copyState}
           imageShareState={imageShareState}
-          onCopy={copyShareText}
           onRestart={startTest}
-          onShareImage={shareImage}
+          onShareImage={openCurrentShareImage}
         />
       ) : stage === "intro" ? (
-        <RoundIntro round={currentRound} index={roundIndex} onStart={startCurrentRound} />
+        <RoundIntro round={currentRound} onStart={startCurrentRound} />
       ) : stage === "playing" ? (
         <PlayFrame round={currentRound} index={roundIndex}>
           <RoundRenderer key={`${currentRound.id}-${roundIndex}`} round={currentRound.id} onComplete={completeRound} />
@@ -280,11 +276,9 @@ export default function Home() {
       ) : (
         <ResultScreen
           trials={trials}
-          copyState={copyState}
           imageShareState={imageShareState}
-          onCopy={copyShareText}
           onRestart={startTest}
-          onShareImage={shareImage}
+          onShareImage={openCurrentShareImage}
         />
       )}
     </main>
@@ -292,24 +286,19 @@ export default function Home() {
 }
 
 function HomeScreen({
-  onShareText,
+  onShareImage,
   onStart,
 }: {
-  onShareText: () => void;
+  onShareImage: () => void;
   onStart: () => void;
 }) {
   return (
     <section className="home-screen">
-      <button
-        aria-label="分享"
-        className="icon-button home-share-button"
-        type="button"
-        onPointerDown={onShareText}
-      >
-        <ShareIcon />
+      <button aria-label="生成默认分享图片" className="icon-button home-image-button" type="button" onPointerDown={onShareImage}>
+        <ImageIcon />
       </button>
       <div className="hero-copy compact">
-        <h1>测测你的段位</h1>
+        <h1>{APP_TITLE}</h1>
       </div>
       <button className="primary-button hero-button" type="button" onPointerDown={onStart}>
         开始
@@ -320,17 +309,15 @@ function HomeScreen({
 
 function RoundIntro({
   round,
-  index,
   onStart,
 }: {
   round: RoundConfig;
-  index: number;
   onStart: () => void;
 }) {
   return (
     <section className="intro-screen">
       <p className="eyebrow">
-        {index + 1} / {rounds.length} · {round.measure}
+        {round.measure}
       </p>
       <h1>{round.title}</h1>
       <div className="rule-card">
@@ -354,6 +341,26 @@ function ShareIcon() {
   );
 }
 
+function ImageIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <rect height="16" rx="2" stroke="currentColor" strokeWidth="2" width="18" x="3" y="4" />
+      <path d="m7 16 3.2-3.2a1.4 1.4 0 0 1 2 0L16 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="m14 14 1.2-1.2a1.4 1.4 0 0 1 2 0L21 16.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <circle cx="8.5" cy="8.5" fill="currentColor" r="1.4" />
+    </svg>
+  );
+}
+
+function RestartIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <path d="M4 12a8 8 0 1 0 2.35-5.65" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="M4 5v5h5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
 function PlayFrame({
   round,
   index,
@@ -368,7 +375,7 @@ function PlayFrame({
       <header className="round-header">
         <div>
           <p className="eyebrow">
-            {index + 1} / {rounds.length} · {round.measure}
+            {round.measure}
           </p>
           <h1>{round.title}</h1>
         </div>
@@ -1112,17 +1119,21 @@ function makeSearchDistractor(roundIndex: number, dotIndex: number) {
 
 function makeCountOptions(targetCount: number, totalDots: number) {
   const options = new Set([targetCount]);
-  const offsets = shuffle([-2, -1, 1, 2, 3, -3, 4, -4]);
+  const offsets = shuffle([-1, 1, -2, 2]);
   for (const offset of offsets) {
     if (options.size >= 4) break;
     const next = targetCount + offset;
     if (next >= 0 && next <= totalDots) options.add(next);
   }
 
-  let fallback = 0;
+  let fallbackDistance = 3;
   while (options.size < 4) {
-    options.add(fallback);
-    fallback += 1;
+    for (const offset of [-fallbackDistance, fallbackDistance]) {
+      const next = targetCount + offset;
+      if (next >= 0 && next <= totalDots) options.add(next);
+      if (options.size >= 4) break;
+    }
+    fallbackDistance += 1;
   }
 
   return shuffle([...options]);
@@ -1709,40 +1720,36 @@ function PatienceRound({ onComplete }: RoundProps) {
 
 function ResultScreen({
   trials,
-  copyState,
   imageShareState,
-  onCopy,
   onShareImage,
   onRestart,
 }: {
   trials: TrialEvent[];
-  copyState: "idle" | "copied" | "failed";
-  imageShareState: "idle" | "sharing" | "saved" | "failed";
-  onCopy: () => void;
+  imageShareState: ImageShareState;
   onShareImage: () => void;
   onRestart: () => void;
 }) {
-  const result = getPersonaResult(trials);
+  const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
   const dinoSafeStops = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.safeStop === true).length;
   const dinoCollisions = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.collision === true).length;
   const rows = [
-    ["反应", result.scores.reaction, result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足"],
+    ["反应力", result.scores.reaction, result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足"],
     [
-      "精准",
+      "精准度",
       result.scores.targeting,
       result.metrics.aimTotal > 0 ? `命中 ${result.metrics.aimHits}/${result.metrics.aimTotal}` : "不足",
     ],
     [
-      "搜索",
+      "侦察力",
       result.scores.search,
       result.metrics.searchMeanCountError !== null ? `误差 ${result.metrics.searchMeanCountError.toFixed(1)}` : "不足",
     ],
-    ["抗扰", result.scores.interference, result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足"],
-    ["节奏", result.scores.rhythm, result.metrics.rhythmAvgOffsetMs !== null ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms` : "不足"],
-    ["记忆", result.scores.memory, result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足"],
+    ["专注力", result.scores.interference, result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足"],
+    ["节奏感", result.scores.rhythm, result.metrics.rhythmAvgOffsetMs !== null ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms` : "不足"],
+    ["记忆力", result.scores.memory, result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足"],
     [
-      "刹车",
+      "控制力",
       result.scores.braking,
       result.metrics.dinoSafeStopRate !== null
         ? `急停 ${dinoSafeStops}/${brakingTrials.length}${dinoCollisions ? ` · 撞 ${dinoCollisions}` : ""}`
@@ -1750,13 +1757,27 @@ function ResultScreen({
           ? `${Math.round(result.metrics.stopFalseAlarmRate * 100)}%误按`
           : "不足",
     ],
-    ["等待", result.scores.waiting, result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足"],
+    ["耐心", result.scores.waiting, result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足"],
   ] as const;
 
   return (
     <section className="result-screen">
       <div className="result-card rank-card">
         <h1>{result.name}</h1>
+        <div className="rank-actions" aria-label="结果操作">
+          <button
+            aria-label="生成分享图片"
+            className="icon-button"
+            disabled={imageShareState === "sharing"}
+            type="button"
+            onPointerDown={onShareImage}
+          >
+            <ShareIcon />
+          </button>
+          <button aria-label="重新测试" className="icon-button" type="button" onPointerDown={onRestart}>
+            <RestartIcon />
+          </button>
+        </div>
       </div>
 
       <RadarChart axis={result.axis} />
@@ -1771,24 +1792,59 @@ function ResultScreen({
         ))}
       </div>
 
-      <div className="share-panel">
-        <label>分享</label>
-        <div className="action-row">
-          <button className="primary-button" type="button" onPointerDown={onCopy}>
-            复制文案
-          </button>
-          <button className="secondary-button" disabled={imageShareState === "sharing"} type="button" onPointerDown={onShareImage}>
-            {imageShareState === "sharing" ? "生成中" : "保存图片"}
-          </button>
-          <button className="secondary-button" type="button" onPointerDown={onRestart}>
-            重新测试
-          </button>
+    </section>
+  );
+}
+
+function ShareImageScreen({
+  dataUrl,
+  imageShareState,
+  onBack,
+  result,
+  shareLinkCopied,
+}: {
+  dataUrl: string | null;
+  imageShareState: ImageShareState;
+  onBack: () => void;
+  result: GameRankResult | null;
+  shareLinkCopied: boolean;
+}) {
+  return (
+    <section className="share-image-screen">
+      <div className="share-image-header">
+        <button className="secondary-button compact-button" type="button" onPointerDown={onBack}>
+          返回
+        </button>
+        <div>
+          <p className="eyebrow">分享图片</p>
+          <h1>{result?.name ?? APP_TITLE}</h1>
         </div>
-        {copyState === "copied" ? <p className="status-text">已复制。</p> : null}
-        {copyState === "failed" ? <p className="status-text">复制失败。</p> : null}
-        {imageShareState === "saved" ? <p className="status-text">图片已生成。</p> : null}
-        {imageShareState === "failed" ? <p className="status-text">图片生成失败。</p> : null}
       </div>
+
+      <div className="share-image-stage">
+        {dataUrl ? (
+          <NextImage
+            alt={`${APP_TITLE}结果分享图`}
+            className="share-image-preview"
+            height={1040}
+            src={dataUrl}
+            unoptimized
+            width={900}
+          />
+        ) : imageShareState === "failed" ? (
+          <div className="share-image-placeholder">
+            <strong>生成失败</strong>
+            <span>返回后重试</span>
+          </div>
+        ) : (
+          <div className="share-image-placeholder">
+            <strong>生成中</strong>
+            <span>正在绘制结果图</span>
+          </div>
+        )}
+      </div>
+
+      {dataUrl && shareLinkCopied ? <p className="status-text share-image-hint">分享链接已复制</p> : null}
     </section>
   );
 }
@@ -1846,11 +1902,16 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
   );
 }
 
-type ShareImageInput = {
-  kind: "result";
-  result: PersonaResult;
-  url: string;
-};
+type ShareImageInput =
+  | {
+      kind: "result";
+      result: GameRankResult;
+      url: string;
+    }
+  | {
+      kind: "default";
+      url: string;
+    };
 
 async function createShareImage(input: ShareImageInput) {
   const canvas = document.createElement("canvas");
@@ -1868,49 +1929,55 @@ async function createShareImage(input: ShareImageInput) {
     color: { dark: "#181818", light: "#fffdf8" },
     errorCorrectionLevel: "M",
     margin: 1,
-    width: 150,
+    width: 144,
   });
   const qrImage = await loadCanvasImage(qrDataUrl);
+
+  if (input.kind === "default") {
+    drawCard(ctx, 24, 24, 852, 736);
+    drawText(ctx, APP_TITLE, 58, 160, "950 74px", "#181818");
+
+    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 460, 170);
+
+    drawQrFooter(ctx, qrImage, 806, "扫码开测", APP_TAGLINE);
+    return canvas.toDataURL("image/png");
+  }
 
   drawCard(ctx, 24, 24, 852, 168);
   drawText(ctx, input.result.name, 58, 126, "950 74px", "#181818");
 
-  drawCard(ctx, 24, 222, 852, 692);
-  drawRadarOnCanvas(ctx, input.result.axis, 450, 548, 190);
-
-  const qrX = 704;
-  const qrY = 790;
-  const qrCenterX = qrX + 75;
-  drawCard(ctx, qrX - 18, qrY - 18, 186, 218);
-  ctx.drawImage(qrImage, qrX, qrY, 150, 150);
-  drawText(ctx, "扫码来测", qrCenterX, qrY + 190, "850 24px", "#665f55", "center");
+  drawCard(ctx, 24, 222, 852, 554);
+  drawRadarOnCanvas(ctx, input.result.axis, 450, 500, 176);
+  drawQrFooter(ctx, qrImage, 806, "扫码来测", APP_TAGLINE);
 
   return canvas.toDataURL("image/png");
 }
 
-async function shareOrSaveImage(dataUrl: string, fileName: string, title: string) {
-  const blob = await (await fetch(dataUrl)).blob();
-  const file = new File([blob], fileName, { type: "image/png" });
-  const shareData: ShareData & { files: File[] } = {
-    files: [file],
-    title,
-  };
-  const nav = navigator as Navigator & {
-    canShare?: (data: ShareData & { files?: File[] }) => boolean;
-    share?: (data: ShareData & { files?: File[] }) => Promise<void>;
-  };
+function defaultShareAxis(): ScoreAxis[] {
+  const labels: Array<ScoreAxis["label"]> = ["反应力", "精准度", "侦察力", "专注力", "节奏感", "记忆力", "控制力", "耐心"];
+  const keys: ScoreAxis["key"][] = ["reaction", "targeting", "search", "interference", "rhythm", "memory", "braking", "waiting"];
+  return labels.map((label, index) => ({
+    key: keys[index],
+    label,
+    score: 72,
+  }));
+}
 
-  if (nav.share && (!nav.canShare || nav.canShare(shareData))) {
-    await nav.share(shareData);
-    return;
-  }
+function drawQrFooter(ctx: CanvasRenderingContext2D, qrImage: HTMLImageElement, y: number, title: string, subtitle: string) {
+  drawCard(ctx, 24, y, 852, 210);
 
-  const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  const qrX = 58;
+  const qrY = y + 34;
+  roundedRect(ctx, qrX - 12, qrY - 12, 168, 168, 16);
+  ctx.fillStyle = "#fffdf8";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(24, 24, 24, 0.1)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.drawImage(qrImage, qrX, qrY, 144, 144);
+
+  drawText(ctx, title, 252, y + 86, "900 34px", "#181818");
+  drawText(ctx, subtitle, 252, y + 132, "760 26px", "#665f55");
 }
 
 function drawRadarOnCanvas(ctx: CanvasRenderingContext2D, axis: ScoreAxis[], centerX: number, centerY: number, radius: number) {

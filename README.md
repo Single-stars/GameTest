@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 测测你的游戏段位
 
-## Getting Started
+一个移动端优先的 Next.js 原型：8个小游戏测测你的段位。
 
-First, run the development server:
+## 当前内容
+
+- 8 项指标：反应力、精准度、侦察力、专注力、节奏感、记忆力、控制力、耐心。
+- 本地计分：所有操作事件只在浏览器内计算，不需要登录、后端或排行榜。
+- 结果页：展示段位、八项评分、雷达图、分享图片和重新测试。
+- 图片分享：点击分享按钮后自动复制分享链接，并在页面内展示图片，方便微信长按保存或转发。
+
+## 开发命令
+
+PowerShell 下优先使用 `npm.cmd`：
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm.cmd install
+npm.cmd run dev
+npm.cmd run test
+npm.cmd run lint
+npm.cmd run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+本地开发默认地址：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 项目结构
 
-## Learn More
+```text
+src/app/page.tsx          主页面、8 个小游戏、结果页、分享图片页
+src/app/globals.css       全局样式和移动端布局
+src/app/layout.tsx        页面元信息
+src/lib/scoring.ts        计分、段位、分享文案
+src/lib/scoring.test.ts   计分与分享文案测试
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 当前约束
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 无账号系统。
+- 无服务器写入。
+- 无在线排行榜。
+- 结果只代表本次浏览器操作表现，不做心理测评判断。

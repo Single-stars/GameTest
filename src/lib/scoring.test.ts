@@ -3,11 +3,12 @@ import test from "node:test";
 
 import {
   buildShareText,
+  buildScoreAxis,
   calculateRankScore,
   calculateScores,
   deriveMetrics,
   DINO_SAFE_STOP_WINDOW_MS,
-  getPersonaResult,
+  getGameRankResult,
   resolveArrowShot,
   resolveArrowTrajectoryShot,
   resolveDinoStop,
@@ -167,7 +168,7 @@ test("calculateScores turns trial-level data into finite 0-100 scores and confid
 });
 
 test("complete strong data can reach the top rank only without obvious weaknesses", () => {
-  const result = getPersonaResult(strongBaseline());
+  const result = getGameRankResult(strongBaseline());
 
   assert.equal(result.name, "最强王者");
   assert.equal(result.rankScore >= 88, true);
@@ -287,7 +288,7 @@ test("arrow precision ignores the practice shot", () => {
       targetSpeed: 0.8,
     },
   });
-  const result = getPersonaResult([
+  const result = getGameRankResult([
     practiceMiss,
     ...arrowAimTrials(Array.from({ length: 8 }, () => ({ hit: true, errorPx: 14, targetSize: 54, speed: 1.2 }))),
   ]);
@@ -413,7 +414,7 @@ test("high average with a weak braking dimension is capped below top rank", () =
     return event;
   });
 
-  const result = getPersonaResult(weakBrake);
+  const result = getGameRankResult(weakBrake);
 
   assert.notEqual(result.name, "最强王者");
   assert.equal(result.rankScore < 88, true);
@@ -534,19 +535,30 @@ test("rhythm score penalizes wrong lane and missed beats, not only timing offset
 });
 
 test("insufficient data lowers confidence and returns the lowest rank", () => {
-  const result = getPersonaResult([trial("reaction", 0, { responseAt: 240 })]);
+  const result = getGameRankResult([trial("reaction", 0, { responseAt: 240 })]);
 
   assert.equal(result.confidence < 35, true);
   assert.equal(result.name, "热血青铜");
 });
 
-test("buildShareText uses compact rank challenge copy", () => {
-  const result = getPersonaResult(strongBaseline());
+test("buildScoreAxis uses the public eight-dimension names", () => {
+  const axis = buildScoreAxis(calculateScores(strongBaseline()));
+
+  assert.deepEqual(
+    axis.map((item) => item.label),
+    ["反应力", "精准度", "侦察力", "专注力", "节奏感", "记忆力", "控制力", "耐心"],
+  );
+});
+
+test("buildShareText uses game rank challenge copy without old profile wording", () => {
+  const result = getGameRankResult(strongBaseline());
   const text = buildShareText(result);
   const textWithLink = buildShareText(result, "https://example.com/test");
 
-  assert.equal(text, `我的段位是【${result.name}】 来挑战我吧！`);
-  assert.equal(textWithLink, `我的段位是【${result.name}】 来挑战我吧！\nhttps://example.com/test`);
-  assert.equal(text.includes("游戏操作画像"), false);
+  assert.equal(text, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！`);
+  assert.equal(textWithLink, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！\nhttps://example.com/test`);
+  assert.equal(buildShareText(null, "https://example.com/test"), "8个小游戏测测你的段位\nhttps://example.com/test");
+  const removedTerms = ["人" + "格", "画" + "像"];
+  assert.equal(removedTerms.some((term) => textWithLink.includes(term)), false);
   assert.equal(text.includes("responseAt"), false);
 });
