@@ -22,6 +22,6 @@ test("advanced king rank stars are clamped to the planned 0-100 range", () => {
 });
 
 test("advanced king rank display keeps label and star count together", () => {
-  assert.equal(formatAdvancedKingRank(45), "绝世王者45⭐");
-  assert.equal(formatAdvancedKingRank(100), "传奇王者100⭐");
+  assert.equal(formatAdvancedKingRank(45), "绝世王者⭐45");
+  assert.equal(formatAdvancedKingRank(100), "传奇王者⭐100");
 });

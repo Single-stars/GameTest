@@ -14,7 +14,9 @@ import {
 } from "react";
 import QRCode from "qrcode";
 import {
+  buildPerfectTrials,
   buildShareText,
+  calculateScores,
   DINO_SAFE_STOP_WINDOW_MS,
   getGameRankResult,
   resolveArrowTrajectoryShot,
@@ -25,9 +27,44 @@ import {
   type ScoreAxis,
   type TrialEvent,
 } from "@/lib/scoring";
+import {
+  clearPersistedCurrentResult,
+  createDefaultAdvancedProgress,
+  createDefaultPersistedGameState,
+  evaluateAdvancedChallengeScore,
+  formatLuckDrawOutcomeText,
+  getAdvancedBackDestination,
+  getAdvancedCompletionActions,
+  formatResultRankTitle,
+  getAdvancedChallengeStatusLabel,
+  getAdvancedDimensionLevel,
+  getAdvancedLevelState,
+  getAdvancedLevelTone,
+  getAdvancedLevelToneForState,
+  getLuckDrawStatusText,
+  getLuckLevelTone,
+  getLuckScoreTone,
+  getAdvancedRoundContent,
+  getAdvancedRoundScore,
+  getAdvancedTotalStars,
+  getRestartDestinationAfterClearingCurrentResult,
+  markAdvancedUnlocked,
+  readPersistedGameState,
+  recordAdvancedChallengeResult,
+  recordLuckDraw,
+  setPersistedCurrentResult,
+  writePersistedGameState,
+  type AdvancedProgress,
+  type LuckDrawOutcome,
+} from "@/lib/advanced-progress";
 
-type Stage = "home" | "intro" | "playing" | "result" | "share";
+type Stage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck";
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
+type AdvancedChallengeState =
+  | { mode: "select"; roundId: RoundId }
+  | { mode: "intro"; roundId: RoundId; level: number }
+  | { mode: "playing"; roundId: RoundId; level: number; attemptId: number }
+  | { mode: "complete"; roundId: RoundId; level: number; score: number; minScore: number; passed: boolean; gained: boolean };
 
 type RoundConfig = {
   id: RoundId;
@@ -46,6 +83,8 @@ const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_IMAGE_WIDTH = 900;
 const SHARE_IMAGE_HEIGHT = 820;
 const SHARE_COPY_TOAST_DELAY_MS = 500;
+const LUCK_RULE_TEXT = "完成新的进阶关卡获得抽取次数。每次抽 0-100 分，换算 0-20⭐，只保留历史最高，80 次内必满运气。";
+const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 const rounds: RoundConfig[] = [
   {
@@ -153,10 +192,18 @@ export default function Home() {
   const [imageShareState, setImageShareState] = useState<ImageShareState>("idle");
   const [shareImageDataUrl, setShareImageDataUrl] = useState<string | null>(null);
   const [shareImageResult, setShareImageResult] = useState<GameRankResult | null>(null);
+  const [shareImageTitle, setShareImageTitle] = useState<string | null>(null);
   const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
+  const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
+  const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
+  const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const advancedProgressRef = useRef(advancedProgress);
+  const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
@@ -178,24 +225,94 @@ export default function Home() {
     }, SHARE_COPY_TOAST_DELAY_MS);
   }, [clearShareCopyToastTimer]);
 
-  const startTest = () => {
+  const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const baseState = createDefaultPersistedGameState();
+      const nextState = currentTrials
+        ? setPersistedCurrentResult(baseState, currentTrials, progress)
+        : clearPersistedCurrentResult({ ...baseState, advancedProgress: progress });
+      writePersistedGameState(window.localStorage, nextState);
+    } catch {
+      // Storage can be unavailable in private mode; the game should still run.
+    }
+  }, []);
+
+  const resetCurrentRunState = () => {
     clearShareCopyToastTimer();
+    trialsRef.current = [];
     setTrials([]);
     setRoundIndex(0);
     roundIndexRef.current = 0;
     setImageShareState("idle");
     setShareImageDataUrl(null);
     setShareImageResult(null);
+    setShareImageTitle(null);
     setShareCopyNoticeId(0);
+    setRestartConfirmOpen(false);
+    setAdvancedChallenge(null);
+    setLuckDrawOutcome(null);
     roundCompletionLockedRef.current = false;
+  };
+
+  const beginTest = () => {
+    resetCurrentRunState();
     setStage("intro");
   };
+
+  const confirmRestartToHome = () => {
+    resetCurrentRunState();
+    persistGameState(null, advancedProgressRef.current);
+    setStage(getRestartDestinationAfterClearingCurrentResult());
+  };
+
+  const requestRestartToHome = () => {
+    if (trialsRef.current.length > 0) {
+      setRestartConfirmOpen(true);
+      return;
+    }
+
+    confirmRestartToHome();
+  };
+
+  useEffect(() => {
+    advancedProgressRef.current = advancedProgress;
+  }, [advancedProgress]);
+
+  useEffect(() => {
+    advancedChallengeRef.current = advancedChallenge;
+  }, [advancedChallenge]);
 
   useEffect(() => {
     roundIndexRef.current = roundIndex;
   }, [roundIndex]);
 
   useEffect(() => clearShareCopyToastTimer, [clearShareCopyToastTimer]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const stored = readPersistedGameState(window.localStorage);
+    const storedTrials = stored.currentResult?.trials ?? [];
+    let nextProgress = stored.advancedProgress;
+
+    if (storedTrials.length > 0) {
+      const storedResult = getGameRankResult(storedTrials);
+      if (storedResult.name === "最强王者" && !nextProgress.unlocked) {
+        nextProgress = markAdvancedUnlocked(nextProgress);
+      }
+      trialsRef.current = storedTrials;
+      setTrials(storedTrials);
+      setStage("result");
+    }
+
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    if (nextProgress !== stored.advancedProgress) {
+      persistGameState(storedTrials.length > 0 ? storedTrials : null, nextProgress);
+    }
+  }, [persistGameState]);
 
   const completeRound = useCallback((roundTrials: TrialEvent[]) => {
     if (roundCompletionLockedRef.current) {
@@ -209,10 +326,20 @@ export default function Home() {
     }
 
     roundCompletionLockedRef.current = true;
-    setTrials((prev) => [...prev, ...roundTrials]);
+    const nextTrials = [...trialsRef.current, ...roundTrials];
+    trialsRef.current = nextTrials;
+    setTrials(nextTrials);
     window.setTimeout(() => {
       const currentIndex = roundIndexRef.current;
       if (currentIndex >= rounds.length - 1) {
+        const finalResult = getGameRankResult(nextTrials);
+        let nextProgress = advancedProgressRef.current;
+        if (finalResult.name === "最强王者") {
+          nextProgress = markAdvancedUnlocked(nextProgress);
+          advancedProgressRef.current = nextProgress;
+          setAdvancedProgress(nextProgress);
+        }
+        persistGameState(nextTrials, nextProgress);
         setStage("result");
         return;
       }
@@ -227,24 +354,31 @@ export default function Home() {
         setStage("intro");
       }
     }, 320);
-  }, []);
+  }, [persistGameState]);
 
   const startCurrentRound = () => {
     roundCompletionLockedRef.current = false;
     setStage("playing");
   };
 
+  const skipCurrentRoundWithPerfectScore = useCallback(() => {
+    const activeRound = rounds[roundIndexRef.current];
+    if (!activeRound) return;
+    completeRound(buildPerfectTrials(activeRound.id));
+  }, [completeRound]);
+
   const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "home" | "result") => {
     clearShareCopyToastTimer();
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
+    setShareImageTitle(input.kind === "result" ? input.rankTitle : null);
     setShareImageDataUrl(null);
     setImageShareState("sharing");
     setShareCopyNoticeId(0);
     setStage("share");
 
     try {
-      await copyTextToClipboard(buildShareText(input.kind === "result" ? input.result : null, input.url));
+      await copyTextToClipboard(buildShareText(input.kind === "result" ? input.result : null, input.url, input.kind === "result" ? input.rankTitle : undefined));
       showShareCopyToast();
     } catch {
       clearShareCopyToastTimer();
@@ -262,7 +396,8 @@ export default function Home() {
   }, [clearShareCopyToastTimer, showShareCopyToast]);
 
   const openCurrentShareImage = useCallback(() => {
-    void openShareImage({ kind: "result", url: window.location.href, result }, "result");
+    const rankTitle = formatResultRankTitle(result.name, getAdvancedTotalStars(advancedProgressRef.current));
+    void openShareImage({ kind: "result", url: window.location.href, result, rankTitle }, "result");
   }, [openShareImage, result]);
 
   const openDefaultShareImage = useCallback(() => {
@@ -275,6 +410,103 @@ export default function Home() {
     setStage(shareReturnStage);
   }, [clearShareCopyToastTimer, shareReturnStage]);
 
+  const openAdvancedChallenge = useCallback((roundId: RoundId) => {
+    setAdvancedChallenge({ mode: "select", roundId });
+    setStage("advanced");
+  }, []);
+
+  const openLuckDraw = useCallback(() => {
+    setLuckDrawOutcome(null);
+    setStage("luck");
+  }, []);
+
+  const closeLuckDraw = useCallback(() => {
+    setLuckDrawOutcome(null);
+    setStage("result");
+  }, []);
+
+  const drawLuck = useCallback(() => {
+    const result = recordLuckDraw(advancedProgressRef.current, Math.floor(Math.random() * 101));
+    if (!result.outcome) return null;
+    advancedProgressRef.current = result.progress;
+    setAdvancedProgress(result.progress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, result.progress);
+    setLuckDrawOutcome(result.outcome);
+    return result.outcome;
+  }, [persistGameState]);
+
+  const closeAdvancedChallenge = useCallback(() => {
+    const current = advancedChallengeRef.current;
+    if (!current || getAdvancedBackDestination(current.mode) === "result" || current.mode === "select" || current.mode === "intro") {
+      setAdvancedChallenge(null);
+      setStage("result");
+      return;
+    }
+
+    setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level: current.level });
+    setStage("advanced");
+  }, []);
+
+  const pickAdvancedLevel = useCallback((level: number) => {
+    const current = advancedChallengeRef.current;
+    if (!current) return;
+    const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
+    if (getAdvancedLevelState(currentLevel, level) === "locked") return;
+    setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level });
+  }, []);
+
+  const startAdvancedLevel = useCallback((level?: number) => {
+    const current = advancedChallengeRef.current;
+    if (!current) return;
+    const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
+    const selectedLevel =
+      level ??
+      (current.mode === "select"
+        ? Math.min(10, currentLevel + 1)
+        : current.level);
+    if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
+    setAdvancedChallenge({
+      mode: "playing",
+      roundId: current.roundId,
+      level: selectedLevel,
+      attemptId: Date.now(),
+    });
+  }, []);
+
+  const completeAdvancedLevel = useCallback(
+    (roundTrials: TrialEvent[]) => {
+      const current = advancedChallengeRef.current;
+      if (!current || current.mode !== "playing") return;
+
+      const scores = calculateScores(roundTrials);
+      const score = getAdvancedRoundScore(scores, current.roundId);
+      const evaluation = evaluateAdvancedChallengeScore(current.roundId, current.level, score);
+      const beforeLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
+      const nextProgress = recordAdvancedChallengeResult(advancedProgressRef.current, {
+        roundId: current.roundId,
+        level: current.level,
+        score: evaluation.score,
+        passed: evaluation.passed,
+      });
+      const afterLevel = getAdvancedDimensionLevel(nextProgress, current.roundId);
+
+      advancedProgressRef.current = nextProgress;
+      setAdvancedProgress(nextProgress);
+      persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+      setAdvancedChallenge({
+        mode: "complete",
+        roundId: current.roundId,
+        level: evaluation.level,
+        score: evaluation.score,
+        minScore: evaluation.minScore,
+        passed: evaluation.passed,
+        gained: afterLevel > beforeLevel,
+      });
+      setStage("advanced");
+    },
+    [persistGameState],
+  );
+
   return (
     <main className="app-shell">
       {stage === "share" ? (
@@ -282,32 +514,61 @@ export default function Home() {
           dataUrl={shareImageDataUrl}
           imageShareState={imageShareState}
           onBack={closeShareImage}
+          rankTitle={shareImageTitle}
           result={shareImageResult}
           shareCopyNoticeId={shareCopyNoticeId}
         />
+      ) : stage === "luck" ? (
+        <LuckDrawScreen
+          advancedProgress={advancedProgress}
+          lastOutcome={luckDrawOutcome}
+          onBack={closeLuckDraw}
+          onDraw={drawLuck}
+        />
+      ) : stage === "advanced" && advancedChallenge ? (
+        <AdvancedChallengeScreen
+          advancedProgress={advancedProgress}
+          challenge={advancedChallenge}
+          onBack={closeAdvancedChallenge}
+          onCompleteRound={completeAdvancedLevel}
+          onPickLevel={pickAdvancedLevel}
+          onStartLevel={startAdvancedLevel}
+        />
       ) : stage === "home" ? (
-        <HomeScreen onShareImage={openDefaultShareImage} onStart={startTest} />
+        <HomeScreen onShareImage={openDefaultShareImage} onStart={beginTest} />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
+          advancedProgress={advancedProgress}
           trials={safeTrials}
           imageShareState={imageShareState}
-          onRestart={startTest}
+          onOpenAdvancedChallenge={openAdvancedChallenge}
+          onOpenLuckDraw={openLuckDraw}
+          onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
         />
       ) : stage === "intro" ? (
         <RoundIntro round={currentRound} onStart={startCurrentRound} />
       ) : stage === "playing" ? (
-        <PlayFrame round={currentRound} index={roundIndex}>
+        <PlayFrame round={currentRound} index={roundIndex} onSkipPerfect={skipCurrentRoundWithPerfectScore}>
           <RoundRenderer key={`${currentRound.id}-${roundIndex}`} round={currentRound.id} onComplete={completeRound} />
         </PlayFrame>
       ) : (
         <ResultScreen
+          advancedProgress={advancedProgress}
           trials={trials}
           imageShareState={imageShareState}
-          onRestart={startTest}
+          onOpenAdvancedChallenge={openAdvancedChallenge}
+          onOpenLuckDraw={openLuckDraw}
+          onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
         />
       )}
+      {restartConfirmOpen ? (
+        <RestartConfirmDialog
+          onCancel={() => setRestartConfirmOpen(false)}
+          onConfirm={confirmRestartToHome}
+        />
+      ) : null}
     </main>
   );
 }
@@ -380,10 +641,12 @@ function RestartIcon() {
 function PlayFrame({
   round,
   index,
+  onSkipPerfect,
   children,
 }: {
   round: RoundConfig;
   index: number;
+  onSkipPerfect: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -395,6 +658,9 @@ function PlayFrame({
           </p>
           <h1>{round.title}</h1>
         </div>
+        <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
+          满分下一关
+        </button>
       </header>
       <div className="progress-track" aria-hidden="true">
         <span style={{ width: `${((index + 1) / rounds.length) * 100}%` }} />
@@ -1732,14 +1998,158 @@ function PatienceRound({ onComplete }: RoundProps) {
   );
 }
 
+function getRoundConfig(roundId: RoundId) {
+  return rounds.find((round) => round.id === roundId) ?? rounds[0];
+}
+
+function AdvancedChallengeScreen({
+  advancedProgress,
+  challenge,
+  onBack,
+  onCompleteRound,
+  onPickLevel,
+  onStartLevel,
+}: {
+  advancedProgress: AdvancedProgress;
+  challenge: AdvancedChallengeState;
+  onBack: () => void;
+  onCompleteRound: (trials: TrialEvent[]) => void;
+  onPickLevel: (level: number) => void;
+  onStartLevel: (level: number) => void;
+}) {
+  const round = getRoundConfig(challenge.roundId);
+  const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
+  const nextLevel = Math.min(10, currentLevel + 1);
+
+  if (challenge.mode === "playing") {
+    return (
+      <section className="play-screen advanced-play-screen" aria-live="polite">
+        <header className="round-header advanced-round-header">
+          <div>
+            <p className="eyebrow">{round.measure}进阶 {challenge.level}</p>
+            <h1>{round.title}</h1>
+          </div>
+          <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+              返回
+            </button>
+            <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(buildPerfectTrials(challenge.roundId))}>
+              满分过关
+            </button>
+          </div>
+        </header>
+        <div className="progress-track" aria-hidden="true">
+          <span style={{ width: `${challenge.level * 10}%` }} />
+        </div>
+        <RoundRenderer
+          key={`advanced-${challenge.roundId}-${challenge.level}-${challenge.attemptId}`}
+          round={challenge.roundId}
+          onComplete={onCompleteRound}
+        />
+      </section>
+    );
+  }
+
+  const selectedLevel = challenge.mode === "select" ? nextLevel : challenge.level;
+  const selectedState = getAdvancedLevelState(currentLevel, selectedLevel);
+  const isComplete = challenge.mode === "complete";
+  const completionActions = isComplete
+    ? getAdvancedCompletionActions({ passed: challenge.passed, gained: challenge.gained, level: challenge.level })
+    : [];
+
+  return (
+    <section className="advanced-screen">
+      <header className="advanced-topbar">
+        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+          返回
+        </button>
+        <span>{round.measure}</span>
+      </header>
+
+      <div className="advanced-hero">
+        <p className="eyebrow">进阶挑战</p>
+        <h1>{round.title}</h1>
+      </div>
+
+      {isComplete ? (
+        <div className={`advanced-result-card ${challenge.passed ? "passed" : "failed"}`}>
+          <p className="eyebrow">{challenge.passed ? "挑战成功" : "差一点"}</p>
+          <h2>{Math.round(challenge.score)} / {challenge.minScore}</h2>
+          <div className={`advanced-actions advanced-actions-${completionActions.length}`}>
+            {completionActions.includes("retry") ? (
+              <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
+                重试
+              </button>
+            ) : null}
+            {completionActions.includes("next") ? (
+              <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level + 1)}>
+                下一阶
+              </button>
+            ) : null}
+            {completionActions.includes("maxed") ? (
+              <button className="primary-button" type="button" onPointerDown={onBack}>
+                已满阶
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="advanced-panel">
+          <div className="advanced-level-grid">
+            {Array.from({ length: 10 }, (_, index) => {
+              const level = index + 1;
+              const state = getAdvancedLevelState(currentLevel, level);
+              const selected = level === selectedLevel;
+              const locked = state === "locked";
+              return (
+                <button
+                  aria-label={`${round.measure}进阶${level}${getAdvancedChallengeStatusLabel(state)}`}
+                  className={`advanced-level-button ${state} ${selected ? "selected" : ""} ${getAdvancedLevelToneForState(state, level)}`}
+                  disabled={locked}
+                  key={level}
+                  type="button"
+                  onPointerDown={() => onPickLevel(level)}
+                >
+                  <strong>{level}</strong>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="advanced-brief">
+            <span>进阶内容</span>
+            <strong>{getAdvancedChallengeStatusLabel(selectedState)}</strong>
+            <small>{getAdvancedRoundContent(challenge.roundId, selectedLevel)}</small>
+          </div>
+
+          <button
+            className="primary-button"
+            disabled={selectedState === "locked"}
+            type="button"
+            onPointerDown={() => onStartLevel(selectedLevel)}
+          >
+            开始挑战
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ResultScreen({
+  advancedProgress,
   trials,
   imageShareState,
+  onOpenAdvancedChallenge,
+  onOpenLuckDraw,
   onShareImage,
   onRestart,
 }: {
+  advancedProgress: AdvancedProgress;
   trials: TrialEvent[];
   imageShareState: ImageShareState;
+  onOpenAdvancedChallenge: (roundId: RoundId) => void;
+  onOpenLuckDraw: () => void;
   onShareImage: () => void;
   onRestart: () => void;
 }) {
@@ -1747,37 +2157,72 @@ function ResultScreen({
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
   const dinoSafeStops = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.safeStop === true).length;
   const dinoCollisions = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.collision === true).length;
+  const advancedUnlocked = advancedProgress.unlocked || result.name === "最强王者";
+  const advancedStars = getAdvancedTotalStars(advancedProgress);
+  const rankTitle = formatResultRankTitle(result.name, advancedStars);
+  const luckStatus = getLuckDrawStatusText(advancedUnlocked, advancedProgress);
   const rows = [
-    ["反应力", result.scores.reaction, result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足"],
-    [
-      "精准度",
-      result.scores.targeting,
-      result.metrics.aimTotal > 0 ? `命中 ${result.metrics.aimHits}/${result.metrics.aimTotal}` : "不足",
-    ],
-    [
-      "侦察力",
-      result.scores.search,
-      result.metrics.searchMeanCountError !== null ? `误差 ${result.metrics.searchMeanCountError.toFixed(1)}` : "不足",
-    ],
-    ["专注力", result.scores.interference, result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足"],
-    ["节奏感", result.scores.rhythm, result.metrics.rhythmAvgOffsetMs !== null ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms` : "不足"],
-    ["记忆力", result.scores.memory, result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足"],
-    [
-      "控制力",
-      result.scores.braking,
-      result.metrics.dinoSafeStopRate !== null
-        ? `急停 ${dinoSafeStops}/${brakingTrials.length}${dinoCollisions ? ` · 撞 ${dinoCollisions}` : ""}`
-        : result.metrics.stopFalseAlarmRate !== null
-          ? `${Math.round(result.metrics.stopFalseAlarmRate * 100)}%误按`
-          : "不足",
-    ],
-    ["耐心", result.scores.waiting, result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足"],
-  ] as const;
+    {
+      roundId: "reaction",
+      label: "反应力",
+      score: result.scores.reaction,
+      detail: result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足",
+    },
+    {
+      roundId: "aim",
+      label: "精准度",
+      score: result.scores.targeting,
+      detail: result.metrics.aimTotal > 0 ? `命中 ${result.metrics.aimHits}/${result.metrics.aimTotal}` : "不足",
+    },
+    {
+      roundId: "search",
+      label: "侦察力",
+      score: result.scores.search,
+      detail: result.metrics.searchMeanCountError !== null ? `误差 ${result.metrics.searchMeanCountError.toFixed(1)}` : "不足",
+    },
+    {
+      roundId: "stroop",
+      label: "专注力",
+      score: result.scores.interference,
+      detail: result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足",
+    },
+    {
+      roundId: "rhythm",
+      label: "节奏感",
+      score: result.scores.rhythm,
+      detail: result.metrics.rhythmAvgOffsetMs !== null ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms` : "不足",
+    },
+    {
+      roundId: "memory",
+      label: "记忆力",
+      score: result.scores.memory,
+      detail: result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足",
+    },
+    {
+      roundId: "braking",
+      label: "控制力",
+      score: result.scores.braking,
+      detail:
+        result.metrics.dinoSafeStopRate !== null
+          ? `急停 ${dinoSafeStops}/${brakingTrials.length}${dinoCollisions ? ` · 撞 ${dinoCollisions}` : ""}`
+          : result.metrics.stopFalseAlarmRate !== null
+            ? `${Math.round(result.metrics.stopFalseAlarmRate * 100)}%误按`
+            : "不足",
+    },
+    {
+      roundId: "patience",
+      label: "耐心",
+      score: result.scores.waiting,
+      detail: result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足",
+    },
+  ] as const satisfies ReadonlyArray<{ roundId: RoundId; label: string; score: number; detail: string }>;
 
   return (
     <section className="result-screen">
       <div className="result-card rank-card">
-        <h1>{result.name}</h1>
+        <div className="rank-title">
+          <h1>{rankTitle}</h1>
+        </div>
         <div className="rank-actions" aria-label="结果操作">
           <button
             aria-label="生成分享图片"
@@ -1797,15 +2242,204 @@ function ResultScreen({
       <RadarChart axis={result.axis} />
 
       <div className="score-grid">
-        {rows.map(([label, score, detail]) => (
-          <div className="score-item" key={label}>
-            <span>{label}</span>
-            <strong>{score}</strong>
-            <small>{detail}</small>
+        {rows.map((row) => {
+          const advancedLevel = getAdvancedDimensionLevel(advancedProgress, row.roundId);
+          return (
+            <div className={`score-item ${advancedUnlocked ? "with-advanced" : ""}`} key={row.roundId}>
+              <div className="score-copy">
+                <span>{row.label}</span>
+                <strong>{row.score}</strong>
+                <small>{row.detail}</small>
+              </div>
+              {advancedUnlocked ? (
+                <button
+                  aria-label={`进入${row.label}进阶挑战，当前进阶${advancedLevel}`}
+                  className={`advanced-entry-button ${getAdvancedLevelTone(advancedLevel)}`}
+                  type="button"
+                  onPointerDown={() => onOpenAdvancedChallenge(row.roundId)}
+                >
+                  {advancedLevel}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        <div className={`score-item luck-score-item ${advancedUnlocked ? "with-advanced" : "locked"}`}>
+          <div className="score-copy luck-copy">
+            <span>运气</span>
+            <strong>{advancedProgress.luckBestScore}</strong>
+            <small>{luckStatus}</small>
           </div>
-        ))}
+          <button
+            aria-label={`进入运气抽取，当前运气${advancedProgress.luckStars}星`}
+            className={`advanced-entry-button luck-entry-button ${getLuckLevelTone(advancedProgress.luckStars)}`}
+            disabled={!advancedUnlocked}
+            type="button"
+            onPointerDown={onOpenLuckDraw}
+          >
+            {advancedProgress.luckStars}
+          </button>
+        </div>
       </div>
 
+    </section>
+  );
+}
+
+function RestartConfirmDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="restart-dialog-backdrop" role="presentation" onPointerDown={onCancel}>
+      <section
+        aria-labelledby="restart-dialog-title"
+        aria-modal="true"
+        className="restart-dialog"
+        role="dialog"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <p className="eyebrow">重新测试</p>
+        <h2 id="restart-dialog-title">清空当前结果？</h2>
+        <p>当前结果页会重置，已完成的进阶、运气星和抽取次数都会保留。</p>
+        <div className="restart-dialog-actions">
+          <button className="secondary-button" type="button" onPointerDown={onCancel}>
+            先保留
+          </button>
+          <button className="primary-button" type="button" onPointerDown={onConfirm}>
+            重新测试
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function LuckDrawScreen({
+  advancedProgress,
+  lastOutcome,
+  onBack,
+  onDraw,
+}: {
+  advancedProgress: AdvancedProgress;
+  lastOutcome: LuckDrawOutcome | null;
+  onBack: () => void;
+  onDraw: () => LuckDrawOutcome | null;
+}) {
+  const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
+  const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
+  const [spinning, setSpinning] = useState(false);
+  const [settledReels, setSettledReels] = useState(3);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const spinTimersRef = useRef<number[]>([]);
+  const ruleDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const unlocked = advancedProgress.unlocked;
+  const canDraw = unlocked && advancedProgress.luckDrawChances > 0 && !spinning;
+  const scoreForDigits = pendingOutcome?.score ?? visibleOutcome?.score ?? advancedProgress.luckBestScore;
+  const digits = String(scoreForDigits).padStart(3, "0").slice(-3).split("");
+  const slotTone = spinning ? "advanced-empty" : getLuckScoreTone(scoreForDigits);
+
+  const clearSpinTimers = useCallback(() => {
+    for (const timer of spinTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+    spinTimersRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    return clearSpinTimers;
+  }, [clearSpinTimers]);
+
+  useEffect(() => {
+    if (!rulesOpen) return undefined;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!ruleDetailsRef.current?.contains(event.target as Node)) {
+        setRulesOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnOutside);
+    return () => window.removeEventListener("pointerdown", closeOnOutside);
+  }, [rulesOpen]);
+
+  const draw = () => {
+    if (!canDraw) return;
+    const outcome = onDraw();
+    if (!outcome) return;
+    clearSpinTimers();
+    setPendingOutcome(outcome);
+    setSpinning(true);
+    setSettledReels(0);
+    spinTimersRef.current = [
+      window.setTimeout(() => setSettledReels(1), 820),
+      window.setTimeout(() => setSettledReels(2), 1240),
+      window.setTimeout(() => setSettledReels(3), 1660),
+      window.setTimeout(() => {
+        setVisibleOutcome(outcome);
+        setPendingOutcome(null);
+        setSpinning(false);
+        setSettledReels(3);
+        spinTimersRef.current = [];
+      }, 1940),
+    ];
+  };
+
+  return (
+    <section className="luck-screen">
+      <header className="advanced-topbar">
+        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+          返回
+        </button>
+        <span>运气</span>
+      </header>
+
+      <div className="advanced-hero luck-hero">
+        <p className="eyebrow">运气</p>
+        <h1>运气老虎机</h1>
+      </div>
+
+      <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${slotTone}`}>
+        <div className="slot-machine" aria-label={`当前抽取分数 ${scoreForDigits}`}>
+          {digits.map((digit, index) => (
+            <div
+              className={`slot-reel ${spinning && index < digits.length - settledReels ? "rolling" : "settled"}`}
+              key={index}
+              style={{ "--slot-offset": `${Number(digit) * -10}%` } as CSSProperties}
+            >
+              <div className="slot-strip" aria-hidden="true">
+                {SLOT_REEL_DIGITS.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="luck-stat-row">
+          <div>
+            <span>已抽取</span>
+            <strong>{advancedProgress.luckDrawCount}/80</strong>
+          </div>
+          <div>
+            <span>抽取次数</span>
+            <strong>{advancedProgress.luckDrawChances}</strong>
+          </div>
+        </div>
+
+        <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onPointerDown={draw}>
+          {spinning ? "抽取中" : "抽取运气"}
+        </button>
+
+        <p className="luck-rule-text">
+          {visibleOutcome ? formatLuckDrawOutcomeText(visibleOutcome) : getLuckDrawStatusText(unlocked, advancedProgress)}
+        </p>
+
+        <details
+          className="luck-rule-details"
+          onToggle={(event) => setRulesOpen(event.currentTarget.open)}
+          open={rulesOpen}
+          ref={ruleDetailsRef}
+        >
+          <summary>?</summary>
+          <p>{LUCK_RULE_TEXT}</p>
+        </details>
+      </div>
     </section>
   );
 }
@@ -1814,12 +2448,14 @@ function ShareImageScreen({
   dataUrl,
   imageShareState,
   onBack,
+  rankTitle,
   result,
   shareCopyNoticeId,
 }: {
   dataUrl: string | null;
   imageShareState: ImageShareState;
   onBack: () => void;
+  rankTitle: string | null;
   result: GameRankResult | null;
   shareCopyNoticeId: number;
 }) {
@@ -1831,7 +2467,7 @@ function ShareImageScreen({
         </button>
         <div>
           <p className="eyebrow">长按保存图片</p>
-          <h1>{result?.name ?? APP_TITLE}</h1>
+          <h1>{rankTitle ?? result?.name ?? APP_TITLE}</h1>
         </div>
       </div>
 
@@ -1924,6 +2560,7 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
 type ShareImageInput =
   | {
       kind: "result";
+      rankTitle: string;
       result: GameRankResult;
       url: string;
     }
@@ -1981,19 +2618,19 @@ async function createShareImage(input: ShareImageInput) {
 
   if (input.kind === "default") {
     drawCard(ctx, 24, 24, 852, 510);
-    drawText(ctx, "热血青铜", 58, 116, "950 72px", "#181818");
+    drawFittedText(ctx, "热血青铜", 58, 116, 784, 72, 48, "#181818");
 
-    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 142);
+    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 124);
 
     drawQrFooter(ctx, qrImage, 562, "扫码开测", APP_TAGLINE);
     return canvas.toDataURL("image/png");
   }
 
   drawCard(ctx, 24, 24, 852, 144);
-  drawText(ctx, input.result.name, 58, 116, "950 72px", "#181818");
+  drawFittedText(ctx, input.rankTitle, 58, 116, 784, 72, 42, "#181818");
 
   drawCard(ctx, 24, 194, 852, 352);
-  drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 128);
+  drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 112);
   drawQrFooter(ctx, qrImage, 574, "扫码来测", APP_TAGLINE);
 
   return canvas.toDataURL("image/png");
@@ -2072,11 +2709,30 @@ function drawRadarOnCanvas(ctx: CanvasRenderingContext2D, axis: ScoreAxis[], cen
   ctx.stroke();
 
   axis.forEach((item, index) => {
-    const labelPoint = point(index, 1.22);
+    const labelPoint = point(index, 1.28);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    drawText(ctx, item.label, labelPoint.x, labelPoint.y, "850 30px", "#665f55", "center");
+    drawText(ctx, item.label, labelPoint.x, labelPoint.y, "850 22px", "#665f55", "center");
   });
+}
+
+function drawFittedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  maxSize: number,
+  minSize: number,
+  color: string,
+) {
+  let size = maxSize;
+  do {
+    ctx.font = `950 ${size}px Inter, "Microsoft YaHei", sans-serif`;
+    if (ctx.measureText(text).width <= maxWidth || size <= minSize) break;
+    size -= 2;
+  } while (size >= minSize);
+  drawText(ctx, text, x, y, `950 ${size}px`, color);
 }
 
 function drawText(

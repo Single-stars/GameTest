@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildPerfectTrials,
   buildShareText,
   buildScoreAxis,
   calculateRankScore,
@@ -14,6 +15,7 @@ import {
   resolveDinoStop,
   segmentCircleHit,
   type RoundId,
+  type ScoreSummary,
   type TrialEvent,
 } from "./scoring.ts";
 
@@ -144,6 +146,27 @@ function dinoBrakeTrials(
   );
 }
 
+function scoreForRound(scores: ScoreSummary, roundId: RoundId) {
+  switch (roundId) {
+    case "reaction":
+      return scores.reaction;
+    case "aim":
+      return scores.targeting;
+    case "search":
+      return scores.search;
+    case "stroop":
+      return scores.interference;
+    case "rhythm":
+      return scores.rhythm;
+    case "memory":
+      return scores.memory;
+    case "braking":
+      return scores.braking;
+    case "patience":
+      return scores.waiting;
+  }
+}
+
 test("calculateScores turns trial-level data into finite 0-100 scores and confidence", () => {
   const scores = calculateScores(strongBaseline());
 
@@ -230,6 +253,19 @@ test("perfect normal all-correct rounds can display 100", () => {
   assert.equal(scores.memory, 100);
   assert.equal(scores.braking, 100);
   assert.equal(scores.waiting, 100);
+});
+
+test("perfect skip trial data produces a full score for every round", () => {
+  const roundIds: RoundId[] = ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"];
+
+  for (const roundId of roundIds) {
+    const perfectTrials = buildPerfectTrials(roundId);
+    const scores = calculateScores(perfectTrials);
+
+    assert.equal(perfectTrials.length > 0, true);
+    assert.equal(perfectTrials.every((item) => item.roundId === roundId), true);
+    assert.equal(scoreForRound(scores, roundId), 100);
+  }
 });
 
 test("very slow all-correct decisions can lose a small amount", () => {
@@ -554,9 +590,11 @@ test("buildShareText uses game rank challenge copy without old wording", () => {
   const result = getGameRankResult(strongBaseline());
   const text = buildShareText(result);
   const textWithLink = buildShareText(result, "https://example.com/test");
+  const advancedText = buildShareText(result, undefined, "至圣王者⭐10");
 
   assert.equal(text, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！`);
   assert.equal(textWithLink, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！\nhttps://example.com/test`);
+  assert.equal(advancedText, "8个小游戏测测你的段位，我的段位是【至圣王者⭐10】。来挑战我吧！");
   assert.equal(buildShareText(null, "https://example.com/test"), "8个小游戏测测你的段位\nhttps://example.com/test");
   const removedTerms = ["人" + "格", "画" + "像"];
   assert.equal(removedTerms.some((term) => textWithLink.includes(term)), false);

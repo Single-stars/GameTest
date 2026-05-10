@@ -52,5 +52,5 @@ export function getAdvancedKingRank(stars: number): AdvancedKingRank {
 
 export function formatAdvancedKingRank(stars: number) {
   const rank = getAdvancedKingRank(stars);
-  return `${rank.label}${rank.stars}⭐`;
+  return `${rank.label}⭐${rank.stars}`;
 }

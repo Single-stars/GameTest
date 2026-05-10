@@ -115,6 +115,7 @@ export type GameRankResult = {
 export const ARROW_AIM_HIT_RADIUS_MULTIPLIER = 1.18;
 export const DINO_SAFE_STOP_WINDOW_MS = 340;
 const DINO_FULL_SCORE_STOP_MS = 240;
+const PERFECT_TRIAL_VIEWPORT = { width: 390, height: 844, dpr: 3 };
 
 export type Point2D = {
   x: number;
@@ -141,6 +142,116 @@ export type ArrowTrajectoryResolution = {
   offsetFromTarget: Point2D;
   stuckInTarget: boolean;
 };
+
+function perfectTrial(roundId: RoundId, trialIndex: number, patch: Partial<TrialEvent> = {}): TrialEvent {
+  const shownAt = trialIndex * 1000;
+  return {
+    roundId,
+    trialIndex,
+    pointerType: "touch",
+    viewport: PERFECT_TRIAL_VIEWPORT,
+    scheduledAt: shownAt,
+    shownAt,
+    responseAt: shownAt + 200,
+    correct: true,
+    ...patch,
+  };
+}
+
+export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
+  switch (roundId) {
+    case "reaction":
+      return Array.from({ length: 3 }, (_, index) =>
+        perfectTrial("reaction", index, {
+          responseAt: index * 1000 + 175,
+        }),
+      );
+    case "aim":
+      return Array.from({ length: 8 }, (_, index) =>
+        perfectTrial("aim", index, {
+          responseAt: index * 1000 + 300,
+          target: { x: 50, y: 28, size: 54, distance: 0, difficulty: 1 + index * 0.18 },
+          value: {
+            mode: "arrow",
+            practice: false,
+            shotHit: true,
+            shotX: 50,
+            targetXAtImpact: 50,
+            shotErrorPx: 0,
+            normalizedError: 0,
+            trajectoryHit: true,
+            targetSpeed: 1.2,
+            flightMs: 520,
+          },
+        }),
+      );
+    case "search":
+      return [
+        { targetCount: 3, totalDots: 18, difficulty: 1 },
+        { targetCount: 4, totalDots: 22, difficulty: 2 },
+        { targetCount: 5, totalDots: 26, difficulty: 3 },
+        { targetCount: 4, totalDots: 30, difficulty: 4 },
+      ].map((item, index) =>
+        perfectTrial("search", index, {
+          responseAt: index * 1000 + 850,
+          target: { x: 0, y: 0, size: 0, difficulty: item.difficulty, setSize: item.totalDots },
+          value: {
+            targetCount: item.targetCount,
+            selectedCount: item.targetCount,
+            countError: 0,
+            difficulty: item.difficulty,
+            totalDots: item.totalDots,
+            watchMs: 4200,
+          },
+        }),
+      );
+    case "stroop":
+      return Array.from({ length: 5 }, (_, index) =>
+        perfectTrial("stroop", index, {
+          responseAt: index * 1000 + 600,
+          value: { congruent: index % 2 === 0 },
+        }),
+      );
+    case "rhythm":
+      return Array.from({ length: 10 }, (_, index) =>
+        perfectTrial("rhythm", index, {
+          responseAt: index * 1000 + 500,
+          value: { offsetMs: 0, lane: index % 2 === 0 ? "left" : "right", targetLane: index % 2 === 0 ? "left" : "right" },
+        }),
+      );
+    case "memory":
+      return Array.from({ length: 4 }, (_, index) =>
+        perfectTrial("memory", index, {
+          responseAt: index * 1000 + 780,
+          value: { setSize: 4, color: "blue", targetIndex: index },
+        }),
+      );
+    case "braking":
+      return Array.from({ length: 8 }, (_, index) =>
+        perfectTrial("braking", index, {
+          responseAt: index * 1000 + 180,
+          value: {
+            mode: "dino",
+            signal: "threat",
+            safeStop: true,
+            collision: false,
+            earlyStop: false,
+            stopLatencyMs: 180,
+            hazardDelayMs: 900,
+            threatX: 60,
+          },
+        }),
+      );
+    case "patience":
+      return [
+        perfectTrial("patience", 0, {
+          shownAt: 0,
+          responseAt: 9000,
+          value: { waitMs: 9000, durationMs: 9000, skipped: false },
+        }),
+      ];
+  }
+}
 
 export function closestPointOnSegment(start: Point2D, end: Point2D, point: Point2D) {
   const dx = end.x - start.x;
@@ -586,7 +697,8 @@ export function getGameRankResult(trials: TrialEvent[]): GameRankResult {
   };
 }
 
-export function buildShareText(result: GameRankResult | null, url?: string) {
-  const text = result ? `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！` : "8个小游戏测测你的段位";
+export function buildShareText(result: GameRankResult | null, url?: string, displayRankName?: string) {
+  const rankName = displayRankName ?? result?.name;
+  const text = rankName ? `8个小游戏测测你的段位，我的段位是【${rankName}】。来挑战我吧！` : "8个小游戏测测你的段位";
   return url ? `${text}\n${url}` : text;
 }
