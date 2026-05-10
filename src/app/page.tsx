@@ -43,6 +43,8 @@ type RoundProps = {
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
+const SHARE_IMAGE_WIDTH = 900;
+const SHARE_IMAGE_HEIGHT = 820;
 
 const rounds: RoundConfig[] = [
   {
@@ -1816,20 +1818,22 @@ function ShareImageScreen({
           返回
         </button>
         <div>
-          <p className="eyebrow">分享图片</p>
+          <p className="eyebrow">长按保存图片</p>
           <h1>{result?.name ?? APP_TITLE}</h1>
         </div>
       </div>
+
+      {shareLinkCopied ? <div className="share-copy-toast">分享链接已复制</div> : null}
 
       <div className="share-image-stage">
         {dataUrl ? (
           <NextImage
             alt={`${APP_TITLE}结果分享图`}
             className="share-image-preview"
-            height={1040}
+            height={SHARE_IMAGE_HEIGHT}
             src={dataUrl}
             unoptimized
-            width={900}
+            width={SHARE_IMAGE_WIDTH}
           />
         ) : imageShareState === "failed" ? (
           <div className="share-image-placeholder">
@@ -1844,7 +1848,6 @@ function ShareImageScreen({
         )}
       </div>
 
-      {dataUrl && shareLinkCopied ? <p className="status-text share-image-hint">分享链接已复制</p> : null}
     </section>
   );
 }
@@ -1915,8 +1918,8 @@ type ShareImageInput =
 
 async function createShareImage(input: ShareImageInput) {
   const canvas = document.createElement("canvas");
-  const width = 900;
-  const height = 1040;
+  const width = SHARE_IMAGE_WIDTH;
+  const height = SHARE_IMAGE_HEIGHT;
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
@@ -1934,21 +1937,21 @@ async function createShareImage(input: ShareImageInput) {
   const qrImage = await loadCanvasImage(qrDataUrl);
 
   if (input.kind === "default") {
-    drawCard(ctx, 24, 24, 852, 736);
-    drawText(ctx, APP_TITLE, 58, 160, "950 74px", "#181818");
+    drawCard(ctx, 24, 24, 852, 510);
+    drawText(ctx, "热血青铜", 58, 116, "950 72px", "#181818");
 
-    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 460, 170);
+    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 142);
 
-    drawQrFooter(ctx, qrImage, 806, "扫码开测", APP_TAGLINE);
+    drawQrFooter(ctx, qrImage, 562, "扫码开测", APP_TAGLINE);
     return canvas.toDataURL("image/png");
   }
 
-  drawCard(ctx, 24, 24, 852, 168);
-  drawText(ctx, input.result.name, 58, 126, "950 74px", "#181818");
+  drawCard(ctx, 24, 24, 852, 144);
+  drawText(ctx, input.result.name, 58, 116, "950 72px", "#181818");
 
-  drawCard(ctx, 24, 222, 852, 554);
-  drawRadarOnCanvas(ctx, input.result.axis, 450, 500, 176);
-  drawQrFooter(ctx, qrImage, 806, "扫码来测", APP_TAGLINE);
+  drawCard(ctx, 24, 194, 852, 352);
+  drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 128);
+  drawQrFooter(ctx, qrImage, 574, "扫码来测", APP_TAGLINE);
 
   return canvas.toDataURL("image/png");
 }
