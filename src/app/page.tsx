@@ -45,6 +45,7 @@ const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_IMAGE_WIDTH = 900;
 const SHARE_IMAGE_HEIGHT = 820;
+const SHARE_COPY_TOAST_DELAY_MS = 1000;
 
 const rounds: RoundConfig[] = [
   {
@@ -156,11 +157,29 @@ export default function Home() {
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
+  const shareCopyToastTimerRef = useRef<number | null>(null);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
 
+  const clearShareCopyToastTimer = useCallback(() => {
+    if (shareCopyToastTimerRef.current !== null) {
+      window.clearTimeout(shareCopyToastTimerRef.current);
+      shareCopyToastTimerRef.current = null;
+    }
+  }, []);
+
+  const showShareCopyToast = useCallback(() => {
+    clearShareCopyToastTimer();
+    setShareCopyNoticeId(0);
+    shareCopyToastTimerRef.current = window.setTimeout(() => {
+      setShareCopyNoticeId((current) => current + 1);
+      shareCopyToastTimerRef.current = null;
+    }, SHARE_COPY_TOAST_DELAY_MS);
+  }, [clearShareCopyToastTimer]);
+
   const startTest = () => {
+    clearShareCopyToastTimer();
     setTrials([]);
     setRoundIndex(0);
     roundIndexRef.current = 0;
@@ -175,6 +194,8 @@ export default function Home() {
   useEffect(() => {
     roundIndexRef.current = roundIndex;
   }, [roundIndex]);
+
+  useEffect(() => clearShareCopyToastTimer, [clearShareCopyToastTimer]);
 
   const completeRound = useCallback((roundTrials: TrialEvent[]) => {
     if (roundCompletionLockedRef.current) {
@@ -214,16 +235,19 @@ export default function Home() {
   };
 
   const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "home" | "result") => {
+    clearShareCopyToastTimer();
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
     setShareImageDataUrl(null);
     setImageShareState("sharing");
+    setShareCopyNoticeId(0);
     setStage("share");
 
     try {
-      await navigator.clipboard.writeText(buildShareText(input.kind === "result" ? input.result : null, input.url));
-      setShareCopyNoticeId((current) => current + 1);
+      await copyTextToClipboard(buildShareText(input.kind === "result" ? input.result : null, input.url));
+      showShareCopyToast();
     } catch {
+      clearShareCopyToastTimer();
       setShareCopyNoticeId(0);
     }
 
@@ -235,7 +259,7 @@ export default function Home() {
       setShareImageDataUrl(null);
       setImageShareState("failed");
     }
-  }, []);
+  }, [clearShareCopyToastTimer, showShareCopyToast]);
 
   const openCurrentShareImage = useCallback(() => {
     void openShareImage({ kind: "result", url: window.location.href, result }, "result");
@@ -246,8 +270,10 @@ export default function Home() {
   }, [openShareImage]);
 
   const closeShareImage = useCallback(() => {
+    clearShareCopyToastTimer();
+    setShareCopyNoticeId(0);
     setStage(shareReturnStage);
-  }, [shareReturnStage]);
+  }, [clearShareCopyToastTimer, shareReturnStage]);
 
   return (
     <main className="app-shell">
@@ -1755,14 +1781,14 @@ function ResultScreen({
         <div className="rank-actions" aria-label="结果操作">
           <button
             aria-label="生成分享图片"
-            className="icon-button"
+            className="result-action-button"
             disabled={imageShareState === "sharing"}
             type="button"
             onPointerDown={onShareImage}
           >
             <ShareIcon />
           </button>
-          <button aria-label="重新测试" className="icon-button" type="button" onPointerDown={onRestart}>
+          <button aria-label="重新测试" className="result-action-button" type="button" onPointerDown={onRestart}>
             <RestartIcon />
           </button>
         </div>
@@ -1905,6 +1931,33 @@ type ShareImageInput =
       kind: "default";
       url: string;
     };
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the textarea fallback for in-app browsers with stricter clipboard handling.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    const copied = document.execCommand("copy");
+    if (!copied) throw new Error("Copy command failed");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
 
 async function createShareImage(input: ShareImageInput) {
   const canvas = document.createElement("canvas");
