@@ -153,7 +153,7 @@ export default function Home() {
   const [shareImageDataUrl, setShareImageDataUrl] = useState<string | null>(null);
   const [shareImageResult, setShareImageResult] = useState<GameRankResult | null>(null);
   const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
-  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const currentRound = rounds[roundIndex];
@@ -167,7 +167,7 @@ export default function Home() {
     setImageShareState("idle");
     setShareImageDataUrl(null);
     setShareImageResult(null);
-    setShareLinkCopied(false);
+    setShareCopyNoticeId(0);
     roundCompletionLockedRef.current = false;
     setStage("intro");
   };
@@ -217,15 +217,14 @@ export default function Home() {
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
     setShareImageDataUrl(null);
-    setShareLinkCopied(false);
     setImageShareState("sharing");
     setStage("share");
 
     try {
       await navigator.clipboard.writeText(buildShareText(input.kind === "result" ? input.result : null, input.url));
-      setShareLinkCopied(true);
+      setShareCopyNoticeId((current) => current + 1);
     } catch {
-      setShareLinkCopied(false);
+      setShareCopyNoticeId(0);
     }
 
     try {
@@ -258,7 +257,7 @@ export default function Home() {
           imageShareState={imageShareState}
           onBack={closeShareImage}
           result={shareImageResult}
-          shareLinkCopied={shareLinkCopied}
+          shareCopyNoticeId={shareCopyNoticeId}
         />
       ) : stage === "home" ? (
         <HomeScreen onShareImage={openDefaultShareImage} onStart={startTest} />
@@ -297,7 +296,7 @@ function HomeScreen({
   return (
     <section className="home-screen">
       <button aria-label="生成默认分享图片" className="icon-button home-image-button" type="button" onPointerDown={onShareImage}>
-        <ImageIcon />
+        <ShareIcon />
       </button>
       <div className="hero-copy compact">
         <h1>{APP_TITLE}</h1>
@@ -339,17 +338,6 @@ function ShareIcon() {
       <path d="M12 4v11" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       <path d="m7 8 5-5 5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M6 14v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function ImageIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
-      <rect height="16" rx="2" stroke="currentColor" strokeWidth="2" width="18" x="3" y="4" />
-      <path d="m7 16 3.2-3.2a1.4 1.4 0 0 1 2 0L16 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="m14 14 1.2-1.2a1.4 1.4 0 0 1 2 0L21 16.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <circle cx="8.5" cy="8.5" fill="currentColor" r="1.4" />
     </svg>
   );
 }
@@ -1710,12 +1698,10 @@ function PatienceRound({ onComplete }: RoundProps) {
         <strong>{Math.round(progress)}%</strong>
       </div>
       {canSkip ? (
-        <button className="secondary-button" type="button" onPointerDown={skip}>
+        <button className="secondary-button patience-skip-button" type="button" onPointerDown={skip}>
           跳过
         </button>
-      ) : (
-        <span className="quiet-text">等待中</span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1803,13 +1789,13 @@ function ShareImageScreen({
   imageShareState,
   onBack,
   result,
-  shareLinkCopied,
+  shareCopyNoticeId,
 }: {
   dataUrl: string | null;
   imageShareState: ImageShareState;
   onBack: () => void;
   result: GameRankResult | null;
-  shareLinkCopied: boolean;
+  shareCopyNoticeId: number;
 }) {
   return (
     <section className="share-image-screen">
@@ -1823,7 +1809,11 @@ function ShareImageScreen({
         </div>
       </div>
 
-      {shareLinkCopied ? <div className="share-copy-toast">分享链接已复制</div> : null}
+      {shareCopyNoticeId > 0 ? (
+        <div className="share-copy-toast" key={shareCopyNoticeId}>
+          分享链接已复制
+        </div>
+      ) : null}
 
       <div className="share-image-stage">
         {dataUrl ? (
