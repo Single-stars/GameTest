@@ -56,13 +56,17 @@ import {
   recordLuckDraw,
   recordLuckDrawBatch,
   removePersistedGameState,
+  resolveAppBackNavigation,
   setPersistedCurrentResult,
+  shouldGuardAppBack,
   writePersistedGameState,
+  type AppBackNavigation,
+  type AppStage,
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
 
-type Stage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck";
+type Stage = AppStage;
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type AdvancedChallengeState =
   | { mode: "select"; roundId: RoundId }
@@ -212,7 +216,7 @@ export default function Home() {
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
   const skipNextPopRef = useRef(false);
-  const appBackHandlerRef = useRef<() => boolean>(() => false);
+  const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
@@ -247,6 +251,17 @@ export default function Home() {
       window.history.back();
     }
     appHistoryActiveRef.current = false;
+  }, []);
+
+  const writeHistoryGuard = useCallback((mode: "push" | "replace") => {
+    if (typeof window === "undefined") return;
+    const historyState = { gameRankTestInternal: true };
+    if (mode === "replace") {
+      window.history.replaceState(historyState, "", window.location.href);
+    } else {
+      window.history.pushState(historyState, "", window.location.href);
+    }
+    appHistoryActiveRef.current = true;
   }, []);
 
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
@@ -578,25 +593,35 @@ export default function Home() {
     setStage("home");
   }, [persistGameState, resetCurrentRunState]);
 
-  const handleAppBack = useCallback(() => {
+  const handleAppBack = useCallback((): AppBackNavigation => {
+    const navigation = resolveAppBackNavigation({
+      stage,
+      restartConfirmOpen,
+      advancedBackSource: advancedChallengeRef.current?.mode ?? null,
+    });
+    if (navigation === "unhandled") return "unhandled";
+    if (restartConfirmOpen) {
+      setRestartConfirmOpen(false);
+      return navigation;
+    }
     if (stage === "share") {
       closeShareImage();
-      return true;
+      return navigation;
     }
     if (stage === "luck") {
       closeLuckDraw();
-      return true;
+      return navigation;
     }
     if (stage === "advanced") {
       closeAdvancedChallenge();
-      return true;
+      return navigation;
     }
     if (stage === "intro" || stage === "playing") {
       clearCurrentRunToHome();
-      return true;
+      return navigation;
     }
-    return false;
-  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeShareImage, stage]);
+    return navigation;
+  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
 
   useEffect(() => {
     appBackHandlerRef.current = handleAppBack;
@@ -604,18 +629,16 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const shouldGuardBack = stage !== "home" && stage !== "result";
+    const shouldGuardBack = shouldGuardAppBack(stage, restartConfirmOpen);
     if (!shouldGuardBack) {
       releaseHistoryGuard();
       return undefined;
     }
 
-    const historyState = { gameRankTestInternal: true };
     if (appHistoryActiveRef.current) {
-      window.history.replaceState(historyState, "", window.location.href);
+      writeHistoryGuard("replace");
     } else {
-      window.history.pushState(historyState, "", window.location.href);
-      appHistoryActiveRef.current = true;
+      writeHistoryGuard("push");
     }
 
     const onPopState = () => {
@@ -624,13 +647,16 @@ export default function Home() {
         return;
       }
       if (!appHistoryActiveRef.current) return;
+      const navigation = appBackHandlerRef.current();
       appHistoryActiveRef.current = false;
-      appBackHandlerRef.current();
+      if (navigation === "guard") {
+        writeHistoryGuard("push");
+      }
     };
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [advancedChallenge, releaseHistoryGuard, stage]);
+  }, [advancedChallenge, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
 
   return (
     <main className="app-shell">

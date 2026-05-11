@@ -25,6 +25,8 @@ import {
   getAdvancedRoundScore,
   getAdvancedTotalStars,
   getRestartDestinationAfterClearingCurrentResult,
+  resolveAppBackNavigation,
+  shouldGuardAppBack,
   markAdvancedUnlocked,
   parsePersistedGameState,
   recordAdvancedChallengeResult,
@@ -469,6 +471,28 @@ test("advanced back destination keeps attempts inside the selected challenge flo
   assert.equal(getAdvancedBackDestination("intro"), "result");
   assert.equal(getAdvancedBackDestination("playing"), "challenge");
   assert.equal(getAdvancedBackDestination("complete"), "challenge");
+});
+
+test("app back guard covers restart dialogs and advanced nested returns", () => {
+  assert.equal(shouldGuardAppBack("result", false), false);
+  assert.equal(shouldGuardAppBack("result", true), true);
+  assert.equal(shouldGuardAppBack("advanced", false), true);
+  assert.equal(shouldGuardAppBack("home", false), false);
+
+  assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: true }), "release");
+  assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: false }), "unhandled");
+  assert.equal(
+    resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "playing" }),
+    "guard",
+  );
+  assert.equal(
+    resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "complete" }),
+    "guard",
+  );
+  assert.equal(
+    resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "intro" }),
+    "release",
+  );
 });
 
 test("advanced completion actions adapt to first clears, replays, failures and max level", () => {
