@@ -143,7 +143,62 @@ textarea:focus-visible,
 
 .intro-screen {
   justify-content: center;
+  align-items: stretch;
+  padding-block: 24px;
+}
+
+.intro-card {
+  width: min(100%, 720px);
+  min-height: min(720px, calc(100svh - 84px));
+  margin-inline: auto;
+  display: grid;
+  align-content: center;
   gap: 22px;
+}
+
+.intro-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.intro-kicker,
+.round-measure-pill {
+  width: fit-content;
+  border: 1px solid rgba(27, 154, 170, 0.24);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(27, 154, 170, 0.08);
+  color: var(--cyan);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.intro-rule-card {
+  max-width: 620px;
+  display: grid;
+  gap: 10px;
+  border-block: 1px solid var(--line);
+  padding-block: 18px;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1.6;
+}
+
+.intro-rule-card p,
+.intro-rule-card small {
+  margin: 0;
+}
+
+.intro-rule-card small {
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.intro-start-button {
+  width: min(220px, 100%);
 }
 
 .eyebrow {
@@ -233,16 +288,26 @@ h1 {
 }
 
 .round-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 18px;
   padding-top: 8px;
 }
 
 .round-header h1 {
-  margin-top: 6px;
+  margin: 0;
   font-size: 36px;
+}
+
+.round-title-block {
+  min-width: 0;
+}
+
+.round-header-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
 }
 
 .progress-pill {
@@ -1562,12 +1627,28 @@ h1 {
   transition: none;
 }
 
+.luck-draw-panel.batch-spinning .slot-reel.rolling .slot-strip {
+  animation-duration: 150ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-strip {
+  transition: transform 180ms cubic-bezier(0.2, 0.86, 0.24, 1);
+}
+
 .slot-reel.rolling:nth-child(2) .slot-strip {
   animation-duration: 250ms;
 }
 
 .slot-reel.rolling:nth-child(3) .slot-strip {
   animation-duration: 220ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-reel.rolling:nth-child(2) .slot-strip {
+  animation-duration: 130ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-reel.rolling:nth-child(3) .slot-strip {
+  animation-duration: 115ms;
 }
 
 .luck-draw-panel.settled:not(.advanced-empty) .slot-reel {
@@ -1638,14 +1719,15 @@ h1 {
 
 .luck-draw-actions {
   width: min(100%, 380px);
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   margin-top: 8px;
 }
 
 .luck-draw-actions .luck-draw-button {
-  min-width: 150px;
+  width: 100%;
+  min-width: 0;
 }
 
 .luck-rule-details {
@@ -1836,6 +1918,15 @@ h1 {
     gap: 18px;
   }
 
+  .intro-card {
+    min-height: calc(100svh - 64px);
+    gap: 18px;
+  }
+
+  .intro-rule-card {
+    font-size: 16px;
+  }
+
   .hero-copy.compact h1 {
     font-size: 42px;
   }
@@ -1846,7 +1937,7 @@ h1 {
   }
 
   .round-header {
-    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
 
@@ -1942,11 +2033,11 @@ h1 {
   }
 
   .luck-stat-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .luck-draw-actions {
-    flex-direction: column;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .slot-reel {

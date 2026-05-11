@@ -95,6 +95,7 @@ const SHARE_IMAGE_HEIGHT = 820;
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 const LUCK_RULE_TEXT = "完成进阶挑战获得抽取次数。每次抽 0-100 分，只保留最高运气，80 次内必满。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
 const rounds: RoundConfig[] = [
   {
@@ -508,14 +509,19 @@ export default function Home() {
   }, [persistGameState]);
 
   const drawLuckBatch = useCallback(() => {
+    const baseDrawCount = advancedProgressRef.current.luckDrawCount;
     const scores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 101));
     const result = recordLuckDrawBatch(advancedProgressRef.current, scores);
     if (!result.outcome) return null;
+    const displayScores = scores
+      .map((score, index) => (baseDrawCount + index + 1 >= 80 ? 100 : score))
+      .sort((left, right) => left - right);
+    const outcome: LuckDrawDisplayOutcome = { ...result.outcome, displayScores };
     advancedProgressRef.current = result.progress;
     setAdvancedProgress(result.progress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, result.progress);
-    setLuckDrawOutcome(result.outcome);
-    return result.outcome;
+    setLuckDrawOutcome(outcome);
+    return outcome;
   }, [persistGameState]);
 
   const closeAdvancedChallenge = useCallback(() => {
@@ -786,17 +792,19 @@ function RoundIntro({
 }) {
   return (
     <section className="intro-screen">
-      <p className="eyebrow">
-        {round.measure}
-      </p>
-      <h1>{round.title}</h1>
-      <div className="rule-card">
-        <p>{round.rule}</p>
-        {round.action ? <small>{round.action}</small> : null}
+      <div className="intro-card">
+        <div className="intro-copy">
+          <span className="intro-kicker">{round.measure}</span>
+          <h1>{round.title}</h1>
+        </div>
+        <div className="intro-rule-card">
+          <p>{round.rule}</p>
+          {round.action ? <small>{round.action}</small> : null}
+        </div>
+        <button className="primary-button intro-start-button" type="button" onPointerDown={onStart}>
+          开始
+        </button>
       </div>
-      <button className="primary-button" type="button" onPointerDown={onStart}>
-        开始
-      </button>
     </section>
   );
 }
@@ -845,15 +853,15 @@ function PlayFrame({
   return (
     <section className="play-screen" aria-live="polite">
       <header className="round-header">
-        <div>
-          <p className="eyebrow">
-            {round.measure}
-          </p>
+        <div className="round-title-block">
           <h1>{round.title}</h1>
         </div>
-        <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
-          满分下一关
-        </button>
+        <div className="round-header-actions">
+          <span className="round-measure-pill">{round.measure}</span>
+          <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
+            满分下一关
+          </button>
+        </div>
       </header>
       <div className="progress-track" aria-hidden="true">
         <span style={{ width: `${((index + 1) / rounds.length) * 100}%` }} />
@@ -2529,6 +2537,9 @@ function LuckDrawScreen({
   const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
   const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [spinMode, setSpinMode] = useState<"single" | "batch" | null>(null);
+  const [displayScore, setDisplayScore] = useState<number | null>(null);
+  const [spinMessage, setSpinMessage] = useState<string | null>(null);
   const [settledReels, setSettledReels] = useState(3);
   const [rulesOpen, setRulesOpen] = useState(false);
   const spinTimersRef = useRef<number[]>([]);
@@ -2536,9 +2547,10 @@ function LuckDrawScreen({
   const unlocked = advancedProgress.unlocked;
   const canDraw = canUseLuckDraw(unlocked, advancedProgress) && !spinning;
   const canDrawBatch = canUseLuckDrawBatch(unlocked, advancedProgress) && !spinning;
-  const scoreForDigits = pendingOutcome?.score ?? visibleOutcome?.score ?? advancedProgress.luckBestScore;
+  const scoreForDigits = displayScore ?? pendingOutcome?.score ?? visibleOutcome?.score ?? advancedProgress.luckBestScore;
   const digits = String(scoreForDigits).padStart(3, "0").slice(-3).split("");
   const slotTone = spinning ? "advanced-empty" : getLuckScoreTone(scoreForDigits);
+  const resultText = spinMessage ?? (visibleOutcome ? formatLuckDrawOutcomeText(visibleOutcome) : getLuckDrawStatusText(unlocked, advancedProgress));
 
   const clearSpinTimers = useCallback(() => {
     for (const timer of spinTimersRef.current) {
@@ -2565,6 +2577,9 @@ function LuckDrawScreen({
   const playDrawAnimation = (outcome: LuckDrawOutcome) => {
     if (!outcome) return;
     clearSpinTimers();
+    setSpinMode("single");
+    setDisplayScore(outcome.score);
+    setSpinMessage("抽取中");
     setPendingOutcome(outcome);
     setSpinning(true);
     setSettledReels(0);
@@ -2575,11 +2590,54 @@ function LuckDrawScreen({
       window.setTimeout(() => {
         setVisibleOutcome(outcome);
         setPendingOutcome(null);
+        setDisplayScore(null);
+        setSpinMessage(null);
         setSpinning(false);
+        setSpinMode(null);
         setSettledReels(3);
         spinTimersRef.current = [];
       }, 1940),
     ];
+  };
+
+  const playBatchDrawAnimation = (outcome: LuckDrawDisplayOutcome) => {
+    if (!outcome) return;
+    const displayScores = [...(outcome.displayScores?.length ? outcome.displayScores : [outcome.score])].sort((left, right) => left - right);
+    clearSpinTimers();
+    setSpinMode("batch");
+    setPendingOutcome(outcome);
+    setVisibleOutcome(null);
+    setDisplayScore(displayScores[0] ?? outcome.score);
+    setSpinMessage(`十连抽 1/${displayScores.length}`);
+    setSpinning(true);
+    setSettledReels(0);
+
+    const stepMs = 300;
+    const settleMs = 120;
+    const timers: number[] = [];
+    displayScores.forEach((score, index) => {
+      timers.push(
+        window.setTimeout(() => {
+          setDisplayScore(score);
+          setSpinMessage(`十连抽 ${index + 1}/${displayScores.length}`);
+          setSettledReels(0);
+        }, index * stepMs),
+      );
+      timers.push(window.setTimeout(() => setSettledReels(3), index * stepMs + settleMs));
+    });
+    timers.push(
+      window.setTimeout(() => {
+        setVisibleOutcome(outcome);
+        setPendingOutcome(null);
+        setDisplayScore(null);
+        setSpinMessage(null);
+        setSpinning(false);
+        setSpinMode(null);
+        setSettledReels(3);
+        spinTimersRef.current = [];
+      }, displayScores.length * stepMs + 520),
+    );
+    spinTimersRef.current = timers;
   };
 
   const draw = () => {
@@ -2593,7 +2651,7 @@ function LuckDrawScreen({
     if (!canDrawBatch) return;
     const outcome = onDrawBatch();
     if (!outcome) return;
-    playDrawAnimation(outcome);
+    playBatchDrawAnimation(outcome);
   };
 
   return (
@@ -2620,7 +2678,7 @@ function LuckDrawScreen({
         </details>
       </div>
 
-      <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${slotTone}`}>
+      <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${spinMode === "batch" ? "batch-spinning" : ""} ${slotTone}`}>
         <div className="slot-machine" aria-label={`当前抽取分数 ${scoreForDigits}`}>
           {digits.map((digit, index) => (
             <div
@@ -2660,7 +2718,7 @@ function LuckDrawScreen({
         </div>
 
         <p className="luck-rule-text">
-          {visibleOutcome ? formatLuckDrawOutcomeText(visibleOutcome) : getLuckDrawStatusText(unlocked, advancedProgress)}
+          {resultText}
         </p>
 
       </div>
@@ -2745,6 +2803,7 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
       return `${current.x},${current.y}`;
     })
     .join(" ");
+  const labelScaleFor = (label: string) => (label === "控制力" || label === "侦察力" ? 1.34 : 1.2);
 
   return (
     <section className="radar-card" aria-label="八向能力图">
@@ -2768,7 +2827,7 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
           })}
           <polygon className="radar-score" points={polygon} />
           {axis.map((item, index) => {
-            const labelPoint = point(index, 1.2);
+            const labelPoint = point(index, labelScaleFor(item.label));
             return (
               <text className="radar-label" key={item.label} x={labelPoint.x} y={labelPoint.y}>
                 {item.label}
