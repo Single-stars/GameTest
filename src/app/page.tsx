@@ -794,7 +794,6 @@ function RoundIntro({
     <section className="intro-screen">
       <div className="intro-card">
         <div className="intro-copy">
-          <span className="intro-kicker">{round.measure}</span>
           <h1>{round.title}</h1>
         </div>
         <div className="intro-rule-card">
@@ -2608,22 +2607,21 @@ function LuckDrawScreen({
     setPendingOutcome(outcome);
     setVisibleOutcome(null);
     setDisplayScore(displayScores[0] ?? outcome.score);
-    setSpinMessage(`十连抽 1/${displayScores.length}`);
+    setSpinMessage("十连抽取中");
     setSpinning(true);
     setSettledReels(0);
 
+    const warmupMs = 540;
     const stepMs = 300;
-    const settleMs = 120;
     const timers: number[] = [];
+    timers.push(window.setTimeout(() => setSettledReels(3), warmupMs));
     displayScores.forEach((score, index) => {
       timers.push(
         window.setTimeout(() => {
           setDisplayScore(score);
           setSpinMessage(`十连抽 ${index + 1}/${displayScores.length}`);
-          setSettledReels(0);
-        }, index * stepMs),
+        }, warmupMs + index * stepMs),
       );
-      timers.push(window.setTimeout(() => setSettledReels(3), index * stepMs + settleMs));
     });
     timers.push(
       window.setTimeout(() => {
@@ -2635,7 +2633,7 @@ function LuckDrawScreen({
         setSpinMode(null);
         setSettledReels(3);
         spinTimersRef.current = [];
-      }, displayScores.length * stepMs + 520),
+      }, warmupMs + displayScores.length * stepMs + 560),
     );
     spinTimersRef.current = timers;
   };
