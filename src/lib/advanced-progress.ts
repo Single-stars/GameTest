@@ -79,6 +79,7 @@ export type AdvancedBackDestination = "result" | "challenge";
 export type AdvancedCompletionAction = "retry" | "next" | "maxed";
 export type AppStage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck";
 export type AppBackNavigation = "unhandled" | "release" | "guard";
+export type AppBackHistoryLayer = 0 | 1 | 2;
 
 export type AdvancedLevelTone =
   | "advanced-empty"
@@ -371,6 +372,33 @@ export function getAdvancedBackDestination(source: AdvancedBackSource): Advanced
 
 export function shouldGuardAppBack(stage: AppStage, restartConfirmOpen: boolean) {
   return restartConfirmOpen || (stage !== "home" && stage !== "result");
+}
+
+export function getAppBackHistoryLayer({
+  stage,
+  restartConfirmOpen,
+  advancedBackSource,
+}: {
+  stage: AppStage;
+  restartConfirmOpen: boolean;
+  advancedBackSource?: AdvancedBackSource | null;
+}): AppBackHistoryLayer {
+  if (!shouldGuardAppBack(stage, restartConfirmOpen)) return 0;
+  if (
+    stage === "advanced" &&
+    advancedBackSource &&
+    getAdvancedBackDestination(advancedBackSource) === "challenge"
+  ) {
+    return 2;
+  }
+  return 1;
+}
+
+export function readAppBackHistoryLayer(state: unknown): AppBackHistoryLayer {
+  if (typeof state !== "object" || state === null) return 0;
+  const source = state as { gameRankTestInternal?: unknown; gameRankTestLayer?: unknown };
+  if (source.gameRankTestInternal !== true) return 0;
+  return source.gameRankTestLayer === 2 ? 2 : 1;
 }
 
 export function resolveAppBackNavigation({

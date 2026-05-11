@@ -24,7 +24,9 @@ import {
   getAdvancedDimensionLevel,
   getAdvancedRoundScore,
   getAdvancedTotalStars,
+  getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
+  readAppBackHistoryLayer,
   resolveAppBackNavigation,
   shouldGuardAppBack,
   markAdvancedUnlocked,
@@ -478,6 +480,12 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   assert.equal(shouldGuardAppBack("result", true), true);
   assert.equal(shouldGuardAppBack("advanced", false), true);
   assert.equal(shouldGuardAppBack("home", false), false);
+  assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: false }), 0);
+  assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: true }), 1);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "select" }), 1);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "intro" }), 1);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "playing" }), 2);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "complete" }), 2);
 
   assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: true }), "release");
   assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: false }), "unhandled");
@@ -493,6 +501,9 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
     resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "intro" }),
     "release",
   );
+  assert.equal(readAppBackHistoryLayer({ gameRankTestInternal: true, gameRankTestLayer: 2 }), 2);
+  assert.equal(readAppBackHistoryLayer({ gameRankTestInternal: true, gameRankTestLayer: 99 }), 1);
+  assert.equal(readAppBackHistoryLayer({ gameRankTestInternal: false, gameRankTestLayer: 1 }), 0);
 });
 
 test("advanced completion actions adapt to first clears, replays, failures and max level", () => {

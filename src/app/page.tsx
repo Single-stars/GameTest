@@ -49,8 +49,10 @@ import {
   getAdvancedRoundContent,
   getAdvancedRoundScore,
   getAdvancedTotalStars,
+  getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
   markAdvancedUnlocked,
+  readAppBackHistoryLayer,
   readPersistedGameState,
   recordAdvancedChallengeResult,
   recordLuckDraw,
@@ -58,9 +60,9 @@ import {
   removePersistedGameState,
   resolveAppBackNavigation,
   setPersistedCurrentResult,
-  shouldGuardAppBack,
   writePersistedGameState,
   type AppBackNavigation,
+  type AppBackHistoryLayer,
   type AppStage,
   type AdvancedProgress,
   type LuckDrawOutcome,
@@ -215,6 +217,7 @@ export default function Home() {
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
+  const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
   const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
   const currentRound = rounds[roundIndex];
@@ -251,17 +254,19 @@ export default function Home() {
       window.history.back();
     }
     appHistoryActiveRef.current = false;
+    appHistoryLayerRef.current = 0;
   }, []);
 
-  const writeHistoryGuard = useCallback((mode: "push" | "replace") => {
+  const writeHistoryGuard = useCallback((mode: "push" | "replace", layer: AppBackHistoryLayer) => {
     if (typeof window === "undefined") return;
-    const historyState = { gameRankTestInternal: true };
+    const historyState = { gameRankTestInternal: true, gameRankTestLayer: layer };
     if (mode === "replace") {
       window.history.replaceState(historyState, "", window.location.href);
     } else {
       window.history.pushState(historyState, "", window.location.href);
     }
     appHistoryActiveRef.current = true;
+    appHistoryLayerRef.current = layer;
   }, []);
 
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
@@ -627,30 +632,51 @@ export default function Home() {
     appBackHandlerRef.current = handleAppBack;
   }, [handleAppBack]);
 
+  const requestAppBack = useCallback(() => {
+    if (typeof window !== "undefined" && appHistoryActiveRef.current) {
+      window.history.back();
+      return;
+    }
+
+    const navigation = appBackHandlerRef.current();
+    if (navigation !== "guard") {
+      appHistoryActiveRef.current = false;
+      appHistoryLayerRef.current = 0;
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const shouldGuardBack = shouldGuardAppBack(stage, restartConfirmOpen);
-    if (!shouldGuardBack) {
+    const historyLayer = getAppBackHistoryLayer({
+      stage,
+      restartConfirmOpen,
+      advancedBackSource: advancedChallenge?.mode ?? null,
+    });
+    if (historyLayer === 0) {
       releaseHistoryGuard();
       return undefined;
     }
 
     if (appHistoryActiveRef.current) {
-      writeHistoryGuard("replace");
+      writeHistoryGuard(historyLayer > appHistoryLayerRef.current ? "push" : "replace", historyLayer);
     } else {
-      writeHistoryGuard("push");
+      writeHistoryGuard("push", historyLayer);
     }
 
-    const onPopState = () => {
+    const onPopState = (event: PopStateEvent) => {
       if (skipNextPopRef.current) {
         skipNextPopRef.current = false;
         return;
       }
       if (!appHistoryActiveRef.current) return;
+      const landedLayer = readAppBackHistoryLayer(event.state);
       const navigation = appBackHandlerRef.current();
-      appHistoryActiveRef.current = false;
-      if (navigation === "guard") {
-        writeHistoryGuard("push");
+      if (navigation === "guard" && landedLayer > 0) {
+        appHistoryActiveRef.current = true;
+        appHistoryLayerRef.current = landedLayer;
+      } else {
+        appHistoryActiveRef.current = false;
+        appHistoryLayerRef.current = 0;
       }
     };
 
@@ -664,7 +690,7 @@ export default function Home() {
         <ShareImageScreen
           dataUrl={shareImageDataUrl}
           imageShareState={imageShareState}
-          onBack={closeShareImage}
+          onBack={requestAppBack}
           rankTitle={shareImageTitle}
           result={shareImageResult}
           shareCopyNoticeId={shareCopyNoticeId}
@@ -673,7 +699,7 @@ export default function Home() {
         <LuckDrawScreen
           advancedProgress={advancedProgress}
           lastOutcome={luckDrawOutcome}
-          onBack={closeLuckDraw}
+          onBack={requestAppBack}
           onDraw={drawLuck}
           onDrawBatch={drawLuckBatch}
         />
@@ -681,7 +707,7 @@ export default function Home() {
         <AdvancedChallengeScreen
           advancedProgress={advancedProgress}
           challenge={advancedChallenge}
-          onBack={closeAdvancedChallenge}
+          onBack={requestAppBack}
           onCompleteRound={completeAdvancedLevel}
           onPickLevel={pickAdvancedLevel}
           onStartLevel={startAdvancedLevel}
