@@ -90,6 +90,7 @@ export type LuckDrawOutcome = {
   stars: number;
   improved: boolean;
   guaranteed: boolean;
+  draws?: number;
 };
 
 export type LuckDrawResult = {
@@ -409,15 +410,28 @@ export function getLuckScoreTone(score: number): AdvancedLevelTone {
 }
 
 export function getLuckDrawStatusText(unlocked: boolean, progress: AdvancedProgress) {
-  if (!unlocked) return "达到最强王者后解锁进阶挑战与运气抽取";
-  const chances = sanitizeAdvancedProgress(progress).luckDrawChances;
+  if (!unlocked) return "达到最强王者后解锁进阶挑战和运气玩法";
+  const sanitized = sanitizeAdvancedProgress(progress);
+  if (sanitized.luckStars >= ADVANCED_STAR_LIMITS.luckStars || sanitized.luckBestScore >= 100) return "运气已达到上限";
+  const chances = sanitized.luckDrawChances;
   return chances > 0 ? `抽取次数 ${chances}` : "完成进阶挑战获得运气抽取";
 }
 
+export function canUseLuckDraw(unlocked: boolean, progress: AdvancedProgress) {
+  const sanitized = sanitizeAdvancedProgress(progress);
+  return unlocked && sanitized.luckDrawChances > 0;
+}
+
+export function canUseLuckDrawBatch(unlocked: boolean, progress: AdvancedProgress, count = 10) {
+  const sanitized = sanitizeAdvancedProgress(progress);
+  return unlocked && sanitized.luckDrawChances >= clampInteger(count, 1, 10);
+}
+
 export function formatLuckDrawOutcomeText(outcome: LuckDrawOutcome) {
+  if ((outcome.draws ?? 1) > 1) return `十连最高运气${outcome.score}！`;
+  if (outcome.guaranteed || outcome.stars >= ADVANCED_STAR_LIMITS.luckStars || outcome.score >= 100) return "运气已达到上限";
   if (!outcome.improved) return "运气保留历史最高";
-  const prefix = outcome.guaranteed ? "保底触发" : "本次";
-  return `${prefix} ${outcome.score} 分 · 运气⭐${outcome.stars} · 刷新最高`;
+  return `运气刷新为${outcome.score}！`;
 }
 
 export function recordLuckDraw(progress: AdvancedProgress, score: number, completedAt = timestamp()): LuckDrawResult {
@@ -446,6 +460,46 @@ export function recordLuckDraw(progress: AdvancedProgress, score: number, comple
       stars: drawStars,
       improved,
       guaranteed,
+    },
+  };
+}
+
+export function recordLuckDrawBatch(progress: AdvancedProgress, scores: number[], completedAt = timestamp()): LuckDrawResult {
+  const sanitized = sanitizeAdvancedProgress(progress, completedAt);
+  const drawCount = Math.min(10, scores.length);
+  if (drawCount < 10 || sanitized.luckDrawChances < 10) {
+    return { progress: sanitized, outcome: null };
+  }
+
+  const outcomes = scores.slice(0, drawCount).map((score, index) => {
+    const drawNumber = Math.min(ADVANCED_DIMENSION_STAR_LIMIT, sanitized.luckDrawCount + index + 1);
+    const guaranteed = drawNumber >= ADVANCED_DIMENSION_STAR_LIMIT;
+    const drawScore = guaranteed ? 100 : clampScore(score);
+    return {
+      score: drawScore,
+      stars: getLuckStarsFromScore(drawScore),
+      guaranteed,
+    };
+  });
+  const best = outcomes.reduce((currentBest, outcome) => (outcome.score > currentBest.score ? outcome : currentBest), outcomes[0]);
+  const improved = best.stars > sanitized.luckStars || best.score > sanitized.luckBestScore;
+  const nextDrawCount = Math.min(ADVANCED_DIMENSION_STAR_LIMIT, sanitized.luckDrawCount + drawCount);
+
+  return {
+    progress: {
+      ...sanitized,
+      luckStars: Math.max(sanitized.luckStars, best.stars),
+      luckBestScore: Math.max(sanitized.luckBestScore, best.score),
+      luckDrawChances: Math.max(0, sanitized.luckDrawChances - drawCount),
+      luckDrawCount: nextDrawCount,
+      updatedAt: completedAt,
+    },
+    outcome: {
+      score: best.score,
+      stars: best.stars,
+      improved,
+      guaranteed: outcomes.some((outcome) => outcome.guaranteed),
+      draws: drawCount,
     },
   };
 }

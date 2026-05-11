@@ -976,6 +976,15 @@ h1 {
   scale: 0.96;
 }
 
+.result-action-button.danger {
+  color: #b42318;
+  background: #fff0ee;
+}
+
+.result-action-button.danger:active {
+  background: #ffe1dd;
+}
+
 .radar-card {
   display: grid;
   grid-template-columns: 1fr;
@@ -1050,6 +1059,8 @@ h1 {
 
 .luck-score-item.locked {
   opacity: 0.82;
+  min-height: 94px;
+  align-content: center;
 }
 
 .luck-copy > span {
@@ -1122,6 +1133,8 @@ h1 {
 }
 
 .advanced-entry-button {
+  position: relative;
+  isolation: isolate;
   width: 42px;
   height: 42px;
   display: inline-grid;
@@ -1140,6 +1153,88 @@ h1 {
   cursor: default;
   opacity: 0.42;
   transform: none;
+}
+
+.advanced-unlock-pulse .advanced-entry-button {
+  animation: advanced-entry-pop 1200ms cubic-bezier(0.16, 0.9, 0.24, 1.08) both;
+}
+
+.advanced-unlock-pulse .advanced-entry-button::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 2px solid rgba(201, 137, 16, 0.28);
+  border-radius: inherit;
+  pointer-events: none;
+  animation: advanced-entry-halo 1800ms ease-in-out infinite;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(1) .advanced-entry-button {
+  animation-delay: 0ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(2) .advanced-entry-button {
+  animation-delay: 90ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(3) .advanced-entry-button {
+  animation-delay: 180ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(4) .advanced-entry-button {
+  animation-delay: 270ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(5) .advanced-entry-button {
+  animation-delay: 360ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(6) .advanced-entry-button {
+  animation-delay: 450ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(7) .advanced-entry-button {
+  animation-delay: 540ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(8) .advanced-entry-button {
+  animation-delay: 630ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(9) .advanced-entry-button {
+  animation-delay: 720ms;
+}
+
+@keyframes advanced-entry-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.62);
+    box-shadow: 0 0 0 0 rgba(201, 137, 16, 0);
+  }
+
+  58% {
+    opacity: 1;
+    transform: scale(1.12);
+    box-shadow: 0 0 0 8px rgba(201, 137, 16, 0.2);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes advanced-entry-halo {
+  0%,
+  100% {
+    opacity: 0.36;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.88;
+    transform: scale(1.08);
+  }
 }
 
 .advanced-screen,
@@ -1192,9 +1287,14 @@ h1 {
 }
 
 .advanced-hero {
+  position: relative;
   display: grid;
   gap: 8px;
   padding: 20px;
+}
+
+.luck-hero {
+  padding-right: 64px;
 }
 
 .advanced-hero h1 {
@@ -1365,7 +1465,7 @@ h1 {
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 18px 22px 54px;
+  padding: 18px 22px 24px;
   background: var(--surface);
   transition:
     background 180ms ease,
@@ -1536,23 +1636,31 @@ h1 {
   text-align: center;
 }
 
-.luck-draw-button {
-  min-width: 180px;
+.luck-draw-actions {
+  width: min(100%, 380px);
+  display: flex;
+  justify-content: center;
+  gap: 10px;
   margin-top: 8px;
+}
+
+.luck-draw-actions .luck-draw-button {
+  min-width: 150px;
 }
 
 .luck-rule-details {
   position: absolute;
   right: 14px;
   top: 14px;
+  z-index: 4;
 }
 
 .luck-rule-details p {
   position: absolute;
   z-index: 5;
   right: 0;
-  bottom: 30px;
-  width: min(300px, 78vw);
+  top: 30px;
+  width: min(280px, 72vw);
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1835,6 +1943,10 @@ h1 {
 
   .luck-stat-row {
     grid-template-columns: 1fr;
+  }
+
+  .luck-draw-actions {
+    flex-direction: column;
   }
 
   .slot-reel {

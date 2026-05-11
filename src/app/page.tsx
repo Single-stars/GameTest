@@ -28,6 +28,8 @@ import {
   type TrialEvent,
 } from "@/lib/scoring";
 import {
+  canUseLuckDraw,
+  canUseLuckDrawBatch,
   clearPersistedCurrentResult,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
@@ -52,6 +54,8 @@ import {
   readPersistedGameState,
   recordAdvancedChallengeResult,
   recordLuckDraw,
+  recordLuckDrawBatch,
+  removePersistedGameState,
   setPersistedCurrentResult,
   writePersistedGameState,
   type AdvancedProgress,
@@ -83,7 +87,7 @@ const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_IMAGE_WIDTH = 900;
 const SHARE_IMAGE_HEIGHT = 820;
 const SHARE_COPY_TOAST_DELAY_MS = 500;
-const LUCK_RULE_TEXT = "完成新的进阶关卡获得抽取次数。每次抽 0-100 分，换算 0-20⭐，只保留历史最高，80 次内必满运气。";
+const LUCK_RULE_TEXT = "完成进阶挑战获得抽取次数。每次抽 0-100 分，只保留最高运气，80 次内必满。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 const rounds: RoundConfig[] = [
@@ -196,6 +200,7 @@ export default function Home() {
   const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
+  const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
@@ -205,6 +210,9 @@ export default function Home() {
   const advancedProgressRef = useRef(advancedProgress);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
+  const appHistoryActiveRef = useRef(false);
+  const skipNextPopRef = useRef(false);
+  const appBackHandlerRef = useRef<() => boolean>(() => false);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
@@ -225,6 +233,22 @@ export default function Home() {
     }, SHARE_COPY_TOAST_DELAY_MS);
   }, [clearShareCopyToastTimer]);
 
+  const scrollResultToTop = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }, []);
+
+  const releaseHistoryGuard = useCallback((mode: "silent" | "browser-back" = "silent") => {
+    if (!appHistoryActiveRef.current) return;
+    if (mode === "browser-back" && typeof window !== "undefined") {
+      skipNextPopRef.current = true;
+      window.history.back();
+    }
+    appHistoryActiveRef.current = false;
+  }, []);
+
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
     if (typeof window === "undefined") return;
 
@@ -239,7 +263,7 @@ export default function Home() {
     }
   }, []);
 
-  const resetCurrentRunState = () => {
+  const resetCurrentRunState = useCallback(() => {
     clearShareCopyToastTimer();
     trialsRef.current = [];
     setTrials([]);
@@ -251,10 +275,11 @@ export default function Home() {
     setShareImageTitle(null);
     setShareCopyNoticeId(0);
     setRestartConfirmOpen(false);
+    setAdvancedUnlockPulseId(0);
     setAdvancedChallenge(null);
     setLuckDrawOutcome(null);
     roundCompletionLockedRef.current = false;
-  };
+  }, [clearShareCopyToastTimer]);
 
   const beginTest = () => {
     resetCurrentRunState();
@@ -275,6 +300,22 @@ export default function Home() {
 
     confirmRestartToHome();
   };
+
+  const resetAllTestData = useCallback(() => {
+    const nextProgress = createDefaultAdvancedProgress();
+    resetCurrentRunState();
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    if (typeof window !== "undefined") {
+      try {
+        removePersistedGameState(window.localStorage);
+      } catch {
+        // Storage can be unavailable in private mode; resetting visible state is still useful.
+      }
+    }
+    releaseHistoryGuard();
+    setStage("home");
+  }, [releaseHistoryGuard, resetCurrentRunState]);
 
   useEffect(() => {
     advancedProgressRef.current = advancedProgress;
@@ -301,6 +342,7 @@ export default function Home() {
       const storedResult = getGameRankResult(storedTrials);
       if (storedResult.name === "最强王者" && !nextProgress.unlocked) {
         nextProgress = markAdvancedUnlocked(nextProgress);
+        setAdvancedUnlockPulseId((current) => current + 1);
       }
       trialsRef.current = storedTrials;
       setTrials(storedTrials);
@@ -334,10 +376,14 @@ export default function Home() {
       if (currentIndex >= rounds.length - 1) {
         const finalResult = getGameRankResult(nextTrials);
         let nextProgress = advancedProgressRef.current;
+        const wasAdvancedUnlocked = nextProgress.unlocked;
         if (finalResult.name === "最强王者") {
           nextProgress = markAdvancedUnlocked(nextProgress);
           advancedProgressRef.current = nextProgress;
           setAdvancedProgress(nextProgress);
+          if (!wasAdvancedUnlocked) {
+            setAdvancedUnlockPulseId((current) => current + 1);
+          }
         }
         persistGameState(nextTrials, nextProgress);
         setStage("result");
@@ -407,26 +453,43 @@ export default function Home() {
   const closeShareImage = useCallback(() => {
     clearShareCopyToastTimer();
     setShareCopyNoticeId(0);
+    releaseHistoryGuard();
+    if (shareReturnStage === "result") scrollResultToTop();
     setStage(shareReturnStage);
-  }, [clearShareCopyToastTimer, shareReturnStage]);
+  }, [clearShareCopyToastTimer, releaseHistoryGuard, scrollResultToTop, shareReturnStage]);
 
   const openAdvancedChallenge = useCallback((roundId: RoundId) => {
+    setAdvancedUnlockPulseId(0);
     setAdvancedChallenge({ mode: "select", roundId });
     setStage("advanced");
   }, []);
 
   const openLuckDraw = useCallback(() => {
+    setAdvancedUnlockPulseId(0);
     setLuckDrawOutcome(null);
     setStage("luck");
   }, []);
 
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
+    releaseHistoryGuard();
+    scrollResultToTop();
     setStage("result");
-  }, []);
+  }, [releaseHistoryGuard, scrollResultToTop]);
 
   const drawLuck = useCallback(() => {
     const result = recordLuckDraw(advancedProgressRef.current, Math.floor(Math.random() * 101));
+    if (!result.outcome) return null;
+    advancedProgressRef.current = result.progress;
+    setAdvancedProgress(result.progress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, result.progress);
+    setLuckDrawOutcome(result.outcome);
+    return result.outcome;
+  }, [persistGameState]);
+
+  const drawLuckBatch = useCallback(() => {
+    const scores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 101));
+    const result = recordLuckDrawBatch(advancedProgressRef.current, scores);
     if (!result.outcome) return null;
     advancedProgressRef.current = result.progress;
     setAdvancedProgress(result.progress);
@@ -439,13 +502,15 @@ export default function Home() {
     const current = advancedChallengeRef.current;
     if (!current || getAdvancedBackDestination(current.mode) === "result" || current.mode === "select" || current.mode === "intro") {
       setAdvancedChallenge(null);
+      releaseHistoryGuard();
+      scrollResultToTop();
       setStage("result");
       return;
     }
 
     setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level: current.level });
     setStage("advanced");
-  }, []);
+  }, [releaseHistoryGuard, scrollResultToTop]);
 
   const pickAdvancedLevel = useCallback((level: number) => {
     const current = advancedChallengeRef.current;
@@ -507,6 +572,66 @@ export default function Home() {
     [persistGameState],
   );
 
+  const clearCurrentRunToHome = useCallback(() => {
+    resetCurrentRunState();
+    persistGameState(null, advancedProgressRef.current);
+    setStage("home");
+  }, [persistGameState, resetCurrentRunState]);
+
+  const handleAppBack = useCallback(() => {
+    if (stage === "share") {
+      closeShareImage();
+      return true;
+    }
+    if (stage === "luck") {
+      closeLuckDraw();
+      return true;
+    }
+    if (stage === "advanced") {
+      closeAdvancedChallenge();
+      return true;
+    }
+    if (stage === "intro" || stage === "playing") {
+      clearCurrentRunToHome();
+      return true;
+    }
+    return false;
+  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeShareImage, stage]);
+
+  useEffect(() => {
+    appBackHandlerRef.current = handleAppBack;
+  }, [handleAppBack]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const shouldGuardBack = stage !== "home" && stage !== "result";
+    if (!shouldGuardBack) {
+      releaseHistoryGuard();
+      return undefined;
+    }
+
+    const historyState = { gameRankTestInternal: true };
+    if (appHistoryActiveRef.current) {
+      window.history.replaceState(historyState, "", window.location.href);
+    } else {
+      window.history.pushState(historyState, "", window.location.href);
+      appHistoryActiveRef.current = true;
+    }
+
+    const onPopState = () => {
+      if (skipNextPopRef.current) {
+        skipNextPopRef.current = false;
+        return;
+      }
+      if (!appHistoryActiveRef.current) return;
+      appHistoryActiveRef.current = false;
+      appBackHandlerRef.current();
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [advancedChallenge, releaseHistoryGuard, stage]);
+
   return (
     <main className="app-shell">
       {stage === "share" ? (
@@ -524,6 +649,7 @@ export default function Home() {
           lastOutcome={luckDrawOutcome}
           onBack={closeLuckDraw}
           onDraw={drawLuck}
+          onDrawBatch={drawLuckBatch}
         />
       ) : stage === "advanced" && advancedChallenge ? (
         <AdvancedChallengeScreen
@@ -540,9 +666,11 @@ export default function Home() {
         <ResultScreen
           advancedProgress={advancedProgress}
           trials={safeTrials}
+          advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenLuckDraw={openLuckDraw}
+          onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
         />
@@ -556,9 +684,11 @@ export default function Home() {
         <ResultScreen
           advancedProgress={advancedProgress}
           trials={trials}
+          advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenLuckDraw={openLuckDraw}
+          onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
         />
@@ -634,6 +764,17 @@ function RestartIcon() {
     <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
       <path d="M4 12a8 8 0 1 0 2.35-5.65" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       <path d="M4 5v5h5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ResetDataIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <path d="M4 7h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="M7 10v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-8" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M10 12v5M14 12v5" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
     </svg>
   );
 }
@@ -2139,17 +2280,21 @@ function AdvancedChallengeScreen({
 function ResultScreen({
   advancedProgress,
   trials,
+  advancedUnlockPulseId,
   imageShareState,
   onOpenAdvancedChallenge,
   onOpenLuckDraw,
+  onResetTestData,
   onShareImage,
   onRestart,
 }: {
   advancedProgress: AdvancedProgress;
   trials: TrialEvent[];
+  advancedUnlockPulseId: number;
   imageShareState: ImageShareState;
   onOpenAdvancedChallenge: (roundId: RoundId) => void;
   onOpenLuckDraw: () => void;
+  onResetTestData: () => void;
   onShareImage: () => void;
   onRestart: () => void;
 }) {
@@ -2236,12 +2381,15 @@ function ResultScreen({
           <button aria-label="重新测试" className="result-action-button" type="button" onPointerDown={onRestart}>
             <RestartIcon />
           </button>
+          <button aria-label="重置测试数据" className="result-action-button danger" type="button" onClick={onResetTestData}>
+            <ResetDataIcon />
+          </button>
         </div>
       </div>
 
       <RadarChart axis={result.axis} />
 
-      <div className="score-grid">
+      <div className={`score-grid ${advancedUnlockPulseId > 0 ? "advanced-unlock-pulse" : ""}`}>
         {rows.map((row) => {
           const advancedLevel = getAdvancedDimensionLevel(advancedProgress, row.roundId);
           return (
@@ -2256,7 +2404,7 @@ function ResultScreen({
                   aria-label={`进入${row.label}进阶挑战，当前进阶${advancedLevel}`}
                   className={`advanced-entry-button ${getAdvancedLevelTone(advancedLevel)}`}
                   type="button"
-                  onPointerDown={() => onOpenAdvancedChallenge(row.roundId)}
+                  onClick={() => onOpenAdvancedChallenge(row.roundId)}
                 >
                   {advancedLevel}
                 </button>
@@ -2270,15 +2418,16 @@ function ResultScreen({
             <strong>{advancedProgress.luckBestScore}</strong>
             <small>{luckStatus}</small>
           </div>
-          <button
-            aria-label={`进入运气抽取，当前运气${advancedProgress.luckStars}星`}
-            className={`advanced-entry-button luck-entry-button ${getLuckLevelTone(advancedProgress.luckStars)}`}
-            disabled={!advancedUnlocked}
-            type="button"
-            onPointerDown={onOpenLuckDraw}
-          >
-            {advancedProgress.luckStars}
-          </button>
+          {advancedUnlocked ? (
+            <button
+              aria-label={`进入运气抽取，当前运气${advancedProgress.luckStars}星`}
+              className={`advanced-entry-button luck-entry-button ${getLuckLevelTone(advancedProgress.luckStars)}`}
+              type="button"
+              onClick={onOpenLuckDraw}
+            >
+              {advancedProgress.luckStars}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -2317,11 +2466,13 @@ function LuckDrawScreen({
   lastOutcome,
   onBack,
   onDraw,
+  onDrawBatch,
 }: {
   advancedProgress: AdvancedProgress;
   lastOutcome: LuckDrawOutcome | null;
   onBack: () => void;
   onDraw: () => LuckDrawOutcome | null;
+  onDrawBatch: () => LuckDrawOutcome | null;
 }) {
   const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
   const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
@@ -2331,7 +2482,8 @@ function LuckDrawScreen({
   const spinTimersRef = useRef<number[]>([]);
   const ruleDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const unlocked = advancedProgress.unlocked;
-  const canDraw = unlocked && advancedProgress.luckDrawChances > 0 && !spinning;
+  const canDraw = canUseLuckDraw(unlocked, advancedProgress) && !spinning;
+  const canDrawBatch = canUseLuckDrawBatch(unlocked, advancedProgress) && !spinning;
   const scoreForDigits = pendingOutcome?.score ?? visibleOutcome?.score ?? advancedProgress.luckBestScore;
   const digits = String(scoreForDigits).padStart(3, "0").slice(-3).split("");
   const slotTone = spinning ? "advanced-empty" : getLuckScoreTone(scoreForDigits);
@@ -2358,9 +2510,7 @@ function LuckDrawScreen({
     return () => window.removeEventListener("pointerdown", closeOnOutside);
   }, [rulesOpen]);
 
-  const draw = () => {
-    if (!canDraw) return;
-    const outcome = onDraw();
+  const playDrawAnimation = (outcome: LuckDrawOutcome) => {
     if (!outcome) return;
     clearSpinTimers();
     setPendingOutcome(outcome);
@@ -2380,6 +2530,20 @@ function LuckDrawScreen({
     ];
   };
 
+  const draw = () => {
+    if (!canDraw) return;
+    const outcome = onDraw();
+    if (!outcome) return;
+    playDrawAnimation(outcome);
+  };
+
+  const drawBatch = () => {
+    if (!canDrawBatch) return;
+    const outcome = onDrawBatch();
+    if (!outcome) return;
+    playDrawAnimation(outcome);
+  };
+
   return (
     <section className="luck-screen">
       <header className="advanced-topbar">
@@ -2390,8 +2554,18 @@ function LuckDrawScreen({
       </header>
 
       <div className="advanced-hero luck-hero">
-        <p className="eyebrow">运气</p>
-        <h1>运气老虎机</h1>
+        <div>
+          <h1>运气老虎机</h1>
+        </div>
+        <details
+          className="luck-rule-details"
+          onToggle={(event) => setRulesOpen(event.currentTarget.open)}
+          open={rulesOpen}
+          ref={ruleDetailsRef}
+        >
+          <summary>?</summary>
+          <p>{LUCK_RULE_TEXT}</p>
+        </details>
       </div>
 
       <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${slotTone}`}>
@@ -2422,23 +2596,21 @@ function LuckDrawScreen({
           </div>
         </div>
 
-        <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onPointerDown={draw}>
-          {spinning ? "抽取中" : "抽取运气"}
-        </button>
+        <div className="luck-draw-actions">
+          <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onPointerDown={draw}>
+            {spinning ? "抽取中" : "抽取运气"}
+          </button>
+          {advancedProgress.luckDrawChances >= 10 ? (
+            <button className="secondary-button luck-draw-button" disabled={!canDrawBatch} type="button" onPointerDown={drawBatch}>
+              十连抽
+            </button>
+          ) : null}
+        </div>
 
         <p className="luck-rule-text">
           {visibleOutcome ? formatLuckDrawOutcomeText(visibleOutcome) : getLuckDrawStatusText(unlocked, advancedProgress)}
         </p>
 
-        <details
-          className="luck-rule-details"
-          onToggle={(event) => setRulesOpen(event.currentTarget.open)}
-          open={rulesOpen}
-          ref={ruleDetailsRef}
-        >
-          <summary>?</summary>
-          <p>{LUCK_RULE_TEXT}</p>
-        </details>
       </div>
     </section>
   );
