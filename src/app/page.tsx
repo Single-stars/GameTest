@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import QRCode from "qrcode";
+import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
 import {
   buildPerfectTrials,
   buildShareText,
@@ -2536,7 +2537,6 @@ function LuckDrawScreen({
   const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
   const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
   const [spinning, setSpinning] = useState(false);
-  const [spinMode, setSpinMode] = useState<"single" | "batch" | null>(null);
   const [displayScore, setDisplayScore] = useState<number | null>(null);
   const [spinMessage, setSpinMessage] = useState<string | null>(null);
   const [settledReels, setSettledReels] = useState(3);
@@ -2548,7 +2548,7 @@ function LuckDrawScreen({
   const canDrawBatch = canUseLuckDrawBatch(unlocked, advancedProgress) && !spinning;
   const scoreForDigits = displayScore ?? pendingOutcome?.score ?? visibleOutcome?.score ?? advancedProgress.luckBestScore;
   const digits = String(scoreForDigits).padStart(3, "0").slice(-3).split("");
-  const slotTone = spinning ? "advanced-empty" : getLuckScoreTone(scoreForDigits);
+  const slotTone = spinning && settledReels < 3 ? "advanced-empty" : getLuckScoreTone(scoreForDigits);
   const resultText = spinMessage ?? (visibleOutcome ? formatLuckDrawOutcomeText(visibleOutcome) : getLuckDrawStatusText(unlocked, advancedProgress));
 
   const clearSpinTimers = useCallback(() => {
@@ -2576,66 +2576,27 @@ function LuckDrawScreen({
   const playDrawAnimation = (outcome: LuckDrawOutcome) => {
     if (!outcome) return;
     clearSpinTimers();
-    setSpinMode("single");
     setDisplayScore(outcome.score);
     setSpinMessage("抽取中");
     setPendingOutcome(outcome);
     setSpinning(true);
     setSettledReels(0);
-    spinTimersRef.current = [
-      window.setTimeout(() => setSettledReels(1), 820),
-      window.setTimeout(() => setSettledReels(2), 1240),
-      window.setTimeout(() => setSettledReels(3), 1660),
+    spinTimersRef.current = buildLuckSlotSpinSchedule().map((step) =>
       window.setTimeout(() => {
+        if (step.type === "settle") {
+          setSettledReels(step.settledReels);
+          return;
+        }
+
         setVisibleOutcome(outcome);
         setPendingOutcome(null);
         setDisplayScore(null);
         setSpinMessage(null);
         setSpinning(false);
-        setSpinMode(null);
         setSettledReels(3);
         spinTimersRef.current = [];
-      }, 1940),
-    ];
-  };
-
-  const playBatchDrawAnimation = (outcome: LuckDrawDisplayOutcome) => {
-    if (!outcome) return;
-    const displayScores = [...(outcome.displayScores?.length ? outcome.displayScores : [outcome.score])].sort((left, right) => left - right);
-    clearSpinTimers();
-    setSpinMode("batch");
-    setPendingOutcome(outcome);
-    setVisibleOutcome(null);
-    setDisplayScore(displayScores[0] ?? outcome.score);
-    setSpinMessage("十连抽取中");
-    setSpinning(true);
-    setSettledReels(0);
-
-    const warmupMs = 540;
-    const stepMs = 300;
-    const timers: number[] = [];
-    timers.push(window.setTimeout(() => setSettledReels(3), warmupMs));
-    displayScores.forEach((score, index) => {
-      timers.push(
-        window.setTimeout(() => {
-          setDisplayScore(score);
-          setSpinMessage(`十连抽 ${index + 1}/${displayScores.length}`);
-        }, warmupMs + index * stepMs),
-      );
-    });
-    timers.push(
-      window.setTimeout(() => {
-        setVisibleOutcome(outcome);
-        setPendingOutcome(null);
-        setDisplayScore(null);
-        setSpinMessage(null);
-        setSpinning(false);
-        setSpinMode(null);
-        setSettledReels(3);
-        spinTimersRef.current = [];
-      }, warmupMs + displayScores.length * stepMs + 560),
+      }, step.atMs),
     );
-    spinTimersRef.current = timers;
   };
 
   const draw = () => {
@@ -2649,7 +2610,7 @@ function LuckDrawScreen({
     if (!canDrawBatch) return;
     const outcome = onDrawBatch();
     if (!outcome) return;
-    playBatchDrawAnimation(outcome);
+    playDrawAnimation(outcome);
   };
 
   return (
@@ -2676,7 +2637,7 @@ function LuckDrawScreen({
         </details>
       </div>
 
-      <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${spinMode === "batch" ? "batch-spinning" : ""} ${slotTone}`}>
+      <div className={`luck-draw-panel ${spinning ? "spinning" : "settled"} ${slotTone}`}>
         <div className="slot-machine" aria-label={`当前抽取分数 ${scoreForDigits}`}>
           {digits.map((digit, index) => (
             <div
