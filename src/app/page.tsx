@@ -4589,13 +4589,6 @@ function ResultScreen({
             </button>
           ) : null}
         </div>
-        <a
-          className="secondary-button"
-          href="/control-maze-prototype"
-          style={{ alignItems: "center", display: "inline-flex", justifyContent: "center", textDecoration: "none" }}
-        >
-          控制力原型
-        </a>
       </div>
 
     </section>
