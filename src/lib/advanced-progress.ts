@@ -1,4 +1,4 @@
-import type { RankName, RoundId, ScoreSummary, TrialEvent } from "./scoring";
+import type { RankName, RoundId, TrialEvent } from "./scoring";
 
 export const GAME_STATE_SCHEMA_VERSION = 1;
 export const GAME_STATE_STORAGE_KEY = "game-rank-test/state/v1";
@@ -68,11 +68,6 @@ export type AdvancedChallengeRecord = {
   completedAt?: string;
 };
 
-export type AdvancedChallengeRequirement = {
-  level: number;
-  minScore: number;
-};
-
 export type AdvancedLevelState = "completed" | "current" | "locked";
 export type AdvancedBackSource = "select" | "intro" | "playing" | "complete";
 export type AdvancedBackDestination = "result" | "challenge";
@@ -94,6 +89,7 @@ export type LuckDrawOutcome = {
   improved: boolean;
   guaranteed: boolean;
   draws?: number;
+  originalScores?: number[];
 };
 
 export type LuckDrawResult = {
@@ -107,7 +103,6 @@ const ADVANCED_DIMENSION_STAR_LIMIT = ADVANCED_STAR_LIMITS.dimensionCount * ADVA
 function timestamp() {
   return new Date().toISOString();
 }
-
 function clampInteger(value: unknown, min: number, max: number) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
@@ -462,7 +457,7 @@ export function getLuckScoreTone(score: number): AdvancedLevelTone {
 export function getLuckDrawStatusText(unlocked: boolean, progress: AdvancedProgress) {
   if (!unlocked) return "达到最强王者后解锁进阶挑战和运气玩法";
   const sanitized = sanitizeAdvancedProgress(progress);
-  if (sanitized.luckStars >= ADVANCED_STAR_LIMITS.luckStars || sanitized.luckBestScore >= 100) return "运气已达到上限";
+  if (sanitized.luckStars >= ADVANCED_STAR_LIMITS.luckStars || sanitized.luckBestScore >= 100) return "已满运气，继续抽取不会降低历史最高";
   const chances = sanitized.luckDrawChances;
   return chances > 0 ? `抽取次数 ${chances}` : "完成进阶挑战获得运气抽取";
 }
@@ -550,72 +545,7 @@ export function recordLuckDrawBatch(progress: AdvancedProgress, scores: number[]
       improved,
       guaranteed: outcomes.some((outcome) => outcome.guaranteed),
       draws: drawCount,
+      originalScores: outcomes.map((outcome) => outcome.score),
     },
-  };
-}
-
-export function getAdvancedRoundContent(roundId: RoundId, level: number) {
-  const normalizedLevel = clampInteger(level, 1, ADVANCED_LEVEL_COUNT);
-  const prefix = `第 ${normalizedLevel} 阶：`;
-  switch (roundId) {
-    case "reaction":
-      return `${prefix}连续完成变色点击，提前点或超时会失败。`;
-    case "aim":
-      return `${prefix}命中移动靶，越高阶容错越低。`;
-    case "search":
-      return `${prefix}在移动点阵里数准目标，错数会失败。`;
-    case "stroop":
-      return `${prefix}只看字体颜色，忽略字义干扰。`;
-    case "rhythm":
-      return `${prefix}按左右节奏圈完成节拍，漏点和错边会失败。`;
-    case "memory":
-      return `${prefix}记住色块位置，遮住后选对目标颜色。`;
-    case "braking":
-      return `${prefix}长按前进，危险出现时及时松手。`;
-    case "patience":
-      return `${prefix}完整等待进度，不提前跳过。`;
-  }
-}
-
-export function getAdvancedChallengeRequirement(roundId: RoundId, level: number): AdvancedChallengeRequirement {
-  if (!isRoundId(roundId)) {
-    return { level: 1, minScore: 60 };
-  }
-  const clampedLevel = clampInteger(level, 1, ADVANCED_LEVEL_COUNT);
-  return {
-    level: clampedLevel,
-    minScore: Math.min(98, 56 + clampedLevel * 4),
-  };
-}
-
-export function getAdvancedRoundScore(scores: ScoreSummary, roundId: RoundId) {
-  switch (roundId) {
-    case "reaction":
-      return scores.reaction;
-    case "aim":
-      return scores.targeting;
-    case "search":
-      return scores.search;
-    case "stroop":
-      return scores.interference;
-    case "rhythm":
-      return scores.rhythm;
-    case "memory":
-      return scores.memory;
-    case "braking":
-      return scores.braking;
-    case "patience":
-      return scores.waiting;
-  }
-}
-
-export function evaluateAdvancedChallengeScore(roundId: RoundId, level: number, score: number) {
-  const requirement = getAdvancedChallengeRequirement(roundId, level);
-  const clampedScore = clampScore(score);
-  return {
-    level: requirement.level,
-    minScore: requirement.minScore,
-    score: clampedScore,
-    passed: clampedScore >= requirement.minScore,
   };
 }

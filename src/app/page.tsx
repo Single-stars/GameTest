@@ -13,11 +13,41 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import QRCode from "qrcode";
+import {
+  createAdvancedAimArrow,
+  resolveAdvancedAimArrowStep,
+  type AdvancedAimArrow,
+  type AdvancedAimEntity,
+} from "@/lib/advanced-aim";
+import {
+  chooseAdvancedRhythmLane,
+  isAdvancedRhythmBeatActive,
+  resolveAdvancedRhythmCadence,
+  type AdvancedRhythmActiveBeat,
+} from "@/lib/advanced-rhythm";
+import {
+  ADVANCED_MEMORY_ROTATE_MS,
+  buildAdvancedMemoryPhaseSchedule,
+  buildAdvancedMemoryFlashOrder,
+  buildAdvancedMemoryOptions,
+  chooseAdvancedMemoryQuestion,
+  makeAdvancedMemoryCells,
+  type AdvancedMemoryCell,
+  type AdvancedMemoryColorKey,
+  type AdvancedMemoryQuestion,
+  type AdvancedMemoryRotation,
+} from "@/lib/advanced-memory";
 import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
+import {
+  evaluateAdvancedChallengeCompletion,
+  getAdvancedStageConfig,
+  getDebugToolsVisibility,
+  type AdvancedStageConfig,
+} from "@/lib/advanced-challenges";
+import { buildAdvancedStroopMismatchIndexes } from "@/lib/advanced-stroop";
 import {
   buildPerfectTrials,
   buildShareText,
-  calculateScores,
   DINO_SAFE_STOP_WINDOW_MS,
   getGameRankResult,
   resolveArrowTrajectoryShot,
@@ -34,7 +64,6 @@ import {
   clearPersistedCurrentResult,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
-  evaluateAdvancedChallengeScore,
   formatLuckDrawOutcomeText,
   getAdvancedBackDestination,
   getAdvancedCompletionActions,
@@ -47,8 +76,6 @@ import {
   getLuckDrawStatusText,
   getLuckLevelTone,
   getLuckScoreTone,
-  getAdvancedRoundContent,
-  getAdvancedRoundScore,
   getAdvancedTotalStars,
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
@@ -68,6 +95,13 @@ import {
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
+import {
+  makeAdvancedSearchScene,
+  makeSearchScene,
+  patternKey,
+  type SearchPattern,
+  type SearchScene,
+} from "@/lib/search-scenes";
 
 type Stage = AppStage;
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
@@ -75,7 +109,18 @@ type AdvancedChallengeState =
   | { mode: "select"; roundId: RoundId }
   | { mode: "intro"; roundId: RoundId; level: number }
   | { mode: "playing"; roundId: RoundId; level: number; attemptId: number }
-  | { mode: "complete"; roundId: RoundId; level: number; score: number; minScore: number; passed: boolean; gained: boolean };
+  | {
+      mode: "complete";
+      roundId: RoundId;
+      level: number;
+      score: number;
+      minScore: number;
+      passed: boolean;
+      gained: boolean;
+      correctCount: number;
+      requiredCorrect: number;
+      reason: string;
+    };
 
 type RoundConfig = {
   id: RoundId;
@@ -87,6 +132,7 @@ type RoundConfig = {
 
 type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
+  advancedConfig?: AdvancedStageConfig;
 };
 
 const APP_TITLE = "测测你的游戏段位";
@@ -94,7 +140,7 @@ const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_IMAGE_WIDTH = 900;
 const SHARE_IMAGE_HEIGHT = 820;
 const SHARE_COPY_TOAST_DELAY_MS = 500;
-const LUCK_RULE_TEXT = "完成进阶挑战获得抽取次数。每次抽 0-100 分，只保留最高运气，80 次内必满。";
+const LUCK_RULE_TEXT = "完成进阶挑战获得抽取次数。每次抽 0-100 分，只保留最高运气；已满运气，继续抽取不会降低历史最高。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -117,8 +163,8 @@ const rounds: RoundConfig[] = [
     id: "search",
     title: "相似红点",
     measure: "侦察力",
-    rule: "只数实心红圆点，空心、方形和偏色点都不算。",
-    action: "看完后从相近数字里选答案。",
+    rule: "每轮先看目标图案，只数和提示完全相同的图案；多个目标时数总和。",
+    action: "图案飞完后，从相近数字里选择目标总数。",
   },
   {
     id: "stroop",
@@ -212,6 +258,7 @@ export default function Home() {
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
+  const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const trialsRef = useRef<TrialEvent[]>([]);
@@ -355,6 +402,7 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
 
     const stored = readPersistedGameState(window.localStorage);
     const storedTrials = stored.currentResult?.trials ?? [];
@@ -514,9 +562,7 @@ export default function Home() {
     const scores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 101));
     const result = recordLuckDrawBatch(advancedProgressRef.current, scores);
     if (!result.outcome) return null;
-    const displayScores = scores
-      .map((score, index) => (baseDrawCount + index + 1 >= 80 ? 100 : score))
-      .sort((left, right) => left - right);
+    const displayScores = (result.outcome.originalScores ?? scores.map((score, index) => (baseDrawCount + index + 1 >= 80 ? 100 : score)));
     const outcome: LuckDrawDisplayOutcome = { ...result.outcome, displayScores };
     advancedProgressRef.current = result.progress;
     setAdvancedProgress(result.progress);
@@ -570,9 +616,8 @@ export default function Home() {
       const current = advancedChallengeRef.current;
       if (!current || current.mode !== "playing") return;
 
-      const scores = calculateScores(roundTrials);
-      const score = getAdvancedRoundScore(scores, current.roundId);
-      const evaluation = evaluateAdvancedChallengeScore(current.roundId, current.level, score);
+      const config = getAdvancedStageConfig(current.roundId, current.level);
+      const evaluation = evaluateAdvancedChallengeCompletion(config, roundTrials);
       const beforeLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
       const nextProgress = recordAdvancedChallengeResult(advancedProgressRef.current, {
         roundId: current.roundId,
@@ -593,6 +638,9 @@ export default function Home() {
         minScore: evaluation.minScore,
         passed: evaluation.passed,
         gained: afterLevel > beforeLevel,
+        correctCount: evaluation.correctCount,
+        requiredCorrect: evaluation.requiredCorrect,
+        reason: evaluation.reason,
       });
       setStage("advanced");
     },
@@ -714,6 +762,7 @@ export default function Home() {
         <AdvancedChallengeScreen
           advancedProgress={advancedProgress}
           challenge={advancedChallenge}
+          debugToolsVisible={debugToolsVisible}
           onBack={requestAppBack}
           onCompleteRound={completeAdvancedLevel}
           onPickLevel={pickAdvancedLevel}
@@ -732,11 +781,12 @@ export default function Home() {
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
+          debugToolsVisible={debugToolsVisible}
         />
       ) : stage === "intro" ? (
         <RoundIntro round={currentRound} onStart={startCurrentRound} />
       ) : stage === "playing" ? (
-        <PlayFrame round={currentRound} index={roundIndex} onSkipPerfect={skipCurrentRoundWithPerfectScore}>
+        <PlayFrame round={currentRound} index={roundIndex} onSkipPerfect={skipCurrentRoundWithPerfectScore} showDebugTools={debugToolsVisible}>
           <RoundRenderer key={`${currentRound.id}-${roundIndex}`} round={currentRound.id} onComplete={completeRound} />
         </PlayFrame>
       ) : (
@@ -750,6 +800,7 @@ export default function Home() {
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
+          debugToolsVisible={debugToolsVisible}
         />
       )}
       {restartConfirmOpen ? (
@@ -843,11 +894,13 @@ function PlayFrame({
   round,
   index,
   onSkipPerfect,
+  showDebugTools,
   children,
 }: {
   round: RoundConfig;
   index: number;
   onSkipPerfect: () => void;
+  showDebugTools: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -858,9 +911,11 @@ function PlayFrame({
         </div>
         <div className="round-header-actions">
           <span className="round-measure-pill">{round.measure}</span>
-          <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
-            满分下一关
-          </button>
+          {showDebugTools ? (
+            <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
+              满分下一关
+            </button>
+          ) : null}
         </div>
       </header>
       <div className="progress-track" aria-hidden="true">
@@ -871,7 +926,27 @@ function PlayFrame({
   );
 }
 
-function RoundRenderer({ round, onComplete }: { round: RoundId } & RoundProps) {
+function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId } & RoundProps) {
+  if (advancedConfig) {
+    switch (round) {
+      case "reaction":
+        return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "aim":
+        return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "search":
+        return <AdvancedSearchRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "stroop":
+        return <AdvancedStroopRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "rhythm":
+        return <AdvancedRhythmRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "memory":
+        return <AdvancedMemoryRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "braking":
+        return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      case "patience":
+        return <AdvancedPatienceRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+    }
+  }
   switch (round) {
     case "reaction":
       return <ReactionRound onComplete={onComplete} />;
@@ -890,6 +965,2094 @@ function RoundRenderer({ round, onComplete }: { round: RoundId } & RoundProps) {
     case "patience":
       return <PatienceRound onComplete={onComplete} />;
   }
+}
+
+function getParamNumber(config: AdvancedStageConfig, key: string, fallback: number) {
+  const value = Number(config.params[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function getParamBoolean(config: AdvancedStageConfig, key: string, fallback = false) {
+  const value = config.params[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function buildAdvancedPerfectTrials(config: AdvancedStageConfig): TrialEvent[] {
+  const count =
+    getParamNumber(config, "requiredGreenClicks", 0) ||
+    getParamNumber(config, "targetCount", 0) ||
+    getParamNumber(config, "roundCount", 0) ||
+    getParamNumber(config, "hitCount", 0) ||
+    getParamNumber(config, "hazardCount", 0) ||
+    1;
+  return Array.from({ length: count }, (_, index) =>
+    trial(config.dimension, index, {
+      shownAt: index * 1000,
+      responseAt: index * 1000 + 120,
+      correct: true,
+      value:
+        config.dimension === "reaction"
+          ? { signalColor: "green" }
+          : config.dimension === "rhythm"
+            ? { offsetMs: 0, beatType: "true" }
+            : config.dimension === "search"
+              ? { targetCount: 3, selectedCount: 3 }
+              : config.dimension === "patience"
+                ? { waitMs: getParamNumber(config, "waitMs", 6000), durationMs: getParamNumber(config, "waitMs", 6000), skipped: false }
+                : config.dimension === "braking"
+                  ? { exited: index === count - 1, collision: false, earlyStop: false }
+                  : { shotHit: true },
+    }),
+  );
+}
+
+type AdvancedReactionCell = {
+  id: number;
+  color: "green" | "red" | "idle";
+  text: string;
+  clicked?: boolean;
+};
+
+function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const lanes = getParamNumber(config, "lanes", 1);
+  const isBoss = config.variant === "reaction-grid-boss";
+  const totalSignals = getParamNumber(config, "signalCount", getParamNumber(config, "requiredGreenClicks", 5));
+  const requiredGreenClicks = getParamNumber(config, "requiredGreenClicks", 1);
+  const [cells, setCells] = useState<AdvancedReactionCell[]>(() =>
+    Array.from({ length: lanes }, (_, id) => ({ id, color: "idle", text: "等信号" })),
+  );
+  const [countText, setCountText] = useState(`0/${isBoss ? requiredGreenClicks : totalSignals}`);
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const signalIndexRef = useRef(0);
+  const greenClicksRef = useRef(0);
+  const activeShownAtRef = useRef(0);
+  const activeGreenIdsRef = useRef<Set<number>>(new Set());
+  const clickedGreenIdsRef = useRef<Set<number>>(new Set());
+  const timersRef = useRef<number[]>([]);
+  const finishedRef = useRef(false);
+  const sequenceRef = useRef<("green" | "red")[]>([]);
+
+  const clearTimers = useCallback(() => {
+    for (const timer of timersRef.current) window.clearTimeout(timer);
+    timersRef.current = [];
+  }, []);
+
+  const finish = useCallback(
+    (extra?: TrialEvent) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      clearTimers();
+      onComplete(extra ? [...trialsRef.current, extra] : trialsRef.current);
+    },
+    [clearTimers, onComplete],
+  );
+
+  const resetCells = useCallback(() => {
+    setCells(Array.from({ length: lanes }, (_, id) => ({ id, color: "idle", text: "等信号" })));
+  }, [lanes]);
+
+  const startSignal = useCallback(() => {
+    if (finishedRef.current) return;
+    clearTimers();
+    resetCells();
+    activeGreenIdsRef.current = new Set();
+    clickedGreenIdsRef.current = new Set();
+    const delay = rand(420, 900);
+    timersRef.current.push(
+      window.setTimeout(() => {
+        const shownAt = now();
+        activeShownAtRef.current = shownAt;
+        if (isBoss) {
+          const litCount = Math.random() > 0.52 ? 2 : 1;
+          const ids = shuffle(Array.from({ length: lanes }, (_, id) => id)).slice(0, litCount);
+          const remaining = requiredGreenClicks - greenClicksRef.current;
+          const colors = ids.map(() => (Math.random() > 0.45 ? "green" : "red") as "green" | "red");
+          if (remaining > 0 && !colors.includes("green")) colors[0] = "green";
+          const greenIds = new Set(ids.filter((_, index) => colors[index] === "green"));
+          activeGreenIdsRef.current = greenIds;
+          setCells((current) =>
+            current.map((cell) => {
+              const litIndex = ids.indexOf(cell.id);
+              if (litIndex < 0) return { ...cell, color: "idle", text: "等信号" };
+              const color = colors[litIndex];
+              return { ...cell, color, text: color === "green" ? "点" : "不点", clicked: false };
+            }),
+          );
+        } else {
+          const activeId = lanes === 1 ? 0 : Math.floor(rand(0, lanes));
+          const plannedColor = sequenceRef.current[signalIndexRef.current];
+          const color: "green" | "red" = config.variant === "reaction-dual-green" ? "green" : plannedColor === "red" ? "red" : "green";
+          if (color === "green") activeGreenIdsRef.current = new Set([activeId]);
+          setCells((current) =>
+            current.map((cell) =>
+              cell.id === activeId
+                ? { ...cell, color, text: color === "green" ? "点" : "不点", clicked: false }
+                : { ...cell, color: "idle", text: "等信号" },
+            ),
+          );
+        }
+
+        timersRef.current.push(
+          window.setTimeout(() => {
+            if (finishedRef.current) return;
+            const greenIds = activeGreenIdsRef.current;
+            if (greenIds.size > 0 && clickedGreenIdsRef.current.size < greenIds.size) {
+              finish(
+                trial("reaction", signalIndexRef.current, {
+                  shownAt,
+                  responseAt: null,
+                  correct: false,
+                  errorType: "timeout",
+                  value: { signalColor: "green" },
+                }),
+              );
+              return;
+            }
+
+            if (!isBoss) {
+              const color = sequenceRef.current[signalIndexRef.current] ?? "green";
+              if (color === "red") {
+                trialsRef.current.push(
+                  trial("reaction", signalIndexRef.current, {
+                    shownAt,
+                    responseAt: null,
+                    correct: true,
+                    value: { signalColor: "red" },
+                  }),
+                );
+                signalIndexRef.current += 1;
+                setCountText(`${signalIndexRef.current}/${totalSignals}`);
+              }
+              if (signalIndexRef.current >= totalSignals) {
+                finish();
+              } else {
+                startSignal();
+              }
+            } else {
+              startSignal();
+            }
+          }, 1120),
+        );
+      }, delay),
+    );
+  }, [clearTimers, config.variant, finish, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
+
+  useEffect(() => {
+    if (!isBoss) {
+      const colors = Array.from({ length: totalSignals }, () => (Math.random() > 0.42 ? "green" : "red") as "green" | "red");
+      if (!colors.includes("green")) colors[Math.floor(rand(0, colors.length))] = "green";
+      sequenceRef.current = colors;
+    }
+    startSignal();
+    return clearTimers;
+  }, [clearTimers, isBoss, startSignal, totalSignals]);
+
+  const clickCell = (event: ReactPointerEvent<HTMLButtonElement>, cell: AdvancedReactionCell) => {
+    if (finishedRef.current || cell.color === "idle" || cell.clicked) {
+      finish(
+        trial("reaction", signalIndexRef.current, {
+          shownAt: activeShownAtRef.current || now(),
+          responseAt: now(),
+          correct: false,
+          errorType: "wrong",
+          pointerType: pointerKind(event.pointerType),
+          value: { signalColor: "idle" },
+        }),
+      );
+      return;
+    }
+    if (cell.color === "red") {
+      finish(
+        trial("reaction", signalIndexRef.current, {
+          shownAt: activeShownAtRef.current,
+          responseAt: now(),
+          correct: false,
+          errorType: "false_alarm",
+          pointerType: pointerKind(event.pointerType),
+          value: { signalColor: "red" },
+        }),
+      );
+      return;
+    }
+
+    const responseAt = now();
+    const ms = Math.round(responseAt - activeShownAtRef.current);
+    clickedGreenIdsRef.current.add(cell.id);
+    greenClicksRef.current += 1;
+    trialsRef.current.push(
+      trial("reaction", signalIndexRef.current, {
+        shownAt: activeShownAtRef.current,
+        responseAt,
+        correct: true,
+        pointerType: pointerKind(event.pointerType),
+        value: { signalColor: "green" },
+      }),
+    );
+    setCells((current) => current.map((item) => (item.id === cell.id ? { ...item, clicked: true, text: `${ms} ms` } : item)));
+    setCountText(`${isBoss ? greenClicksRef.current : signalIndexRef.current + 1}/${isBoss ? requiredGreenClicks : totalSignals}`);
+
+    if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {
+      finish();
+      return;
+    }
+    if (!isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
+      signalIndexRef.current += 1;
+      if (signalIndexRef.current >= totalSignals) {
+        finish();
+      } else {
+        timersRef.current.push(window.setTimeout(startSignal, 240));
+      }
+      return;
+    }
+    if (isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
+      timersRef.current.push(window.setTimeout(startSignal, 240));
+    }
+  };
+
+  return (
+    <div className={`advanced-reaction-grid cells-${lanes}`}>
+      <div className="mini-score">
+        <span>{countText}</span>
+      </div>
+      {cells.map((cell) => (
+        <button
+          className={`advanced-reaction-cell ${cell.color} ${cell.clicked ? "clicked" : ""}`}
+          key={cell.id}
+          type="button"
+          onPointerDown={(event) => clickCell(event, cell)}
+        >
+          {cell.text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type AdvancedAimMode = "track" | "incoming" | "decoy" | "boss";
+type AdvancedAimRoute = "circle" | "ellipse" | "figure-eight" | "diagonal" | "incoming";
+
+type AdvancedAimBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type AdvancedAimMovingEntity = {
+  id: string;
+  index: number;
+  kind: "target" | "distractor";
+  route: AdvancedAimRoute;
+  x: number;
+  y: number;
+  size: number;
+  active: boolean;
+  spawnedAt: number;
+  entered: boolean;
+  vx: number;
+  vy: number;
+  baseX: number;
+  baseY: number;
+  radiusX: number;
+  radiusY: number;
+  phase: number;
+  angularSpeed: number;
+};
+
+type AdvancedAimArrowView = AdvancedAimArrow & {
+  angleDeg: number;
+  pointerType: PointerKind;
+  launchedAt: number;
+  status: "flying" | "hit" | "miss" | "blocked";
+  settledAt?: number;
+};
+
+const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS = 0.84;
+const ADVANCED_AIM_ARROW_TOLERANCE_PX = 8;
+const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 28;
+const ADVANCED_AIM_ARROW_PRUNE_MS = 480;
+const ADVANCED_AIM_TARGET_MARGIN_PX = 36;
+
+function getAdvancedAimMode(config: AdvancedStageConfig): AdvancedAimMode {
+  const mode = String(config.params.aimMode ?? "");
+  if (mode === "track" || mode === "incoming" || mode === "decoy" || mode === "boss") return mode;
+  if (config.variant === "aim-incoming") return "incoming";
+  if (config.variant === "aim-decoy") return "decoy";
+  if (config.variant === "aim-boss") return "boss";
+  return "track";
+}
+
+function getAdvancedAimBounds(rect: Pick<DOMRect, "width" | "height">): AdvancedAimBounds {
+  const minX = Math.min(rect.width / 2, Math.max(ADVANCED_AIM_TARGET_MARGIN_PX, rect.width * 0.1));
+  const maxX = Math.max(minX, rect.width - minX);
+  const minY = Math.min(rect.height / 2, Math.max(92, rect.height * 0.18));
+  const maxY = Math.max(minY, rect.height - Math.max(92, rect.height * 0.18));
+  return { minX, maxX, minY, maxY };
+}
+
+function advancedAimRouteFromConfig(config: AdvancedStageConfig): AdvancedAimRoute {
+  const route = String(config.params.route ?? "circle");
+  if (route === "ellipse" || route === "figure-eight" || route === "diagonal" || route === "incoming") return route;
+  return "circle";
+}
+
+function advancedAimTargetSpeed(config: AdvancedStageConfig, mode: AdvancedAimMode, kind: "target" | "distractor") {
+  const base = kind === "distractor" ? 0.06 : 0.052;
+  if (mode === "incoming") return 0.19 + config.level * 0.018;
+  if (mode === "boss") return kind === "distractor" ? 0.1 : 0.18 + config.level * 0.012;
+  if (mode === "decoy") return base + config.level * 0.009;
+  return base + config.level * 0.007;
+}
+
+function makeAdvancedAimMovingEntity({
+  config,
+  index,
+  kind,
+  mode,
+  rect,
+  spawnedAt,
+}: {
+  config: AdvancedStageConfig;
+  index: number;
+  kind: "target" | "distractor";
+  mode: AdvancedAimMode;
+  rect: DOMRect;
+  spawnedAt: number;
+}): AdvancedAimMovingEntity {
+  const bounds = getAdvancedAimBounds(rect);
+  const targetSize = getParamNumber(config, "targetSize", 52);
+  const size = kind === "distractor" ? Math.max(34, targetSize - 5) : targetSize;
+  const speed = advancedAimTargetSpeed(config, mode, kind);
+  const baseX = rand(bounds.minX + size, bounds.maxX - size);
+  const baseY = rand(bounds.minY + size, bounds.maxY - size);
+  const phase = index * 0.86 + (kind === "distractor" ? 1.7 : 0);
+  const bossRoute =
+    kind === "target"
+      ? index % 3 === 0
+        ? "incoming"
+        : index % 3 === 1
+          ? "figure-eight"
+          : "diagonal"
+      : "diagonal";
+  const route: AdvancedAimRoute =
+    mode === "incoming"
+      ? "incoming"
+      : mode === "boss"
+        ? bossRoute
+        : kind === "distractor" || mode === "decoy"
+          ? "diagonal"
+          : advancedAimRouteFromConfig(config);
+
+  if (route === "incoming") {
+    const side = Math.floor(rand(0, 4));
+    const start =
+      side === 0
+        ? { x: -size, y: rand(bounds.minY, bounds.maxY) }
+        : side === 1
+          ? { x: rect.width + size, y: rand(bounds.minY, bounds.maxY) }
+          : side === 2
+            ? { x: rand(bounds.minX, bounds.maxX), y: -size }
+            : { x: rand(bounds.minX, bounds.maxX), y: rect.height + size };
+    const destination = {
+      x:
+        side === 0
+          ? rect.width + size
+          : side === 1
+            ? -size
+            : rand(bounds.minX, bounds.maxX),
+      y:
+        side === 2
+          ? rect.height + size
+          : side === 3
+            ? -size
+            : rand(bounds.minY, bounds.maxY),
+    };
+    const dx = destination.x - start.x;
+    const dy = destination.y - start.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    return {
+      id: `${kind}-${index}`,
+      index,
+      kind,
+      route,
+      x: start.x,
+      y: start.y,
+      size,
+      active: true,
+      spawnedAt,
+      entered: false,
+      vx: (dx / distance) * speed,
+      vy: (dy / distance) * speed,
+      baseX: start.x,
+      baseY: start.y,
+      radiusX: 0,
+      radiusY: 0,
+      phase,
+      angularSpeed: 0,
+    };
+  }
+
+  const vx = (Math.random() > 0.5 ? 1 : -1) * speed;
+  const vy = (Math.random() > 0.5 ? 1 : -1) * speed * 0.72;
+  const radiusX = Math.min((bounds.maxX - bounds.minX) * 0.28, 90);
+  const radiusY = Math.min((bounds.maxY - bounds.minY) * 0.24, 70);
+  return {
+    id: `${kind}-${index}`,
+    index,
+    kind,
+    route,
+    x: baseX,
+    y: baseY,
+    size,
+    active: true,
+    spawnedAt,
+    entered: true,
+    vx,
+    vy,
+    baseX,
+    baseY,
+    radiusX,
+    radiusY,
+    phase,
+    angularSpeed: (mode === "track" ? 0.0018 : 0.0022) + config.level * 0.00012,
+  };
+}
+
+function moveAdvancedAimEntity(
+  entity: AdvancedAimMovingEntity,
+  deltaMs: number,
+  frameNow: number,
+  rect: DOMRect,
+): AdvancedAimMovingEntity {
+  if (!entity.active) return entity;
+  const bounds = getAdvancedAimBounds(rect);
+
+  if (entity.route === "circle" || entity.route === "ellipse" || entity.route === "figure-eight") {
+    const elapsed = frameNow - entity.spawnedAt;
+    const angle = entity.phase + elapsed * entity.angularSpeed;
+    const radiusX = entity.route === "circle" ? Math.min(entity.radiusX, entity.radiusY) : entity.radiusX;
+    const radiusY = entity.route === "circle" ? Math.min(entity.radiusX, entity.radiusY) : entity.radiusY;
+    return {
+      ...entity,
+      x: clamp(entity.baseX + Math.cos(angle) * radiusX, bounds.minX, bounds.maxX),
+      y: clamp(
+        entity.baseY + (entity.route === "figure-eight" ? Math.sin(angle * 2) : Math.sin(angle)) * radiusY,
+        bounds.minY,
+        bounds.maxY,
+      ),
+      entered: true,
+    };
+  }
+
+  let x = entity.x + entity.vx * deltaMs;
+  let y = entity.y + entity.vy * deltaMs;
+  let vx = entity.vx;
+  let vy = entity.vy;
+  const entered = entity.entered || (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height);
+
+  if (entity.route !== "incoming") {
+    if (x < bounds.minX || x > bounds.maxX) {
+      x = clamp(x, bounds.minX, bounds.maxX);
+      vx *= -1;
+    }
+    if (y < bounds.minY || y > bounds.maxY) {
+      y = clamp(y, bounds.minY, bounds.maxY);
+      vy *= -1;
+    }
+  }
+
+  return { ...entity, x, y, vx, vy, entered };
+}
+
+function advancedAimEntityLeftField(entity: AdvancedAimMovingEntity, rect: DOMRect) {
+  const margin = entity.size / 2 + 8;
+  return (
+    entity.entered &&
+    (entity.x < -margin || entity.x > rect.width + margin || entity.y < -margin || entity.y > rect.height + margin)
+  );
+}
+
+function advancedAimCollisionEntity(entity: AdvancedAimMovingEntity): AdvancedAimEntity {
+  return {
+    id: entity.id,
+    kind: entity.kind,
+    x: entity.x,
+    y: entity.y,
+    radius: entity.size / 2,
+    active: entity.active,
+  };
+}
+
+function advancedAimTargetPayload(entity: AdvancedAimMovingEntity, rect: DOMRect, difficulty: number) {
+  return {
+    x: Math.round((entity.x / Math.max(1, rect.width)) * 100),
+    y: Math.round((entity.y / Math.max(1, rect.height)) * 100),
+    size: entity.size,
+    distance: Math.round(Math.hypot(entity.vx, entity.vy) * 1000),
+    difficulty,
+  };
+}
+
+function arrowAngleDeg(arrow: Pick<AdvancedAimArrow, "vx" | "vy">) {
+  return (Math.atan2(arrow.vx, -arrow.vy) * 180) / Math.PI;
+}
+
+function advancedArrowOutOfField(arrow: AdvancedAimArrow, rect: DOMRect) {
+  return arrow.x < -48 || arrow.x > rect.width + 48 || arrow.y < -72 || arrow.y > rect.height + 72;
+}
+
+function advancedAimEntityRenderSignature(entities: AdvancedAimMovingEntity[]) {
+  return entities
+    .filter((entity) => entity.active)
+    .map((entity) => `${entity.id}:${entity.size}`)
+    .join("|");
+}
+
+function advancedAimArrowRenderSignature(arrows: AdvancedAimArrowView[]) {
+  return arrows.map((arrow) => `${arrow.id}:${arrow.status}:${arrow.active ? "1" : "0"}`).join("|");
+}
+
+function placeAdvancedAimEntityElement(element: HTMLElement, entity: AdvancedAimMovingEntity) {
+  element.style.transform = `translate3d(${entity.x}px, ${entity.y}px, 0) translate(-50%, -50%)`;
+}
+
+function placeAdvancedAimArrowElement(element: HTMLElement, arrow: AdvancedAimArrowView) {
+  element.style.transform = `translate3d(${arrow.x}px, ${arrow.y}px, 0) translate(-50%, 0) rotate(${arrow.angleDeg}deg)`;
+}
+
+function paintAdvancedAimEntityElements(entities: AdvancedAimMovingEntity[], elements: Map<string, HTMLElement>) {
+  for (const entity of entities) {
+    const element = elements.get(entity.id);
+    if (entity.active && element) placeAdvancedAimEntityElement(element, entity);
+  }
+}
+
+function paintAdvancedAimArrowElements(arrows: AdvancedAimArrowView[], elements: Map<string, HTMLElement>) {
+  for (const arrow of arrows) {
+    const element = elements.get(arrow.id);
+    if (element) placeAdvancedAimArrowElement(element, arrow);
+  }
+}
+
+function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const mode = getAdvancedAimMode(config);
+  const arrowCount = getParamNumber(config, "arrowCount", 8);
+  const targetCount = getParamNumber(config, "targetCount", arrowCount);
+  const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
+  const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
+  const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
+  const [distractors, setDistractors] = useState<AdvancedAimMovingEntity[]>([]);
+  const [arrows, setArrows] = useState<AdvancedAimArrowView[]>([]);
+  const [firedCount, setFiredCount] = useState(0);
+  const [hitCount, setHitCount] = useState(0);
+  const [feedback, setFeedback] = useState<"hit" | "miss" | "blocked" | null>(null);
+  const areaRef = useRef<HTMLDivElement | null>(null);
+  const rectRef = useRef<DOMRect | null>(null);
+  const targetsRef = useRef<AdvancedAimMovingEntity[]>([]);
+  const distractorsRef = useRef<AdvancedAimMovingEntity[]>([]);
+  const arrowsRef = useRef<AdvancedAimArrowView[]>([]);
+  const targetElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const distractorElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const arrowElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameAtRef = useRef(0);
+  const firedCountRef = useRef(0);
+  const hitCountRef = useRef(0);
+  const spawnedTargetsRef = useRef(0);
+  const lastSpawnAtRef = useRef(0);
+  const finishedRef = useRef(false);
+
+  const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
+    const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
+    targetsRef.current = next;
+    paintAdvancedAimEntityElements(next, targetElementsRef.current);
+    if (shouldRender) setTargets(next);
+  }, []);
+  const publishDistractors = useCallback((next: AdvancedAimMovingEntity[]) => {
+    const shouldRender = advancedAimEntityRenderSignature(distractorsRef.current) !== advancedAimEntityRenderSignature(next);
+    distractorsRef.current = next;
+    paintAdvancedAimEntityElements(next, distractorElementsRef.current);
+    if (shouldRender) setDistractors(next);
+  }, []);
+  const publishArrows = useCallback((next: AdvancedAimArrowView[]) => {
+    const shouldRender = advancedAimArrowRenderSignature(arrowsRef.current) !== advancedAimArrowRenderSignature(next);
+    arrowsRef.current = next;
+    paintAdvancedAimArrowElements(next, arrowElementsRef.current);
+    if (shouldRender) setArrows(next);
+  }, []);
+
+  const finish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    onComplete([...trialsRef.current]);
+  }, [onComplete]);
+
+  const recordAimTrial = useCallback((patch: Omit<Partial<TrialEvent>, "roundId" | "trialIndex" | "viewport">) => {
+    const item = trial("aim", trialsRef.current.length, patch);
+    trialsRef.current.push(item);
+    return item;
+  }, []);
+
+  useEffect(() => {
+    const rect = areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    rectRef.current = rect;
+    const startedAt = now();
+    finishedRef.current = false;
+    trialsRef.current = [];
+    firedCountRef.current = 0;
+    hitCountRef.current = 0;
+    spawnedTargetsRef.current = 0;
+    lastSpawnAtRef.current = startedAt - spawnIntervalMs;
+    lastFrameAtRef.current = startedAt;
+    setFiredCount(0);
+    setHitCount(0);
+    setFeedback(null);
+    publishArrows([]);
+
+    const initialTargets =
+      mode === "track" || mode === "decoy"
+        ? Array.from({ length: targetCount }, (_, index) =>
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: startedAt }),
+          )
+        : [];
+    spawnedTargetsRef.current = initialTargets.length;
+    publishTargets(initialTargets);
+    publishDistractors(
+      Array.from({ length: getParamNumber(config, "decoyCount", 0) }, (_, index) =>
+        makeAdvancedAimMovingEntity({ config, index, kind: "distractor", mode, rect, spawnedAt: startedAt }),
+      ),
+    );
+
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      finishedRef.current = true;
+    };
+  }, [config, mode, publishArrows, publishDistractors, publishTargets, spawnIntervalMs, targetCount]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (finishedRef.current) return;
+      const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
+      if (!rect) {
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      rectRef.current = rect;
+      const frameNow = now();
+      const deltaMs = Math.min(34, frameNow - (lastFrameAtRef.current || frameNow));
+      lastFrameAtRef.current = frameNow;
+
+      let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      if ((mode === "incoming" || mode === "boss") && spawnedTargetsRef.current < targetCount) {
+        while (spawnedTargetsRef.current < targetCount && frameNow - lastSpawnAtRef.current >= spawnIntervalMs) {
+          const index = spawnedTargetsRef.current;
+          nextTargets = [
+            ...nextTargets,
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: frameNow }),
+          ];
+          spawnedTargetsRef.current += 1;
+          lastSpawnAtRef.current = frameNow;
+        }
+      }
+
+      const flyOutTarget = failOnFlyOut
+        ? nextTargets.find((entity) => entity.kind === "target" && entity.active && advancedAimEntityLeftField(entity, rect))
+        : undefined;
+      if (flyOutTarget) {
+        recordAimTrial({
+          shownAt: flyOutTarget.spawnedAt,
+          responseAt: null,
+          correct: false,
+          errorType: "timeout",
+          target: advancedAimTargetPayload(flyOutTarget, rect, config.level),
+          value: {
+            mode: "arrow",
+            shotHit: false,
+            flyOut: true,
+            targetId: flyOutTarget.id,
+            arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+          },
+        });
+        setFeedback("miss");
+        finish();
+        return;
+      }
+
+      let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      let blocked = false;
+      const nextArrows = arrowsRef.current
+        .map((arrow) => {
+          if (!arrow.active) return arrow;
+          const result = resolveAdvancedAimArrowStep({
+            arrow,
+            deltaMs,
+            targets: nextTargets.filter((entity) => entity.active).map(advancedAimCollisionEntity),
+            distractors: nextDistractors.filter((entity) => entity.active).map(advancedAimCollisionEntity),
+            tolerancePx: ADVANCED_AIM_ARROW_TOLERANCE_PX,
+          });
+          const movedArrow = { ...arrow, ...result.arrow };
+          if (!result.collision) {
+            if (advancedArrowOutOfField(movedArrow, rect)) {
+              recordAimTrial({
+                shownAt: arrow.launchedAt,
+                responseAt: frameNow,
+                correct: false,
+                errorType: "miss",
+                pointerType: arrow.pointerType,
+                value: {
+                  mode: "arrow",
+                  shotHit: false,
+                  arrowId: arrow.id,
+                  arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+                },
+              });
+              setFeedback("miss");
+              return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
+            }
+            return { ...movedArrow, status: "flying" as const };
+          }
+
+          if (result.collision.kind === "distractor") {
+            const hitDistractor = nextDistractors.find((entity) => entity.id === result.collision?.entityId);
+            recordAimTrial({
+              shownAt: hitDistractor?.spawnedAt ?? arrow.launchedAt,
+              responseAt: frameNow,
+              correct: false,
+              errorType: "collision",
+              pointerType: arrow.pointerType,
+              target: hitDistractor ? advancedAimTargetPayload(hitDistractor, rect, config.level) : undefined,
+              value: {
+                mode: "arrow",
+                shotHit: false,
+                hitDecoy: true,
+                arrowId: arrow.id,
+                distractorId: result.collision.entityId,
+                arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+              },
+            });
+            nextDistractors = nextDistractors.map((entity) =>
+              entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
+            );
+            blocked = true;
+            setFeedback("blocked");
+            return { ...movedArrow, active: false, status: "blocked" as const, settledAt: frameNow };
+          }
+
+          const hitTarget = nextTargets.find((entity) => entity.id === result.collision?.entityId);
+          if (hitTarget) {
+            hitCountRef.current += 1;
+            setHitCount(hitCountRef.current);
+            recordAimTrial({
+              shownAt: hitTarget.spawnedAt,
+              responseAt: frameNow,
+              correct: true,
+              pointerType: arrow.pointerType,
+              target: advancedAimTargetPayload(hitTarget, rect, config.level),
+              value: {
+                mode: "arrow",
+                shotHit: true,
+                trajectoryHit: true,
+                arrowId: arrow.id,
+                hitTargetId: hitTarget.id,
+                arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+                targetSpeed: Math.round(Math.hypot(hitTarget.vx, hitTarget.vy) * 1000),
+                shotErrorPx: result.collision.errorPx,
+                normalizedError: result.collision.normalizedError,
+              },
+            });
+            nextTargets = nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
+            setFeedback("hit");
+            return null;
+          }
+          return { ...movedArrow, active: false, status: "hit" as const, settledAt: frameNow };
+        })
+        .filter(
+          (arrow): arrow is AdvancedAimArrowView =>
+            arrow !== null && (arrow.active || frameNow - (arrow.settledAt ?? frameNow) < ADVANCED_AIM_ARROW_PRUNE_MS),
+        );
+
+      publishTargets(nextTargets);
+      publishDistractors(nextDistractors);
+      publishArrows(nextArrows);
+
+      if (blocked) {
+        finish();
+        return;
+      }
+      if (hitCountRef.current >= targetCount) {
+        finish();
+        return;
+      }
+      if (firedCountRef.current >= arrowCount && nextArrows.every((arrow) => !arrow.active)) {
+        finish();
+        return;
+      }
+
+      frameRef.current = requestAnimationFrame(tick);
+    };
+
+    frameRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    };
+  }, [
+    arrowCount,
+    config,
+    failOnFlyOut,
+    finish,
+    mode,
+    recordAimTrial,
+    spawnIntervalMs,
+    publishArrows,
+    publishDistractors,
+    publishTargets,
+    targetCount,
+  ]);
+
+  const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (finishedRef.current || firedCountRef.current >= arrowCount) return;
+    const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    rectRef.current = rect;
+    const shotAt = now();
+    const pointerType = pointerKind(event.pointerType);
+    const shotX = clamp(event.clientX - rect.left, 18, rect.width - 18);
+    const from = { x: shotX, y: rect.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX };
+    const to = { x: shotX, y: 10 };
+    const baseArrow = createAdvancedAimArrow({
+      id: `arrow-${shotAt}-${firedCountRef.current}`,
+      from,
+      to,
+      createdAt: shotAt,
+      speedPxPerMs: ADVANCED_AIM_ARROW_SPEED_PX_PER_MS,
+    });
+    const nextArrow: AdvancedAimArrowView = {
+      ...baseArrow,
+      angleDeg: arrowAngleDeg(baseArrow),
+      pointerType,
+      launchedAt: shotAt,
+      status: "flying",
+    };
+
+    firedCountRef.current += 1;
+    setFiredCount(firedCountRef.current);
+    publishArrows([...arrowsRef.current, nextArrow]);
+    setFeedback(null);
+  };
+
+  const arrowsLeft = Math.max(0, arrowCount - firedCount);
+  return (
+    <div className={`game-area advanced-aim ${config.variant} mode-${mode}`} ref={areaRef} onPointerDown={shoot}>
+      <div className="mini-score advanced-aim-score">
+        <span>剩余箭数 {arrowsLeft}</span>
+        <span>命中 {hitCount}/{targetCount}</span>
+      </div>
+      {targets
+        .filter((target) => target.active)
+        .map((target) => (
+          <span
+            className="advanced-aim-target"
+            key={target.id}
+            ref={(element) => {
+              const elements = targetElementsRef.current;
+              if (element) {
+                elements.set(target.id, element);
+                placeAdvancedAimEntityElement(element, targetsRef.current.find((item) => item.id === target.id) ?? target);
+              } else {
+                elements.delete(target.id);
+              }
+            }}
+            style={{ width: `${target.size}px`, height: `${target.size}px` }}
+          />
+        ))}
+      {distractors
+        .filter((distractor) => distractor.active)
+        .map((distractor) => (
+          <span
+            className="advanced-aim-target decoy"
+            key={distractor.id}
+            ref={(element) => {
+              const elements = distractorElementsRef.current;
+              if (element) {
+                elements.set(distractor.id, element);
+                placeAdvancedAimEntityElement(element, distractorsRef.current.find((item) => item.id === distractor.id) ?? distractor);
+              } else {
+                elements.delete(distractor.id);
+              }
+            }}
+            style={{
+              width: `${distractor.size}px`,
+              height: `${distractor.size}px`,
+            }}
+          />
+        ))}
+      {arrows.map((arrow) => (
+        <span
+          className={`advanced-arrow-shot ${arrow.status}`}
+          key={arrow.id}
+          ref={(element) => {
+            const elements = arrowElementsRef.current;
+            if (element) {
+              elements.set(arrow.id, element);
+              placeAdvancedAimArrowElement(element, arrowsRef.current.find((item) => item.id === arrow.id) ?? arrow);
+            } else {
+              elements.delete(arrow.id);
+            }
+          }}
+        />
+      ))}
+      {feedback ? (
+        <div className={`aim-feedback ${feedback === "hit" ? "hit" : "miss"}`}>
+          {feedback === "hit" ? "命中" : feedback === "blocked" ? "撞到干扰靶" : "未命中"}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchPatternPreview({ patterns }: { patterns: SearchPattern[] }) {
+  return (
+    <div className="advanced-pattern-row">
+      {patterns.map((pattern) => (
+        <span
+          className={`search-dot static-pattern ${pattern.shape} ${pattern.hollow ? "hollow" : ""}`}
+          key={patternKey(pattern)}
+          style={{
+            "--dot-color": pattern.color,
+            background: pattern.hollow ? "transparent" : pattern.color,
+            borderColor: pattern.color,
+          } as CSSProperties}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AdvancedSearchRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const roundCount = getParamNumber(config, "roundCount", 3);
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState<"brief" | "watch" | "answer">("brief");
+  const [scene, setScene] = useState<SearchScene>(() => makeAdvancedSearchScene(config, 0));
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const shownAtRef = useRef(now());
+  const answerShownAtRef = useRef(now());
+  const timerRef = useRef<number | null>(null);
+
+  const start = useCallback(
+    (nextIndex: number) => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      const nextScene = makeAdvancedSearchScene(config, nextIndex);
+      setScene(nextScene);
+      setIndex(nextIndex);
+      shownAtRef.current = now();
+      setPhase("brief");
+      timerRef.current = window.setTimeout(() => {
+        setPhase("watch");
+        timerRef.current = window.setTimeout(() => {
+          answerShownAtRef.current = now();
+          setPhase("answer");
+        }, nextScene.durationMs);
+      }, 1100);
+    },
+    [config],
+  );
+
+  useEffect(() => {
+    start(0);
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [start]);
+
+  const answer = (event: ReactPointerEvent<HTMLButtonElement>, selectedCount: number) => {
+    if (phase !== "answer") return;
+    const countError = Math.abs(scene.targetCount - selectedCount);
+    trialsRef.current.push(
+      trial("search", index, {
+        scheduledAt: shownAtRef.current,
+        shownAt: answerShownAtRef.current,
+        responseAt: now(),
+        correct: countError === 0,
+        errorType: countError === 0 ? undefined : "wrong",
+        pointerType: pointerKind(event.pointerType),
+        value: { targetCount: scene.targetCount, selectedCount, countError, totalDots: scene.totalDots },
+      }),
+    );
+    if (index >= roundCount - 1) onComplete(trialsRef.current);
+    else window.setTimeout(() => start(index + 1), 200);
+  };
+
+  return (
+    <div className="game-area search-area barrage-search advanced-search">
+      <div className="mini-score">
+        <span>{index + 1}/{roundCount}</span>
+      </div>
+      {phase === "brief" ? (
+        <div className="search-answer-panel pattern-brief">
+          <p>目标图案</p>
+          <SearchPatternPreview patterns={scene.targetPatterns} />
+        </div>
+      ) : phase === "watch" ? (
+        scene.dots.map((dot) => (
+          <span
+            aria-hidden="true"
+            className={`search-dot barrage ${dot.shape} ${dot.hollow ? "hollow" : ""}`}
+            key={dot.id}
+            style={{
+              "--from-x": `${dot.fromX}%`,
+              "--from-y": `${dot.fromY}%`,
+              "--to-x": `${dot.toX}%`,
+              "--to-y": `${dot.toY}%`,
+              "--dot-color": dot.color,
+              width: `${dot.size}px`,
+              height: `${dot.size}px`,
+              background: dot.hollow ? "transparent" : dot.color,
+              borderColor: dot.color,
+              animationDuration: `${dot.durationMs}ms`,
+              animationDelay: `${dot.delayMs}ms`,
+            } as CSSProperties}
+          />
+        ))
+      ) : (
+        <div className="search-answer-panel">
+          <p>目标图案一共有几个？</p>
+          <div className="count-options">
+            {scene.options.map((option) => (
+              <button className="count-option" key={option} type="button" onPointerDown={(event) => answer(event, option)}>
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type AdvancedStroopItem = {
+  id: number;
+  word: (typeof colorWords)[number];
+  color: (typeof colorWords)[number];
+  x: number;
+  y: number;
+  rotation: number;
+  fromX?: string;
+  fromY?: string;
+  fromRotation?: number;
+  durationMs?: number;
+  delayMs?: number;
+};
+
+const stroopScatterAnchors = [
+  { x: 18, y: 24 },
+  { x: 52, y: 16 },
+  { x: 80, y: 30 },
+  { x: 30, y: 43 },
+  { x: 66, y: 52 },
+  { x: 14, y: 68 },
+  { x: 46, y: 79 },
+  { x: 83, y: 72 },
+];
+
+const stroopFlyAnchors = [
+  { x: 20, y: 24 },
+  { x: 52, y: 17 },
+  { x: 78, y: 31 },
+  { x: 68, y: 60 },
+  { x: 38, y: 70 },
+  { x: 16, y: 56 },
+];
+
+const stroopFlyStarts = [
+  { x: "-82vw", y: "-44svh", rotation: -30 },
+  { x: "-8vw", y: "-62svh", rotation: 22 },
+  { x: "80vw", y: "-40svh", rotation: -24 },
+  { x: "88vw", y: "8svh", rotation: 28 },
+  { x: "72vw", y: "56svh", rotation: -26 },
+  { x: "4vw", y: "66svh", rotation: 20 },
+  { x: "-86vw", y: "52svh", rotation: -22 },
+  { x: "-78vw", y: "6svh", rotation: 24 },
+];
+
+function shuffledIndexes(length: number): number[] {
+  const indexes = Array.from({ length }, (_, index) => index);
+  for (let index = indexes.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(rand(0, index + 1));
+    [indexes[index], indexes[swapIndex]] = [indexes[swapIndex], indexes[index]];
+  }
+  return indexes;
+}
+
+function makeAdvancedStroopLayout(config: AdvancedStageConfig, count: number) {
+  const flyMode = config.variant === "stroop-moving-count" || config.variant === "stroop-boss";
+  const anchors = flyMode ? stroopFlyAnchors : stroopScatterAnchors;
+  const anchorOrder = shuffledIndexes(anchors.length);
+  const startOffset = Math.floor(rand(0, stroopFlyStarts.length));
+
+  return Array.from({ length: count }, (_, index) => {
+    const anchor = anchors[anchorOrder[index % anchorOrder.length]];
+    const rotation = rand(-18, 18);
+    const item = {
+      x: clamp(anchor.x + rand(-6, 6), 10, 90),
+      y: clamp(anchor.y + rand(-7, 7), 14, 86),
+      rotation,
+    };
+
+    if (!flyMode) return item;
+
+    const startIndex = (startOffset + Math.floor((index * stroopFlyStarts.length) / count)) % stroopFlyStarts.length;
+    const start = stroopFlyStarts[startIndex];
+    return {
+      ...item,
+      fromX: start.x,
+      fromY: start.y,
+      fromRotation: rotation + start.rotation,
+      durationMs: rand(1780, config.variant === "stroop-boss" ? 2180 : 2060),
+      delayMs: index * 70 + rand(0, 70),
+    };
+  });
+}
+
+function makeAdvancedStroopItems(config: AdvancedStageConfig, roundIndex: number): AdvancedStroopItem[] {
+  const count = getParamNumber(config, "cardCount", getParamNumber(config, "movingWordCount", 1));
+  const mismatchIndexes = new Set(buildAdvancedStroopMismatchIndexes({ itemCount: count, roundIndex, variant: config.variant }));
+  const layout = makeAdvancedStroopLayout(config, count);
+  return Array.from({ length: count }, (_, index) => {
+    const word = colorWords[(roundIndex + index) % colorWords.length];
+    let color = word;
+    if (config.variant !== "stroop-flash-color" && mismatchIndexes.has(index)) {
+      color = colorWords[(colorWords.findIndex((item) => item.key === word.key) + 1) % colorWords.length];
+    } else if (config.variant === "stroop-flash-color" && roundIndex % 2 === 1) {
+      color = colorWords[(colorWords.findIndex((item) => item.key === word.key) + 2) % colorWords.length];
+    }
+    return {
+      id: roundIndex * 10 + index,
+      word,
+      color,
+      ...layout[index],
+    };
+  });
+}
+
+function AdvancedStroopRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const roundCount = getParamNumber(config, "roundCount", 5);
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState<"wait" | "show" | "answer">("wait");
+  const [items, setItems] = useState<AdvancedStroopItem[]>(() => makeAdvancedStroopItems(config, 0));
+  const shownAtRef = useRef(now());
+  const answerShownAtRef = useRef(now());
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  const start = useCallback(
+    (nextIndex: number) => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      const nextItems = makeAdvancedStroopItems(config, nextIndex);
+      setItems(nextItems);
+      setIndex(nextIndex);
+      setPhase("wait");
+      shownAtRef.current = now();
+      timerRef.current = window.setTimeout(() => {
+        setPhase("show");
+        answerShownAtRef.current = now();
+        if (config.variant === "stroop-flash-color") {
+          timerRef.current = window.setTimeout(() => setPhase("answer"), getParamNumber(config, "flashMs", 520));
+        } else if (config.variant === "stroop-moving-count" || config.variant === "stroop-boss") {
+          timerRef.current = window.setTimeout(() => setPhase("answer"), config.variant === "stroop-boss" ? 2800 : 2500);
+        }
+      }, 520);
+    },
+    [config],
+  );
+
+  useEffect(() => {
+    start(0);
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [start]);
+
+  const record = (event: ReactPointerEvent<HTMLElement>, correct: boolean, value: Record<string, number | string | boolean | null>) => {
+    trialsRef.current.push(
+      trial("stroop", index, {
+        shownAt: answerShownAtRef.current,
+        responseAt: now(),
+        correct,
+        errorType: correct ? undefined : "wrong",
+        pointerType: pointerKind(event.pointerType),
+        value,
+      }),
+    );
+    if (index >= roundCount - 1) onComplete(trialsRef.current);
+    else window.setTimeout(() => start(index + 1), 180);
+  };
+
+  const answerColor = (event: ReactPointerEvent<HTMLButtonElement>, key: string) => {
+    const item = items[0];
+    record(event, key === item.color.key, { congruent: item.word.key === item.color.key });
+  };
+
+  const answerMismatchCard = (event: ReactPointerEvent<HTMLButtonElement>, item: AdvancedStroopItem) => {
+    record(event, item.word.key !== item.color.key, { mismatch: item.word.key !== item.color.key });
+  };
+
+  const answerMismatchCount = (event: ReactPointerEvent<HTMLButtonElement>, selected: number) => {
+    const targetCount = items.filter((item) => item.word.key !== item.color.key).length;
+    record(event, selected === targetCount, { targetCount, selectedCount: selected });
+  };
+
+  const mismatchCount = items.filter((item) => item.word.key !== item.color.key).length;
+
+  return (
+    <div className={`stroop-panel advanced-stroop ${config.variant}`}>
+      <div className="mini-score">
+        <span>{index + 1}/{roundCount}</span>
+      </div>
+      {phase === "wait" ? (
+        <div className="stroop-word-placeholder">等</div>
+      ) : config.variant === "stroop-flash-color" ? (
+        <>
+          {phase === "show" ? (
+            <div className="stroop-word" style={{ color: items[0].color.value }}>
+              {items[0].word.label}
+            </div>
+          ) : (
+            <div className="stroop-word-placeholder" aria-hidden="true" />
+          )}
+          {phase === "answer" ? (
+            <div className="color-grid no-swatches">
+              {colorWords.map((color) => (
+                <button className="color-button" key={color.key} type="button" onPointerDown={(event) => answerColor(event, color.key)}>
+                  {color.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : config.variant === "stroop-mismatch-card" ? (
+        <div className="advanced-word-scatter-field">
+          {items.map((item) => (
+            <button
+              className="advanced-word-card"
+              key={item.id}
+              style={
+                {
+                  "--word-rotate": `${item.rotation}deg`,
+                  color: item.color.value,
+                  left: `${item.x}%`,
+                  top: `${item.y}%`,
+                } as CSSProperties
+              }
+              type="button"
+              onPointerDown={(event) => answerMismatchCard(event, item)}
+            >
+              <span style={{ color: item.color.value }}>{item.word.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          {phase === "show" ? (
+            <div className="advanced-moving-word-field">
+              {items.map((item, itemIndex) => (
+                <span
+                  className={`advanced-moving-word ${config.variant === "stroop-boss" ? "flicker" : ""}`}
+                  key={item.id}
+                  style={
+                    {
+                      "--word-fly-ms": `${item.durationMs ?? 2100}ms`,
+                      "--word-from-rotate": `${item.fromRotation ?? item.rotation}deg`,
+                      "--word-from-x": item.fromX ?? "-68vw",
+                      "--word-from-y": item.fromY ?? "-18px",
+                      "--word-rotate": `${item.rotation}deg`,
+                      animationDelay: `${item.delayMs ?? itemIndex * 90}ms`,
+                      color: item.color.value,
+                      left: `${item.x}%`,
+                      top: `${item.y}%`,
+                    } as CSSProperties
+                  }
+                >
+                  {item.word.label}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="search-answer-panel">
+              <p>不一致的字有几个？</p>
+              <div className="count-options">
+                {makeCountOptions(mismatchCount, items.length).map((option) => (
+                  <button className="count-option" key={option} type="button" onPointerDown={(event) => answerMismatchCount(event, option)}>
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+type AdvancedBeat = AdvancedRhythmActiveBeat & {
+  id: number;
+  fake: boolean;
+  resolved: boolean;
+};
+
+function makeAdvancedBeat(config: AdvancedStageConfig, index: number, startedAt: number, activeBeats: AdvancedBeat[], thresholdMs: number): AdvancedBeat {
+  const lanes = getParamNumber(config, "lanes", 2);
+  const fakeEnabled = getParamBoolean(config, "fakeBeats");
+  return {
+    id: index,
+    lane: chooseAdvancedRhythmLane({
+      lanes,
+      activeBeats,
+      now: startedAt,
+      thresholdMs,
+      randomInt: (exclusiveMax) => Math.floor(rand(0, exclusiveMax)),
+    }),
+    fake: fakeEnabled && index % 4 === 2,
+    startedAt,
+    duration: Math.max(520, 900 - config.level * 34 + rand(-90, 90)),
+    resolved: false,
+  };
+}
+
+function advancedBeatOffsetMs(beat: AdvancedBeat, frameNow: number) {
+  return Math.round(frameNow - beat.startedAt - beat.duration);
+}
+
+function advancedBeatRingScale(beat: AdvancedBeat, frameNow: number) {
+  const progress = Math.max(0, (frameNow - beat.startedAt) / beat.duration);
+  return progress <= 1 ? 1.72 - progress * 0.72 : Math.max(0.18, 1 - (progress - 1) * 1.35);
+}
+
+function nearestAdvancedBeat(beats: AdvancedBeat[], frameNow: number) {
+  return [...beats].sort((a, b) => Math.abs(advancedBeatOffsetMs(a, frameNow)) - Math.abs(advancedBeatOffsetMs(b, frameNow)))[0] ?? null;
+}
+
+function pickAdvancedBeatForTap(beats: AdvancedBeat[], lane: number, frameNow: number, thresholdMs: number) {
+  const activeBeats = beats.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: frameNow, thresholdMs }));
+  const laneBeats = activeBeats.filter((beat) => beat.lane === lane);
+  const hittableTrueBeat = nearestAdvancedBeat(
+    laneBeats.filter((beat) => !beat.fake && Math.abs(advancedBeatOffsetMs(beat, frameNow)) <= thresholdMs),
+    frameNow,
+  );
+  if (hittableTrueBeat) return hittableTrueBeat;
+
+  const laneFakeBeat = nearestAdvancedBeat(
+    laneBeats.filter((beat) => beat.fake),
+    frameNow,
+  );
+  if (laneFakeBeat) return laneFakeBeat;
+
+  const laneTrueBeat = nearestAdvancedBeat(
+    laneBeats.filter((beat) => !beat.fake),
+    frameNow,
+  );
+  if (laneTrueBeat) return laneTrueBeat;
+
+  const wrongLaneTrueBeat = nearestAdvancedBeat(
+    activeBeats.filter((beat) => !beat.fake),
+    frameNow,
+  );
+  if (wrongLaneTrueBeat) return wrongLaneTrueBeat;
+
+  return nearestAdvancedBeat(activeBeats, frameNow);
+}
+
+function AdvancedRhythmRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const hitCount = getParamNumber(config, "hitCount", 10);
+  const lanes = getParamNumber(config, "lanes", 2);
+  const threshold = getParamNumber(config, "offsetThresholdMs", 100);
+  const cadence = useMemo(() => resolveAdvancedRhythmCadence(config.level), [config.level]);
+  const [beats, setBeats] = useState<AdvancedBeat[]>([]);
+  const [frameNow, setFrameNow] = useState(() => now());
+  const [hitProgress, setHitProgress] = useState(0);
+  const beatsRef = useRef<AdvancedBeat[]>([]);
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const completedRef = useRef(false);
+  const nextIndexRef = useRef(0);
+  const spawnedTrueCountRef = useRef(0);
+  const trueHitsRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+  const spawnBeatRef = useRef<() => void>(() => undefined);
+
+  const clearTimers = useCallback(() => {
+    for (const timer of timersRef.current) window.clearTimeout(timer);
+    timersRef.current = [];
+  }, []);
+
+  const addTimer = useCallback((callback: () => void, delayMs: number) => {
+    const timer = window.setTimeout(callback, delayMs);
+    timersRef.current.push(timer);
+  }, []);
+
+  const publishBeats = useCallback((updater: (current: AdvancedBeat[]) => AdvancedBeat[]) => {
+    const nextBeats = updater(beatsRef.current);
+    beatsRef.current = nextBeats;
+    setBeats(nextBeats);
+  }, []);
+
+  const complete = useCallback(
+    (events: TrialEvent[] = trialsRef.current) => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      clearTimers();
+      onComplete([...events]);
+    },
+    [clearTimers, onComplete],
+  );
+
+  const resolveBeat = useCallback(
+    (beatId: number) => {
+      if (completedRef.current) return;
+      const currentBeat = beatsRef.current.find((beat) => beat.id === beatId);
+      if (!currentBeat || currentBeat.resolved) return;
+
+      publishBeats((current) => current.map((beat) => (beat.id === beatId ? { ...beat, resolved: true } : beat)));
+
+      if (currentBeat.fake) {
+        if (!cadence.overlap && spawnedTrueCountRef.current < hitCount) addTimer(() => spawnBeatRef.current(), 90);
+        return;
+      }
+
+      trialsRef.current.push(
+        trial("rhythm", currentBeat.id, {
+          shownAt: currentBeat.startedAt,
+          responseAt: null,
+          correct: false,
+          errorType: "timeout",
+          value: { offsetMs: threshold + 1, beatType: "true", lane: currentBeat.lane, targetLane: currentBeat.lane },
+        }),
+      );
+      complete();
+    },
+    [addTimer, cadence.overlap, complete, hitCount, publishBeats, threshold],
+  );
+
+  const spawnBeat = useCallback(() => {
+    if (completedRef.current || spawnedTrueCountRef.current >= hitCount) return;
+
+    const startedAt = now();
+    const nextBeat = makeAdvancedBeat(config, nextIndexRef.current, startedAt, beatsRef.current, threshold);
+    nextIndexRef.current += 1;
+    if (!nextBeat.fake) spawnedTrueCountRef.current += 1;
+
+    publishBeats((current) => [
+      ...current.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: startedAt, thresholdMs: threshold }) || !beat.resolved),
+      nextBeat,
+    ]);
+    addTimer(() => resolveBeat(nextBeat.id), nextBeat.duration + threshold + cadence.resolveBufferMs);
+
+    if (cadence.overlap && cadence.spawnIntervalMs !== null && spawnedTrueCountRef.current < hitCount) {
+      addTimer(() => spawnBeatRef.current(), cadence.spawnIntervalMs);
+    }
+  }, [addTimer, cadence.overlap, cadence.resolveBufferMs, cadence.spawnIntervalMs, config, hitCount, publishBeats, resolveBeat, threshold]);
+
+  useEffect(() => {
+    spawnBeatRef.current = spawnBeat;
+  }, [spawnBeat]);
+
+  useEffect(() => {
+    completedRef.current = false;
+    nextIndexRef.current = 0;
+    spawnedTrueCountRef.current = 0;
+    trueHitsRef.current = 0;
+    trialsRef.current = [];
+    beatsRef.current = [];
+    setBeats([]);
+    setHitProgress(0);
+    clearTimers();
+    spawnBeat();
+    return () => {
+      clearTimers();
+    };
+  }, [clearTimers, spawnBeat]);
+
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      setFrameNow(now());
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const tap = (event: ReactPointerEvent<HTMLButtonElement>, lane: number) => {
+    if (completedRef.current) return;
+    const responseAt = now();
+    const selectedBeat = pickAdvancedBeatForTap(beatsRef.current, lane, responseAt, threshold);
+    if (!selectedBeat) return;
+
+    const offsetMs = advancedBeatOffsetMs(selectedBeat, responseAt);
+    const correct = !selectedBeat.fake && lane === selectedBeat.lane && Math.abs(offsetMs) <= threshold;
+    publishBeats((current) => current.map((beat) => (beat.id === selectedBeat.id ? { ...beat, resolved: true } : beat)));
+    trialsRef.current.push(
+      trial("rhythm", selectedBeat.id, {
+        shownAt: selectedBeat.startedAt,
+        responseAt,
+        correct,
+        errorType: selectedBeat.fake ? "false_alarm" : lane === selectedBeat.lane ? undefined : "wrong",
+        pointerType: pointerKind(event.pointerType),
+        value: { offsetMs, beatType: selectedBeat.fake ? "fake" : "true", lane, targetLane: selectedBeat.lane },
+      }),
+    );
+    if (!correct) {
+      complete();
+      return;
+    }
+    trueHitsRef.current += 1;
+    setHitProgress(trueHitsRef.current);
+    if (trueHitsRef.current >= hitCount) complete();
+    else if (!cadence.overlap) addTimer(() => spawnBeatRef.current(), 90);
+  };
+
+  const activeBeats = beats.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: frameNow, thresholdMs: threshold }));
+  const hasActiveFakeBeat = activeBeats.some((beat) => beat.fake);
+
+  return (
+    <div className={`rhythm-panel advanced-rhythm lanes-${lanes}`}>
+      <div className="mini-score">
+        <span>{Math.min(hitCount, hitProgress)}/{hitCount}</span>
+        <span>{hasActiveFakeBeat ? "不点" : `偏差 ≤ ${threshold}ms`}</span>
+      </div>
+      {Array.from({ length: lanes }, (_, lane) => {
+        const laneBeats = activeBeats.filter((beat) => beat.lane === lane);
+        const active = laneBeats.length > 0;
+        return (
+          <button className={`rhythm-target ${active ? "active" : "inactive"}`} key={lane} type="button" onPointerDown={(event) => tap(event, lane)}>
+            <span className="judge-line" />
+            {laneBeats.map((laneBeat) => (
+              <span
+                className="shrinking-ring"
+                key={laneBeat.id}
+                style={{
+                  transform: `scale(${advancedBeatRingScale(laneBeat, frameNow)})`,
+                  ...(laneBeat.fake ? { borderColor: "rgba(145, 138, 126, 0.62)", borderStyle: "dashed" } : {}),
+                }}
+              />
+            ))}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type AdvancedMemoryPhase = "show" | "flash" | "hide" | "rotate" | "answer" | "feedback";
+
+const ADVANCED_MEMORY_FEEDBACK_MS = 680;
+const ADVANCED_MEMORY_BLANK_COLOR = "#f1ece4";
+
+function pickAdvancedMemoryRotation(): AdvancedMemoryRotation {
+  return [90, 180, 270][Math.floor(rand(0, 3))] as AdvancedMemoryRotation;
+}
+
+function isAdvancedMemoryRotationRound(config: AdvancedStageConfig) {
+  return config.variant === "memory-rotation" || config.variant === "memory-boss" || getParamBoolean(config, "rotation", false);
+}
+
+function isAdvancedMemoryFlashRound(config: AdvancedStageConfig) {
+  return config.variant === "memory-sequence-flash" || config.variant === "memory-boss";
+}
+
+function AdvancedMemoryRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const roundCount = getParamNumber(config, "roundCount", 3);
+  const [index, setIndex] = useState(0);
+  const [cells, setCells] = useState<AdvancedMemoryCell[]>(() =>
+    makeAdvancedMemoryCells({
+      gridSize: getParamNumber(config, "gridSize", 4),
+      coloredCount: getParamNumber(config, "coloredCount", 4),
+    }),
+  );
+  const [question, setQuestion] = useState<AdvancedMemoryQuestion | null>(null);
+  const [phase, setPhase] = useState<AdvancedMemoryPhase>("show");
+  const [flashIndex, setFlashIndex] = useState<number | null>(null);
+  const [rotation, setRotation] = useState(0);
+  const [selectedColor, setSelectedColor] = useState<AdvancedMemoryColorKey | null>(null);
+  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
+  const shownAtRef = useRef(now());
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const timersRef = useRef<number[]>([]);
+  const answeredRef = useRef(false);
+
+  const clearTimers = useCallback(() => {
+    for (const timer of timersRef.current) window.clearTimeout(timer);
+    timersRef.current = [];
+  }, []);
+
+  const start = useCallback(
+    (nextIndex: number) => {
+      clearTimers();
+      const gridSize = getParamNumber(config, "gridSize", 4);
+      const coloredCount = getParamNumber(config, "coloredCount", gridSize);
+      const includeBlank = getParamBoolean(config, "includeBlank", false);
+      const nextCells = makeAdvancedMemoryCells({ gridSize, coloredCount });
+      const hasFlash = isAdvancedMemoryFlashRound(config);
+      const hasRotation = isAdvancedMemoryRotationRound(config);
+      const nextRotation = hasRotation ? pickAdvancedMemoryRotation() : 0;
+      const nextQuestion = chooseAdvancedMemoryQuestion({
+        cells: nextCells,
+        gridSize,
+        rotationDegrees: nextRotation,
+        allowBlankQuestion: includeBlank,
+      });
+      const flashOrder = buildAdvancedMemoryFlashOrder(nextCells);
+      const showMs = getParamNumber(config, "showMs", 1500);
+      const flashMs = getParamNumber(config, "flashMs", 560);
+      const flashGapMs = getParamNumber(config, "flashGapMs", 120);
+      const flashStepMs = flashMs + flashGapMs;
+      const phaseSchedule = buildAdvancedMemoryPhaseSchedule({
+        hasFlash,
+        hasRotation,
+        showMs,
+        flashOrderLength: flashOrder.length,
+        flashMs,
+        flashGapMs,
+      });
+
+      const schedule = (callback: () => void, delayMs: number) => {
+        timersRef.current.push(window.setTimeout(callback, delayMs));
+      };
+      const enterAnswer = () => {
+        setFlashIndex(null);
+        setPhase("answer");
+        shownAtRef.current = now();
+      };
+
+      setCells(nextCells);
+      setQuestion(nextQuestion);
+      setIndex(nextIndex);
+      setRotation(0);
+      setSelectedColor(null);
+      setLastCorrect(null);
+      setFlashIndex(null);
+      answeredRef.current = false;
+      setPhase(phaseSchedule[0]?.phase === "flash" ? "flash" : "show");
+
+      if (hasFlash) {
+        flashOrder.forEach((cellIndex, orderIndex) => {
+          const offset = orderIndex * flashStepMs;
+          schedule(() => setFlashIndex(cellIndex), offset);
+          schedule(() => setFlashIndex(null), offset + flashMs);
+        });
+      }
+
+      phaseSchedule.slice(1).forEach((step) => {
+        if (step.phase === "hide") {
+          schedule(() => {
+            setFlashIndex(null);
+            setPhase("hide");
+            setRotation(0);
+          }, step.startMs);
+        } else if (step.phase === "rotate") {
+          schedule(() => {
+            setFlashIndex(null);
+            setPhase("rotate");
+            setRotation(nextRotation);
+          }, step.startMs);
+        } else if (step.phase === "answer") {
+          schedule(enterAnswer, step.startMs);
+        }
+      });
+    },
+    [clearTimers, config],
+  );
+
+  useEffect(() => {
+    start(0);
+    return clearTimers;
+  }, [clearTimers, start]);
+
+  const answer = (event: ReactPointerEvent<HTMLButtonElement>, colorKey: AdvancedMemoryColorKey) => {
+    if (phase !== "answer") return;
+    if (!question) return;
+    if (answeredRef.current) return;
+    answeredRef.current = true;
+    const correctColor = question.correctColorKey;
+    const correct = colorKey === correctColor;
+    setSelectedColor(colorKey);
+    setLastCorrect(correct);
+    setPhase("feedback");
+    trialsRef.current.push(
+      trial("memory", index, {
+        shownAt: shownAtRef.current,
+        responseAt: now(),
+        correct,
+        errorType: correct ? undefined : "wrong",
+        pointerType: pointerKind(event.pointerType),
+        value: {
+          targetIndex: question.targetIndexAfterRotation,
+          sourceIndex: question.sourceIndex,
+          color: correctColor,
+          selectedColor: colorKey,
+          setSize: cells.length,
+          rotationDegrees: question.rotationDegrees,
+        },
+      }),
+    );
+    timersRef.current.push(
+      window.setTimeout(() => {
+        if (index >= roundCount - 1) onComplete(trialsRef.current);
+        else start(index + 1);
+      }, ADVANCED_MEMORY_FEEDBACK_MS),
+    );
+  };
+
+  const gridColumns = cells.length <= 4 ? 2 : 3;
+  const includeBlank = getParamBoolean(config, "includeBlank", false);
+  const hasRotation = isAdvancedMemoryRotationRound(config);
+  const showFullColors = phase === "show";
+  const activeQuestion = question ?? {
+    sourceIndex: 0,
+    targetIndexAfterRotation: 0,
+    correctColorKey: "blank" as AdvancedMemoryColorKey,
+    rotationDegrees: 0 as AdvancedMemoryRotation,
+  };
+  const options = buildAdvancedMemoryOptions(includeBlank);
+  const promptText =
+    phase === "show"
+      ? "记住每个格子的颜色"
+      : phase === "flash"
+        ? "看清每次闪烁的位置和颜色"
+        : phase === "hide"
+          ? "颜色已隐藏，准备旋转"
+        : phase === "rotate"
+          ? "看清整块宫格的旋转"
+          : phase === "feedback"
+            ? lastCorrect
+              ? "答对了"
+              : "记错了，正确颜色已标出"
+            : hasRotation
+              ? "标记格原本是什么颜色？"
+              : `第 ${activeQuestion.sourceIndex + 1} 格原本是什么颜色？`;
+
+  return (
+    <div className="memory-panel advanced-memory">
+      <div className="mini-score">
+        <span>{index + 1}/{roundCount}</span>
+        <span>{promptText}</span>
+      </div>
+      <div className={`advanced-memory-board cells-${cells.length}`}>
+        <div
+          className={`memory-grid advanced-memory-grid phase-${phase}`}
+          style={{
+            gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+            transform: rotation ? `rotate(${rotation}deg)` : undefined,
+            transitionDuration: phase === "rotate" ? `${ADVANCED_MEMORY_ROTATE_MS}ms` : undefined,
+          }}
+        >
+          {cells.map((cell, cellIndex) => {
+            const highlighted = (phase === "answer" || phase === "feedback") && cellIndex === activeQuestion.sourceIndex;
+            const flashing = phase === "flash" && cellIndex === flashIndex;
+            const feedbackReveal = phase === "feedback" && cellIndex === activeQuestion.sourceIndex;
+            const background = showFullColors || flashing || feedbackReveal ? cell.colorValue ?? ADVANCED_MEMORY_BLANK_COLOR : ADVANCED_MEMORY_BLANK_COLOR;
+
+            return (
+              <div
+                aria-label={`记忆格 ${cellIndex + 1}`}
+                className={`memory-color-cell ${highlighted ? "target-cell" : ""} ${flashing ? "flash-cell" : ""}`}
+                key={`${index}-${cell.id}`}
+                style={{ background }}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <div className={`memory-options advanced-memory-options ${includeBlank ? "with-blank" : "four-col"} ${phase === "answer" || phase === "feedback" ? "visible" : "hidden"}`}>
+        {options.map((color) => {
+          const isBlank = color.key === "blank";
+          const isSelected = selectedColor === color.key;
+          const isCorrectOption = phase === "feedback" && color.key === activeQuestion.correctColorKey;
+
+          return isBlank ? (
+            <button
+              className={`memory-color-option blank-option ${isSelected ? "selected-option" : ""} ${isCorrectOption ? "correct-option" : ""}`}
+              disabled={phase !== "answer"}
+              key={color.key}
+              type="button"
+              onPointerDown={(event) => answer(event, color.key)}
+            >
+              {color.label}
+            </button>
+          ) : (
+            <button
+              aria-label={`选择颜色 ${color.label}`}
+              className={`memory-color-option ${isSelected ? "selected-option" : ""} ${isCorrectOption ? "correct-option" : ""}`}
+              disabled={phase !== "answer"}
+              key={color.key}
+              type="button"
+              onPointerDown={(event) => answer(event, color.key)}
+              style={{ background: color.value }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type AdvancedBrakeHazard = {
+  x: number;
+  fake: boolean;
+  simultaneous: boolean;
+};
+
+function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const lanes = getParamNumber(config, "lanes", 1);
+  const hazardCount = getParamNumber(config, "hazardCount", 2);
+  const reactionWindowMs = getParamNumber(config, "reactionWindowMs", 340);
+  const fakeHazards = getParamBoolean(config, "fakeHazards");
+  const simultaneousOnly = getParamBoolean(config, "simultaneousOnly");
+  const [progress, setProgress] = useState(4);
+  const [holding, setHolding] = useState(false);
+  const [hazard, setHazard] = useState<AdvancedBrakeHazard | null>(null);
+  const progressRef = useRef(4);
+  const holdingRef = useRef(false);
+  const hazardRef = useRef<AdvancedBrakeHazard | null>(null);
+  const hazardShownAtRef = useRef<number | null>(null);
+  const hazardIndexRef = useRef(0);
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameAtRef = useRef(0);
+  const hazardTimerRef = useRef<number | null>(null);
+  const collisionTimerRef = useRef<number | null>(null);
+  const finishedRef = useRef(false);
+
+  const clearTimers = useCallback(() => {
+    if (hazardTimerRef.current) window.clearTimeout(hazardTimerRef.current);
+    if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
+    hazardTimerRef.current = null;
+    collisionTimerRef.current = null;
+  }, []);
+
+  const finish = useCallback(
+    (extra?: TrialEvent) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      clearTimers();
+      setHolding(false);
+      holdingRef.current = false;
+      onComplete(extra ? [...trialsRef.current, extra] : trialsRef.current);
+    },
+    [clearTimers, onComplete],
+  );
+
+  const scheduleHazard = useCallback(() => {
+    clearTimers();
+    hazardTimerRef.current = window.setTimeout(() => {
+      if (finishedRef.current || !holdingRef.current) return;
+      const nextHazard = {
+        x: clamp(progressRef.current + rand(10, 18), 18, 88),
+        fake: fakeHazards && Math.random() > 0.55,
+        simultaneous: !simultaneousOnly || Math.random() > 0.35,
+      };
+      hazardRef.current = nextHazard;
+      setHazard(nextHazard);
+      hazardShownAtRef.current = now();
+      if (!nextHazard.fake && (!simultaneousOnly || nextHazard.simultaneous)) {
+        collisionTimerRef.current = window.setTimeout(() => {
+          finish(
+            trial("braking", hazardIndexRef.current, {
+              shownAt: hazardShownAtRef.current ?? now(),
+              responseAt: now(),
+              correct: false,
+              errorType: "collision",
+              value: { collision: true, fakeStop: false, exited: false },
+            }),
+          );
+        }, reactionWindowMs);
+      } else {
+        window.setTimeout(() => {
+          hazardRef.current = null;
+          setHazard(null);
+          hazardIndexRef.current += 1;
+          if (holdingRef.current) scheduleHazard();
+        }, 720);
+      }
+    }, rand(700, 1300));
+  }, [clearTimers, fakeHazards, finish, reactionWindowMs, simultaneousOnly]);
+
+  useEffect(() => {
+    const tick = () => {
+      const frameNow = now();
+      const delta = frameNow - (lastFrameAtRef.current || frameNow);
+      lastFrameAtRef.current = frameNow;
+      if (holdingRef.current && !finishedRef.current) {
+        const speed = 0.008 + Math.max(0, 10 - config.level) * 0.0015;
+        const next = clamp(progressRef.current + delta * speed, 4, 104);
+        progressRef.current = next;
+        setProgress(next);
+        if (next >= 100) {
+          finish(
+            trial("braking", hazardIndexRef.current, {
+              shownAt: 0,
+              responseAt: now(),
+              correct: true,
+              value: { exited: true, collision: false, earlyStop: false },
+            }),
+          );
+          return;
+        }
+      }
+      frameRef.current = requestAnimationFrame(tick);
+    };
+    frameRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      clearTimers();
+    };
+  }, [clearTimers, config.level, finish]);
+
+  const begin = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (finishedRef.current || holdingRef.current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setHolding(true);
+    holdingRef.current = true;
+    scheduleHazard();
+  };
+
+  const release = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (finishedRef.current || !holdingRef.current) return;
+    const currentHazard = hazardRef.current;
+    const mustStop = currentHazard && !currentHazard.fake && (!simultaneousOnly || currentHazard.simultaneous);
+    setHolding(false);
+    holdingRef.current = false;
+    clearTimers();
+    if (!mustStop) {
+      finish(
+        trial("braking", hazardIndexRef.current, {
+          shownAt: hazardShownAtRef.current ?? now(),
+          responseAt: now(),
+          correct: false,
+          errorType: currentHazard?.fake ? "false_alarm" : "early_stop",
+          pointerType: pointerKind(event.pointerType),
+          value: { collision: false, earlyStop: !currentHazard?.fake, fakeStop: currentHazard?.fake === true, exited: false },
+        }),
+      );
+      return;
+    }
+    const latency = Math.round(now() - (hazardShownAtRef.current ?? now()));
+    const correct = latency <= reactionWindowMs;
+    trialsRef.current.push(
+      trial("braking", hazardIndexRef.current, {
+        shownAt: hazardShownAtRef.current ?? now(),
+        responseAt: now(),
+        correct,
+        errorType: correct ? undefined : "collision",
+        pointerType: pointerKind(event.pointerType),
+        value: { collision: !correct, earlyStop: false, fakeStop: false, stopLatencyMs: latency, exited: false },
+      }),
+    );
+    if (!correct || hazardIndexRef.current >= hazardCount - 1) {
+      if (!correct) finish();
+    }
+    hazardIndexRef.current += 1;
+    hazardRef.current = null;
+    setHazard(null);
+  };
+
+  return (
+    <div className={`braking-panel advanced-braking lanes-${lanes}`}>
+      <div className="mini-score">
+        <span>{Math.round(progress)}%</span>
+      </div>
+      <div className="advanced-brake-track" aria-hidden="true">
+        {Array.from({ length: lanes }, (_, lane) => (
+          <div className="advanced-brake-lane" key={lane}>
+            {hazard ? <span className={`advanced-hazard ${hazard.fake ? "fake" : "real"} ${hazard.simultaneous ? "simultaneous" : ""}`} style={{ left: `${hazard.x}%` }} /> : null}
+            <span className="advanced-runner" style={{ left: `${progress}%` }} />
+          </div>
+        ))}
+      </div>
+      <button className={`run-button ${holding ? "active" : ""}`} type="button" onPointerCancel={release} onPointerDown={begin} onPointerUp={release} />
+    </div>
+  );
+}
+
+function AdvancedPatienceRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const duration = getParamNumber(config, "waitMs", 6000);
+  const [progress, setProgress] = useState(0);
+  const startRef = useRef(now());
+  const doneRef = useRef(false);
+  const lastPaintRef = useRef(0);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" && !doneRef.current) {
+        doneRef.current = true;
+        onComplete([
+          trial("patience", 0, {
+            shownAt: startRef.current,
+            responseAt: now(),
+            correct: false,
+            errorType: "visibility",
+            value: { waitMs: Math.round(now() - startRef.current), durationMs: duration, skipped: true },
+          }),
+        ]);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    let frame = 0;
+    const tick = () => {
+      const frameNow = now();
+      const elapsed = frameNow - startRef.current;
+      const nextProgress = clamp((elapsed / duration) * 100, 0, 100);
+      if (frameNow - lastPaintRef.current > 90 || elapsed >= duration) {
+        lastPaintRef.current = frameNow;
+        setProgress(nextProgress);
+      }
+      if (elapsed >= duration && !doneRef.current) {
+        doneRef.current = true;
+        onComplete([
+          trial("patience", 0, {
+            shownAt: startRef.current,
+            responseAt: now(),
+            correct: true,
+            value: { waitMs: duration, durationMs: duration, skipped: false },
+          }),
+        ]);
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      cancelAnimationFrame(frame);
+    };
+  }, [duration, onComplete]);
+
+  return (
+    <div className="patience-panel advanced-patience">
+      <div className="mini-score">
+        <span>{Math.round(progress)}%</span>
+      </div>
+      <div className="patience-bar" aria-label="进度">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className="progress-readout">
+        <strong>{Math.round(progress)}%</strong>
+      </div>
+    </div>
+  );
 }
 
 function ReactionRound({ onComplete }: RoundProps) {
@@ -1350,7 +3513,6 @@ function AimRound({ onComplete }: RoundProps) {
           />
         ) : null}
       </div>
-      <div className="aim-fire-strip">点击发射</div>
     </div>
   );
 }
@@ -1397,35 +3559,11 @@ function arrowBottomFromTip(tipY: number, fieldHeight?: number) {
   return Math.max(0, fieldHeight - tipY - AIM_ARROW_TIP_TO_BOTTOM_PX);
 }
 
-type SearchDot = {
-  id: number;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  size: number;
-  color: string;
-  shape: "circle" | "square";
-  hollow: boolean;
-  target: boolean;
-  durationMs: number;
-  delayMs: number;
-};
-
-type SearchScene = {
-  dots: SearchDot[];
-  targetCount: number;
-  totalDots: number;
-  durationMs: number;
-  difficulty: number;
-  options: number[];
-};
-
 const SEARCH_ROUND_COUNT = 4;
 
 function SearchRound({ onComplete }: RoundProps) {
   const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<"watch" | "answer">("watch");
+  const [phase, setPhase] = useState<"brief" | "watch" | "answer">("brief");
   const [scene, setScene] = useState<SearchScene>(() => makeSearchScene(0));
   const shownAtRef = useRef(now());
   const answerShownAtRef = useRef(now());
@@ -1437,15 +3575,18 @@ function SearchRound({ onComplete }: RoundProps) {
     const nextScene = makeSearchScene(nextIndex);
     setIndex(nextIndex);
     setScene(nextScene);
-    setPhase("watch");
+    setPhase("brief");
     shownAtRef.current = now();
     answeredRef.current = false;
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
-      if (answeredRef.current) return;
-      answerShownAtRef.current = now();
-      setPhase("answer");
-    }, nextScene.durationMs);
+      setPhase("watch");
+      timeoutRef.current = window.setTimeout(() => {
+        if (answeredRef.current) return;
+        answerShownAtRef.current = now();
+        setPhase("answer");
+      }, nextScene.durationMs);
+    }, 900);
   }, []);
 
   useEffect(() => {
@@ -1488,9 +3629,14 @@ function SearchRound({ onComplete }: RoundProps) {
     <div className="game-area search-area barrage-search">
       <div className="mini-score">
         <span>{index + 1}/{SEARCH_ROUND_COUNT}</span>
-        <span>只数实心红圆点</span>
+        <span>数目标图案</span>
       </div>
-      {phase === "watch" ? (
+      {phase === "brief" ? (
+        <div className="search-answer-panel pattern-brief">
+          <p>目标图案</p>
+          <SearchPatternPreview patterns={scene.targetPatterns} />
+        </div>
+      ) : phase === "watch" ? (
         <>
           <p className="search-brief">看完再选数量</p>
           {scene.dots.map((dot) => {
@@ -1520,7 +3666,7 @@ function SearchRound({ onComplete }: RoundProps) {
         </>
       ) : (
         <div className="search-answer-panel">
-          <p>符合条件的点有几个？</p>
+          <p>目标图案一共有几个？</p>
           <div className="count-options">
             {scene.options.map((option) => (
               <button className="count-option" key={option} type="button" onPointerDown={(event) => answer(event, option)}>
@@ -1532,72 +3678,6 @@ function SearchRound({ onComplete }: RoundProps) {
       )}
     </div>
   );
-}
-
-const searchConfigs = [
-  { totalDots: 16, targetMin: 3, targetMax: 4, durationMs: 4200, dotMinMs: 3200, dotMaxMs: 3900, slope: 6 },
-  { totalDots: 20, targetMin: 3, targetMax: 5, durationMs: 4400, dotMinMs: 2900, dotMaxMs: 3600, slope: 9 },
-  { totalDots: 24, targetMin: 4, targetMax: 6, durationMs: 4600, dotMinMs: 2500, dotMaxMs: 3300, slope: 12 },
-  { totalDots: 28, targetMin: 3, targetMax: 7, durationMs: 4800, dotMinMs: 2200, dotMaxMs: 3000, slope: 15 },
-] as const;
-
-function makeSearchScene(roundIndex: number): SearchScene {
-  const config = searchConfigs[Math.min(roundIndex, searchConfigs.length - 1)];
-  const targetCount = Math.floor(rand(config.targetMin, config.targetMax + 1));
-  const targetSlots = new Set<number>();
-  while (targetSlots.size < targetCount) {
-    targetSlots.add(Math.floor(rand(0, config.totalDots)));
-  }
-
-  const dots = Array.from({ length: config.totalDots }, (_, dotIndex) => {
-    const target = targetSlots.has(dotIndex);
-    const leftToRight = Math.random() > 0.5;
-    const fromY = rand(18, 82);
-    const durationMs = rand(config.dotMinMs, config.dotMaxMs);
-    const delayMs = rand(0, Math.max(0, config.durationMs - durationMs));
-    const distractor = target ? null : makeSearchDistractor(roundIndex, dotIndex);
-
-    return {
-      id: roundIndex * 100 + dotIndex,
-      fromX: leftToRight ? -14 : 114,
-      fromY,
-      toX: leftToRight ? 114 : -14,
-      toY: clamp(fromY + rand(-config.slope, config.slope), 14, 86),
-      size: target ? rand(34, 43) : rand(30, 45),
-      color: target ? "#e1251b" : distractor?.color ?? "#2f80ed",
-      shape: target ? "circle" : distractor?.shape ?? "circle",
-      hollow: target ? false : distractor?.hollow ?? false,
-      target,
-      durationMs,
-      delayMs,
-    } satisfies SearchDot;
-  });
-
-  return {
-    dots,
-    targetCount,
-    totalDots: config.totalDots,
-    durationMs: config.durationMs,
-    difficulty: roundIndex + 1,
-    options: makeCountOptions(targetCount, config.totalDots),
-  };
-}
-
-function makeSearchDistractor(roundIndex: number, dotIndex: number) {
-  const base = [
-    { color: "#2f80ed", shape: "circle", hollow: false },
-    { color: "#d39b2a", shape: "circle", hollow: false },
-    { color: "#2f9b68", shape: "circle", hollow: false },
-    { color: "#7b61ff", shape: "circle", hollow: false },
-  ] as const;
-  const similar = [
-    { color: "#e65349", shape: "square", hollow: false },
-    { color: "#e65349", shape: "circle", hollow: true },
-    { color: "#ef7a45", shape: "circle", hollow: false },
-    { color: "#e96b8c", shape: "circle", hollow: false },
-  ] as const;
-  const pool = [...base, ...similar.slice(0, Math.min(similar.length, roundIndex + 1))];
-  return pool[dotIndex % pool.length];
 }
 
 function makeCountOptions(targetCount: number, totalDots: number) {
@@ -2206,6 +4286,7 @@ function getRoundConfig(roundId: RoundId) {
 function AdvancedChallengeScreen({
   advancedProgress,
   challenge,
+  debugToolsVisible,
   onBack,
   onCompleteRound,
   onPickLevel,
@@ -2213,6 +4294,7 @@ function AdvancedChallengeScreen({
 }: {
   advancedProgress: AdvancedProgress;
   challenge: AdvancedChallengeState;
+  debugToolsVisible: boolean;
   onBack: () => void;
   onCompleteRound: (trials: TrialEvent[]) => void;
   onPickLevel: (level: number) => void;
@@ -2221,8 +4303,11 @@ function AdvancedChallengeScreen({
   const round = getRoundConfig(challenge.roundId);
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
   const nextLevel = Math.min(10, currentLevel + 1);
+  const activeLevel = challenge.mode === "select" ? nextLevel : challenge.level;
+  const activeConfig = getAdvancedStageConfig(challenge.roundId, activeLevel);
 
   if (challenge.mode === "playing") {
+    const playingConfig = getAdvancedStageConfig(challenge.roundId, challenge.level);
     return (
       <section className="play-screen advanced-play-screen" aria-live="polite">
         <header className="round-header advanced-round-header">
@@ -2234,9 +4319,11 @@ function AdvancedChallengeScreen({
             <button className="advanced-back-button" type="button" onPointerDown={onBack}>
               返回
             </button>
-            <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(buildPerfectTrials(challenge.roundId))}>
-              满分过关
-            </button>
+            {debugToolsVisible ? (
+              <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(buildAdvancedPerfectTrials(playingConfig))}>
+                满分过关
+              </button>
+            ) : null}
           </div>
         </header>
         <div className="progress-track" aria-hidden="true">
@@ -2244,6 +4331,7 @@ function AdvancedChallengeScreen({
         </div>
         <RoundRenderer
           key={`advanced-${challenge.roundId}-${challenge.level}-${challenge.attemptId}`}
+          advancedConfig={playingConfig}
           round={challenge.roundId}
           onComplete={onCompleteRound}
         />
@@ -2251,7 +4339,7 @@ function AdvancedChallengeScreen({
     );
   }
 
-  const selectedLevel = challenge.mode === "select" ? nextLevel : challenge.level;
+  const selectedLevel = activeLevel;
   const selectedState = getAdvancedLevelState(currentLevel, selectedLevel);
   const isComplete = challenge.mode === "complete";
   const completionActions = isComplete
@@ -2275,7 +4363,8 @@ function AdvancedChallengeScreen({
       {isComplete ? (
         <div className={`advanced-result-card ${challenge.passed ? "passed" : "failed"}`}>
           <p className="eyebrow">{challenge.passed ? "挑战成功" : "差一点"}</p>
-          <h2>{Math.round(challenge.score)} / {challenge.minScore}</h2>
+          <h2>{challenge.passed ? "过关" : challenge.reason}</h2>
+          <small>{challenge.correctCount}/{challenge.requiredCorrect}</small>
           <div className={`advanced-actions advanced-actions-${completionActions.length}`}>
             {completionActions.includes("retry") ? (
               <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
@@ -2320,7 +4409,7 @@ function AdvancedChallengeScreen({
           <div className="advanced-brief">
             <span>进阶内容</span>
             <strong>{getAdvancedChallengeStatusLabel(selectedState)}</strong>
-            <small>{getAdvancedRoundContent(challenge.roundId, selectedLevel)}</small>
+            <small>{activeConfig.passText}</small>
           </div>
 
           <button
@@ -2342,6 +4431,7 @@ function ResultScreen({
   trials,
   advancedUnlockPulseId,
   imageShareState,
+  debugToolsVisible,
   onOpenAdvancedChallenge,
   onOpenLuckDraw,
   onResetTestData,
@@ -2352,6 +4442,7 @@ function ResultScreen({
   trials: TrialEvent[];
   advancedUnlockPulseId: number;
   imageShareState: ImageShareState;
+  debugToolsVisible: boolean;
   onOpenAdvancedChallenge: (roundId: RoundId) => void;
   onOpenLuckDraw: () => void;
   onResetTestData: () => void;
@@ -2441,9 +4532,11 @@ function ResultScreen({
           <button aria-label="重新测试" className="result-action-button" type="button" onPointerDown={onRestart}>
             <RestartIcon />
           </button>
-          <button aria-label="重置测试数据" className="result-action-button danger" type="button" onClick={onResetTestData}>
-            <ResetDataIcon />
-          </button>
+          {debugToolsVisible ? (
+            <button aria-label="重置测试数据" className="result-action-button danger" type="button" onClick={onResetTestData}>
+              <ResetDataIcon />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -2489,6 +4582,13 @@ function ResultScreen({
             </button>
           ) : null}
         </div>
+        <a
+          className="secondary-button"
+          href="/control-maze-prototype"
+          style={{ alignItems: "center", display: "inline-flex", justifyContent: "center", textDecoration: "none" }}
+        >
+          控制力原型
+        </a>
       </div>
 
     </section>
@@ -2581,7 +4681,7 @@ function LuckDrawScreen({
     setPendingOutcome(outcome);
     setSpinning(true);
     setSettledReels(0);
-    spinTimersRef.current = buildLuckSlotSpinSchedule().map((step) =>
+    spinTimersRef.current = buildLuckSlotSpinSchedule({ mode: (outcome.draws ?? 1) > 1 ? "batch" : "single" }).map((step) =>
       window.setTimeout(() => {
         if (step.type === "settle") {
           setSettledReels(step.settledReels);

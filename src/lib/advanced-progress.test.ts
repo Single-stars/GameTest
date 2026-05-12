@@ -6,10 +6,8 @@ import {
   createDefaultPersistedGameState,
   canUseLuckDraw,
   canUseLuckDrawBatch,
-  evaluateAdvancedChallengeScore,
   formatResultRankTitle,
   getAdvancedCompletionActions,
-  getAdvancedChallengeRequirement,
   getAdvancedChallengeStatusLabel,
   getAdvancedBackDestination,
   getAdvancedLevelState,
@@ -20,9 +18,7 @@ import {
   getLuckScoreTone,
   getLuckStarsFromScore,
   formatLuckDrawOutcomeText,
-  getAdvancedRoundContent,
   getAdvancedDimensionLevel,
-  getAdvancedRoundScore,
   getAdvancedTotalStars,
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
@@ -41,7 +37,6 @@ import {
   type StorageLike,
 } from "./advanced-progress.ts";
 import type { TrialEvent } from "./scoring.ts";
-import type { ScoreSummary } from "./scoring.ts";
 
 function makeTrial(roundId: TrialEvent["roundId"]): TrialEvent {
   return {
@@ -360,7 +355,7 @@ test("luck score helpers produce display copy for locked, ready and empty states
   );
   assert.equal(
     getLuckDrawStatusText(true, { ...progressWithTwoDraws, luckStars: 20, luckBestScore: 100 }),
-    "运气已达到上限",
+    "已满运气，继续抽取不会降低历史最高",
   );
 
   const maxedDrawResult = recordLuckDraw({ ...progressWithTwoDraws, luckStars: 20, luckBestScore: 100 }, 12);
@@ -410,6 +405,7 @@ test("ten luck draws consume ten chances and display the best score from the bat
     improved: true,
     guaranteed: false,
     draws: 10,
+    originalScores: [4, 22, 63, 91, 18, 39, 74, 10, 58, 87],
   });
   assert.equal(formatLuckDrawOutcomeText(result.outcome!), "十连最高运气91！");
   assert.equal(result.progress.luckBestScore, 91);
@@ -433,6 +429,7 @@ test("ten luck draws preserve historical max luck and include the eightieth draw
     improved: false,
     guaranteed: true,
     draws: 10,
+    originalScores: [1, 2, 3, 4, 5, 6, 7, 8, 9, 100],
   });
   assert.equal(formatLuckDrawOutcomeText(result.outcome!), "十连最高运气100！");
   assert.equal(result.progress.luckBestScore, 100);
@@ -521,17 +518,6 @@ test("result rank title only folds stars into the king title when stars are abov
   assert.equal(formatResultRankTitle("至尊星耀", 7), "至尊星耀");
 });
 
-test("advanced round content is specific to each metric and includes the selected level", () => {
-  assert.equal(getAdvancedRoundContent("reaction", 4), "第 4 阶：连续完成变色点击，提前点或超时会失败。");
-  assert.equal(getAdvancedRoundContent("aim", 4), "第 4 阶：命中移动靶，越高阶容错越低。");
-  assert.equal(getAdvancedRoundContent("search", 4), "第 4 阶：在移动点阵里数准目标，错数会失败。");
-  assert.equal(getAdvancedRoundContent("stroop", 4), "第 4 阶：只看字体颜色，忽略字义干扰。");
-  assert.equal(getAdvancedRoundContent("rhythm", 4), "第 4 阶：按左右节奏圈完成节拍，漏点和错边会失败。");
-  assert.equal(getAdvancedRoundContent("memory", 4), "第 4 阶：记住色块位置，遮住后选对目标颜色。");
-  assert.equal(getAdvancedRoundContent("braking", 4), "第 4 阶：长按前进，危险出现时及时松手。");
-  assert.equal(getAdvancedRoundContent("patience", 4), "第 4 阶：完整等待进度，不提前跳过。");
-});
-
 test("current result can be cleared while preserving advanced progress", () => {
   const progress = recordAdvancedChallengeResult(markAdvancedUnlocked(createDefaultAdvancedProgress()), {
     roundId: "aim",
@@ -589,45 +575,6 @@ test("persisted state parser falls back safely and clamps progress shape", () =>
   assert.equal(parsed.advancedProgress.luckDrawCount, 10);
   assert.equal(getAdvancedTotalStars(parsed.advancedProgress), 30);
   assert.equal(getAdvancedDimensionLevel(parsed.advancedProgress, "reaction"), 0);
-});
-
-test("challenge requirements grow stricter and score evaluation uses pass threshold", () => {
-  const levelOne = getAdvancedChallengeRequirement("reaction", 1);
-  const levelTen = getAdvancedChallengeRequirement("reaction", 10);
-
-  assert.equal(levelOne.level, 1);
-  assert.equal(levelTen.level, 10);
-  assert.equal(levelTen.minScore > levelOne.minScore, true);
-  assert.deepEqual(evaluateAdvancedChallengeScore("reaction", 1, levelOne.minScore), {
-    level: 1,
-    minScore: levelOne.minScore,
-    score: levelOne.minScore,
-    passed: true,
-  });
-  assert.equal(evaluateAdvancedChallengeScore("reaction", 10, levelTen.minScore - 1).passed, false);
-});
-
-test("advanced round score maps public round ids to the matching score axis", () => {
-  const scores: ScoreSummary = {
-    reaction: 11,
-    targeting: 22,
-    search: 33,
-    interference: 44,
-    rhythm: 55,
-    memory: 66,
-    braking: 77,
-    waiting: 88,
-    confidence: 99,
-  };
-
-  assert.equal(getAdvancedRoundScore(scores, "reaction"), 11);
-  assert.equal(getAdvancedRoundScore(scores, "aim"), 22);
-  assert.equal(getAdvancedRoundScore(scores, "search"), 33);
-  assert.equal(getAdvancedRoundScore(scores, "stroop"), 44);
-  assert.equal(getAdvancedRoundScore(scores, "rhythm"), 55);
-  assert.equal(getAdvancedRoundScore(scores, "memory"), 66);
-  assert.equal(getAdvancedRoundScore(scores, "braking"), 77);
-  assert.equal(getAdvancedRoundScore(scores, "patience"), 88);
 });
 
 test("storage helpers round-trip through a browser-like storage object", () => {
