@@ -330,6 +330,11 @@ export function getDebugToolsVisibility({
   return new URLSearchParams((search ?? "").replace(/^\?/, "")).get("debug") === "1";
 }
 
+export function shouldShowPerfectClearShortcut({ debugToolsVisible }: { debugToolsVisible: boolean }) {
+  void debugToolsVisible;
+  return true;
+}
+
 function numberParam(config: AdvancedStageConfig, key: string, fallback: number) {
   const value = Number(config.params[key]);
   return Number.isFinite(value) ? value : fallback;

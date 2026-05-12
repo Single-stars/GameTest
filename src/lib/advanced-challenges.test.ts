@@ -6,6 +6,7 @@ import {
   evaluateAdvancedChallengeCompletion,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
+  shouldShowPerfectClearShortcut,
   type AdvancedDifficulty,
 } from "./advanced-challenges.ts";
 import type { RoundId, TrialEvent } from "./scoring.ts";
@@ -216,4 +217,9 @@ test("debug tools are hidden unless explicitly enabled by development mode or UR
   assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "" }), false);
   assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1" }), true);
   assert.equal(getDebugToolsVisibility({ nodeEnv: "development", search: "" }), true);
+});
+
+test("perfect-clear shortcut stays visible inside playable levels without debug tools", () => {
+  assert.equal(shouldShowPerfectClearShortcut({ debugToolsVisible: false }), true);
+  assert.equal(shouldShowPerfectClearShortcut({ debugToolsVisible: true }), true);
 });
