@@ -4,6 +4,12 @@ import test from "node:test";
 import {
   ADVANCED_STAGE_CONFIGS,
   evaluateAdvancedChallengeCompletion,
+  getAdvancedBrakeCorrectAction,
+  getAdvancedBrakeDangerLeft,
+  getAdvancedBrakeEventOptions,
+  getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeReleaseOutcome,
+  getAdvancedBrakeSchedulerStep,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
   shouldShowPerfectClearShortcut,
@@ -156,6 +162,184 @@ test("advanced config encodes MD round counts and wait durations", () => {
   assert.equal(getAdvancedStageConfig("stroop", 7).params.answerTimeLimitMs, 1000);
   assert.equal(getAdvancedStageConfig("stroop", 10).params.answerTimeLimitMs, null);
   assert.equal(getAdvancedStageConfig("rhythm", 10).params.offsetThresholdMs, 50);
+});
+
+test("advanced braking configs follow the square-stop variant columns and difficulty rows", () => {
+  assert.deepEqual(
+    [1, 4, 7].map((level) => {
+      const config = getAdvancedStageConfig("braking", level);
+      return [config.variant, config.params.lanes, config.params.eventCountMin, config.params.eventCountMax, config.params.allowGray];
+    }),
+    [
+      ["braking-single-red", 1, 3, 4, false],
+      ["braking-single-red", 1, 5, 6, false],
+      ["braking-single-red", 1, 7, 8, false],
+    ],
+  );
+
+  assert.deepEqual(
+    [2, 5, 8].map((level) => {
+      const config = getAdvancedStageConfig("braking", level);
+      return [config.variant, config.params.lanes, config.params.eventCountMin, config.params.eventCountMax, config.params.allowGray];
+    }),
+    [
+      ["braking-red-gray", 1, 5, 6, true],
+      ["braking-red-gray", 1, 7, 8, true],
+      ["braking-red-gray", 1, 9, 10, true],
+    ],
+  );
+
+  assert.deepEqual(
+    [3, 6, 9].map((level) => {
+      const config = getAdvancedStageConfig("braking", level);
+      return [config.variant, config.params.lanes, config.params.eventCountMin, config.params.eventCountMax, config.params.allowGray];
+    }),
+    [
+      ["braking-dual-red-rule", 2, 4, 5, false],
+      ["braking-dual-red-rule", 2, 6, 7, false],
+      ["braking-dual-red-rule", 2, 8, 9, false],
+    ],
+  );
+
+  const boss = getAdvancedStageConfig("braking", 10);
+  assert.equal(boss.variant, "braking-final-red-gray");
+  assert.equal(boss.params.lanes, 2);
+  assert.equal(boss.params.allowGray, true);
+});
+
+test("advanced braking event options keep red and gray as the only danger blocks", () => {
+  for (const level of [1, 4, 7]) {
+    assert.deepEqual(getAdvancedBrakeEventOptions(level), [{ top: "red", bottom: null, correctAction: "release" }]);
+  }
+
+  for (const level of [2, 5, 8]) {
+    assert.deepEqual(getAdvancedBrakeEventOptions(level), [
+      { top: "red", bottom: null, correctAction: "release" },
+      { top: "gray", bottom: null, correctAction: "hold" },
+    ]);
+    assert.deepEqual(getAdvancedBrakeEventOptions(level, { eventIndex: 0, eventCount: 6 }), [
+      { top: "red", bottom: null, correctAction: "release" },
+    ]);
+  }
+
+  for (const level of [3, 6, 9]) {
+    const options = getAdvancedBrakeEventOptions(level);
+    assert.equal(options.some((event) => event.top === "gray" || event.bottom === "gray"), false);
+    assert.equal(options.some((event) => event.top === "red" && event.bottom === "red"), true);
+  }
+
+  const finalOptions = getAdvancedBrakeEventOptions(10);
+  assert.equal(finalOptions.some((event) => event.top === "red" && event.bottom === "gray"), false);
+  assert.equal(finalOptions.some((event) => event.top === "gray" && event.bottom === "red"), false);
+  assert.equal(finalOptions.some((event) => event.top === "gray" || event.bottom === "gray"), true);
+});
+
+test("advanced braking correct action follows single red, gray fake, and dual-line rules", () => {
+  assert.equal(getAdvancedBrakeCorrectAction(1, { top: "red", bottom: null }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(2, { top: "gray", bottom: null }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(3, { top: "red", bottom: null }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(3, { top: "red", bottom: "red" }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(6, { top: "red", bottom: null }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(6, { top: "red", bottom: "red" }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(9, { top: null, bottom: "red" }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(9, { top: "red", bottom: "red" }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: null }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: "red" }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: null }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: "gray" }), "hold");
+});
+
+test("advanced braking positions danger by reaction window and wins when block right edge reaches finish", () => {
+  assert.equal(
+    getAdvancedBrakeDangerLeft({
+      runnerLeftPercent: 20,
+      runnerWidthPercent: 8,
+      hazardWidthPercent: 6,
+      speedPerSecond: 10,
+      reactionWindowMs: 500,
+    }),
+    33,
+  );
+  assert.equal(
+    getAdvancedBrakeDangerLeft({
+      runnerLeftPercent: 88,
+      runnerWidthPercent: 8,
+      hazardWidthPercent: 6,
+      speedPerSecond: 10,
+      reactionWindowMs: 500,
+    }),
+    null,
+  );
+  assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 0, runnerWidthPercent: 8 }), false);
+  assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 91.9, runnerWidthPercent: 8 }), false);
+  assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 92, runnerWidthPercent: 8 }), true);
+});
+
+test("advanced braking scheduler advances only while the player is holding and no event is active", () => {
+  assert.deepEqual(
+    getAdvancedBrakeSchedulerStep({
+      holding: false,
+      activeEvent: false,
+      eventTimerMs: 800,
+      deltaMs: 300,
+      eventCountUsed: 0,
+      eventCountTarget: 3,
+      nearFinish: false,
+    }),
+    { eventTimerMs: 800, shouldSpawn: false },
+  );
+
+  assert.deepEqual(
+    getAdvancedBrakeSchedulerStep({
+      holding: true,
+      activeEvent: true,
+      eventTimerMs: 800,
+      deltaMs: 300,
+      eventCountUsed: 0,
+      eventCountTarget: 3,
+      nearFinish: false,
+    }),
+    { eventTimerMs: 800, shouldSpawn: false },
+  );
+
+  assert.deepEqual(
+    getAdvancedBrakeSchedulerStep({
+      holding: true,
+      activeEvent: false,
+      eventTimerMs: 800,
+      deltaMs: 300,
+      eventCountUsed: 0,
+      eventCountTarget: 3,
+      nearFinish: false,
+    }),
+    { eventTimerMs: 500, shouldSpawn: false },
+  );
+
+  assert.deepEqual(
+    getAdvancedBrakeSchedulerStep({
+      holding: true,
+      activeEvent: false,
+      eventTimerMs: 200,
+      deltaMs: 300,
+      eventCountUsed: 0,
+      eventCountTarget: 3,
+      nearFinish: false,
+    }),
+    { eventTimerMs: 0, shouldSpawn: true },
+  );
+});
+
+test("advanced braking release outcome pauses normally but fails when hold is required", () => {
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome(null), { outcome: "pause" });
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "red", bottom: null, correctAction: "release" }), { outcome: "success" });
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "gray", bottom: null, correctAction: "hold" }), {
+    outcome: "failure",
+    errorType: "false_alarm",
+  });
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "red", bottom: "red", correctAction: "hold" }), {
+    outcome: "failure",
+    errorType: "early_stop",
+  });
 });
 
 test("advanced completion evaluates reaction by green-click average and clear failure reasons", () => {

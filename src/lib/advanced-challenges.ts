@@ -22,6 +22,18 @@ export type AdvancedCompletionEvaluation = {
   reason: string;
 };
 
+export type AdvancedBrakeDanger = "red" | "gray";
+export type AdvancedBrakeAction = "release" | "hold";
+export type AdvancedBrakeEvent = {
+  top: AdvancedBrakeDanger | null;
+  bottom: AdvancedBrakeDanger | null;
+  correctAction?: AdvancedBrakeAction;
+};
+export type AdvancedBrakeReleaseOutcome =
+  | { outcome: "pause" }
+  | { outcome: "success" }
+  | { outcome: "failure"; errorType: "false_alarm" | "early_stop" };
+
 type ConfigInput = Omit<AdvancedStageConfig, "dimension">;
 
 const difficultyByBand = ["easy", "medium", "hard"] as const;
@@ -277,17 +289,283 @@ function memoryConfigs() {
 
 function brakingConfigs() {
   return [
-    config(1, "braking-real-hazard", "过关要求：长按走出屏幕，真实危险出现时松手。", { hazardCount: 2, fakeHazards: false, lanes: 1, exitRequired: true, reactionWindowMs: 420 }),
-    config(2, "braking-fake-hazard", "过关要求：真危险松手，假危险不能松手，走出屏幕。", { hazardCount: 2, fakeHazards: true, lanes: 1, exitRequired: true, reactionWindowMs: 420 }),
-    config(3, "braking-dual-car", "过关要求：两车一起走出屏幕，只有同时遇险才松手。", { hazardCount: 2, fakeHazards: false, lanes: 2, simultaneousOnly: true, exitRequired: true, reactionWindowMs: 420 }),
-    config(4, "braking-real-hazard", "过关要求：长按走出屏幕，真实危险出现时松手。", { hazardCount: 3, fakeHazards: false, lanes: 1, exitRequired: true, reactionWindowMs: 340 }),
-    config(5, "braking-fake-hazard", "过关要求：真危险松手，假危险不能松手，走出屏幕。", { hazardCount: 3, fakeHazards: true, lanes: 1, exitRequired: true, reactionWindowMs: 340 }),
-    config(6, "braking-dual-car", "过关要求：两车一起走出屏幕，只有同时遇险才松手。", { hazardCount: 3, fakeHazards: false, lanes: 2, simultaneousOnly: true, exitRequired: true, reactionWindowMs: 340 }),
-    config(7, "braking-real-hazard", "过关要求：长按走出屏幕，真实危险出现时松手。", { hazardCount: 4, fakeHazards: false, lanes: 1, exitRequired: true, reactionWindowMs: 280 }),
-    config(8, "braking-fake-hazard", "过关要求：真危险松手，假危险不能松手，走出屏幕。", { hazardCount: 4, fakeHazards: true, lanes: 1, exitRequired: true, reactionWindowMs: 280 }),
-    config(9, "braking-dual-car", "过关要求：两车一起走出屏幕，只有同时遇险才松手。", { hazardCount: 4, fakeHazards: false, lanes: 2, simultaneousOnly: true, exitRequired: true, reactionWindowMs: 280 }),
-    config(10, "braking-boss", "过关要求：双车走出屏幕，只在同时真实危险时松手。", { hazardCount: 5, fakeHazards: true, lanes: 2, simultaneousOnly: true, exitRequired: true, reactionWindowMs: 260 }),
+    config(1, "braking-single-red", "过关要求：长按前进，红色危险出现时松手，到终点。", {
+      hazardCount: 3,
+      eventCountMin: 3,
+      eventCountMax: 4,
+      allowGray: false,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 14,
+      reactionWindowMs: 650,
+      eventDurationMs: 550,
+      minEventDelayMs: 1400,
+      maxEventDelayMs: 2100,
+      finishSafeDistance: 12,
+    }),
+    config(2, "braking-red-gray", "过关要求：红色松手，灰色继续按住，到终点。", {
+      hazardCount: 5,
+      eventCountMin: 5,
+      eventCountMax: 6,
+      allowGray: true,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 12.5,
+      reactionWindowMs: 580,
+      grayHoldMs: 550,
+      eventDurationMs: 550,
+      minEventDelayMs: 1200,
+      maxEventDelayMs: 1900,
+      finishSafeDistance: 12,
+    }),
+    config(3, "braking-dual-red-rule", "过关要求：单个红色松手，两个红色继续按住，到终点。", {
+      hazardCount: 4,
+      eventCountMin: 4,
+      eventCountMax: 5,
+      allowGray: false,
+      lanes: 2,
+      exitRequired: true,
+      speedPerSecond: 11,
+      reactionWindowMs: 600,
+      eventDurationMs: 600,
+      minEventDelayMs: 1200,
+      maxEventDelayMs: 1800,
+      finishSafeDistance: 12,
+      dualRule: "single-red-stop",
+    }),
+    config(4, "braking-single-red", "过关要求：长按前进，连续处理红色危险，到终点。", {
+      hazardCount: 5,
+      eventCountMin: 5,
+      eventCountMax: 6,
+      allowGray: false,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 11.5,
+      reactionWindowMs: 500,
+      eventDurationMs: 600,
+      minEventDelayMs: 1000,
+      maxEventDelayMs: 1700,
+      finishSafeDistance: 12,
+    }),
+    config(5, "braking-red-gray", "过关要求：红色松手，灰色继续按住，随机混合到终点。", {
+      hazardCount: 7,
+      eventCountMin: 7,
+      eventCountMax: 8,
+      allowGray: true,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 10.5,
+      reactionWindowMs: 480,
+      grayHoldMs: 500,
+      eventDurationMs: 600,
+      minEventDelayMs: 900,
+      maxEventDelayMs: 1500,
+      finishSafeDistance: 12,
+    }),
+    config(6, "braking-dual-red-rule", "过关要求：两个红色松手，单个红色继续按住，到终点。", {
+      hazardCount: 6,
+      eventCountMin: 6,
+      eventCountMax: 7,
+      allowGray: false,
+      lanes: 2,
+      exitRequired: true,
+      speedPerSecond: 9.5,
+      reactionWindowMs: 520,
+      eventDurationMs: 600,
+      minEventDelayMs: 900,
+      maxEventDelayMs: 1500,
+      finishSafeDistance: 12,
+      dualRule: "double-red-stop",
+    }),
+    config(7, "braking-single-red", "过关要求：长按前进，高压处理红色危险，到终点。", {
+      hazardCount: 7,
+      eventCountMin: 7,
+      eventCountMax: 8,
+      allowGray: false,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 9,
+      reactionWindowMs: 420,
+      eventDurationMs: 650,
+      minEventDelayMs: 750,
+      maxEventDelayMs: 1350,
+      finishSafeDistance: 12,
+    }),
+    config(8, "braking-red-gray", "过关要求：红色松手，灰色继续按住，高压混合到终点。", {
+      hazardCount: 9,
+      eventCountMin: 9,
+      eventCountMax: 10,
+      allowGray: true,
+      lanes: 1,
+      exitRequired: true,
+      speedPerSecond: 8.8,
+      reactionWindowMs: 400,
+      grayHoldMs: 450,
+      eventDurationMs: 650,
+      minEventDelayMs: 650,
+      maxEventDelayMs: 1250,
+      finishSafeDistance: 12,
+    }),
+    config(9, "braking-dual-red-rule", "过关要求：单个红色松手，两个红色继续按住，高压到终点。", {
+      hazardCount: 8,
+      eventCountMin: 8,
+      eventCountMax: 9,
+      allowGray: false,
+      lanes: 2,
+      exitRequired: true,
+      speedPerSecond: 8.3,
+      reactionWindowMs: 450,
+      eventDurationMs: 650,
+      minEventDelayMs: 650,
+      maxEventDelayMs: 1250,
+      finishSafeDistance: 12,
+      dualRule: "single-red-stop",
+    }),
+    config(10, "braking-final-red-gray", "过关要求：单红松手，双红和灰色继续按住，到终点。", {
+      hazardCount: 10,
+      eventCountMin: 10,
+      eventCountMax: 12,
+      allowGray: true,
+      lanes: 2,
+      exitRequired: true,
+      speedPerSecond: 7.5,
+      reactionWindowMs: 420,
+      grayHoldMs: 500,
+      eventDurationMs: 650,
+      minEventDelayMs: 550,
+      maxEventDelayMs: 1100,
+      finishSafeDistance: 12,
+    }),
   ];
+}
+
+function completeBrakeEvent(level: number, event: AdvancedBrakeEvent): AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction } {
+  return { ...event, correctAction: getAdvancedBrakeCorrectAction(level, event) };
+}
+
+function getBrakeVariantIndex(level: number) {
+  return level === 10 ? 10 : variantIndex(level);
+}
+
+export function getAdvancedBrakeCorrectAction(level: number, event: AdvancedBrakeEvent): AdvancedBrakeAction {
+  const redCount = (event.top === "red" ? 1 : 0) + (event.bottom === "red" ? 1 : 0);
+  const grayCount = (event.top === "gray" ? 1 : 0) + (event.bottom === "gray" ? 1 : 0);
+  const brakeVariantIndex = getBrakeVariantIndex(level);
+
+  if (brakeVariantIndex === 3) return level === 6 ? (redCount === 2 ? "release" : "hold") : redCount === 1 ? "release" : "hold";
+  if (level === 10) return redCount === 1 && grayCount === 0 ? "release" : "hold";
+  return event.top === "gray" || event.bottom === "gray" ? "hold" : "release";
+}
+
+export function getAdvancedBrakeEventOptions(
+  level: number,
+  context: { eventIndex?: number; eventCount?: number; previousEvent?: AdvancedBrakeEvent | null } = {},
+): Array<AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }> {
+  const eventIndex = context.eventIndex ?? 2;
+  const eventCount = context.eventCount ?? Number.POSITIVE_INFINITY;
+  const previousEvent = context.previousEvent ?? null;
+  const previousWasGray = previousEvent?.top === "gray" || previousEvent?.bottom === "gray";
+  const isFirst = eventIndex <= 0;
+  const isLast = eventIndex >= eventCount - 1;
+  const brakeVariantIndex = getBrakeVariantIndex(level);
+
+  let options: AdvancedBrakeEvent[];
+  if (brakeVariantIndex === 1) {
+    options = [{ top: "red", bottom: null }];
+  } else if (brakeVariantIndex === 2) {
+    options =
+      isFirst || isLast || previousWasGray
+        ? [{ top: "red", bottom: null }]
+        : [
+            { top: "red", bottom: null },
+            { top: "gray", bottom: null },
+          ];
+  } else if (level === 10) {
+    options =
+      isFirst || isLast || eventIndex < 2 || previousWasGray
+        ? [
+            { top: "red", bottom: null },
+            { top: null, bottom: "red" },
+          ]
+        : [
+            { top: "red", bottom: null },
+            { top: null, bottom: "red" },
+            { top: "red", bottom: "red" },
+            { top: "gray", bottom: null },
+            { top: null, bottom: "gray" },
+            { top: "gray", bottom: "gray" },
+          ];
+  } else {
+    options = [
+      { top: "red", bottom: null },
+      { top: null, bottom: "red" },
+      { top: "red", bottom: "red" },
+    ];
+  }
+
+  return options.map((event) => completeBrakeEvent(level, event));
+}
+
+export function getAdvancedBrakeDangerLeft({
+  runnerLeftPercent,
+  runnerWidthPercent,
+  hazardWidthPercent,
+  speedPerSecond,
+  reactionWindowMs,
+}: {
+  runnerLeftPercent: number;
+  runnerWidthPercent: number;
+  hazardWidthPercent: number;
+  speedPerSecond: number;
+  reactionWindowMs: number;
+}) {
+  const reactionDistance = (speedPerSecond * reactionWindowMs) / 1000;
+  const hazardLeft = runnerLeftPercent + runnerWidthPercent + reactionDistance;
+  const maxHazardLeft = 100 - hazardWidthPercent;
+  if (hazardLeft > maxHazardLeft) return null;
+  return Number(hazardLeft.toFixed(4));
+}
+
+export function getAdvancedBrakeHasReachedFinish({
+  runnerLeftPercent,
+  runnerWidthPercent,
+}: {
+  runnerLeftPercent: number;
+  runnerWidthPercent: number;
+}) {
+  return runnerLeftPercent + runnerWidthPercent >= 100;
+}
+
+export function getAdvancedBrakeSchedulerStep({
+  holding,
+  activeEvent,
+  eventTimerMs,
+  deltaMs,
+  eventCountUsed,
+  eventCountTarget,
+  nearFinish,
+}: {
+  holding: boolean;
+  activeEvent: boolean;
+  eventTimerMs: number;
+  deltaMs: number;
+  eventCountUsed: number;
+  eventCountTarget: number;
+  nearFinish: boolean;
+}) {
+  if (!holding || activeEvent || eventCountUsed >= eventCountTarget || nearFinish) {
+    return { eventTimerMs, shouldSpawn: false };
+  }
+
+  const nextTimer = Math.max(0, eventTimerMs - deltaMs);
+  return { eventTimerMs: nextTimer, shouldSpawn: nextTimer <= 0 };
+}
+
+export function getAdvancedBrakeReleaseOutcome(event: (AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }) | null): AdvancedBrakeReleaseOutcome {
+  if (!event) return { outcome: "pause" as const };
+  if (event.correctAction === "release") return { outcome: "success" as const };
+  const hasGray = event.top === "gray" || event.bottom === "gray";
+  return { outcome: "failure" as const, errorType: hasGray ? "false_alarm" : "early_stop" };
 }
 
 function patienceConfigs() {

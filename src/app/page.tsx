@@ -40,9 +40,16 @@ import {
 import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
 import {
   evaluateAdvancedChallengeCompletion,
+  getAdvancedBrakeDangerLeft,
+  getAdvancedBrakeEventOptions,
+  getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeReleaseOutcome,
+  getAdvancedBrakeSchedulerStep,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
   shouldShowPerfectClearShortcut,
+  type AdvancedBrakeAction,
+  type AdvancedBrakeEvent,
   type AdvancedStageConfig,
 } from "@/lib/advanced-challenges";
 import { buildAdvancedStroopMismatchIndexes } from "@/lib/advanced-stroop";
@@ -2816,38 +2823,57 @@ function AdvancedMemoryRound({ advancedConfig, onComplete }: RoundProps) {
 
 type AdvancedBrakeHazard = {
   x: number;
-  fake: boolean;
-  simultaneous: boolean;
+  top: AdvancedBrakeEvent["top"];
+  bottom: AdvancedBrakeEvent["bottom"];
+  correctAction: AdvancedBrakeAction;
 };
 
 function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
   const config = advancedConfig!;
   const lanes = getParamNumber(config, "lanes", 1);
-  const hazardCount = getParamNumber(config, "hazardCount", 2);
+  const eventCountMin = getParamNumber(config, "eventCountMin", getParamNumber(config, "hazardCount", 2));
+  const eventCountMax = getParamNumber(config, "eventCountMax", eventCountMin);
   const reactionWindowMs = getParamNumber(config, "reactionWindowMs", 340);
-  const fakeHazards = getParamBoolean(config, "fakeHazards");
-  const simultaneousOnly = getParamBoolean(config, "simultaneousOnly");
-  const [progress, setProgress] = useState(4);
+  const eventDurationMs = getParamNumber(config, "eventDurationMs", 600);
+  const grayHoldMs = getParamNumber(config, "grayHoldMs", eventDurationMs);
+  const minEventDelayMs = getParamNumber(config, "minEventDelayMs", 900);
+  const maxEventDelayMs = getParamNumber(config, "maxEventDelayMs", 1500);
+  const speedPerSecond = getParamNumber(config, "speedPerSecond", 10);
+  const finishSafeDistance = getParamNumber(config, "finishSafeDistance", 12);
+  const eventCountTarget = useMemo(
+    () => Math.floor(rand(eventCountMin, eventCountMax + 1)),
+    [eventCountMax, eventCountMin],
+  );
+  const initialEventDelayMs = useMemo(() => rand(minEventDelayMs, maxEventDelayMs), [maxEventDelayMs, minEventDelayMs]);
+  const [progress, setProgress] = useState(0);
   const [holding, setHolding] = useState(false);
   const [hazard, setHazard] = useState<AdvancedBrakeHazard | null>(null);
-  const progressRef = useRef(4);
+  const progressRef = useRef(0);
   const holdingRef = useRef(false);
   const hazardRef = useRef<AdvancedBrakeHazard | null>(null);
   const hazardShownAtRef = useRef<number | null>(null);
+  const eventTimerRef = useRef(initialEventDelayMs);
   const hazardIndexRef = useRef(0);
+  const previousHazardRef = useRef<AdvancedBrakeEvent | null>(null);
   const trialsRef = useRef<TrialEvent[]>([]);
   const frameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef(0);
-  const hazardTimerRef = useRef<number | null>(null);
   const collisionTimerRef = useRef<number | null>(null);
+  const holdSuccessTimerRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
   const clearTimers = useCallback(() => {
-    if (hazardTimerRef.current) window.clearTimeout(hazardTimerRef.current);
     if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
-    hazardTimerRef.current = null;
+    if (holdSuccessTimerRef.current) window.clearTimeout(holdSuccessTimerRef.current);
     collisionTimerRef.current = null;
+    holdSuccessTimerRef.current = null;
   }, []);
+
+  const resetEventTimer = useCallback(() => {
+    eventTimerRef.current = rand(minEventDelayMs, maxEventDelayMs);
+  }, [maxEventDelayMs, minEventDelayMs]);
 
   const finish = useCallback(
     (extra?: TrialEvent) => {
@@ -2861,40 +2887,123 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
     [clearTimers, onComplete],
   );
 
-  const scheduleHazard = useCallback(() => {
-    clearTimers();
-    hazardTimerRef.current = window.setTimeout(() => {
-      if (finishedRef.current || !holdingRef.current) return;
-      const nextHazard = {
-        x: clamp(progressRef.current + rand(10, 18), 18, 88),
-        fake: fakeHazards && Math.random() > 0.55,
-        simultaneous: !simultaneousOnly || Math.random() > 0.35,
-      };
-      hazardRef.current = nextHazard;
-      setHazard(nextHazard);
-      hazardShownAtRef.current = now();
-      if (!nextHazard.fake && (!simultaneousOnly || nextHazard.simultaneous)) {
-        collisionTimerRef.current = window.setTimeout(() => {
-          finish(
-            trial("braking", hazardIndexRef.current, {
-              shownAt: hazardShownAtRef.current ?? now(),
-              responseAt: now(),
-              correct: false,
-              errorType: "collision",
-              value: { collision: true, fakeStop: false, exited: false },
-            }),
-          );
-        }, reactionWindowMs);
-      } else {
-        window.setTimeout(() => {
-          hazardRef.current = null;
-          setHazard(null);
-          hazardIndexRef.current += 1;
-          if (holdingRef.current) scheduleHazard();
-        }, 720);
-      }
-    }, rand(700, 1300));
-  }, [clearTimers, fakeHazards, finish, reactionWindowMs, simultaneousOnly]);
+  useEffect(() => {
+    const updateTrackMetrics = () => {
+      const width = trackRef.current?.clientWidth ?? 0;
+      if (width <= 0) return;
+      setTrackMetrics({
+        runnerWidthPercent: (46 / width) * 100,
+        hazardWidthPercent: (38 / width) * 100,
+      });
+    };
+
+    updateTrackMetrics();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateTrackMetrics);
+      return () => window.removeEventListener("resize", updateTrackMetrics);
+    }
+
+    const observer = new ResizeObserver(updateTrackMetrics);
+    if (trackRef.current) observer.observe(trackRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const clearHazardAfterSuccess = useCallback(() => {
+    previousHazardRef.current = hazardRef.current;
+    hazardRef.current = null;
+    setHazard(null);
+    hazardShownAtRef.current = null;
+    hazardIndexRef.current += 1;
+    resetEventTimer();
+  }, [resetEventTimer]);
+
+  const recordHoldSuccess = useCallback(
+    (currentHazard: AdvancedBrakeHazard) => {
+      trialsRef.current.push(
+        trial("braking", hazardIndexRef.current, {
+          shownAt: hazardShownAtRef.current ?? now(),
+          responseAt: now(),
+          correct: true,
+          value: {
+            collision: false,
+            earlyStop: false,
+            fakeStop: false,
+            signal: currentHazard.top === "gray" || currentHazard.bottom === "gray" ? "gray" : "hold",
+          },
+        }),
+      );
+      clearHazardAfterSuccess();
+    },
+    [clearHazardAfterSuccess],
+  );
+
+  const startHazard = useCallback(() => {
+    if (hazardRef.current || finishedRef.current) return;
+    const options = getAdvancedBrakeEventOptions(config.level, {
+      eventIndex: hazardIndexRef.current,
+      eventCount: eventCountTarget,
+      previousEvent: previousHazardRef.current,
+    });
+    const picked = options[Math.floor(rand(0, options.length))] ?? options[0];
+    if (!picked) return;
+    const hazardLeft = getAdvancedBrakeDangerLeft({
+      runnerLeftPercent: progressRef.current,
+      runnerWidthPercent: trackMetrics.runnerWidthPercent,
+      hazardWidthPercent: trackMetrics.hazardWidthPercent,
+      speedPerSecond,
+      reactionWindowMs,
+    });
+    if (hazardLeft === null) {
+      resetEventTimer();
+      return;
+    }
+    const nextHazard: AdvancedBrakeHazard = {
+      x: hazardLeft,
+      top: picked.top,
+      bottom: picked.bottom,
+      correctAction: picked.correctAction,
+    };
+    hazardRef.current = nextHazard;
+    setHazard(nextHazard);
+    hazardShownAtRef.current = now();
+
+    if (nextHazard.correctAction === "release") {
+      collisionTimerRef.current = window.setTimeout(() => {
+        if (!hazardRef.current || hazardRef.current.correctAction !== "release") return;
+        finish(
+          trial("braking", hazardIndexRef.current, {
+            shownAt: hazardShownAtRef.current ?? now(),
+            responseAt: now(),
+            correct: false,
+            errorType: "collision",
+            value: { collision: true, fakeStop: false, exited: false, signal: "red" },
+          }),
+        );
+      }, reactionWindowMs);
+      return;
+    }
+
+    holdSuccessTimerRef.current = window.setTimeout(
+      () => {
+        const currentHazard = hazardRef.current;
+        if (!currentHazard || currentHazard.correctAction !== "hold" || !holdingRef.current) return;
+        recordHoldSuccess(currentHazard);
+      },
+      nextHazard.top === "gray" || nextHazard.bottom === "gray" ? grayHoldMs : eventDurationMs,
+    );
+  }, [
+    config.level,
+    eventCountTarget,
+    eventDurationMs,
+    finish,
+    grayHoldMs,
+    reactionWindowMs,
+    recordHoldSuccess,
+    resetEventTimer,
+    speedPerSecond,
+    trackMetrics.hazardWidthPercent,
+    trackMetrics.runnerWidthPercent,
+  ]);
 
   useEffect(() => {
     const tick = () => {
@@ -2902,11 +3011,12 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
       const delta = frameNow - (lastFrameAtRef.current || frameNow);
       lastFrameAtRef.current = frameNow;
       if (holdingRef.current && !finishedRef.current) {
-        const speed = 0.008 + Math.max(0, 10 - config.level) * 0.0015;
-        const next = clamp(progressRef.current + delta * speed, 4, 104);
+        const { hazardWidthPercent, runnerWidthPercent } = trackMetrics;
+        const finishLeft = Math.max(0, 100 - runnerWidthPercent);
+        const next = clamp(progressRef.current + (delta * speedPerSecond) / 1000, 0, finishLeft);
         progressRef.current = next;
         setProgress(next);
-        if (next >= 100) {
+        if (getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: next, runnerWidthPercent })) {
           finish(
             trial("braking", hazardIndexRef.current, {
               shownAt: 0,
@@ -2917,6 +3027,26 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
           );
           return;
         }
+
+        const canPlaceNextDanger =
+          getAdvancedBrakeDangerLeft({
+            runnerLeftPercent: next,
+            runnerWidthPercent,
+            hazardWidthPercent,
+            speedPerSecond,
+            reactionWindowMs,
+          }) !== null;
+        const scheduleStep = getAdvancedBrakeSchedulerStep({
+          holding: holdingRef.current,
+          activeEvent: hazardRef.current !== null,
+          eventTimerMs: eventTimerRef.current,
+          deltaMs: delta,
+          eventCountUsed: hazardIndexRef.current,
+          eventCountTarget,
+          nearFinish: !canPlaceNextDanger || next >= 100 - finishSafeDistance,
+        });
+        eventTimerRef.current = scheduleStep.eventTimerMs;
+        if (scheduleStep.shouldSpawn) startHazard();
       }
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -2925,36 +3055,53 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
       clearTimers();
     };
-  }, [clearTimers, config.level, finish]);
+  }, [
+    clearTimers,
+    eventCountTarget,
+    finish,
+    finishSafeDistance,
+    reactionWindowMs,
+    speedPerSecond,
+    startHazard,
+    trackMetrics,
+  ]);
 
   const begin = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (finishedRef.current || holdingRef.current) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setHolding(true);
     holdingRef.current = true;
-    scheduleHazard();
   };
 
   const release = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (finishedRef.current || !holdingRef.current) return;
     const currentHazard = hazardRef.current;
-    const mustStop = currentHazard && !currentHazard.fake && (!simultaneousOnly || currentHazard.simultaneous);
+    const releaseOutcome = getAdvancedBrakeReleaseOutcome(currentHazard);
     setHolding(false);
     holdingRef.current = false;
-    clearTimers();
-    if (!mustStop) {
+    if (releaseOutcome.outcome === "pause") return;
+    if (releaseOutcome.outcome === "failure") {
+      clearTimers();
       finish(
         trial("braking", hazardIndexRef.current, {
           shownAt: hazardShownAtRef.current ?? now(),
           responseAt: now(),
           correct: false,
-          errorType: currentHazard?.fake ? "false_alarm" : "early_stop",
+          errorType: releaseOutcome.errorType,
           pointerType: pointerKind(event.pointerType),
-          value: { collision: false, earlyStop: !currentHazard?.fake, fakeStop: currentHazard?.fake === true, exited: false },
+          value: {
+            collision: false,
+            earlyStop: releaseOutcome.errorType === "early_stop",
+            fakeStop: releaseOutcome.errorType === "false_alarm",
+            exited: false,
+          },
         }),
       );
       return;
     }
+
+    if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
+    collisionTimerRef.current = null;
     const latency = Math.round(now() - (hazardShownAtRef.current ?? now()));
     const correct = latency <= reactionWindowMs;
     trialsRef.current.push(
@@ -2964,27 +3111,28 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
         correct,
         errorType: correct ? undefined : "collision",
         pointerType: pointerKind(event.pointerType),
-        value: { collision: !correct, earlyStop: false, fakeStop: false, stopLatencyMs: latency, exited: false },
+        value: { collision: !correct, earlyStop: false, fakeStop: false, stopLatencyMs: latency, exited: false, signal: "red" },
       }),
     );
-    if (!correct || hazardIndexRef.current >= hazardCount - 1) {
-      if (!correct) finish();
-    }
-    hazardIndexRef.current += 1;
-    hazardRef.current = null;
-    setHazard(null);
+    if (!correct) finish();
+    else clearHazardAfterSuccess();
   };
 
   return (
     <div className={`braking-panel advanced-braking lanes-${lanes}`}>
       <div className="mini-score">
-        <span>{Math.round(progress)}%</span>
+        <span>{Math.round(Math.min(100, progress + trackMetrics.runnerWidthPercent))}%</span>
       </div>
-      <div className="advanced-brake-track" aria-hidden="true">
+      <div className="advanced-brake-track" aria-hidden="true" ref={trackRef}>
         {Array.from({ length: lanes }, (_, lane) => (
           <div className="advanced-brake-lane" key={lane}>
-            {hazard ? <span className={`advanced-hazard ${hazard.fake ? "fake" : "real"} ${hazard.simultaneous ? "simultaneous" : ""}`} style={{ left: `${hazard.x}%` }} /> : null}
-            <span className="advanced-runner" style={{ left: `${progress}%` }} />
+            {hazard && (lane === 0 ? hazard.top : hazard.bottom) ? (
+              <span
+                className={`advanced-hazard ${(lane === 0 ? hazard.top : hazard.bottom) === "gray" ? "fake" : "real"}`}
+                style={{ left: `${hazard.x}%`, translate: "0 0" }}
+              />
+            ) : null}
+            <span className="advanced-runner" style={{ left: `${progress}%`, translate: "0 0" }} />
           </div>
         ))}
       </div>
