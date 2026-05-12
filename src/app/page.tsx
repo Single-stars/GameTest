@@ -42,6 +42,7 @@ import {
   evaluateAdvancedChallengeCompletion,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
+  shouldShowPerfectClearShortcut,
   type AdvancedStageConfig,
 } from "@/lib/advanced-challenges";
 import { buildAdvancedStroopMismatchIndexes } from "@/lib/advanced-stroop";
@@ -272,6 +273,7 @@ export default function Home() {
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
+  const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
 
   const clearShareCopyToastTimer = useCallback(() => {
     if (shareCopyToastTimerRef.current !== null) {
@@ -786,7 +788,12 @@ export default function Home() {
       ) : stage === "intro" ? (
         <RoundIntro round={currentRound} onStart={startCurrentRound} />
       ) : stage === "playing" ? (
-        <PlayFrame round={currentRound} index={roundIndex} onSkipPerfect={skipCurrentRoundWithPerfectScore} showDebugTools={debugToolsVisible}>
+        <PlayFrame
+          round={currentRound}
+          index={roundIndex}
+          onSkipPerfect={skipCurrentRoundWithPerfectScore}
+          showPerfectClearShortcut={showPerfectClearShortcut}
+        >
           <RoundRenderer key={`${currentRound.id}-${roundIndex}`} round={currentRound.id} onComplete={completeRound} />
         </PlayFrame>
       ) : (
@@ -894,13 +901,13 @@ function PlayFrame({
   round,
   index,
   onSkipPerfect,
-  showDebugTools,
+  showPerfectClearShortcut,
   children,
 }: {
   round: RoundConfig;
   index: number;
   onSkipPerfect: () => void;
-  showDebugTools: boolean;
+  showPerfectClearShortcut: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -911,9 +918,9 @@ function PlayFrame({
         </div>
         <div className="round-header-actions">
           <span className="round-measure-pill">{round.measure}</span>
-          {showDebugTools ? (
+          {showPerfectClearShortcut ? (
             <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
-              满分下一关
+              一键满分过关
             </button>
           ) : null}
         </div>
@@ -4319,9 +4326,9 @@ function AdvancedChallengeScreen({
             <button className="advanced-back-button" type="button" onPointerDown={onBack}>
               返回
             </button>
-            {debugToolsVisible ? (
+            {shouldShowPerfectClearShortcut({ debugToolsVisible }) ? (
               <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(buildAdvancedPerfectTrials(playingConfig))}>
-                满分过关
+                一键满分过关
               </button>
             ) : null}
           </div>
