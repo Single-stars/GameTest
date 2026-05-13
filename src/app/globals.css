@@ -2361,6 +2361,9 @@ h1 {
   box-shadow: var(--shadow);
   contain: layout paint;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .prototype-stage:focus-visible {
@@ -2444,6 +2447,7 @@ h1 {
   position: absolute;
   left: 0;
   top: 0;
+  backface-visibility: hidden;
   will-change: transform;
 }
 
@@ -2568,6 +2572,7 @@ h1 {
 .doodle-progress-line {
   z-index: 3;
   left: 0;
+  top: 0;
   width: 100%;
   height: 2px;
   border-top: 2px dashed rgba(24, 24, 24, 0.22);
@@ -2699,7 +2704,24 @@ h1 {
   position: relative;
   width: 100%;
   height: 100%;
+  backface-visibility: hidden;
   will-change: transform;
+}
+
+.mini-game-fps-badge {
+  position: absolute;
+  z-index: 35;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: rgba(255, 253, 248, 0.82);
+  color: rgba(24, 24, 24, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .knife-wheel-svg {
@@ -2938,6 +2960,51 @@ h1 {
   100% {
     opacity: 0;
     transform: scale(0.98);
+  }
+}
+
+@media (max-width: 768px) {
+  .prototype-stage {
+    box-shadow: 0 8px 18px rgba(24, 24, 24, 0.1);
+  }
+
+  .prototype-start-hint,
+  .prototype-end-overlay {
+    box-shadow: none;
+  }
+
+  .doodle-player,
+  .flappy-player,
+  .doodle-platform,
+  .doodle-platform.moving,
+  .doodle-platform.start,
+  .flappy-start-platform,
+  .knife-arrow {
+    box-shadow: 0 4px 10px rgba(24, 24, 24, 0.1);
+  }
+
+  .doodle-platform.risk,
+  .doodle-hazard,
+  .doodle-hazard.moving,
+  .flappy-collectible,
+  .knife-stuck.failed,
+  .knife-stage.final-shot-ready .knife-launcher {
+    box-shadow: 0 0 0 4px rgba(24, 24, 24, 0.08);
+  }
+
+  .flappy-background span {
+    opacity: 0.28;
+  }
+
+  .knife-wheel-svg path {
+    stroke-width: 0;
+  }
+
+  .prototype-stage.low-power .doodle-platform,
+  .prototype-stage.low-power .doodle-hazard,
+  .prototype-stage.low-power .flappy-gate,
+  .prototype-stage.low-power .knife-arrow {
+    box-shadow: none;
   }
 }
 

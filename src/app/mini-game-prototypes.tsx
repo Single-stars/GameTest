@@ -17,14 +17,19 @@ import {
   generateFlappyGateLayout,
   generateKnifeForbiddenZones,
   generateKnifeInitialAngles,
+  getFlappyGateScreenX,
   getKnifeShotGeometry,
   getMiniGame,
   getMiniGameLevel,
   getMiniGameLevels,
   getLocalHitAngle,
   getSineAngularVelocity,
+  isLowPowerMiniGameDevice,
   normalizeDegrees,
   resolveKnifeShotOutcome,
+  selectVisibleDoodleHazards,
+  selectVisibleDoodlePlatforms,
+  selectVisibleFlappyGates,
   type AngleArc,
   type GeneratedDoodleHazard,
   type GeneratedDoodlePlatform,
@@ -49,7 +54,10 @@ const KNIFE_FIRE_ANGLE = KNIFE_SHOT_GEOMETRY.impactAngle;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
 const DEBUG_MINI_GAME_HITBOX = false;
+const DEBUG_MINI_GAME_FPS = false;
 const BASE_FAILURE_LIMIT = 3;
+const MINI_GAME_UI_SYNC_MS = 120;
+const MINI_GAME_TIMER_SYNC_MS = 100;
 
 type PrototypeStatus = "playing" | "passed" | "failed";
 type MiniGameRunMode = "prototype" | "base" | "advanced";
@@ -62,7 +70,7 @@ export type MiniGameCompletion = {
   stats: Record<string, number | string | boolean | null>;
 };
 
-type DoodlePlatform = GeneratedDoodlePlatform;
+type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
 
 type DoodleFrame = {
@@ -80,6 +88,23 @@ type DoodleFrame = {
   invincibleUntil: number;
   status: PrototypeStatus;
   reason: string;
+};
+
+type DoodleViewFrame = {
+  cameraY: number;
+  failures: number;
+  invincibleUntil: number;
+  playerTurns: number;
+  playerX: number;
+  playerY: number;
+  progressPercent: number;
+  reason: string;
+  riskHit: number;
+  started: boolean;
+  status: PrototypeStatus;
+  time: number;
+  visibleHazards: DoodleHazard[];
+  visiblePlatforms: DoodlePlatform[];
 };
 
 type FlappyGate = GeneratedFlappyGate;
@@ -107,6 +132,21 @@ type FlappyFrame = {
   reason: string;
 };
 
+type FlappyViewFrame = {
+  collected: number;
+  failures: number;
+  invincibleUntil: number;
+  passed: number;
+  playerTurns: number;
+  playerY: number;
+  progress: number;
+  reason: string;
+  started: boolean;
+  status: PrototypeStatus;
+  time: number;
+  visibleGates: FlappyGate[];
+};
+
 type KnifeForbiddenZone = {
   id: number;
   localStart: number;
@@ -127,6 +167,10 @@ type KnifeFrame = {
   launcherReadyAt: number;
   status: PrototypeStatus;
   reason: string;
+};
+
+type KnifeViewFrame = KnifeFrame & {
+  launcherVisible: boolean;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -151,10 +195,55 @@ function levelToneClass(level: MiniGameLevelConfig) {
   return "advanced-empty";
 }
 
+function transformPoint3d(x: number, y: number) {
+  return `translate3d(${x}px, ${y}px, 0)`;
+}
+
 function stagePointStyle(x: number, y: number, cameraY = 0, size = PLAYER_SIZE): CSSProperties {
   return {
-    transform: `translate(${x - size / 2}px, ${STAGE_HEIGHT - (y - cameraY) - size / 2}px)`,
+    transform: transformPoint3d(x - size / 2, STAGE_HEIGHT - (y - cameraY) - size / 2),
   };
+}
+
+function useMiniGameLowPowerMode() {
+  const [isLowPowerDevice, setIsLowPowerDevice] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setIsLowPowerDevice(isLowPowerMiniGameDevice());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return isLowPowerDevice;
+}
+
+function useMiniGameFpsCounter(enabled: boolean) {
+  const [fps, setFps] = useState(0);
+  const statsRef = useRef({ frames: 0, lastReportAt: 0 });
+
+  const recordFrame = useCallback(
+    (time: number) => {
+      if (!enabled) return;
+      const stats = statsRef.current;
+      if (stats.lastReportAt === 0) stats.lastReportAt = time;
+      stats.frames += 1;
+      const elapsed = time - stats.lastReportAt;
+      if (elapsed >= 500) {
+        setFps(Math.round((stats.frames * 1000) / elapsed));
+        stats.frames = 0;
+        stats.lastReportAt = time;
+      }
+    },
+    [enabled],
+  );
+
+  return { fps, recordFrame };
+}
+
+function MiniGameFpsBadge({ fps }: { fps: number }) {
+  if (!DEBUG_MINI_GAME_FPS) return null;
+  return <div className="mini-game-fps-badge">FPS {fps}</div>;
 }
 
 export function MiniGameEntryPanel({ onOpenGame }: { onOpenGame: (gameId: MiniGameId) => void }) {
@@ -305,13 +394,14 @@ export function MiniGameEmbeddedStage({
   runSeed: string;
 }) {
   const level = getMiniGameLevel(gameId, levelId);
+  const stageKey = `${gameId}-${levelId}-${runSeed}`;
   if (gameId === "doodle") {
-    return <DoodleJumpPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <DoodleJumpPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
   if (gameId === "flappy") {
-    return <FlappyPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <FlappyPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
-  return <KnifeHitPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+  return <KnifeHitPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
 }
 
 function PrototypeEndOverlay({
@@ -390,6 +480,52 @@ function movingHazardPosition(hazard: DoodleHazard, time: number) {
   };
 }
 
+function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>): DoodleFrame {
+  return {
+    started: false,
+    time: 0,
+    playerX: STAGE_WIDTH / 2,
+    playerY: world.startPlayerY,
+    playerVy: 0,
+    cameraY: 0,
+    platforms: world.platforms.map((platform) => ({ ...platform, used: false })),
+    hazards: world.hazards,
+    riskHit: 0,
+    playerTurns: 0,
+    failures: 0,
+    invincibleUntil: 0,
+    status: "playing",
+    reason: "",
+  };
+}
+
+function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number): DoodleViewFrame {
+  return {
+    cameraY: frame.cameraY,
+    failures: frame.failures,
+    invincibleUntil: frame.invincibleUntil,
+    playerTurns: frame.playerTurns,
+    playerX: frame.playerX,
+    playerY: frame.playerY,
+    progressPercent: clamp((frame.playerY / targetHeight) * 100, 0, 100),
+    reason: frame.reason,
+    riskHit: frame.riskHit,
+    started: frame.started,
+    status: frame.status,
+    time: frame.time,
+    visibleHazards: selectVisibleDoodleHazards(frame.hazards, {
+      buffer,
+      cameraY: frame.cameraY,
+      stageHeight: STAGE_HEIGHT,
+    }),
+    visiblePlatforms: selectVisibleDoodlePlatforms(frame.platforms, {
+      buffer,
+      cameraY: frame.cameraY,
+      stageHeight: STAGE_HEIGHT,
+    }),
+  };
+}
+
 function DoodleJumpPrototype({
   level,
   mode,
@@ -408,29 +544,42 @@ function DoodleJumpPrototype({
   const world = useMemo(() => makeDoodleWorld(level, runSeed), [level, runSeed]);
   const riskTotal = numberParam(level.params, "requiredRiskPlatforms", 0);
   const riskJumpMultiplier = numberParam(level.params, "riskJumpMultiplier", 1);
+  const isLowPowerDevice = useMiniGameLowPowerMode();
+  const visibleBuffer = isLowPowerDevice ? 96 : 160;
+  const initialRuntime = useMemo(() => createDoodleRuntime(world), [world]);
   const controlXRef = useRef(STAGE_WIDTH / 2);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const playerBoxRef = useRef<HTMLDivElement | null>(null);
+  const progressLineRef = useRef<HTMLDivElement | null>(null);
+  const platformRefs = useRef(new Map<number, HTMLDivElement>());
+  const hazardRefs = useRef(new Map<number, HTMLDivElement>());
+  const runtimeRef = useRef<DoodleFrame>(initialRuntime);
+  const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
-  const [frame, setFrame] = useState<DoodleFrame>({
-    started: false,
-    time: 0,
-    playerX: STAGE_WIDTH / 2,
-    playerY: world.startPlayerY,
-    playerVy: 0,
-    cameraY: 0,
-    platforms: world.platforms,
-    hazards: world.hazards,
-    riskHit: 0,
-    playerTurns: 0,
-    failures: 0,
-    invincibleUntil: 0,
-    status: "playing",
-    reason: "",
-  });
+  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer));
+
+  const syncDoodleView = useCallback(
+    (time = performance.now()) => {
+      lastUiSyncRef.current = time;
+      setView(makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer));
+    },
+    [visibleBuffer, world.targetHeight],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => syncDoodleView(), 0);
+    return () => window.clearTimeout(timer);
+  }, [syncDoodleView]);
 
   const startDoodle = useCallback(() => {
-    setFrame((current) => current.started || current.status !== "playing" ? current : { ...current, started: true, playerVy: 760 });
-  }, []);
+    const current = runtimeRef.current;
+    if (current.started || current.status !== "playing") return;
+    current.started = true;
+    current.playerVy = 760;
+    syncDoodleView();
+  }, [syncDoodleView]);
 
   const setControlFromPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -443,166 +592,221 @@ function DoodleJumpPrototype({
     let frameId = 0;
     let last = performance.now();
 
+    const updateDom = (current: DoodleFrame) => {
+      if (playerShellRef.current) {
+        playerShellRef.current.style.transform = transformPoint3d(
+          current.playerX - PLAYER_SIZE / 2,
+          STAGE_HEIGHT - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
+        );
+      }
+      if (playerBoxRef.current) {
+        playerBoxRef.current.style.transform = `rotate(${current.playerTurns * 90}deg)`;
+      }
+      if (progressLineRef.current) {
+        const targetY = clamp(STAGE_HEIGHT - (world.targetHeight - current.cameraY), 0, STAGE_HEIGHT);
+        progressLineRef.current.style.transform = transformPoint3d(0, targetY);
+      }
+
+      for (const [id, node] of platformRefs.current) {
+        const platform = current.platforms.find((item) => item.id === id);
+        if (!platform || platform.used) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
+        const x = movingPlatformX(platform, current.time);
+        const y = STAGE_HEIGHT - (platform.y - current.cameraY);
+        node.style.transform = transformPoint3d(x - platform.width / 2, y);
+      }
+
+      for (const [id, node] of hazardRefs.current) {
+        const hazard = current.hazards.find((item) => item.id === id);
+        if (!hazard) continue;
+        const position = movingHazardPosition(hazard, current.time);
+        const y = STAGE_HEIGHT - (position.y - current.cameraY) - hazard.size / 2;
+        const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
+        const scale = position.size / hazard.size;
+        node.style.transform = `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`;
+      }
+    };
+
     const tick = (time: number) => {
+      recordFrame(time);
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
-      setFrame((current) => {
-        if (current.status !== "playing") return current;
-        if (!current.started) return current;
 
-        const nextTime = current.time + delta;
-        const nextX = clamp(current.playerX + (controlXRef.current - current.playerX) * 0.34, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
-        const previousY = current.playerY;
-        let nextVy = current.playerVy - 1500 * delta;
-        let nextY = current.playerY + nextVy * delta;
-        let platforms = current.platforms;
-        let riskHit = current.riskHit;
-        let playerTurns = current.playerTurns;
-        let reason = "";
-        let status: PrototypeStatus = "playing";
+      const current = runtimeRef.current;
+      if (current.status !== "playing") {
+        updateDom(current);
+        return;
+      }
+      if (!current.started) {
+        updateDom(current);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
-        if (nextVy < 0) {
-          for (const platform of current.platforms) {
-            const platformX = movingPlatformX(platform, nextTime);
-            const crossed = previousY - PLAYER_SIZE / 2 >= platform.y && nextY - PLAYER_SIZE / 2 <= platform.y;
-            const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
-            if (crossed && insideX) {
-              nextY = platform.y + PLAYER_SIZE / 2;
-              nextVy = 760 * (platform.risk ? riskJumpMultiplier : 1);
-              platforms = current.platforms.filter((item) => item.id !== platform.id);
-              if (platform.risk) riskHit += 1;
-              playerTurns += 1;
-              break;
-            }
+      const nextTime = current.time + delta;
+      const nextX = clamp(current.playerX + (controlXRef.current - current.playerX) * 0.34, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
+      const previousY = current.playerY;
+      let nextVy = current.playerVy - 1500 * delta;
+      let nextY = current.playerY + nextVy * delta;
+      let riskHit = current.riskHit;
+      let playerTurns = current.playerTurns;
+      let eventChanged = false;
+      let reason = "";
+      let status: PrototypeStatus = "playing";
+
+      if (nextVy < 0) {
+        const minY = Math.min(previousY, nextY) - PLAYER_SIZE;
+        const maxY = Math.max(previousY, nextY) + PLAYER_SIZE;
+        for (const platform of current.platforms) {
+          if (platform.used || platform.y < minY || platform.y > maxY) continue;
+          const platformX = movingPlatformX(platform, nextTime);
+          const crossed = previousY - PLAYER_SIZE / 2 >= platform.y && nextY - PLAYER_SIZE / 2 <= platform.y;
+          const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
+          if (crossed && insideX) {
+            nextY = platform.y + PLAYER_SIZE / 2;
+            nextVy = 760 * (platform.risk ? riskJumpMultiplier : 1);
+            platform.used = true;
+            if (platform.risk) riskHit += 1;
+            playerTurns += 1;
+            eventChanged = true;
+            break;
           }
         }
+      }
 
-        const cameraY = Math.max(current.cameraY, nextY - STAGE_HEIGHT * 0.45);
-        if (status === "playing") {
-          const missedRisk = platforms.find((platform) => platform.risk && cameraY > platform.y + STAGE_HEIGHT * 0.34);
-          if (missedRisk) {
-            status = "failed";
-            reason = "漏踩高风险平台";
-          }
+      const cameraY = Math.max(current.cameraY, nextY - STAGE_HEIGHT * 0.45);
+      if (status === "playing" && riskHit < riskTotal) {
+        const missedRisk = current.platforms.find((platform) => !platform.used && platform.risk && cameraY > platform.y + STAGE_HEIGHT * 0.34);
+        if (missedRisk) {
+          status = "failed";
+          reason = "漏踩高风险平台";
         }
+      }
 
-        if (status === "playing" && nextTime >= current.invincibleUntil) {
-          const hitHazard = current.hazards.some((hazard) => {
-            const position = movingHazardPosition(hazard, nextTime);
-            if (position.y < cameraY - 50 || position.y > cameraY + STAGE_HEIGHT + 50) return false;
-            const distance = Math.hypot(nextX - position.x, nextY - position.y);
-            return distance <= position.size / 2 + PLAYER_SIZE / 2 - 3;
-          });
-          if (hitHazard) {
+      if (status === "playing" && nextTime >= current.invincibleUntil) {
+        for (const hazard of current.hazards) {
+          const movementRange = hazard.movementEnabled ? hazard.range + 18 : 0;
+          if (hazard.y + hazard.size + movementRange < cameraY - 70 || hazard.y - hazard.size - movementRange > cameraY + STAGE_HEIGHT + 70) continue;
+          const position = movingHazardPosition(hazard, nextTime);
+          const hitRadius = position.size / 2 + PLAYER_SIZE / 2 - 3;
+          const dx = nextX - position.x;
+          const dy = nextY - position.y;
+          if (Math.abs(dx) > hitRadius || Math.abs(dy) > hitRadius) continue;
+          if (dx * dx + dy * dy <= hitRadius * hitRadius) {
             status = "failed";
             reason = "碰到移动障碍";
+            break;
           }
         }
+      }
 
-        if (status === "playing" && nextY < cameraY - 80) {
+      if (status === "playing" && nextY < cameraY - 80) {
+        status = "failed";
+        reason = "掉出屏幕底部";
+      }
+
+      if (status === "playing" && nextY >= world.targetHeight) {
+        if (riskHit >= riskTotal) {
+          status = "passed";
+          reason = `高度达成，必踩平台 ${riskHit}/${riskTotal}`;
+        } else {
           status = "failed";
-          reason = "掉出屏幕底部";
+          reason = `漏踩高风险平台 ${riskHit}/${riskTotal}`;
         }
+      }
 
-        if (status === "playing" && nextY >= world.targetHeight) {
-          if (riskHit >= riskTotal) {
-            status = "passed";
-            reason = `高度达成，必踩平台 ${riskHit}/${riskTotal}`;
-          } else {
-            status = "failed";
-            reason = `漏踩高风险平台 ${riskHit}/${riskTotal}`;
-          }
+      current.time = nextTime;
+      current.playerX = nextX;
+      current.playerY = nextY;
+      current.playerVy = nextVy;
+      current.cameraY = cameraY;
+      current.riskHit = riskHit;
+      current.playerTurns = playerTurns;
+
+      if (mode === "base" && status === "failed") {
+        const failures = current.failures + 1;
+        if (failures <= BASE_FAILURE_LIMIT) {
+          const respawnY = cameraY + STAGE_HEIGHT * 0.34;
+          const respawnX = clamp(nextX, 70, STAGE_WIDTH - 70);
+          const respawnPlatform: DoodlePlatform = {
+            id: -1000 - failures,
+            x: respawnX,
+            y: respawnY - PLAYER_SIZE / 2,
+            width: 116,
+            start: false,
+            moving: false,
+            risk: false,
+            phase: 0,
+            range: 0,
+            speed: 0,
+            used: false,
+          };
+          current.playerX = respawnX;
+          current.playerY = respawnY;
+          current.playerVy = 760;
+          current.platforms.unshift(respawnPlatform);
+          current.failures = failures;
+          current.invincibleUntil = nextTime + 1.1;
+          current.status = "playing";
+          current.reason = reason;
+          updateDom(current);
+          syncDoodleView(time);
+          frameId = requestAnimationFrame(tick);
+          return;
         }
+        current.failures = failures;
+        reason = "失误超过 3 次，进入下一关";
+      }
 
-        if (mode === "base" && status === "failed") {
-          const failures = current.failures + 1;
-          if (failures <= BASE_FAILURE_LIMIT) {
-            const respawnY = cameraY + STAGE_HEIGHT * 0.34;
-            const respawnX = clamp(nextX, 70, STAGE_WIDTH - 70);
-            const respawnPlatform: DoodlePlatform = {
-              id: -1000 - failures,
-              x: respawnX,
-              y: respawnY - PLAYER_SIZE / 2,
-              width: 116,
-              start: false,
-              moving: false,
-              risk: false,
-              phase: 0,
-              range: 0,
-              speed: 0,
-            };
-            return {
-              ...current,
-              time: nextTime,
-              playerX: respawnX,
-              playerY: respawnY,
-              playerVy: 760,
-              cameraY,
-              platforms: [respawnPlatform, ...platforms.filter((platform) => platform.id !== respawnPlatform.id)],
-              riskHit,
-              playerTurns,
-              failures,
-              invincibleUntil: nextTime + 1.1,
-              status: "playing",
-              reason,
-            };
-          }
-          reason = "失误超过 3 次，进入下一关";
-        }
+      current.status = status;
+      current.reason = reason;
+      updateDom(current);
 
-        return {
-          ...current,
-          time: nextTime,
-          playerX: nextX,
-          playerY: nextY,
-          playerVy: nextVy,
-          cameraY,
-          platforms,
-          riskHit,
-          playerTurns,
-          failures: status === "failed" && mode === "base" ? current.failures + 1 : current.failures,
-          status,
-          reason,
-        };
-      });
+      if (status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+        syncDoodleView(time);
+      }
       frameId = requestAnimationFrame(tick);
     };
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [mode, riskJumpMultiplier, riskTotal, world.targetHeight]);
+  }, [mode, recordFrame, riskJumpMultiplier, riskTotal, syncDoodleView, world.targetHeight]);
 
-  const progress = clamp((frame.playerY / world.targetHeight) * 100, 0, 100);
   const showOverlay = mode === "prototype";
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    if (!onComplete || completedRef.current || view.status === "playing") return;
     completedRef.current = true;
+    const latest = runtimeRef.current;
+    const progress = clamp((latest.playerY / world.targetHeight) * 100, 0, 100);
     onComplete({
       gameId: "doodle",
       levelId: level.levelId,
-      status: frame.status,
-      reason: frame.reason,
-      elapsedMs: Math.round(frame.time * 1000),
+      status: view.status,
+      reason: latest.reason,
+      elapsedMs: Math.round(latest.time * 1000),
       stats: {
-        failures: frame.failures,
+        failures: latest.failures,
         progressPercent: Math.round(progress),
-        riskHit: frame.riskHit,
+        riskHit: latest.riskHit,
         riskTotal,
-        forcedAdvance: mode === "base" && frame.status === "failed",
+        forcedAdvance: mode === "base" && view.status === "failed",
       },
     });
-  }, [frame.failures, frame.reason, frame.riskHit, frame.status, frame.time, level.levelId, mode, onComplete, progress, riskTotal]);
+  }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
   return (
     <div className="prototype-game-wrap">
-        <div className="mini-score">
-        <span>高度 {Math.round(progress)}%</span>
-        <span>必踩 {frame.riskHit}/{riskTotal}</span>
-        {mode === "base" ? <span>失误 {Math.min(frame.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+      <div className="mini-score">
+        <span>高度 {Math.round(view.progressPercent)}%</span>
+        <span>必踩 {view.riskHit}/{riskTotal}</span>
+        {mode === "base" ? <span>失误 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
-        className={`prototype-stage doodle-stage ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage doodle-stage ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Doodle Jump 型小游戏"
@@ -613,44 +817,60 @@ function DoodleJumpPrototype({
         }}
         onPointerMove={setControlFromPointer}
       >
-        <div className="doodle-progress-line" style={{ bottom: `${clamp((world.targetHeight - frame.cameraY) / STAGE_HEIGHT, 0, 1) * 100}%` }} />
-        {frame.platforms.map((platform) => {
-          const x = movingPlatformX(platform, frame.time);
-          const y = STAGE_HEIGHT - (platform.y - frame.cameraY);
-          if (y < -30 || y > STAGE_HEIGHT + 30) return null;
+        <MiniGameFpsBadge fps={fps} />
+        <div
+          className="doodle-progress-line"
+          ref={progressLineRef}
+          style={{ transform: transformPoint3d(0, clamp(STAGE_HEIGHT - (world.targetHeight - view.cameraY), 0, STAGE_HEIGHT)) }}
+        />
+        {view.visiblePlatforms.map((platform) => {
+          const x = movingPlatformX(platform, view.time);
+          const y = STAGE_HEIGHT - (platform.y - view.cameraY);
           return (
             <div
               className={`doodle-platform ${platform.start ? "start" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
               key={platform.id}
+              ref={(node) => {
+                if (node) platformRefs.current.set(platform.id, node);
+                else platformRefs.current.delete(platform.id);
+              }}
               style={{
-                transform: `translate(${x - platform.width / 2}px, ${y}px)`,
+                transform: transformPoint3d(x - platform.width / 2, y),
                 width: `${platform.width}px`,
               }}
             />
           );
         })}
-        {frame.hazards.map((hazard) => {
-          const position = movingHazardPosition(hazard, frame.time);
-          const y = STAGE_HEIGHT - (position.y - frame.cameraY) - position.size / 2;
-          if (y < -40 || y > STAGE_HEIGHT + 40) return null;
+        {view.visibleHazards.map((hazard) => {
+          const position = movingHazardPosition(hazard, view.time);
+          const y = STAGE_HEIGHT - (position.y - view.cameraY) - hazard.size / 2;
           const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
+          const scale = position.size / hazard.size;
           return (
             <div
               className={`doodle-hazard motion-${hazard.movementPattern} ${hazard.movementEnabled ? "moving" : ""}`}
               key={hazard.id}
+              ref={(node) => {
+                if (node) hazardRefs.current.set(hazard.id, node);
+                else hazardRefs.current.delete(hazard.id);
+              }}
               style={{
-                height: `${position.size}px`,
-                transform: `translate(${position.x - position.size / 2}px, ${y}px) rotate(${rotate}deg)`,
-                width: `${position.size}px`,
+                height: `${hazard.size}px`,
+                transform: `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`,
+                width: `${hazard.size}px`,
               }}
             />
           );
         })}
-        <div className={`doodle-player-shell ${frame.time < frame.invincibleUntil ? "invincible" : ""}`} style={stagePointStyle(frame.playerX, frame.playerY, frame.cameraY)}>
-          <div className="prototype-player-box doodle-player" style={{ transform: `rotate(${frame.playerTurns * 90}deg)` }} />
+        <div
+          className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
+          ref={playerShellRef}
+          style={stagePointStyle(view.playerX, view.playerY, view.cameraY)}
+        >
+          <div className="prototype-player-box doodle-player" ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
         </div>
-        {!frame.started ? <div className="prototype-start-hint">拖动开始</div> : null}
-        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
+        {!view.started ? <div className="prototype-start-hint">拖动开始</div> : null}
+        {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );
@@ -660,10 +880,51 @@ function makeFlappyLayout(level: MiniGameLevelConfig, runSeed: string) {
   return generateFlappyGateLayout(level, runSeed, { stageHeight: STAGE_HEIGHT });
 }
 
-function flappyGateCenterY(gate: FlappyGate, frame: FlappyFrame, params: MiniGameParams) {
+function flappyGateCenterY(gate: FlappyGate, time: number, params: MiniGameParams) {
   if (!gate.moving) return gate.baseCenterY;
   const movingSpeed = numberParam(params, "movingGateSpeed", 1);
-  return clamp(gate.baseCenterY + Math.sin(frame.time * movingSpeed + gate.phase) * 42, 116, STAGE_HEIGHT - 116);
+  return clamp(gate.baseCenterY + Math.sin(time * movingSpeed + gate.phase) * 42, 116, STAGE_HEIGHT - 116);
+}
+
+function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): FlappyFrame {
+  return {
+    started: false,
+    time: 0,
+    progress: 0,
+    playerY: initialPlayerY,
+    playerVy: 0,
+    gates: gates.map((gate) => ({ ...gate })),
+    passed: 0,
+    collected: 0,
+    playerTurns: 0,
+    failures: 0,
+    invincibleUntil: 0,
+    status: "playing",
+    reason: "",
+  };
+}
+
+function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: number): FlappyViewFrame {
+  return {
+    collected: frame.collected,
+    failures: frame.failures,
+    invincibleUntil: frame.invincibleUntil,
+    passed: frame.passed,
+    playerTurns: frame.playerTurns,
+    playerY: frame.playerY,
+    progress: frame.progress,
+    reason: frame.reason,
+    started: frame.started,
+    status: frame.status,
+    time: frame.time,
+    visibleGates: selectVisibleFlappyGates(frame.gates, {
+      buffer,
+      gateWidth: FLAPPY_GATE_WIDTH,
+      progress: frame.progress,
+      reverseDirection,
+      stageWidth: STAGE_WIDTH,
+    }),
+  };
 }
 
 function FlappyPrototype({
@@ -683,7 +944,6 @@ function FlappyPrototype({
 }) {
   const layout = useMemo(() => makeFlappyLayout(level, runSeed), [level, runSeed]);
   const gates = layout.gates;
-  const backgroundRefs: FlappyBackgroundRef[] = layout.backgroundRefs;
   const reversedGravity = booleanParam(level.params, "reversedGravity");
   const reverseDirection = booleanParam(level.params, "reverseDirection");
   const gateCount = numberParam(level.params, "gateCount", 6);
@@ -691,180 +951,256 @@ function FlappyPrototype({
   const gapSize = numberParam(level.params, "gapSize", 180);
   const speed = numberParam(level.params, "speed", 118);
   const playerX = reverseDirection ? STAGE_WIDTH - 92 : 92;
-  const completedRef = useRef(false);
+  const isLowPowerDevice = useMiniGameLowPowerMode();
+  const visibleBuffer = isLowPowerDevice ? 88 : 130;
+  const backgroundRefs: FlappyBackgroundRef[] = useMemo(
+    () => (isLowPowerDevice ? layout.backgroundRefs.slice(0, 12) : layout.backgroundRefs),
+    [isLowPowerDevice, layout.backgroundRefs],
+  );
   const initialPlayerY = layout.initialPlacement === "belowPlatform"
     ? FLAPPY_START_PLATFORM_Y + FLAPPY_START_PLATFORM_HEIGHT + PLAYER_SIZE / 2
     : FLAPPY_START_PLATFORM_Y - PLAYER_SIZE / 2;
-  const [frame, setFrame] = useState<FlappyFrame>({
-    started: false,
-    time: 0,
-    progress: 0,
-    playerY: initialPlayerY,
-    playerVy: 0,
-    gates,
-    passed: 0,
-    collected: 0,
-    playerTurns: 0,
-    failures: 0,
-    invincibleUntil: 0,
-    status: "playing",
-    reason: "",
-  });
+  const initialRuntime = useMemo(() => createFlappyRuntime(gates, initialPlayerY), [gates, initialPlayerY]);
+  const runtimeRef = useRef<FlappyFrame>(initialRuntime);
+  const completedRef = useRef(false);
+  const lastUiSyncRef = useRef(0);
+  const backgroundNodeRefs = useRef(new Map<number, HTMLSpanElement>());
+  const gateTopRefs = useRef(new Map<number, HTMLDivElement>());
+  const gateBottomRefs = useRef(new Map<number, HTMLDivElement>());
+  const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
+  const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const playerBoxRef = useRef<HTMLDivElement | null>(null);
+  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer));
+
+  const syncFlappyView = useCallback(
+    (time = performance.now()) => {
+      lastUiSyncRef.current = time;
+      setView(makeFlappyView(runtimeRef.current, reverseDirection, visibleBuffer));
+    },
+    [reverseDirection, visibleBuffer],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => syncFlappyView(), 0);
+    return () => window.clearTimeout(timer);
+  }, [syncFlappyView]);
 
   const pulse = useCallback(() => {
-    setFrame((current) =>
-      current.status === "playing"
-        ? {
-            ...current,
-            started: true,
-            playerTurns: current.playerTurns + 1,
-            playerVy: reversedGravity ? 335 : -335,
-          }
-        : current,
-    );
-  }, [reversedGravity]);
+    const current = runtimeRef.current;
+    if (current.status !== "playing") return;
+    current.started = true;
+    current.playerTurns += 1;
+    current.playerVy = reversedGravity ? 335 : -335;
+    syncFlappyView();
+  }, [reversedGravity, syncFlappyView]);
 
   useEffect(() => {
     let frameId = 0;
     let last = performance.now();
 
+    const updateDom = (current: FlappyFrame) => {
+      for (const ref of backgroundRefs) {
+        const node = backgroundNodeRefs.current.get(ref.id);
+        if (!node) continue;
+        const spacing = 82;
+        const drift = reverseDirection ? current.progress : -current.progress;
+        const cycle = STAGE_WIDTH + spacing;
+        const x = (((ref.x + drift * 0.55) % cycle) + cycle) % cycle - spacing;
+        node.style.transform = transformPoint3d(x, ref.y);
+      }
+
+      for (const [id, topNode] of gateTopRefs.current) {
+        const gate = current.gates.find((item) => item.id === id);
+        const bottomNode = gateBottomRefs.current.get(id);
+        if (!gate || !bottomNode) continue;
+        const screenX = getFlappyGateScreenX(gate, {
+          progress: current.progress,
+          reverseDirection,
+          stageWidth: STAGE_WIDTH,
+        });
+        const centerY = flappyGateCenterY(gate, current.time, level.params);
+        const topHeight = centerY - gapSize / 2;
+        const bottomY = centerY + gapSize / 2;
+        topNode.style.transform = transformPoint3d(screenX, topHeight - STAGE_HEIGHT);
+        bottomNode.style.transform = transformPoint3d(screenX, bottomY);
+
+        const collectibleNode = collectibleRefs.current.get(id);
+        if (collectibleNode) {
+          if (gate.collected) {
+            collectibleNode.style.display = "none";
+          } else {
+            const collectibleY = clamp(centerY + gate.collectibleOffset * gapSize, centerY - gapSize / 2 + 22, centerY + gapSize / 2 - 22);
+            collectibleNode.style.display = "";
+            collectibleNode.style.transform = transformPoint3d(screenX + FLAPPY_GATE_WIDTH / 2 - 9, collectibleY - 9);
+          }
+        }
+      }
+
+      if (playerShellRef.current) {
+        playerShellRef.current.style.transform = transformPoint3d(playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
+      }
+      if (playerBoxRef.current) {
+        playerBoxRef.current.style.transform = `rotate(${current.playerTurns * 90}deg)`;
+      }
+    };
+
     const tick = (time: number) => {
+      recordFrame(time);
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
-      setFrame((current) => {
-        if (current.status !== "playing") return current;
-        if (!current.started) return current;
-        const nextTime = current.time + delta;
-        const gravity = reversedGravity ? -850 : 900;
-        const nextVy = current.playerVy + gravity * delta;
-        const nextY = current.playerY + nextVy * delta;
-        const nextProgress = current.progress + speed * delta;
-        let status: PrototypeStatus = "playing";
-        let reason = "";
-        let passed = current.passed;
-        let collected = current.collected;
 
-        let nextGates = current.gates.map((gate) => {
-          const screenX = reverseDirection ? -gate.distance + nextProgress : STAGE_WIDTH + gate.distance - nextProgress;
-          const centerY = flappyGateCenterY(gate, current, level.params);
-          const gatePassed = reverseDirection ? screenX > playerX + PLAYER_SIZE : screenX + FLAPPY_GATE_WIDTH < playerX - PLAYER_SIZE;
-          let nextGate = gate;
+      const current = runtimeRef.current;
+      if (current.status !== "playing") {
+        updateDom(current);
+        return;
+      }
+      if (!current.started) {
+        updateDom(current);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
-          if (!gate.passed && gatePassed) {
-            passed += 1;
-            nextGate = { ...nextGate, passed: true };
+      const nextTime = current.time + delta;
+      const gravityDirection = reversedGravity ? -1 : 1;
+      const gravityMagnitude = reversedGravity ? 850 : 900;
+      const nextVy = current.playerVy + gravityDirection * gravityMagnitude * delta;
+      const nextY = current.playerY + nextVy * delta;
+      const nextProgress = current.progress + speed * delta;
+      let status: PrototypeStatus = "playing";
+      let reason = "";
+      let passed = current.passed;
+      let collected = current.collected;
+      let eventChanged = false;
+
+      for (const gate of current.gates) {
+        const screenX = getFlappyGateScreenX(gate, {
+          progress: nextProgress,
+          reverseDirection,
+          stageWidth: STAGE_WIDTH,
+        });
+        const centerY = flappyGateCenterY(gate, nextTime, level.params);
+        const gatePassed = reverseDirection ? screenX > playerX + PLAYER_SIZE : screenX + FLAPPY_GATE_WIDTH < playerX - PLAYER_SIZE;
+
+        if (!gate.passed && gatePassed) {
+          gate.passed = true;
+          passed += 1;
+          eventChanged = true;
+        }
+
+        if (gate.collectible && !gate.collected) {
+          const collectibleY = clamp(centerY + gate.collectibleOffset * gapSize, centerY - gapSize / 2 + 22, centerY + gapSize / 2 - 22);
+          const collectibleX = screenX + FLAPPY_GATE_WIDTH / 2;
+          const dx = playerX - collectibleX;
+          const dy = nextY - collectibleY;
+          if (dx * dx + dy * dy <= 24 * 24) {
+            gate.collected = true;
+            collected += 1;
+            eventChanged = true;
           }
+        }
 
-          if (gate.collectible && !gate.collected) {
-            const collectibleY = clamp(centerY + gate.collectibleOffset * gapSize, centerY - gapSize / 2 + 22, centerY + gapSize / 2 - 22);
-            const collectibleX = screenX + FLAPPY_GATE_WIDTH / 2;
-            if (Math.hypot(playerX - collectibleX, nextY - collectibleY) <= 24) {
-              collected += 1;
-              nextGate = { ...nextGate, collected: true };
-            }
-          }
-
-          const overlapsX = playerX + PLAYER_SIZE / 2 > screenX && playerX - PLAYER_SIZE / 2 < screenX + FLAPPY_GATE_WIDTH;
+        const overlapsX = playerX + PLAYER_SIZE / 2 > screenX && playerX - PLAYER_SIZE / 2 < screenX + FLAPPY_GATE_WIDTH;
+        if (overlapsX && nextTime >= current.invincibleUntil) {
           const blockedY = nextY - PLAYER_SIZE / 2 < centerY - gapSize / 2 || nextY + PLAYER_SIZE / 2 > centerY + gapSize / 2;
-          if (overlapsX && blockedY && nextTime >= current.invincibleUntil) {
+          if (blockedY) {
             status = "failed";
             reason = "撞到障碍";
           }
+        }
+      }
 
-          return nextGate;
-        });
+      if ((nextY < PLAYER_SIZE / 2 || nextY > STAGE_HEIGHT - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
+        status = "failed";
+        reason = "飞出边界";
+      }
 
-        if ((nextY < PLAYER_SIZE / 2 || nextY > STAGE_HEIGHT - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
+      if (status === "playing" && passed >= gateCount) {
+        if (collected >= collectibleCount) {
+          status = "passed";
+          reason = collectibleCount > 0 ? `通过终点，收集 ${collected}/${collectibleCount}` : `通过 ${passed}/${gateCount} 个门`;
+        } else {
           status = "failed";
-          reason = "飞出边界";
+          reason = `漏收集道具 ${collected}/${collectibleCount}`;
         }
+        for (const gate of current.gates) gate.passed = true;
+        eventChanged = true;
+      }
 
-        if (status === "playing" && passed >= gateCount) {
-          if (collected >= collectibleCount) {
-            status = "passed";
-            reason = collectibleCount > 0 ? `通过终点，收集 ${collected}/${collectibleCount}` : `通过 ${passed}/${gateCount} 个门`;
-          } else {
-            status = "failed";
-            reason = `漏收集道具 ${collected}/${collectibleCount}`;
-          }
-          nextGates = nextGates.map((gate) => ({ ...gate, passed: true }));
+      current.time = nextTime;
+      current.progress = nextProgress;
+      current.playerY = nextY;
+      current.playerVy = nextVy;
+      current.passed = passed;
+      current.collected = collected;
+
+      if (mode === "base" && status === "failed") {
+        const failures = current.failures + 1;
+        if (failures <= BASE_FAILURE_LIMIT) {
+          current.progress = Math.max(0, nextProgress - 92);
+          current.playerY = initialPlayerY;
+          current.playerVy = 0;
+          current.failures = failures;
+          current.invincibleUntil = nextTime + 1.15;
+          current.status = "playing";
+          current.reason = reason;
+          updateDom(current);
+          syncFlappyView(time);
+          frameId = requestAnimationFrame(tick);
+          return;
         }
+        current.failures = failures;
+        reason = "失误超过 3 次，进入下一关";
+      }
 
-        if (mode === "base" && status === "failed") {
-          const failures = current.failures + 1;
-          if (failures <= BASE_FAILURE_LIMIT) {
-            return {
-              ...current,
-              time: nextTime,
-              progress: Math.max(0, nextProgress - 92),
-              playerY: initialPlayerY,
-              playerVy: 0,
-              gates: nextGates,
-              passed,
-              collected,
-              failures,
-              invincibleUntil: nextTime + 1.15,
-              status: "playing",
-              reason,
-            };
-          }
-          reason = "失误超过 3 次，进入下一关";
-        }
+      current.status = status;
+      current.reason = reason;
+      updateDom(current);
 
-        return {
-          ...current,
-          time: nextTime,
-          progress: nextProgress,
-          playerY: nextY,
-          playerVy: nextVy,
-          gates: nextGates,
-          passed,
-          collected,
-          failures: status === "failed" && mode === "base" ? current.failures + 1 : current.failures,
-          status,
-          reason,
-        };
-      });
+      if (status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+        syncFlappyView(time);
+      }
       frameId = requestAnimationFrame(tick);
     };
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, reverseDirection, reversedGravity, speed]);
+  }, [backgroundRefs, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, recordFrame, reverseDirection, reversedGravity, speed, syncFlappyView]);
 
-  const progressPercent = clamp((frame.passed / gateCount) * 100, 0, 100);
+  const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const showOverlay = mode === "prototype";
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    if (!onComplete || completedRef.current || view.status === "playing") return;
     completedRef.current = true;
+    const latest = runtimeRef.current;
     onComplete({
       gameId: "flappy",
       levelId: level.levelId,
-      status: frame.status,
-      reason: frame.reason,
-      elapsedMs: Math.round(frame.time * 1000),
+      status: view.status,
+      reason: latest.reason,
+      elapsedMs: Math.round(latest.time * 1000),
       stats: {
-        failures: frame.failures,
+        failures: latest.failures,
         progressPercent: Math.round(progressPercent),
-        passedGates: frame.passed,
+        passedGates: latest.passed,
         gateCount,
-        collected: frame.collected,
+        collected: latest.collected,
         collectibleCount,
-        forcedAdvance: mode === "base" && frame.status === "failed",
+        forcedAdvance: mode === "base" && view.status === "failed",
       },
     });
-  }, [collectibleCount, frame.collected, frame.failures, frame.passed, frame.reason, frame.status, frame.time, gateCount, level.levelId, mode, onComplete, progressPercent]);
+  }, [collectibleCount, gateCount, level.levelId, mode, onComplete, progressPercent, view.status]);
 
   return (
     <div className="prototype-game-wrap">
-        <div className="mini-score">
-          <span>通过 {frame.passed}/{gateCount}</span>
-          <span>收集 {frame.collected}/{collectibleCount}</span>
-          {mode === "base" ? <span>失误 {Math.min(frame.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
-        </div>
+      <div className="mini-score">
+        <span>通过 {view.passed}/{gateCount}</span>
+        <span>收集 {view.collected}/{collectibleCount}</span>
+        {mode === "base" ? <span>失误 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+      </div>
       <div
-        className={`prototype-stage flappy-stage ${reverseDirection ? "reverse" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage flappy-stage ${reverseDirection ? "reverse" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         role="application"
         aria-label="Flappy Bird 型小游戏"
         onPointerDown={(event) => {
@@ -872,61 +1208,84 @@ function FlappyPrototype({
           pulse();
         }}
       >
+        <MiniGameFpsBadge fps={fps} />
         <div className="flappy-background" aria-hidden="true">
           {backgroundRefs.map((ref) => {
             const spacing = 82;
-            const drift = reverseDirection ? frame.progress : -frame.progress;
+            const drift = reverseDirection ? view.progress : -view.progress;
             const cycle = STAGE_WIDTH + spacing;
             const x = (((ref.x + drift * 0.55) % cycle) + cycle) % cycle - spacing;
             return (
               <span
                 className={ref.kind}
                 key={ref.id}
-                style={{ transform: `translate(${x}px, ${ref.y}px)` }}
+                ref={(node) => {
+                  if (node) backgroundNodeRefs.current.set(ref.id, node);
+                  else backgroundNodeRefs.current.delete(ref.id);
+                }}
+                style={{ transform: transformPoint3d(x, ref.y) }}
               />
             );
           })}
         </div>
         <div
-          className={`flappy-start-platform ${frame.started ? "started" : ""}`}
-          style={{ transform: `translate(${playerX - 50}px, ${FLAPPY_START_PLATFORM_Y}px)` }}
+          className={`flappy-start-platform ${view.started ? "started" : ""}`}
+          style={{ transform: transformPoint3d(playerX - 50, FLAPPY_START_PLATFORM_Y) }}
         />
-        {frame.gates.map((gate) => {
-          const screenX = reverseDirection ? -gate.distance + frame.progress : STAGE_WIDTH + gate.distance - frame.progress;
-          if (screenX < -90 || screenX > STAGE_WIDTH + 90) return null;
-          const centerY = flappyGateCenterY(gate, frame, level.params);
+        {view.visibleGates.map((gate) => {
+          const screenX = getFlappyGateScreenX(gate, {
+            progress: view.progress,
+            reverseDirection,
+            stageWidth: STAGE_WIDTH,
+          });
+          const centerY = flappyGateCenterY(gate, view.time, level.params);
+          const topHeight = centerY - gapSize / 2;
+          const bottomY = centerY + gapSize / 2;
           const collectibleY = clamp(centerY + gate.collectibleOffset * gapSize, centerY - gapSize / 2 + 22, centerY + gapSize / 2 - 22);
           return (
             <div className={`flappy-gate-layer ${gate.moving ? "moving" : ""}`} key={gate.id}>
               <div
                 className="flappy-gate top"
-                style={{ height: `${centerY - gapSize / 2}px`, transform: `translateX(${screenX}px)`, width: `${FLAPPY_GATE_WIDTH}px` }}
+                ref={(node) => {
+                  if (node) gateTopRefs.current.set(gate.id, node);
+                  else gateTopRefs.current.delete(gate.id);
+                }}
+                style={{ height: `${STAGE_HEIGHT}px`, transform: transformPoint3d(screenX, topHeight - STAGE_HEIGHT), width: `${FLAPPY_GATE_WIDTH}px` }}
               />
               <div
                 className="flappy-gate bottom"
+                ref={(node) => {
+                  if (node) gateBottomRefs.current.set(gate.id, node);
+                  else gateBottomRefs.current.delete(gate.id);
+                }}
                 style={{
-                  height: `${STAGE_HEIGHT - (centerY + gapSize / 2)}px`,
-                  transform: `translate(${screenX}px, ${centerY + gapSize / 2}px)`,
+                  height: `${STAGE_HEIGHT}px`,
+                  transform: transformPoint3d(screenX, bottomY),
                   width: `${FLAPPY_GATE_WIDTH}px`,
                 }}
               />
               {gate.collectible && !gate.collected ? (
                 <div
                   className="flappy-collectible"
-                  style={{ transform: `translate(${screenX + FLAPPY_GATE_WIDTH / 2 - 9}px, ${collectibleY - 9}px)` }}
+                  ref={(node) => {
+                    if (node) collectibleRefs.current.set(gate.id, node);
+                    else collectibleRefs.current.delete(gate.id);
+                  }}
+                  style={{ transform: transformPoint3d(screenX + FLAPPY_GATE_WIDTH / 2 - 9, collectibleY - 9) }}
                 />
               ) : null}
             </div>
           );
         })}
         <div
-          className={`flappy-player-shell ${frame.time < frame.invincibleUntil ? "invincible" : ""}`}
-          style={{ transform: `translate(${playerX - PLAYER_SIZE / 2}px, ${frame.playerY - PLAYER_SIZE / 2}px)` }}
+          className={`flappy-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
+          ref={playerShellRef}
+          style={{ transform: transformPoint3d(playerX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
         >
-          <div className={`prototype-player-box flappy-player ${reversedGravity ? "reversed" : ""}`} style={{ transform: `rotate(${frame.playerTurns * 90}deg)` }} />
+          <div className={`prototype-player-box flappy-player ${reversedGravity ? "reversed" : ""}`} ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
         </div>
-        {!frame.started ? <div className="prototype-start-hint flappy-start-hint">点击开始</div> : null}
-        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
+        {!view.started ? <div className="prototype-start-hint flappy-start-hint">点击开始</div> : null}
+        {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );
@@ -946,6 +1305,34 @@ function knifeSectorPath(zone: KnifeForbiddenZone) {
   const y2 = center + Math.sin(end) * radius;
   const largeArc = span > 180 ? 1 : 0;
   return `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+}
+
+function createKnifeRuntime(initialAngles: number[], hasCountdown: boolean, countdown: number): KnifeFrame {
+  return {
+    time: 0,
+    rotation: 0,
+    insertedAngles: [],
+    initialAngles,
+    failedAngles: [],
+    failedAngle: null,
+    shotIndex: 0,
+    failures: 0,
+    timer: hasCountdown ? countdown : null,
+    flying: false,
+    launcherReadyAt: 0,
+    status: "playing",
+    reason: "",
+  };
+}
+
+function makeKnifeView(frame: KnifeFrame, launcherVisible: boolean): KnifeViewFrame {
+  return {
+    ...frame,
+    failedAngles: [...frame.failedAngles],
+    initialAngles: [...frame.initialAngles],
+    insertedAngles: [...frame.insertedAngles],
+    launcherVisible,
+  };
 }
 
 function KnifeHitPrototype({
@@ -977,25 +1364,37 @@ function KnifeHitPrototype({
   );
   const initialAngles = useMemo(() => generateKnifeInitialAngles(level, runSeed, forbiddenArcs), [forbiddenArcs, level, runSeed]);
   const timeoutRef = useRef<number | null>(null);
+  const launcherReadyTimeoutRef = useRef<number | null>(null);
+  const wheelRef = useRef<HTMLDivElement | null>(null);
+  const initialRuntime = useMemo(() => createKnifeRuntime(initialAngles, hasCountdown, countdown), [countdown, hasCountdown, initialAngles]);
+  const runtimeRef = useRef<KnifeFrame>(initialRuntime);
+  const launcherVisibleRef = useRef(true);
+  const lastTimerSyncRef = useRef(0);
   const completedRef = useRef(false);
-  const [frame, setFrame] = useState<KnifeFrame>({
-    time: 0,
-    rotation: 0,
-    insertedAngles: [],
-    initialAngles,
-    failedAngles: [],
-    failedAngle: null,
-    shotIndex: 0,
-    failures: 0,
-    timer: hasCountdown ? countdown : null,
-    flying: false,
-    launcherReadyAt: 0,
-    status: "playing",
-    reason: "",
-  });
+  const isLowPowerDevice = useMiniGameLowPowerMode();
+  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const [view, setView] = useState<KnifeViewFrame>(() => makeKnifeView(initialRuntime, true));
 
-  const resolveShot = useCallback((current: KnifeFrame): KnifeFrame => {
-    if (current.status !== "playing") return current;
+  const syncKnifeView = useCallback(() => {
+    setView(makeKnifeView(runtimeRef.current, launcherVisibleRef.current));
+  }, []);
+
+  const scheduleLauncherReady = useCallback(() => {
+    if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
+    launcherVisibleRef.current = false;
+    launcherReadyTimeoutRef.current = window.setTimeout(() => {
+      const current = runtimeRef.current;
+      if (current.status === "playing" && !current.flying) {
+        launcherVisibleRef.current = true;
+        syncKnifeView();
+      }
+      launcherReadyTimeoutRef.current = null;
+    }, 60);
+  }, [syncKnifeView]);
+
+  const resolveShot = useCallback(() => {
+    const current = runtimeRef.current;
+    if (current.status !== "playing") return;
     const impactAngle = getLocalHitAngle(KNIFE_FIRE_ANGLE, current.rotation);
     const outcome = resolveKnifeShotOutcome({
       collisionDegrees: KNIFE_COLLISION_DEGREES,
@@ -1009,120 +1408,138 @@ function KnifeHitPrototype({
       if (mode === "base") {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
-        return {
-          ...current,
-          failedAngles: [...current.failedAngles, outcome.impactAngle],
-          failedAngle: outcome.impactAngle,
-          failures: nextFailures,
-          flying: false,
-          launcherReadyAt: current.time + 0.06,
-          reason: "撞到已插入长条",
-          shotIndex: nextShotIndex,
-          status: nextShotIndex >= shotCount ? "failed" : "playing",
-          timer: hasCountdown ? countdown : null,
-        };
+        current.failedAngles.push(outcome.impactAngle);
+        current.failedAngle = outcome.impactAngle;
+        current.failures = nextFailures;
+        current.flying = false;
+        current.launcherReadyAt = current.time + 0.06;
+        current.reason = "撞到已插入长条";
+        current.shotIndex = nextShotIndex;
+        current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        current.timer = hasCountdown ? countdown : null;
+        if (current.status === "playing") scheduleLauncherReady();
+        else launcherVisibleRef.current = false;
+        syncKnifeView();
+        return;
       }
-      return { ...current, failedAngle: outcome.impactAngle, flying: false, status: "failed", reason: "撞到已插入长条" };
+      current.failedAngle = outcome.impactAngle;
+      current.flying = false;
+      current.status = "failed";
+      current.reason = "撞到已插入长条";
+      launcherVisibleRef.current = false;
+      syncKnifeView();
+      return;
     }
     if (outcome.kind === "forbidden") {
       if (mode === "base") {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
-        return {
-          ...current,
-          failedAngles: [...current.failedAngles, outcome.impactAngle],
-          failedAngle: outcome.impactAngle,
-          failures: nextFailures,
-          flying: false,
-          launcherReadyAt: current.time + 0.06,
-          reason: "命中危险区域",
-          shotIndex: nextShotIndex,
-          status: nextShotIndex >= shotCount ? "failed" : "playing",
-          timer: hasCountdown ? countdown : null,
-        };
+        current.failedAngles.push(outcome.impactAngle);
+        current.failedAngle = outcome.impactAngle;
+        current.failures = nextFailures;
+        current.flying = false;
+        current.launcherReadyAt = current.time + 0.06;
+        current.reason = "命中危险区域";
+        current.shotIndex = nextShotIndex;
+        current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        current.timer = hasCountdown ? countdown : null;
+        if (current.status === "playing") scheduleLauncherReady();
+        else launcherVisibleRef.current = false;
+        syncKnifeView();
+        return;
       }
-      return { ...current, failedAngle: outcome.impactAngle, flying: false, status: "failed", reason: "命中危险区域" };
+      current.failedAngle = outcome.impactAngle;
+      current.flying = false;
+      current.status = "failed";
+      current.reason = "命中危险区域";
+      launcherVisibleRef.current = false;
+      syncKnifeView();
+      return;
     }
 
     const nextShotIndex = current.shotIndex + 1;
-    const nextInserted = [...current.insertedAngles, outcome.impactAngle];
+    current.insertedAngles.push(outcome.impactAngle);
+    current.flying = false;
+    current.shotIndex = nextShotIndex;
     if (nextShotIndex >= shotCount) {
-      return {
-        ...current,
-        flying: false,
-        insertedAngles: nextInserted,
-        shotIndex: nextShotIndex,
-        status: current.failures > 0 && mode === "base" ? "failed" : "passed",
-        reason: `全部 ${shotCount} 发命中`,
-      };
+      current.status = current.failures > 0 && mode === "base" ? "failed" : "passed";
+      current.reason = `全部 ${shotCount} 发命中`;
+      launcherVisibleRef.current = false;
+      syncKnifeView();
+      return;
     }
 
-    return {
-      ...current,
-      flying: false,
-      insertedAngles: nextInserted,
-      shotIndex: nextShotIndex,
-      launcherReadyAt: current.time + 0.06,
-      timer: hasCountdown ? countdown : null,
-    };
-  }, [countdown, forbiddenArcs, hasCountdown, mode, shotCount]);
+    current.launcherReadyAt = current.time + 0.06;
+    current.timer = hasCountdown ? countdown : null;
+    scheduleLauncherReady();
+    syncKnifeView();
+  }, [countdown, forbiddenArcs, hasCountdown, mode, scheduleLauncherReady, shotCount, syncKnifeView]);
 
   const launch = useCallback(() => {
-    setFrame((current) => {
-      if (current.status !== "playing" || current.flying) return current;
-      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = window.setTimeout(() => {
-        setFrame((latest) => resolveShot(latest));
-        timeoutRef.current = null;
-      }, KNIFE_FLIGHT_MS);
-      return { ...current, flying: true };
-    });
-  }, [resolveShot]);
+    const current = runtimeRef.current;
+    if (current.status !== "playing" || current.flying) return;
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
+    launcherReadyTimeoutRef.current = null;
+    current.flying = true;
+    launcherVisibleRef.current = true;
+    syncKnifeView();
+    timeoutRef.current = window.setTimeout(() => {
+      resolveShot();
+      timeoutRef.current = null;
+    }, KNIFE_FLIGHT_MS);
+  }, [resolveShot, syncKnifeView]);
 
   useEffect(() => {
     let frameId = 0;
     let last = performance.now();
     const tick = (time: number) => {
+      recordFrame(time);
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
-      setFrame((current) => {
-        if (current.status !== "playing") return current;
-        const nextTime = current.time + delta;
-        const speed = sineRotationEnabled ? getSineAngularVelocity(current.time, phaseDuration, sweepPerPhase) : baseRotationSpeed;
-        let nextTimer = current.timer;
-        let status: PrototypeStatus = "playing";
-        let reason = "";
-        if (nextTimer !== null && !current.flying) {
-          nextTimer -= delta;
-          if (nextTimer <= 0) {
-            if (mode === "base") {
-              const nextShotIndex = current.shotIndex + 1;
-              return {
-                ...current,
-                failures: current.failures + 1,
-                launcherReadyAt: nextTime + 0.06,
-                reason: "倒计时结束",
-                shotIndex: nextShotIndex,
-                status: nextShotIndex >= shotCount ? "failed" : "playing",
-                time: nextTime,
-                timer: hasCountdown ? countdown : null,
-                rotation: normalizeDegrees(current.rotation + speed * delta),
-              };
-            }
-            status = "failed";
-            reason = "倒计时结束";
-            nextTimer = 0;
+
+      const current = runtimeRef.current;
+      if (current.status !== "playing") {
+        if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
+        return;
+      }
+
+      const rotationSpeed = sineRotationEnabled ? getSineAngularVelocity(current.time, phaseDuration, sweepPerPhase) : baseRotationSpeed;
+      const nextTime = current.time + delta;
+      current.time = nextTime;
+      current.rotation = normalizeDegrees(current.rotation + rotationSpeed * delta);
+      if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
+
+      let shouldSync = false;
+      if (current.timer !== null && !current.flying) {
+        current.timer -= delta;
+        if (current.timer <= 0) {
+          if (mode === "base") {
+            const nextShotIndex = current.shotIndex + 1;
+            current.failures += 1;
+            current.launcherReadyAt = nextTime + 0.06;
+            current.reason = "倒计时结束";
+            current.shotIndex = nextShotIndex;
+            current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+            current.timer = hasCountdown ? countdown : null;
+            if (current.status === "playing") scheduleLauncherReady();
+            else launcherVisibleRef.current = false;
+          } else {
+            current.status = "failed";
+            current.reason = "倒计时结束";
+            current.timer = 0;
+            launcherVisibleRef.current = false;
           }
+          shouldSync = true;
         }
-        return {
-          ...current,
-          time: nextTime,
-          rotation: normalizeDegrees(current.rotation + speed * delta),
-          timer: nextTimer,
-          status,
-          reason,
-        };
-      });
+      }
+
+      if (hasCountdown && time - lastTimerSyncRef.current >= MINI_GAME_TIMER_SYNC_MS) {
+        lastTimerSyncRef.current = time;
+        shouldSync = true;
+      }
+
+      if (shouldSync) syncKnifeView();
       frameId = requestAnimationFrame(tick);
     };
 
@@ -1130,43 +1547,45 @@ function KnifeHitPrototype({
     return () => {
       cancelAnimationFrame(frameId);
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+      if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, shotCount, sineRotationEnabled, sweepPerPhase]);
+  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, sineRotationEnabled, sweepPerPhase, syncKnifeView]);
 
-  const remaining = shotCount - frame.shotIndex;
-  const wheelRotation = `rotate(${frame.rotation}deg)`;
-  const showLauncher = frame.status === "playing" && (frame.flying || frame.time >= frame.launcherReadyAt);
+  const remaining = shotCount - view.shotIndex;
+  const wheelRotation = `rotate(${view.rotation}deg)`;
+  const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible);
   const showOverlay = mode === "prototype";
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    if (!onComplete || completedRef.current || view.status === "playing") return;
     completedRef.current = true;
+    const latest = runtimeRef.current;
     onComplete({
       gameId: "knife",
       levelId: level.levelId,
-      status: frame.status,
-      reason: frame.reason,
-      elapsedMs: Math.round(frame.time * 1000),
+      status: view.status,
+      reason: latest.reason,
+      elapsedMs: Math.round(latest.time * 1000),
       stats: {
-        failures: frame.failures,
-        hits: frame.insertedAngles.length,
+        failures: latest.failures,
+        hits: latest.insertedAngles.length,
         shotCount,
-        fired: frame.shotIndex,
-        forcedAdvance: mode === "base" && frame.status === "failed",
+        fired: latest.shotIndex,
+        forcedAdvance: mode === "base" && view.status === "failed",
       },
     });
-  }, [frame.failures, frame.insertedAngles.length, frame.reason, frame.shotIndex, frame.status, frame.time, level.levelId, mode, onComplete, shotCount]);
+  }, [level.levelId, mode, onComplete, shotCount, view.status]);
 
   return (
     <div className="prototype-game-wrap">
-        <div className="mini-score">
-          <span>已发 {frame.shotIndex}/{shotCount}</span>
-          {mode === "base" ? <span>命中 {frame.insertedAngles.length}/{shotCount}</span> : null}
-          {hasCountdown ? <span>倒计时 {(frame.timer ?? 0).toFixed(1)}s</span> : null}
-          {sineRotationEnabled ? <span>正弦转速</span> : null}
+      <div className="mini-score">
+        <span>已发 {view.shotIndex}/{shotCount}</span>
+        {mode === "base" ? <span>命中 {view.insertedAngles.length}/{shotCount}</span> : null}
+        {hasCountdown ? <span>倒计时 {(view.timer ?? 0).toFixed(1)}s</span> : null}
+        {sineRotationEnabled ? <span>正弦转速</span> : null}
       </div>
       <div
-        className={`prototype-stage knife-stage ${frame.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage knife-stage ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         role="button"
         tabIndex={0}
         aria-label="Knife Hit 型小游戏，点击发射"
@@ -1181,35 +1600,36 @@ function KnifeHitPrototype({
           }
         }}
       >
+        <MiniGameFpsBadge fps={fps} />
         <div className="knife-wheel-wrap">
-          <div className="knife-wheel" style={{ transform: wheelRotation }}>
+          <div className="knife-wheel" ref={wheelRef} style={{ transform: wheelRotation }}>
             <svg className="knife-wheel-svg" viewBox={`0 0 ${KNIFE_WHEEL_SIZE} ${KNIFE_WHEEL_SIZE}`} aria-hidden="true">
               <circle cx={KNIFE_WHEEL_SIZE / 2} cy={KNIFE_WHEEL_SIZE / 2} r={KNIFE_WHEEL_SIZE / 2 - 3} />
               {forbiddenZones.map((zone) => (
                 <path d={knifeSectorPath(zone)} key={zone.id} />
               ))}
             </svg>
-            {frame.initialAngles.map((angle) => (
+            {view.initialAngles.map((angle) => (
               <span className="knife-arrow knife-stuck initial" key={`initial-${angle}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
-            {frame.insertedAngles.map((angle, index) => (
+            {view.insertedAngles.map((angle, index) => (
               <span className="knife-arrow knife-stuck" key={`${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
-            {frame.failedAngles.map((angle, index) => (
+            {view.failedAngles.map((angle, index) => (
               <span className="knife-arrow knife-stuck failed" key={`failed-${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
-            {frame.failedAngle !== null ? (
-              mode === "prototype" ? <span className="knife-arrow knife-stuck failed" style={{ transform: `rotate(${frame.failedAngle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} /> : null
+            {view.failedAngle !== null ? (
+              mode === "prototype" ? <span className="knife-arrow knife-stuck failed" style={{ transform: `rotate(${view.failedAngle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} /> : null
             ) : null}
           </div>
         </div>
-        {showLauncher ? <div className={`knife-arrow knife-launcher ${frame.flying ? "flying" : ""}`} /> : null}
+        {showLauncher ? <div className={`knife-arrow knife-launcher ${view.flying ? "flying" : ""}`} /> : null}
         <div className="knife-shot-stack" aria-hidden="true">
           {Array.from({ length: remaining }, (_, index) => (
             <span key={index} />
           ))}
         </div>
-        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
+        {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );

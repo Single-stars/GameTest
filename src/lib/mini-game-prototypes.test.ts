@@ -7,6 +7,7 @@ import {
   generateFlappyGateLayout,
   generateKnifeForbiddenZones,
   generateKnifeInitialAngles,
+  getMiniGameLowPowerMode,
   getFlappyInitialPlacement,
   getKnifeShotGeometry,
   getMiniGame,
@@ -15,9 +16,13 @@ import {
   getLocalHitAngle,
   getShortestAngleDistance,
   getSineAngularVelocity,
+  isLowPowerMiniGameDevice,
   isAngleWithinArc,
   normalizeDegrees,
   resolveKnifeShotOutcome,
+  selectVisibleDoodleHazards,
+  selectVisibleDoodlePlatforms,
+  selectVisibleFlappyGates,
   type MiniGameId,
 } from "./mini-game-prototypes.ts";
 
@@ -216,6 +221,62 @@ test("doodle generated layout is stable for a seed and changes across seeds", ()
     first.platforms.slice(1, 8).map((platform) => [Math.round(platform.x), Math.round(platform.y), Math.round(platform.width)]),
     different.platforms.slice(1, 8).map((platform) => [Math.round(platform.x), Math.round(platform.y), Math.round(platform.width)]),
   );
+});
+
+test("mini-game low power helper is SSR safe and follows mobile or low-core hints", () => {
+  assert.doesNotThrow(() => isLowPowerMiniGameDevice());
+  assert.equal(getMiniGameLowPowerMode({ maxWidth768: false, hardwareConcurrency: 8 }), false);
+  assert.equal(getMiniGameLowPowerMode({ maxWidth768: true, hardwareConcurrency: 8 }), true);
+  assert.equal(getMiniGameLowPowerMode({ maxWidth768: false, hardwareConcurrency: 4 }), true);
+  assert.equal(getMiniGameLowPowerMode({ maxWidth768: false, hardwareConcurrency: undefined }), false);
+});
+
+test("doodle visible selectors cull used and off-screen world objects", () => {
+  const layout = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-10"), "visibility-seed");
+  const visiblePlatforms = selectVisibleDoodlePlatforms(layout.platforms, {
+    buffer: 80,
+    cameraY: 640,
+    stageHeight: 640,
+  });
+  assert.ok(visiblePlatforms.length < layout.platforms.length);
+  assert.ok(visiblePlatforms.every((platform) => platform.y >= 560 && platform.y <= 1360));
+
+  const usedPlatform = { ...visiblePlatforms[0], used: true };
+  assert.equal(
+    selectVisibleDoodlePlatforms([usedPlatform], { buffer: 80, cameraY: 640, stageHeight: 640 }).length,
+    0,
+  );
+
+  const visibleHazards = selectVisibleDoodleHazards(layout.hazards, {
+    buffer: 80,
+    cameraY: 640,
+    stageHeight: 640,
+  });
+  assert.ok(visibleHazards.length < layout.hazards.length);
+  assert.ok(visibleHazards.every((hazard) => hazard.y + hazard.size >= 560 && hazard.y - hazard.size <= 1360));
+});
+
+test("flappy visible selector culls gates outside the viewport for both directions", () => {
+  const layout = generateFlappyGateLayout(getMiniGameLevel("flappy", "flappy-10"), "visibility-seed");
+  const forwardVisible = selectVisibleFlappyGates(layout.gates, {
+    buffer: 90,
+    gateWidth: 54,
+    progress: 360,
+    reverseDirection: false,
+    stageWidth: 360,
+  });
+  const reverseVisible = selectVisibleFlappyGates(layout.gates, {
+    buffer: 90,
+    gateWidth: 54,
+    progress: 360,
+    reverseDirection: true,
+    stageWidth: 360,
+  });
+
+  assert.ok(forwardVisible.length < layout.gates.length);
+  assert.ok(reverseVisible.length < layout.gates.length);
+  assert.ok(forwardVisible.every((gate) => 360 + gate.distance - 360 > -54 - 90 && 360 + gate.distance - 360 < 360 + 90));
+  assert.ok(reverseVisible.every((gate) => -gate.distance + 360 > -54 - 90 && -gate.distance + 360 < 360 + 90));
 });
 
 test("doodle only moving obstacle variants enable moving hazards", () => {

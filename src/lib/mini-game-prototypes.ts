@@ -101,6 +101,25 @@ export type GeneratedFlappyGate = {
 
 export type FlappyInitialPlacement = "abovePlatform" | "belowPlatform";
 
+export type MiniGameLowPowerHints = {
+  maxWidth768?: boolean;
+  hardwareConcurrency?: number;
+};
+
+export type DoodleVisibleOptions = {
+  buffer: number;
+  cameraY: number;
+  stageHeight: number;
+};
+
+export type FlappyVisibleOptions = {
+  buffer: number;
+  gateWidth: number;
+  progress: number;
+  reverseDirection: boolean;
+  stageWidth: number;
+};
+
 export type KnifePoint = {
   x: number;
   y: number;
@@ -150,6 +169,61 @@ function stringParam(params: MiniGameParams, key: string, fallback: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+export function getMiniGameLowPowerMode({
+  hardwareConcurrency,
+  maxWidth768 = false,
+}: MiniGameLowPowerHints = {}) {
+  return maxWidth768 || (typeof hardwareConcurrency === "number" && hardwareConcurrency <= 4);
+}
+
+export function isLowPowerMiniGameDevice() {
+  const maxWidth768 =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 768px)").matches;
+  const hardwareConcurrency =
+    typeof navigator !== "undefined" && typeof navigator.hardwareConcurrency === "number"
+      ? navigator.hardwareConcurrency
+      : undefined;
+
+  return getMiniGameLowPowerMode({ hardwareConcurrency, maxWidth768 });
+}
+
+export function selectVisibleDoodlePlatforms<T extends { y: number; used?: boolean }>(
+  platforms: readonly T[],
+  { buffer, cameraY, stageHeight }: DoodleVisibleOptions,
+) {
+  const minY = cameraY - buffer;
+  const maxY = cameraY + stageHeight + buffer;
+  return platforms.filter((platform) => !platform.used && platform.y >= minY && platform.y <= maxY);
+}
+
+export function selectVisibleDoodleHazards<T extends { y: number; size: number; used?: boolean }>(
+  hazards: readonly T[],
+  { buffer, cameraY, stageHeight }: DoodleVisibleOptions,
+) {
+  const minY = cameraY - buffer;
+  const maxY = cameraY + stageHeight + buffer;
+  return hazards.filter((hazard) => !hazard.used && hazard.y + hazard.size >= minY && hazard.y - hazard.size <= maxY);
+}
+
+export function getFlappyGateScreenX(
+  gate: { distance: number },
+  { progress, reverseDirection, stageWidth }: Pick<FlappyVisibleOptions, "progress" | "reverseDirection" | "stageWidth">,
+) {
+  return reverseDirection ? -gate.distance + progress : stageWidth + gate.distance - progress;
+}
+
+export function selectVisibleFlappyGates<T extends { distance: number }>(
+  gates: readonly T[],
+  options: FlappyVisibleOptions,
+) {
+  return gates.filter((gate) => {
+    const screenX = getFlappyGateScreenX(gate, options);
+    return screenX > -options.gateWidth - options.buffer && screenX < options.stageWidth + options.buffer;
+  });
 }
 
 export function generateDoodleWorldLayout(
@@ -270,7 +344,7 @@ export function getFlappyInitialPlacement(level: MiniGameLevelConfig): FlappyIni
 export function generateFlappyGateLayout(
   level: MiniGameLevelConfig,
   runSeed: string,
-  options: { stageHeight?: number } = {},
+  options: { backgroundRefCount?: number; stageHeight?: number } = {},
 ) {
   const stageHeight = options.stageHeight ?? 640;
   const gateCount = numberParam(level.params, "gateCount", 6);
@@ -303,7 +377,8 @@ export function generateFlappyGateLayout(
   });
 
   const backgroundSeed = createSeededRandom(`${level.levelId}:${runSeed}:flappy-background`);
-  const backgroundRefs = Array.from({ length: 14 }, (_, index) => ({
+  const backgroundRefCount = Math.max(0, Math.floor(options.backgroundRefCount ?? 14));
+  const backgroundRefs = Array.from({ length: backgroundRefCount }, (_, index) => ({
     id: index,
     x: backgroundSeed() * 360,
     y: 72 + backgroundSeed() * (stageHeight - 150),
