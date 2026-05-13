@@ -110,6 +110,14 @@ import {
   type SearchPattern,
   type SearchScene,
 } from "@/lib/search-scenes";
+import {
+  MiniGameEmbeddedStage,
+  type MiniGameCompletion,
+} from "./mini-game-prototypes";
+import {
+  createMiniGameRunSeed,
+  type MiniGameId,
+} from "@/lib/mini-game-prototypes";
 
 type Stage = AppStage;
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
@@ -129,7 +137,6 @@ type AdvancedChallengeState =
       requiredCorrect: number;
       reason: string;
     };
-
 type RoundConfig = {
   id: RoundId;
   title: string;
@@ -169,10 +176,10 @@ const rounds: RoundConfig[] = [
   },
   {
     id: "search",
-    title: "相似红点",
-    measure: "侦察力",
-    rule: "每轮先看目标图案，只数和提示完全相同的图案；多个目标时数总和。",
-    action: "图案飞完后，从相近数字里选择目标总数。",
+    title: "一路向上",
+    measure: "连续反应",
+    rule: "拖动控制小方块左右移动，踩平台一路上升。",
+    action: "基础关失败会原地续跑，超过 3 次失误后直接结算进入下一轮。",
   },
   {
     id: "stroop",
@@ -190,10 +197,10 @@ const rounds: RoundConfig[] = [
   },
   {
     id: "memory",
-    title: "色块记忆",
-    measure: "记忆力",
-    rule: "记住 4 格颜色，遮住后按提示位置选择颜色。",
-    action: "答对越多、反应越快分越高。",
+    title: "一路向前",
+    measure: "手眼协调",
+    rule: "点击让小方块起飞并控制高度，穿过前方门洞。",
+    action: "基础关撞到障碍会闪烁复位继续，超过 3 次失误后结算。",
   },
   {
     id: "braking",
@@ -204,10 +211,10 @@ const rounds: RoundConfig[] = [
   },
   {
     id: "patience",
-    title: "进度等待",
-    measure: "耐心",
-    rule: "等待进度条推进，越完整分越高。",
-    action: "中途跳过会按已等待比例计分。",
+    title: "飞刀连射",
+    measure: "时机判断",
+    rule: "点击发射长条，尽量避开已经插在转盘上的长条。",
+    action: "基础关失败不打断，发射完所有长条后按命中表现计分。",
   },
 ];
 
@@ -248,6 +255,49 @@ function trial(
     errorType: patch.errorType,
     target: patch.target,
     value: patch.value,
+  };
+}
+
+function numberStat(outcome: MiniGameCompletion, key: string, fallback = 0) {
+  const value = Number(outcome.stats[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function miniGameBaseScore(outcome: MiniGameCompletion) {
+  const failures = numberStat(outcome, "failures");
+  if (outcome.gameId === "knife") {
+    const hits = numberStat(outcome, "hits");
+    const shotCount = Math.max(1, numberStat(outcome, "shotCount", 6));
+    return Math.round(clamp((hits / shotCount) * 100 - failures * 8, 0, 100));
+  }
+  const progress = numberStat(outcome, "progressPercent");
+  const passBonus = outcome.status === "passed" ? 8 : 0;
+  return Math.round(clamp(progress + passBonus - failures * 16, 0, 100));
+}
+
+function miniGameFailureError(outcome: MiniGameCompletion): TrialEvent["errorType"] | undefined {
+  if (outcome.status === "passed") return undefined;
+  if (outcome.reason.includes("边界") || outcome.reason.includes("掉出")) return "miss";
+  if (outcome.reason.includes("倒计时")) return "timeout";
+  return "collision";
+}
+
+function miniGameValue(mode: string, outcome: MiniGameCompletion, score: number) {
+  return {
+    mode,
+    miniGameId: outcome.gameId,
+    miniLevelId: outcome.levelId,
+    passed: outcome.status === "passed",
+    score,
+    reason: outcome.reason,
+    elapsedMs: outcome.elapsedMs,
+    failures: numberStat(outcome, "failures"),
+    progressPercent: numberStat(outcome, "progressPercent", outcome.status === "passed" ? 100 : 0),
+    hits: numberStat(outcome, "hits"),
+    shotCount: numberStat(outcome, "shotCount"),
+    gateCount: numberStat(outcome, "gateCount"),
+    passedGates: numberStat(outcome, "passedGates"),
+    forcedAdvance: outcome.stats.forcedAdvance === true,
   };
 }
 
@@ -472,12 +522,7 @@ export default function Home() {
       const nextIndex = currentIndex + 1;
       roundIndexRef.current = nextIndex;
       setRoundIndex(nextIndex);
-      if (rounds[nextIndex]?.id === "patience") {
-        roundCompletionLockedRef.current = false;
-        setStage("playing");
-      } else {
-        setStage("intro");
-      }
+      setStage("intro");
     }, 320);
   }, [persistGameState]);
 
@@ -711,7 +756,7 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const historyLayer = getAppBackHistoryLayer({
+    const historyLayer: AppBackHistoryLayer = getAppBackHistoryLayer({
       stage,
       restartConfirmOpen,
       advancedBackSource: advancedChallenge?.mode ?? null,
@@ -940,8 +985,100 @@ function PlayFrame({
   );
 }
 
+function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
+  if (round === "search") return "doodle";
+  if (round === "memory") return "flappy";
+  if (round === "patience") return "knife";
+  return null;
+}
+
+type MiniAdvancedStageConfig = AdvancedStageConfig & { params: AdvancedStageConfig["params"] & { miniGameId: MiniGameId; miniLevelId: string } };
+
+function isMiniGameAdvancedConfig(config?: AdvancedStageConfig): config is MiniAdvancedStageConfig {
+  return (
+    typeof config?.params.miniGameId === "string" &&
+    (config.params.miniGameId === "doodle" || config.params.miniGameId === "flappy" || config.params.miniGameId === "knife") &&
+    typeof config.params.miniLevelId === "string"
+  );
+}
+
+function MiniGameBaseRound({
+  gameId,
+  onComplete,
+  round,
+}: {
+  gameId: MiniGameId;
+  onComplete: (trials: TrialEvent[]) => void;
+  round: RoundId;
+}) {
+  const levelId = `${gameId}-base`;
+  const [runId] = useState(() => Date.now());
+  const shownAtRef = useRef(now());
+  const runSeed = useMemo(() => createMiniGameRunSeed(levelId, runId), [levelId, runId]);
+  const handleComplete = useCallback(
+    (outcome: MiniGameCompletion) => {
+      const score = miniGameBaseScore(outcome);
+      onComplete([
+        trial(round, 0, {
+          shownAt: shownAtRef.current,
+          responseAt: shownAtRef.current + outcome.elapsedMs,
+          correct: outcome.status === "passed" && score >= 60,
+          errorType: miniGameFailureError(outcome),
+          value: miniGameValue(`mini-${gameId}-base`, outcome, score),
+        }),
+      ]);
+    },
+    [gameId, onComplete, round],
+  );
+
+  return (
+    <MiniGameEmbeddedStage
+      gameId={gameId}
+      levelId={levelId}
+      mode="base"
+      onComplete={handleComplete}
+      runSeed={runSeed}
+    />
+  );
+}
+
+function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advancedConfig: MiniAdvancedStageConfig; onComplete: (trials: TrialEvent[]) => void }) {
+  const config = advancedConfig;
+  const [runId] = useState(() => Date.now());
+  const shownAtRef = useRef(now());
+  const runSeed = useMemo(() => createMiniGameRunSeed(config.params.miniLevelId, runId), [config.params.miniLevelId, runId]);
+  const handleComplete = useCallback(
+    (outcome: MiniGameCompletion) => {
+      const passed = outcome.status === "passed";
+      onComplete([
+        trial(config.dimension, 0, {
+          shownAt: shownAtRef.current,
+          responseAt: shownAtRef.current + outcome.elapsedMs,
+          correct: passed,
+          errorType: passed ? undefined : miniGameFailureError(outcome),
+          value: miniGameValue("mini-game", outcome, passed ? 100 : 0),
+        }),
+      ]);
+    },
+    [config.dimension, onComplete],
+  );
+
+  return (
+    <MiniGameEmbeddedStage
+      gameId={config.params.miniGameId}
+      levelId={config.params.miniLevelId}
+      mode="advanced"
+      onComplete={handleComplete}
+      runSeed={runSeed}
+    />
+  );
+}
+
 function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId } & RoundProps) {
   if (advancedConfig) {
+    if (isMiniGameAdvancedConfig(advancedConfig)) {
+      return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+    }
     switch (round) {
       case "reaction":
         return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
@@ -960,6 +1097,10 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
       case "patience":
         return <AdvancedPatienceRound advancedConfig={advancedConfig} onComplete={onComplete} />;
     }
+  }
+  const baseMiniGameId = miniGameIdForBaseRound(round);
+  if (baseMiniGameId) {
+    return <MiniGameBaseRound gameId={baseMiniGameId} onComplete={onComplete} round={round} />;
   }
   switch (round) {
     case "reaction":
@@ -992,6 +1133,24 @@ function getParamBoolean(config: AdvancedStageConfig, key: string, fallback = fa
 }
 
 function buildAdvancedPerfectTrials(config: AdvancedStageConfig): TrialEvent[] {
+  if (typeof config.params.miniGameId === "string" && typeof config.params.miniLevelId === "string") {
+    return [
+      trial(config.dimension, 0, {
+        shownAt: 0,
+        responseAt: 1000,
+        correct: true,
+        value: {
+          mode: "mini-game",
+          miniGameId: config.params.miniGameId,
+          miniLevelId: config.params.miniLevelId,
+          passed: true,
+          score: 100,
+          reason: "通过",
+          elapsedMs: 1000,
+        },
+      }),
+    ];
+  }
   const count =
     getParamNumber(config, "requiredGreenClicks", 0) ||
     getParamNumber(config, "targetCount", 0) ||
@@ -4627,9 +4786,9 @@ function ResultScreen({
     },
     {
       roundId: "search",
-      label: "侦察力",
+      label: "连续反应",
       score: result.scores.search,
-      detail: result.metrics.searchMeanCountError !== null ? `误差 ${result.metrics.searchMeanCountError.toFixed(1)}` : "不足",
+      detail: result.metrics.searchMeanCountError !== null ? `失误 ${result.metrics.searchMeanCountError.toFixed(0)}` : "不足",
     },
     {
       roundId: "stroop",
@@ -4645,7 +4804,7 @@ function ResultScreen({
     },
     {
       roundId: "memory",
-      label: "记忆力",
+      label: "手眼协调",
       score: result.scores.memory,
       detail: result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足",
     },
@@ -4662,7 +4821,7 @@ function ResultScreen({
     },
     {
       roundId: "patience",
-      label: "耐心",
+      label: "时机判断",
       score: result.scores.waiting,
       detail: result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足",
     },
@@ -5010,7 +5169,7 @@ function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
       return `${current.x},${current.y}`;
     })
     .join(" ");
-  const labelScaleFor = (label: string) => (label === "控制力" || label === "侦察力" ? 1.34 : 1.2);
+  const labelScaleFor = (label: string) => (label === "控制力" || label === "连续反应" || label === "手眼协调" || label === "时机判断" ? 1.34 : 1.2);
 
   return (
     <section className="radar-card" aria-label="八向能力图">
@@ -5127,7 +5286,7 @@ async function createShareImage(input: ShareImageInput) {
 }
 
 function defaultShareAxis(): ScoreAxis[] {
-  const labels: Array<ScoreAxis["label"]> = ["反应力", "精准度", "侦察力", "专注力", "节奏感", "记忆力", "控制力", "耐心"];
+  const labels: Array<ScoreAxis["label"]> = ["反应力", "精准度", "连续反应", "专注力", "节奏感", "手眼协调", "控制力", "时机判断"];
   const keys: ScoreAxis["key"][] = ["reaction", "targeting", "search", "interference", "rhythm", "memory", "braking", "waiting"];
   return labels.map((label, index) => ({
     key: keys[index],

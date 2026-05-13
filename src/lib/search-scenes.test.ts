@@ -53,30 +53,27 @@ test("normal search scenes randomize the counted pattern while preserving exact 
   }
 });
 
-test("only advanced search level 3 counts two prompted patterns from the third round onward", () => {
-  const random = mulberry32(303);
-  const levelThree = getAdvancedStageConfig("search", 3);
-  const normalThirdRound = makeSearchScene(2, { random });
-  const firstAdvancedRound = makeAdvancedSearchScene(levelThree, 0, { random });
-  const secondAdvancedRound = makeAdvancedSearchScene(levelThree, 1, { random });
-  const thirdAdvancedRound = makeAdvancedSearchScene(levelThree, 2, { random });
+test("advanced search dimension now delegates to doodle mini-game challenge levels", () => {
+  const orderedMiniLevels = [1, 4, 7, 2, 5, 8, 3, 6, 9, 10];
+  for (let level = 1; level <= 10; level += 1) {
+    const config = getAdvancedStageConfig("search", level);
+    assert.equal(config.params.miniGameId, "doodle");
+    assert.equal(config.params.miniLevelId, `doodle-${orderedMiniLevels[level - 1]}`);
+  }
 
-  assert.equal(normalThirdRound.targetPatterns.length, 1);
-  assert.equal(firstAdvancedRound.targetPatterns.length, 1);
-  assert.equal(secondAdvancedRound.targetPatterns.length, 1);
-  assert.equal(thirdAdvancedRound.targetPatterns.length, 2);
-
-  const targetKeys = new Set(thirdAdvancedRound.targetPatterns.map(patternKey));
-  assert.equal(thirdAdvancedRound.dots.filter((dot) => dot.target).length, thirdAdvancedRound.targetCount);
-  assert.equal(
-    thirdAdvancedRound.dots.every((dot) => dot.target === targetKeys.has(patternKey(dot))),
-    true,
-  );
+  assert.equal(getAdvancedStageConfig("search", 1).variant, "mini-doodle-moving-platform");
+  assert.equal(getAdvancedStageConfig("search", 2).variant, "mini-doodle-risk-platform");
+  assert.equal(getAdvancedStageConfig("search", 3).variant, "mini-doodle-moving-obstacle");
+  assert.equal(getAdvancedStageConfig("search", 10).variant, "mini-doodle-final");
 });
 
-test("advanced search scenes use random prompted patterns and distribute launch order", () => {
+test("legacy advanced search scene helper still distributes launch order when given old-style params", () => {
   const random = mulberry32(20260512);
-  const config = getAdvancedStageConfig("search", 9);
+  const config = {
+    ...getAdvancedStageConfig("search", 9),
+    variant: "search-pattern-count",
+    params: { roundCount: 3, totalDots: 28, targetPatternCount: 3, directions: 2 },
+  };
   const scenes = Array.from({ length: 6 }, (_, index) => makeAdvancedSearchScene(config, index, { random }));
   const promptedSets = new Set(scenes.map((scene) => scene.targetPatterns.map(patternKey).join("|")));
 

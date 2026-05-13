@@ -19,46 +19,30 @@ const cells: AdvancedMemoryCell[] = [
   { id: 3, colorKey: "green", colorValue: "#2f9b68" },
 ];
 
-test("advanced memory difficulty bands keep the three variants playable and distinct", () => {
+test("advanced memory dimension now delegates to flappy mini-game challenge levels", () => {
+  const orderedMiniLevels = [1, 4, 7, 2, 5, 8, 3, 6, 9, 10];
   for (let level = 1; level <= 10; level += 1) {
-    assert.equal(getAdvancedStageConfig("memory", level).params.roundCount, 4);
+    const config = getAdvancedStageConfig("memory", level);
+    assert.equal(config.params.miniGameId, "flappy");
+    assert.equal(config.params.miniLevelId, `flappy-${orderedMiniLevels[level - 1]}`);
   }
 
   assert.deepEqual(
-    [1, 4, 7].map((level) => {
+    [1, 2, 3].map((level) => {
       const config = getAdvancedStageConfig("memory", level);
-      return [config.variant, config.params.gridSize, config.params.coloredCount, config.params.includeBlank, config.params.showMs];
+      return [config.variant, config.params.gateCount, config.params.movingGateRatio, config.params.collectibleCount];
     }),
     [
-      ["memory-static-grid", 4, 4, false, 1800],
-      ["memory-static-grid", 9, 6, true, 2000],
-      ["memory-static-grid", 9, 7, true, 2200],
+      ["mini-flappy-moving-gate", 8, 0.3, 0],
+      ["mini-flappy-collectible-path", 8, 0, 4],
+      ["mini-flappy-reverse-gravity", 6, 0, 0],
     ],
   );
 
-  assert.deepEqual(
-    [2, 5, 8].map((level) => {
-      const config = getAdvancedStageConfig("memory", level);
-      return [config.variant, config.params.gridSize, config.params.coloredCount, config.params.includeBlank];
-    }),
-    [
-      ["memory-sequence-flash", 4, 4, false],
-      ["memory-sequence-flash", 6, 5, true],
-      ["memory-sequence-flash", 9, 7, true],
-    ],
-  );
-
-  assert.deepEqual(
-    [3, 6, 9].map((level) => {
-      const config = getAdvancedStageConfig("memory", level);
-      return [config.variant, config.params.gridSize, config.params.coloredCount, config.params.includeBlank, config.params.showMs];
-    }),
-    [
-      ["memory-rotation", 4, 4, false, 1800],
-      ["memory-rotation", 9, 6, true, 2000],
-      ["memory-rotation", 9, 7, true, 2200],
-    ],
-  );
+  const final = getAdvancedStageConfig("memory", 10);
+  assert.equal(final.variant, "mini-flappy-final");
+  assert.equal(final.params.reversedGravity, true);
+  assert.equal(final.params.collectibleCount, 7);
 });
 
 test("advanced memory rotation schedule hides colors before the slow rotation starts", () => {

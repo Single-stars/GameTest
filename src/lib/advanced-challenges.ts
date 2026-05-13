@@ -1,4 +1,5 @@
 import type { RoundId, TrialEvent } from "./scoring";
+type MiniGameId = "doodle" | "flappy" | "knife";
 
 export type AdvancedDifficulty = "easy" | "medium" | "hard" | "boss";
 
@@ -39,7 +40,34 @@ type ConfigInput = Omit<AdvancedStageConfig, "dimension">;
 const difficultyByBand = ["easy", "medium", "hard"] as const;
 const reactionThresholds = [350, 300, 250] as const;
 const reactionCounts = [5, 6, 7] as const;
-const patienceWaitMs = [6000, 8000, 10000, 12000, 15000, 18000, 20000, 24000, 28000, 32000] as const;
+const miniVariantSlug: Record<MiniGameId, Record<string, string>> = {
+  doodle: {
+    移动平台: "moving-platform",
+    必踩高风险平台: "risk-platform",
+    移动障碍: "moving-obstacle",
+    综合最终关: "final",
+  },
+  flappy: {
+    移动门: "moving-gate",
+    收集路径道具: "collectible-path",
+    反重力反向: "reverse-gravity",
+    综合最终关: "final",
+  },
+  knife: {
+    发射倒计时: "countdown",
+    转速正弦波动: "sine-rotation",
+    不可插区域: "forbidden-zone",
+    综合最终关: "final",
+  },
+};
+type MiniAdvancedLevelInput = {
+  order: number;
+  variant: string;
+  goalText: string;
+  description: string;
+  params: AdvancedStageConfig["params"];
+};
+const miniProgressionOrder = [1, 4, 7, 2, 5, 8, 3, 6, 9, 10] as const;
 
 function createDimensionConfigs(roundId: RoundId, configs: ConfigInput[]): AdvancedStageConfig[] {
   return configs.map((config) => ({ ...config, dimension: roundId }));
@@ -227,21 +255,6 @@ function aimConfigs() {
   ];
 }
 
-function searchConfigs() {
-  return [
-    config(1, "search-dense-red", "过关要求：3 轮全部数准实心红点。", { roundCount: 3, totalDots: 20, targetPatternCount: 1, directions: 2 }),
-    config(2, "search-directional-red", "过关要求：3 轮全部数准多方向飞入的实心红点。", { roundCount: 3, totalDots: 18, targetPatternCount: 1, directions: 4 }),
-    config(3, "search-pattern-count", "过关要求：记住提示图案，3 轮全部数准目标数量。", { roundCount: 3, totalDots: 16, targetPatternCount: 1, directions: 2 }),
-    config(4, "search-dense-red", "过关要求：3 轮全部数准更密的实心红点。", { roundCount: 3, totalDots: 28, targetPatternCount: 1, directions: 2 }),
-    config(5, "search-directional-red", "过关要求：3 轮全部数准多方向交叉红点。", { roundCount: 3, totalDots: 24, targetPatternCount: 1, directions: 6 }),
-    config(6, "search-pattern-count", "过关要求：记住 2 种提示图案，3 轮全部数准目标数量。", { roundCount: 3, totalDots: 22, targetPatternCount: 2, directions: 2 }),
-    config(7, "search-dense-red", "过关要求：3 轮全部数准高密度实心红点。", { roundCount: 3, totalDots: 36, targetPatternCount: 1, directions: 2 }),
-    config(8, "search-directional-red", "过关要求：3 轮全部数准复杂方向红点。", { roundCount: 3, totalDots: 30, targetPatternCount: 1, directions: 8 }),
-    config(9, "search-pattern-count", "过关要求：记住 3 种提示图案，3 轮全部数准目标数量。", { roundCount: 3, totalDots: 28, targetPatternCount: 3, directions: 2 }),
-    config(10, "search-boss", "过关要求：3 轮全部数准多方向、多图案目标数量。", { roundCount: 3, totalDots: 34, targetPatternCount: 3, directions: 8 }),
-  ];
-}
-
 function stroopConfigs() {
   return [
     config(1, "stroop-flash-color", "过关要求：5 轮全选对字体颜色，每题 ≤ 2000ms。", { roundCount: 5, answerTimeLimitMs: 2000, flashMs: 620 }),
@@ -269,21 +282,6 @@ function rhythmConfigs() {
     config(8, "rhythm-four-circle", "过关要求：命中 18 次四圈节拍，每次偏差 ≤ 60ms。", { hitCount: 18, offsetThresholdMs: 60, lanes: 4, fakeBeats: false, overlap: true }),
     config(9, "rhythm-fake-beat", "过关要求：命中 18 次真拍，假拍不能点，偏差 ≤ 60ms。", { hitCount: 18, offsetThresholdMs: 60, lanes: 2, fakeBeats: true, overlap: true }),
     config(10, "rhythm-boss", "过关要求：命中 20 次真拍，假拍不能点，每次偏差 ≤ 50ms。", { hitCount: 20, offsetThresholdMs: 50, lanes: 4, fakeBeats: true, overlap: true }),
-  ];
-}
-
-function memoryConfigs() {
-  return [
-    config(1, "memory-static-grid", "过关要求：4 轮全部答对目标格颜色。", { roundCount: 4, gridSize: 4, coloredCount: 4, showMs: 1800, includeBlank: false }),
-    config(2, "memory-sequence-flash", "过关要求：4 轮全部答对闪烁后目标格颜色。", { roundCount: 4, gridSize: 4, coloredCount: 4, flashMs: 720, flashGapMs: 160, includeBlank: false }),
-    config(3, "memory-rotation", "过关要求：4 轮全部答对旋转后标记格颜色。", { roundCount: 4, gridSize: 4, coloredCount: 4, showMs: 1800, rotation: true, includeBlank: false }),
-    config(4, "memory-static-grid", "过关要求：4 轮全部答对九宫格目标颜色，可选空白。", { roundCount: 4, gridSize: 9, coloredCount: 6, showMs: 2000, includeBlank: true }),
-    config(5, "memory-sequence-flash", "过关要求：4 轮全部答对顺序闪烁后的目标颜色，可选空白。", { roundCount: 4, gridSize: 6, coloredCount: 5, flashMs: 560, flashGapMs: 130, includeBlank: true }),
-    config(6, "memory-rotation", "过关要求：4 轮全部答对旋转后标记格颜色，可选空白。", { roundCount: 4, gridSize: 9, coloredCount: 6, showMs: 2000, rotation: true, includeBlank: true }),
-    config(7, "memory-static-grid", "过关要求：4 轮全部答对九宫格目标颜色，可选空白。", { roundCount: 4, gridSize: 9, coloredCount: 7, showMs: 2200, includeBlank: true }),
-    config(8, "memory-sequence-flash", "过关要求：4 轮全部答对更快闪烁后的目标颜色，可选空白。", { roundCount: 4, gridSize: 9, coloredCount: 7, flashMs: 420, flashGapMs: 100, includeBlank: true }),
-    config(9, "memory-rotation", "过关要求：4 轮全部答对旋转后标记格颜色，可选空白。", { roundCount: 4, gridSize: 9, coloredCount: 7, showMs: 2200, rotation: true, includeBlank: true }),
-    config(10, "memory-boss", "过关要求：4 轮全部答对九宫格闪烁、旋转后的标记格颜色。", { roundCount: 4, gridSize: 9, coloredCount: 6, rotation: true, flashMs: 420, flashGapMs: 90, includeBlank: true }),
   ];
 }
 
@@ -439,6 +437,67 @@ function brakingConfigs() {
   ];
 }
 
+function miniAdvancedLevel(
+  order: number,
+  variant: string,
+  goalText: string,
+  description: string,
+  params: AdvancedStageConfig["params"],
+): MiniAdvancedLevelInput {
+  return { order, variant, goalText, description, params };
+}
+
+const miniAdvancedLevels: Record<MiniGameId, MiniAdvancedLevelInput[]> = {
+  doodle: [
+    miniAdvancedLevel(1, "移动平台", "到达 4 屏高度", "移动平台比例约 40%，少量危险障碍，速度慢。", { targetHeightScreens: 4, movingPlatformRatio: 0.4, movingPlatformSpeed: 22, hazardDensity: 0.45 }),
+    miniAdvancedLevel(2, "移动平台", "到达 6 屏高度", "移动平台比例约 70%，中等危险障碍，速度中等。", { targetHeightScreens: 6, movingPlatformRatio: 0.7, movingPlatformSpeed: 34, hazardDensity: 0.8 }),
+    miniAdvancedLevel(3, "移动平台", "到达 8 屏高度", "全部平台移动，危险障碍更多，速度较快。", { targetHeightScreens: 8, movingPlatformRatio: 1, movingPlatformSpeed: 46, hazardDensity: 1.2 }),
+    miniAdvancedLevel(4, "必踩高风险平台", "到达 5 屏高度，必踩 3/3", "必须踩中 3 个略窄高风险平台，统一 1.6 倍弹跳。", { targetHeightScreens: 5, movingPlatformRatio: 0, requiredRiskPlatforms: 3, riskJumpMultiplier: 1.6 }),
+    miniAdvancedLevel(5, "必踩高风险平台", "到达 7 屏高度，必踩 5/5", "必须踩中 5 个中等宽度高风险平台。", { targetHeightScreens: 7, movingPlatformRatio: 0, requiredRiskPlatforms: 5, riskJumpMultiplier: 1.6 }),
+    miniAdvancedLevel(6, "必踩高风险平台", "到达 9 屏高度，必踩 7/7", "必须踩中 7 个更窄高风险平台，静态危险障碍更多。", { targetHeightScreens: 9, movingPlatformRatio: 0, requiredRiskPlatforms: 7, riskJumpMultiplier: 1.6 }),
+    miniAdvancedLevel(7, "移动障碍", "到达 5 屏高度", "少量移动障碍在平台旁缓慢移动。", { targetHeightScreens: 5, movingObstacleCount: 5, movementPattern: "horizontal" }),
+    miniAdvancedLevel(8, "移动障碍", "到达 7 屏高度", "移动障碍数量增加，部分会穿过常用跳跃路线。", { targetHeightScreens: 7, movingObstacleCount: 9, movementPattern: "horizontal|vertical|patrolDiagonal" }),
+    miniAdvancedLevel(9, "移动障碍", "到达 9 屏高度", "较多移动障碍持续压迫连续平台之间的上升路线。", { targetHeightScreens: 9, movingObstacleCount: 13, movementPattern: "horizontal|vertical|patrolDiagonal|orbitSmall|pulse|slowCross" }),
+    miniAdvancedLevel(10, "综合最终关", "到达 10 屏高度，必踩 8/8", "全移动平台，8 个必踩高风险平台，后段加入更多移动障碍。", { targetHeightScreens: 10, movingPlatformRatio: 1, requiredRiskPlatforms: 8, movingObstacleCount: 20, riskJumpMultiplier: 1.6 }),
+  ],
+  flappy: [
+    miniAdvancedLevel(1, "移动门", "通过 8 个门", "8 门，30% 移动门，缝隙大，速度慢。", { gateCount: 8, movingGateRatio: 0.3, collectibleCount: 0 }),
+    miniAdvancedLevel(2, "移动门", "通过 10 个门", "10 门，50% 移动门，缝隙中等。", { gateCount: 10, movingGateRatio: 0.5, collectibleCount: 0 }),
+    miniAdvancedLevel(3, "移动门", "通过 12 个门", "12 门，70% 移动门，缝隙略小。", { gateCount: 12, movingGateRatio: 0.7, collectibleCount: 0 }),
+    miniAdvancedLevel(4, "收集路径道具", "通过 8 门，收集 4/4", "必须收集 4 个接近安全中心线的道具。", { gateCount: 8, movingGateRatio: 0, collectibleCount: 4 }),
+    miniAdvancedLevel(5, "收集路径道具", "通过 10 门，收集 6/6", "必须收集 6 个略微偏上或偏下的道具。", { gateCount: 10, movingGateRatio: 0, collectibleCount: 6 }),
+    miniAdvancedLevel(6, "收集路径道具", "通过 12 门，收集 8/8", "必须收集 8 个更靠近缝隙边缘的道具。", { gateCount: 12, movingGateRatio: 0, collectibleCount: 8 }),
+    miniAdvancedLevel(7, "反重力反向", "通过 6 个门", "角色从右往左移动，不点击向上漂，点击向下压。", { gateCount: 6, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
+    miniAdvancedLevel(8, "反重力反向", "通过 8 个门", "反向移动速度中等，缝隙中等。", { gateCount: 8, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
+    miniAdvancedLevel(9, "反重力反向", "通过 10 个门", "反向速度较快，门位变化更明显。", { gateCount: 10, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
+    miniAdvancedLevel(10, "综合最终关", "通过 13 门，收集 7/7", "反向移动和反重力，移动门与必收集道具同时出现。", { gateCount: 13, movingGateRatio: 0.45, collectibleCount: 7, reversedGravity: true, reverseDirection: true }),
+  ],
+  knife: [
+    miniAdvancedLevel(1, "发射倒计时", "命中 7 发", "每发 3.0 秒倒计时，初始障碍 1 个。", { shotCount: 7, shotCountdown: 3, initialObstacleCount: 1 }),
+    miniAdvancedLevel(2, "发射倒计时", "命中 9 发", "每发 2.5 秒倒计时，初始障碍 2 个。", { shotCount: 9, shotCountdown: 2.5, initialObstacleCount: 2 }),
+    miniAdvancedLevel(3, "发射倒计时", "命中 11 发", "每发 2.0 秒倒计时，初始障碍 3 个。", { shotCount: 11, shotCountdown: 2, initialObstacleCount: 3 }),
+    miniAdvancedLevel(4, "转速正弦波动", "命中 7 发", "正弦速度按 0 到正反最快循环。", { shotCount: 7, sineRotationEnabled: true, phaseDuration: 3, sweepPerPhase: 390, initialObstacleCount: 1 }),
+    miniAdvancedLevel(5, "转速正弦波动", "命中 9 发", "正弦速度中等，初始障碍 2 个。", { shotCount: 9, sineRotationEnabled: true, phaseDuration: 2.8, sweepPerPhase: 405, initialObstacleCount: 2 }),
+    miniAdvancedLevel(6, "转速正弦波动", "命中 11 发", "正弦速度更快，初始障碍 3 个。", { shotCount: 11, sineRotationEnabled: true, phaseDuration: 2.55, sweepPerPhase: 420, initialObstacleCount: 3 }),
+    miniAdvancedLevel(7, "不可插区域", "命中 7 发，避开禁区", "1 块不可插区域，总面积约 12%。", { shotCount: 7, forbiddenZoneCount: 1, forbiddenZoneRatio: 0.12, initialObstacleCount: 1 }),
+    miniAdvancedLevel(8, "不可插区域", "命中 9 发，避开禁区", "2 块不可插区域，总面积约 18%。", { shotCount: 9, forbiddenZoneCount: 2, forbiddenZoneRatio: 0.18, initialObstacleCount: 2 }),
+    miniAdvancedLevel(9, "不可插区域", "命中 11 发，避开禁区", "3 块不可插区域，总面积约 24%。", { shotCount: 11, forbiddenZoneCount: 3, forbiddenZoneRatio: 0.24, initialObstacleCount: 3 }),
+    miniAdvancedLevel(10, "综合最终关", "命中 13 发，避开禁区和旧刀", "倒计时、正弦转速和不可插区域同时出现。", { shotCount: 13, shotCountdown: 2.3, sineRotationEnabled: true, phaseDuration: 2.7, sweepPerPhase: 405, forbiddenZoneCount: 2, forbiddenZoneRatio: 0.2, initialObstacleCount: 3 }),
+  ],
+};
+
+function miniGameConfigs(gameId: MiniGameId) {
+  const levels = miniAdvancedLevels[gameId];
+  return miniProgressionOrder.map((sourceOrder, index) => {
+    const level = levels.find((item) => item.order === sourceOrder) ?? levels[index];
+    return config(index + 1, `mini-${gameId}-${miniVariantSlug[gameId][level.variant] ?? level.variant}`, `过关要求：${level.goalText}。${level.description}`, {
+      ...level.params,
+      miniGameId: gameId,
+      miniLevelId: `${gameId}-${sourceOrder}`,
+    });
+  });
+}
+
 function completeBrakeEvent(level: number, event: AdvancedBrakeEvent): AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction } {
   return { ...event, correctAction: getAdvancedBrakeCorrectAction(level, event) };
 }
@@ -568,23 +627,15 @@ export function getAdvancedBrakeReleaseOutcome(event: (AdvancedBrakeEvent & { co
   return { outcome: "failure" as const, errorType: hasGray ? "false_alarm" : "early_stop" };
 }
 
-function patienceConfigs() {
-  return patienceWaitMs.map((waitMs, index) =>
-    config(index + 1, "patience-wait", `过关要求：完整等待 ${Math.round(waitMs / 1000)} 秒，中断失败。`, {
-      waitMs,
-    }),
-  );
-}
-
 export const ADVANCED_STAGE_CONFIGS: Record<RoundId, AdvancedStageConfig[]> = {
   reaction: createDimensionConfigs("reaction", reactionConfigs()),
   aim: createDimensionConfigs("aim", aimConfigs()),
-  search: createDimensionConfigs("search", searchConfigs()),
+  search: createDimensionConfigs("search", miniGameConfigs("doodle")),
   stroop: createDimensionConfigs("stroop", stroopConfigs()),
   rhythm: createDimensionConfigs("rhythm", rhythmConfigs()),
-  memory: createDimensionConfigs("memory", memoryConfigs()),
+  memory: createDimensionConfigs("memory", miniGameConfigs("flappy")),
   braking: createDimensionConfigs("braking", brakingConfigs()),
-  patience: createDimensionConfigs("patience", patienceConfigs()),
+  patience: createDimensionConfigs("patience", miniGameConfigs("knife")),
 };
 
 function clampLevel(level: number) {
@@ -707,7 +758,28 @@ function evaluateAim(config: AdvancedStageConfig, trials: TrialEvent[]) {
   return pass(config, hits, required);
 }
 
+function isMiniGameConfig(config: AdvancedStageConfig) {
+  return typeof config.params.miniGameId === "string" && typeof config.params.miniLevelId === "string";
+}
+
+function miniGameFailureReason(trial: TrialEvent | undefined) {
+  const rawReason = String(trial?.value?.reason ?? trial?.errorType ?? "未完成挑战");
+  return rawReason.startsWith("失败：") ? rawReason : `失败：${rawReason}`;
+}
+
+function evaluateMiniGameChallenge(config: AdvancedStageConfig, trials: TrialEvent[]) {
+  const item = trials.find(
+    (trial) =>
+      (trial.value?.miniGameId === config.params.miniGameId || trial.value?.gameId === config.params.miniGameId) &&
+      trial.value?.miniLevelId === config.params.miniLevelId,
+  );
+  if (!item) return fail(config, 0, 1, "失败：未完成挑战");
+  if (item.correct === true && item.value?.passed !== false) return pass(config, 1, 1);
+  return fail(config, 0, 1, miniGameFailureReason(item));
+}
+
 function evaluateSearch(config: AdvancedStageConfig, trials: TrialEvent[]) {
+  if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
   const required = numberParam(config, "roundCount", 3);
   for (const item of trials) {
     const target = Number(item.value?.targetCount);
@@ -761,6 +833,7 @@ function evaluateRhythm(config: AdvancedStageConfig, trials: TrialEvent[]) {
 }
 
 function evaluateMemory(config: AdvancedStageConfig, trials: TrialEvent[]) {
+  if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
   const required = numberParam(config, "roundCount", 3);
   const correct = trials.filter((trial) => trial.correct === true).length;
   if (trials.some((trial) => trial.correct === false)) return fail(config, correct, required, "失败：选错颜色");
@@ -782,6 +855,7 @@ function evaluateBraking(config: AdvancedStageConfig, trials: TrialEvent[]) {
 }
 
 function evaluatePatience(config: AdvancedStageConfig, trials: TrialEvent[]) {
+  if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
   const requiredWaitMs = numberParam(config, "waitMs", 6000);
   const item = trials[0];
   if (!item) return baseEvaluation(config, 1);
