@@ -187,24 +187,17 @@ export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
       );
     case "search":
       return [
-        { targetCount: 3, totalDots: 18, difficulty: 1 },
-        { targetCount: 4, totalDots: 22, difficulty: 2 },
-        { targetCount: 5, totalDots: 26, difficulty: 3 },
-        { targetCount: 4, totalDots: 30, difficulty: 4 },
-      ].map((item, index) =>
-        perfectTrial("search", index, {
-          responseAt: index * 1000 + 850,
-          target: { x: 0, y: 0, size: 0, difficulty: item.difficulty, setSize: item.totalDots },
+        perfectTrial("search", 0, {
+          responseAt: 1800,
           value: {
-            targetCount: item.targetCount,
-            selectedCount: item.targetCount,
-            countError: 0,
-            difficulty: item.difficulty,
-            totalDots: item.totalDots,
-            watchMs: 4200,
+            mode: "mini-doodle-base",
+            score: 100,
+            failures: 0,
+            progressPercent: 100,
+            elapsedMs: 1800,
           },
         }),
-      );
+      ];
     case "stroop":
       return Array.from({ length: 5 }, (_, index) =>
         perfectTrial("stroop", index, {
@@ -220,12 +213,18 @@ export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
         }),
       );
     case "memory":
-      return Array.from({ length: 4 }, (_, index) =>
-        perfectTrial("memory", index, {
-          responseAt: index * 1000 + 780,
-          value: { setSize: 4, color: "blue", targetIndex: index },
+      return [
+        perfectTrial("memory", 0, {
+          responseAt: 1700,
+          value: {
+            mode: "mini-flappy-base",
+            score: 100,
+            failures: 0,
+            passedGates: 6,
+            elapsedMs: 1700,
+          },
         }),
-      );
+      ];
     case "braking":
       return Array.from({ length: 8 }, (_, index) =>
         perfectTrial("braking", index, {
@@ -246,8 +245,15 @@ export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
       return [
         perfectTrial("patience", 0, {
           shownAt: 0,
-          responseAt: 9000,
-          value: { waitMs: 9000, durationMs: 9000, skipped: false },
+          responseAt: 1600,
+          value: {
+            mode: "mini-knife-base",
+            score: 100,
+            hits: 6,
+            failures: 0,
+            shotCount: 6,
+            elapsedMs: 1600,
+          },
         }),
       ];
   }
@@ -361,6 +367,31 @@ export function resolveDinoStop({
 const clamp = (value: number, min = 0, max = 100) =>
   Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
 
+function miniGameScoreTrial(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+  return trials.find((trial) => {
+    const mode = String(trial.value?.mode ?? "");
+    const explicitGameId = trial.value?.gameId ?? trial.value?.miniGameId;
+    return explicitGameId === gameId || mode === `mini-${gameId}` || mode === `mini-${gameId}-base`;
+  });
+}
+
+function miniGameScore(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+  const value = Number(miniGameScoreTrial(trials, gameId)?.value?.score);
+  return Number.isFinite(value) ? clamp(value) : null;
+}
+
+function miniGameElapsedMs(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+  const trial = miniGameScoreTrial(trials, gameId);
+  const explicitElapsed = Number(trial?.value?.elapsedMs);
+  if (Number.isFinite(explicitElapsed)) return explicitElapsed;
+  return trial ? rt(trial) : null;
+}
+
+function miniGameFailures(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+  const failures = Number(miniGameScoreTrial(trials, gameId)?.value?.failures);
+  return Number.isFinite(failures) ? Math.max(0, Math.round(failures)) : null;
+}
+
 const mean = (values: number[]) =>
   values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
 
@@ -416,6 +447,9 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     .filter((value) => Number.isFinite(value));
 
   const searchTrials = byRound("search");
+  const searchMiniScore = miniGameScore(searchTrials, "doodle");
+  const searchMiniFailures = miniGameFailures(searchTrials, "doodle");
+  const searchMiniElapsedMs = miniGameElapsedMs(searchTrials, "doodle");
   const searchHits = correctTrials(searchTrials);
   const searchCountTrials = searchTrials.filter((trial) => {
     const targetCount = Number(trial.value?.targetCount);
@@ -470,6 +504,8 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
   const rhythmWrongLane = rhythmTrials.filter((trial) => trial.errorType === "wrong").length;
 
   const memoryTrials = byRound("memory");
+  const memoryMiniScore = miniGameScore(memoryTrials, "flappy");
+  const memoryMiniElapsedMs = miniGameElapsedMs(memoryTrials, "flappy");
   const memoryHits = correctTrials(memoryTrials);
   const memoryTimes = memoryHits
     .map((trial) => validRt(trial, 120, 4500))
@@ -492,16 +528,17 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
   const stopFalseAlarms = stopTrials.filter((trial) => trial.errorType === "false_alarm" || trial.correct === false).length;
 
   const patienceTrial = byRound("patience")[0];
+  const patienceMiniScore = miniGameScore(byRound("patience"), "knife");
   const waitMs = Number(patienceTrial?.value?.waitMs);
   const durationMs = Number(patienceTrial?.value?.durationMs);
 
   const completedDimensions = [
     reactionTimes.length >= 3,
     aimTrials.length >= 8,
-    searchTrials.length >= 4,
+    searchMiniScore !== null || searchTrials.length >= 4,
     stroopTrials.length >= 5,
     rhythmTrials.length >= 8,
-    memoryTrials.length >= 3,
+    memoryMiniScore !== null || memoryTrials.length >= 3,
     brakingTrials.length >= 8,
     patienceTrial !== undefined,
   ].filter(Boolean).length;
@@ -515,13 +552,13 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     aimAccuracy: ratio(aimHits.length, aimTrials.length),
     aimAvgMs: mean(aimTimes),
     aimAvgErrorPx: mean(aimErrors),
-    searchAccuracy: ratio(searchHits.length, searchTrials.length),
-    searchAvgMs: mean(searchTimes),
-    searchWrongTaps: searchTrials.filter((trial) => trial.correct === false || trial.errorType === "wrong").length,
-    searchTargetTotal,
-    searchSelectedTotal,
-    searchMeanCountError: mean(searchCountErrors),
-    searchCountQuality: mean(searchCountQualities),
+    searchAccuracy: searchMiniScore !== null ? searchMiniScore / 100 : ratio(searchHits.length, searchTrials.length),
+    searchAvgMs: searchMiniElapsedMs ?? mean(searchTimes),
+    searchWrongTaps: searchMiniFailures ?? searchTrials.filter((trial) => trial.correct === false || trial.errorType === "wrong").length,
+    searchTargetTotal: searchMiniScore !== null ? null : searchTargetTotal,
+    searchSelectedTotal: searchMiniScore !== null ? null : searchSelectedTotal,
+    searchMeanCountError: searchMiniFailures ?? mean(searchCountErrors),
+    searchCountQuality: searchMiniScore !== null ? searchMiniScore / 100 : mean(searchCountQualities),
     stroopAccuracy: ratio(stroopCorrect.length, stroopTrials.length),
     stroopTotalMs: stroopTimes.length === 0 ? null : stroopTimes.reduce((sum, value) => sum + value, 0),
     stroopAvgMs: mean(stroopTimes),
@@ -532,8 +569,8 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     rhythmAccuracy: ratio(rhythmCorrect.length, rhythmTrials.length),
     rhythmMissRate: ratio(rhythmMisses, rhythmTrials.length),
     rhythmWrongLaneRate: ratio(rhythmWrongLane, rhythmTrials.length),
-    memoryAccuracy: ratio(memoryHits.length, memoryTrials.length),
-    memoryAvgMs: mean(memoryTimes),
+    memoryAccuracy: memoryMiniScore !== null ? memoryMiniScore / 100 : ratio(memoryHits.length, memoryTrials.length),
+    memoryAvgMs: memoryMiniElapsedMs ?? mean(memoryTimes),
     stopFalseAlarmRate: ratio(stopFalseAlarms, stopTrials.length),
     goMissRate: ratio(goTrials.length - goHits.length, goTrials.length),
     goAvgMs: mean(goTimes),
@@ -541,13 +578,16 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     dinoCollisionRate: ratio(dinoCollisions.length, dinoTrials.length),
     dinoEarlyStopRate: ratio(dinoEarlyStops.length, dinoTrials.length),
     dinoAvgStopMs: mean(dinoStopTimes),
-    patiencePct: Number.isFinite(waitMs) && Number.isFinite(durationMs) && durationMs > 0 ? (waitMs / durationMs) * 100 : null,
+    patiencePct: patienceMiniScore ?? (Number.isFinite(waitMs) && Number.isFinite(durationMs) && durationMs > 0 ? (waitMs / durationMs) * 100 : null),
     completedDimensions,
   };
 }
 
 export function calculateScores(trials: TrialEvent[]): ScoreSummary {
   const metrics = deriveMetrics(trials);
+  const miniDoodleScore = miniGameScore(trials.filter((trial) => trial.roundId === "search"), "doodle");
+  const miniFlappyScore = miniGameScore(trials.filter((trial) => trial.roundId === "memory"), "flappy");
+  const miniKnifeScore = miniGameScore(trials.filter((trial) => trial.roundId === "patience"), "knife");
 
   const reaction = clamp(
     scoreFromLowerIsBetter(metrics.reactionMedianMs, 175, 560, 38) * 0.8 +
@@ -565,7 +605,8 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
       );
 
   const search =
-    metrics.searchCountQuality !== null
+    miniDoodleScore ??
+    (metrics.searchCountQuality !== null
       ? clamp(
           metrics.searchCountQuality * 90 +
             (metrics.searchAccuracy ?? 0) * 10 -
@@ -575,7 +616,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
           (metrics.searchAccuracy ?? 0) * 56 +
             scoreFromLowerIsBetter(metrics.searchAvgMs, 520, 2300, 38) * 0.34 -
             metrics.searchWrongTaps * 7,
-        );
+        ));
 
   const interference = clamp(
     (metrics.stroopAccuracy ?? 0) * 100 -
@@ -591,7 +632,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
       (metrics.rhythmMissRate ?? 0) * 38,
   );
 
-  const memory = clamp((metrics.memoryAccuracy ?? 0) * 100 - Math.max(0, ((metrics.memoryAvgMs ?? 0) - 1600) / 2200) * 12);
+  const memory = miniFlappyScore ?? clamp((metrics.memoryAccuracy ?? 0) * 100 - Math.max(0, ((metrics.memoryAvgMs ?? 0) - 1600) / 2200) * 12);
 
   const stopSuccess = metrics.stopFalseAlarmRate === null ? 0 : 1 - metrics.stopFalseAlarmRate;
   const goSuccess = metrics.goMissRate === null ? 0 : 1 - metrics.goMissRate;
@@ -600,7 +641,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
       ? clamp(metrics.dinoSafeStopRate * 100 - Math.max(0, ((metrics.dinoAvgStopMs ?? 0) - DINO_FULL_SCORE_STOP_MS) / 260) * 18)
       : clamp(stopSuccess * 60 + goSuccess * 40 - Math.max(0, ((metrics.goAvgMs ?? 0) - 420) / 500) * 12);
 
-  const waiting = clamp(metrics.patiencePct ?? 0);
+  const waiting = miniKnifeScore ?? clamp(metrics.patiencePct ?? 0);
   const confidence = clamp((metrics.completedDimensions / 8) * 100);
 
   return {
@@ -620,12 +661,12 @@ export function buildScoreAxis(scores: ScoreSummary): ScoreAxis[] {
   return [
     { key: "reaction", label: "反应力", score: scores.reaction },
     { key: "targeting", label: "精准度", score: scores.targeting },
-    { key: "search", label: "侦察力", score: scores.search },
+    { key: "search", label: "连续反应", score: scores.search },
     { key: "interference", label: "专注力", score: scores.interference },
     { key: "rhythm", label: "节奏感", score: scores.rhythm },
-    { key: "memory", label: "记忆力", score: scores.memory },
+    { key: "memory", label: "手眼协调", score: scores.memory },
     { key: "braking", label: "控制力", score: scores.braking },
-    { key: "waiting", label: "耐心", score: scores.waiting },
+    { key: "waiting", label: "时机判断", score: scores.waiting },
   ];
 }
 

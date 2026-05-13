@@ -268,6 +268,54 @@ test("perfect skip trial data produces a full score for every round", () => {
   }
 });
 
+test("mini-game base trial scores replace the old search memory and waiting dimensions", () => {
+  const perfectMiniTrials = [
+    trial("search", 0, {
+      correct: true,
+      value: { mode: "mini-doodle-base", score: 96, failures: 0, progressPercent: 100 },
+    }),
+    trial("memory", 0, {
+      correct: true,
+      value: { mode: "mini-flappy-base", score: 92, failures: 1, passedGates: 6 },
+    }),
+    trial("patience", 0, {
+      correct: true,
+      value: { mode: "mini-knife-base", score: 88, hits: 5, failures: 1, shotCount: 6 },
+    }),
+  ];
+  const messyMiniTrials = [
+    trial("search", 0, {
+      correct: false,
+      errorType: "collision",
+      value: { mode: "mini-doodle-base", score: 42, failures: 4, progressPercent: 72 },
+    }),
+    trial("memory", 0, {
+      correct: false,
+      errorType: "collision",
+      value: { mode: "mini-flappy-base", score: 38, failures: 4, passedGates: 4 },
+    }),
+    trial("patience", 0, {
+      correct: false,
+      errorType: "collision",
+      value: { mode: "mini-knife-base", score: 34, hits: 2, failures: 4, shotCount: 6 },
+    }),
+  ];
+
+  const perfectScores = calculateScores(perfectMiniTrials);
+  const messyScores = calculateScores(messyMiniTrials);
+
+  assert.equal(perfectScores.search, 96);
+  assert.equal(perfectScores.memory, 92);
+  assert.equal(perfectScores.waiting, 88);
+  assert.equal(messyScores.search, 42);
+  assert.equal(messyScores.memory, 38);
+  assert.equal(messyScores.waiting, 34);
+  assert.equal(perfectScores.confidence, 38);
+  assert.equal(messyScores.search < perfectScores.search, true);
+  assert.equal(messyScores.memory < perfectScores.memory, true);
+  assert.equal(messyScores.waiting < perfectScores.waiting, true);
+});
+
 test("very slow all-correct decisions can lose a small amount", () => {
   const scores = calculateScores([
     ...searchCountTrials([
@@ -582,7 +630,7 @@ test("buildScoreAxis uses the public eight-dimension names", () => {
 
   assert.deepEqual(
     axis.map((item) => item.label),
-    ["反应力", "精准度", "侦察力", "专注力", "节奏感", "记忆力", "控制力", "耐心"],
+    ["反应力", "精准度", "连续反应", "专注力", "节奏感", "手眼协调", "控制力", "时机判断"],
   );
 });
 

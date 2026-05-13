@@ -146,17 +146,25 @@ test("advanced aim configs describe real archery target types and arrow parity",
   }
 });
 
-test("advanced config encodes MD round counts and wait durations", () => {
+test("advanced config maps the replaced dimensions to the new mini-game advanced levels", () => {
+  const orderedMiniLevels = [1, 4, 7, 2, 5, 8, 3, 6, 9, 10];
   for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
-    assert.equal(getAdvancedStageConfig("search", level).params.roundCount, 3);
-    assert.equal(getAdvancedStageConfig("memory", level).params.roundCount, 4);
+    const miniLevel = orderedMiniLevels[level - 1];
+    assert.equal(getAdvancedStageConfig("search", level).params.miniGameId, "doodle");
+    assert.equal(getAdvancedStageConfig("search", level).params.miniLevelId, `doodle-${miniLevel}`);
+    assert.equal(getAdvancedStageConfig("memory", level).params.miniGameId, "flappy");
+    assert.equal(getAdvancedStageConfig("memory", level).params.miniLevelId, `flappy-${miniLevel}`);
+    assert.equal(getAdvancedStageConfig("patience", level).params.miniGameId, "knife");
+    assert.equal(getAdvancedStageConfig("patience", level).params.miniLevelId, `knife-${miniLevel}`);
     assert.equal(getAdvancedStageConfig("stroop", level).params.roundCount, 5);
   }
 
-  assert.deepEqual(
-    Array.from({ length: 10 }, (_, index) => getAdvancedStageConfig("patience", index + 1).params.waitMs),
-    [6000, 8000, 10000, 12000, 15000, 18000, 20000, 24000, 28000, 32000],
-  );
+  assert.equal(getAdvancedStageConfig("search", 1).variant, "mini-doodle-moving-platform");
+  assert.equal(getAdvancedStageConfig("search", 2).variant, "mini-doodle-risk-platform");
+  assert.equal(getAdvancedStageConfig("search", 3).variant, "mini-doodle-moving-obstacle");
+  assert.equal(getAdvancedStageConfig("memory", 2).variant, "mini-flappy-collectible-path");
+  assert.equal(getAdvancedStageConfig("memory", 3).variant, "mini-flappy-reverse-gravity");
+  assert.equal(getAdvancedStageConfig("patience", 10).variant, "mini-knife-final");
   assert.equal(getAdvancedStageConfig("stroop", 1).params.answerTimeLimitMs, 2000);
   assert.equal(getAdvancedStageConfig("stroop", 4).params.answerTimeLimitMs, 1500);
   assert.equal(getAdvancedStageConfig("stroop", 7).params.answerTimeLimitMs, 1000);
@@ -376,7 +384,7 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   assert.equal(redClick.reason, "失败：点到了红灯");
 });
 
-test("advanced completion evaluates rhythm offset thresholds and search count errors", () => {
+test("advanced completion evaluates rhythm offset thresholds and mini-game challenge outcomes", () => {
   const rhythm = getAdvancedStageConfig("rhythm", 4);
   const rhythmTrials = Array.from({ length: 12 }, (_, index) =>
     trial("rhythm", index, { value: { offsetMs: index === 4 ? 91 : 48, beatType: "true" } }),
@@ -386,15 +394,20 @@ test("advanced completion evaluates rhythm offset thresholds and search count er
   assert.equal(rhythmResult.passed, false);
   assert.equal(rhythmResult.reason, "失败：偏差 91ms，要求 ≤ 80ms");
 
-  const search = getAdvancedStageConfig("search", 3);
-  const searchResult = evaluateAdvancedChallengeCompletion(search, [
-    trial("search", 0, { value: { targetCount: 5, selectedCount: 5 } }),
-    trial("search", 1, { value: { targetCount: 6, selectedCount: 4 } }),
-    trial("search", 2, { value: { targetCount: 3, selectedCount: 3 } }),
+  const doodle = getAdvancedStageConfig("search", 3);
+  const doodleResult = evaluateAdvancedChallengeCompletion(doodle, [
+    trial("search", 0, { correct: false, errorType: "collision", value: { mode: "mini-game", miniGameId: "doodle", miniLevelId: "doodle-7", reason: "碰到移动障碍" } }),
+  ]);
+  const flappy = getAdvancedStageConfig("memory", 2);
+  const flappyResult = evaluateAdvancedChallengeCompletion(flappy, [
+    trial("memory", 0, { correct: true, value: { mode: "mini-game", miniGameId: "flappy", miniLevelId: "flappy-4", reason: "通过终点" } }),
   ]);
 
-  assert.equal(searchResult.passed, false);
-  assert.equal(searchResult.reason, "失败：少数了 2 个目标");
+  assert.equal(doodleResult.passed, false);
+  assert.equal(doodleResult.reason, "失败：碰到移动障碍");
+  assert.equal(doodleResult.requiredCorrect, 1);
+  assert.equal(flappyResult.passed, true);
+  assert.equal(flappyResult.reason, "通过");
 });
 
 test("debug tools are hidden unless explicitly enabled by development mode or URL flag", () => {

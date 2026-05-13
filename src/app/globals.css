@@ -2458,6 +2458,21 @@ h1 {
   z-index: 10;
 }
 
+.doodle-player-shell.invincible,
+.flappy-player-shell.invincible {
+  animation: mini-player-flash 180ms linear infinite;
+}
+
+@keyframes mini-player-flash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.34;
+  }
+}
+
 .prototype-player-box {
   width: 100%;
   height: 100%;

@@ -49,8 +49,18 @@ const KNIFE_FIRE_ANGLE = KNIFE_SHOT_GEOMETRY.impactAngle;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
 const DEBUG_MINI_GAME_HITBOX = false;
+const BASE_FAILURE_LIMIT = 3;
 
 type PrototypeStatus = "playing" | "passed" | "failed";
+type MiniGameRunMode = "prototype" | "base" | "advanced";
+export type MiniGameCompletion = {
+  gameId: MiniGameId;
+  levelId: string;
+  status: Exclude<PrototypeStatus, "playing">;
+  reason: string;
+  elapsedMs: number;
+  stats: Record<string, number | string | boolean | null>;
+};
 
 type DoodlePlatform = GeneratedDoodlePlatform;
 type DoodleHazard = GeneratedDoodleHazard;
@@ -66,6 +76,8 @@ type DoodleFrame = {
   hazards: DoodleHazard[];
   riskHit: number;
   playerTurns: number;
+  failures: number;
+  invincibleUntil: number;
   status: PrototypeStatus;
   reason: string;
 };
@@ -89,6 +101,8 @@ type FlappyFrame = {
   passed: number;
   collected: number;
   playerTurns: number;
+  failures: number;
+  invincibleUntil: number;
   status: PrototypeStatus;
   reason: string;
 };
@@ -104,8 +118,10 @@ type KnifeFrame = {
   rotation: number;
   insertedAngles: number[];
   initialAngles: number[];
+  failedAngles: number[];
   failedAngle: number | null;
   shotIndex: number;
+  failures: number;
   timer: number | null;
   flying: boolean;
   launcherReadyAt: number;
@@ -258,15 +274,44 @@ export function MiniGamePlayScreen({
           返回
         </button>
       </header>
-      {gameId === "doodle" ? (
-        <DoodleJumpPrototype key={`${level.levelId}-${runId}`} level={level} runSeed={runSeed} onBackToSelect={onBackToSelect} onRestart={restart} />
-      ) : gameId === "flappy" ? (
-        <FlappyPrototype key={`${level.levelId}-${runId}`} level={level} runSeed={runSeed} onBackToSelect={onBackToSelect} onRestart={restart} />
-      ) : (
-        <KnifeHitPrototype key={`${level.levelId}-${runId}`} level={level} runSeed={runSeed} onBackToSelect={onBackToSelect} onRestart={restart} />
-      )}
+      <MiniGameEmbeddedStage
+        key={`${level.levelId}-${runId}`}
+        gameId={gameId}
+        levelId={levelId}
+        mode="prototype"
+        onBackToSelect={onBackToSelect}
+        onRestart={restart}
+        runSeed={runSeed}
+      />
     </section>
   );
+}
+
+export function MiniGameEmbeddedStage({
+  gameId,
+  levelId,
+  mode = "prototype",
+  onBackToSelect = () => undefined,
+  onComplete,
+  onRestart = () => undefined,
+  runSeed,
+}: {
+  gameId: MiniGameId;
+  levelId: string;
+  mode?: MiniGameRunMode;
+  onBackToSelect?: () => void;
+  onComplete?: (outcome: MiniGameCompletion) => void;
+  onRestart?: () => void;
+  runSeed: string;
+}) {
+  const level = getMiniGameLevel(gameId, levelId);
+  if (gameId === "doodle") {
+    return <DoodleJumpPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+  }
+  if (gameId === "flappy") {
+    return <FlappyPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+  }
+  return <KnifeHitPrototype level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
 }
 
 function PrototypeEndOverlay({
@@ -347,13 +392,17 @@ function movingHazardPosition(hazard: DoodleHazard, time: number) {
 
 function DoodleJumpPrototype({
   level,
+  mode,
   runSeed,
   onBackToSelect,
+  onComplete,
   onRestart,
 }: {
   level: MiniGameLevelConfig;
+  mode: MiniGameRunMode;
   runSeed: string;
   onBackToSelect: () => void;
+  onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
   const world = useMemo(() => makeDoodleWorld(level, runSeed), [level, runSeed]);
@@ -361,6 +410,7 @@ function DoodleJumpPrototype({
   const riskJumpMultiplier = numberParam(level.params, "riskJumpMultiplier", 1);
   const controlXRef = useRef(STAGE_WIDTH / 2);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const completedRef = useRef(false);
   const [frame, setFrame] = useState<DoodleFrame>({
     started: false,
     time: 0,
@@ -372,6 +422,8 @@ function DoodleJumpPrototype({
     hazards: world.hazards,
     riskHit: 0,
     playerTurns: 0,
+    failures: 0,
+    invincibleUntil: 0,
     status: "playing",
     reason: "",
   });
@@ -434,7 +486,7 @@ function DoodleJumpPrototype({
           }
         }
 
-        if (status === "playing") {
+        if (status === "playing" && nextTime >= current.invincibleUntil) {
           const hitHazard = current.hazards.some((hazard) => {
             const position = movingHazardPosition(hazard, nextTime);
             if (position.y < cameraY - 50 || position.y > cameraY + STAGE_HEIGHT + 50) return false;
@@ -462,6 +514,42 @@ function DoodleJumpPrototype({
           }
         }
 
+        if (mode === "base" && status === "failed") {
+          const failures = current.failures + 1;
+          if (failures <= BASE_FAILURE_LIMIT) {
+            const respawnY = cameraY + STAGE_HEIGHT * 0.34;
+            const respawnX = clamp(nextX, 70, STAGE_WIDTH - 70);
+            const respawnPlatform: DoodlePlatform = {
+              id: -1000 - failures,
+              x: respawnX,
+              y: respawnY - PLAYER_SIZE / 2,
+              width: 116,
+              start: false,
+              moving: false,
+              risk: false,
+              phase: 0,
+              range: 0,
+              speed: 0,
+            };
+            return {
+              ...current,
+              time: nextTime,
+              playerX: respawnX,
+              playerY: respawnY,
+              playerVy: 760,
+              cameraY,
+              platforms: [respawnPlatform, ...platforms.filter((platform) => platform.id !== respawnPlatform.id)],
+              riskHit,
+              playerTurns,
+              failures,
+              invincibleUntil: nextTime + 1.1,
+              status: "playing",
+              reason,
+            };
+          }
+          reason = "失误超过 3 次，进入下一关";
+        }
+
         return {
           ...current,
           time: nextTime,
@@ -472,6 +560,7 @@ function DoodleJumpPrototype({
           platforms,
           riskHit,
           playerTurns,
+          failures: status === "failed" && mode === "base" ? current.failures + 1 : current.failures,
           status,
           reason,
         };
@@ -481,15 +570,36 @@ function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [riskJumpMultiplier, riskTotal, world.targetHeight]);
+  }, [mode, riskJumpMultiplier, riskTotal, world.targetHeight]);
 
   const progress = clamp((frame.playerY / world.targetHeight) * 100, 0, 100);
+  const showOverlay = mode === "prototype";
+
+  useEffect(() => {
+    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    completedRef.current = true;
+    onComplete({
+      gameId: "doodle",
+      levelId: level.levelId,
+      status: frame.status,
+      reason: frame.reason,
+      elapsedMs: Math.round(frame.time * 1000),
+      stats: {
+        failures: frame.failures,
+        progressPercent: Math.round(progress),
+        riskHit: frame.riskHit,
+        riskTotal,
+        forcedAdvance: mode === "base" && frame.status === "failed",
+      },
+    });
+  }, [frame.failures, frame.reason, frame.riskHit, frame.status, frame.time, level.levelId, mode, onComplete, progress, riskTotal]);
 
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
+        <div className="mini-score">
         <span>高度 {Math.round(progress)}%</span>
         <span>必踩 {frame.riskHit}/{riskTotal}</span>
+        {mode === "base" ? <span>失误 {Math.min(frame.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
         className={`prototype-stage doodle-stage ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
@@ -536,11 +646,11 @@ function DoodleJumpPrototype({
             />
           );
         })}
-        <div className="doodle-player-shell" style={stagePointStyle(frame.playerX, frame.playerY, frame.cameraY)}>
+        <div className={`doodle-player-shell ${frame.time < frame.invincibleUntil ? "invincible" : ""}`} style={stagePointStyle(frame.playerX, frame.playerY, frame.cameraY)}>
           <div className="prototype-player-box doodle-player" style={{ transform: `rotate(${frame.playerTurns * 90}deg)` }} />
         </div>
         {!frame.started ? <div className="prototype-start-hint">拖动开始</div> : null}
-        <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} />
+        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );
@@ -558,13 +668,17 @@ function flappyGateCenterY(gate: FlappyGate, frame: FlappyFrame, params: MiniGam
 
 function FlappyPrototype({
   level,
+  mode,
   runSeed,
   onBackToSelect,
+  onComplete,
   onRestart,
 }: {
   level: MiniGameLevelConfig;
+  mode: MiniGameRunMode;
   runSeed: string;
   onBackToSelect: () => void;
+  onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
   const layout = useMemo(() => makeFlappyLayout(level, runSeed), [level, runSeed]);
@@ -577,6 +691,7 @@ function FlappyPrototype({
   const gapSize = numberParam(level.params, "gapSize", 180);
   const speed = numberParam(level.params, "speed", 118);
   const playerX = reverseDirection ? STAGE_WIDTH - 92 : 92;
+  const completedRef = useRef(false);
   const initialPlayerY = layout.initialPlacement === "belowPlatform"
     ? FLAPPY_START_PLATFORM_Y + FLAPPY_START_PLATFORM_HEIGHT + PLAYER_SIZE / 2
     : FLAPPY_START_PLATFORM_Y - PLAYER_SIZE / 2;
@@ -590,6 +705,8 @@ function FlappyPrototype({
     passed: 0,
     collected: 0,
     playerTurns: 0,
+    failures: 0,
+    invincibleUntil: 0,
     status: "playing",
     reason: "",
   });
@@ -649,7 +766,7 @@ function FlappyPrototype({
 
           const overlapsX = playerX + PLAYER_SIZE / 2 > screenX && playerX - PLAYER_SIZE / 2 < screenX + FLAPPY_GATE_WIDTH;
           const blockedY = nextY - PLAYER_SIZE / 2 < centerY - gapSize / 2 || nextY + PLAYER_SIZE / 2 > centerY + gapSize / 2;
-          if (overlapsX && blockedY) {
+          if (overlapsX && blockedY && nextTime >= current.invincibleUntil) {
             status = "failed";
             reason = "撞到障碍";
           }
@@ -657,7 +774,7 @@ function FlappyPrototype({
           return nextGate;
         });
 
-        if (nextY < PLAYER_SIZE / 2 || nextY > STAGE_HEIGHT - PLAYER_SIZE / 2) {
+        if ((nextY < PLAYER_SIZE / 2 || nextY > STAGE_HEIGHT - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
           status = "failed";
           reason = "飞出边界";
         }
@@ -673,6 +790,27 @@ function FlappyPrototype({
           nextGates = nextGates.map((gate) => ({ ...gate, passed: true }));
         }
 
+        if (mode === "base" && status === "failed") {
+          const failures = current.failures + 1;
+          if (failures <= BASE_FAILURE_LIMIT) {
+            return {
+              ...current,
+              time: nextTime,
+              progress: Math.max(0, nextProgress - 92),
+              playerY: initialPlayerY,
+              playerVy: 0,
+              gates: nextGates,
+              passed,
+              collected,
+              failures,
+              invincibleUntil: nextTime + 1.15,
+              status: "playing",
+              reason,
+            };
+          }
+          reason = "失误超过 3 次，进入下一关";
+        }
+
         return {
           ...current,
           time: nextTime,
@@ -682,6 +820,7 @@ function FlappyPrototype({
           gates: nextGates,
           passed,
           collected,
+          failures: status === "failed" && mode === "base" ? current.failures + 1 : current.failures,
           status,
           reason,
         };
@@ -691,14 +830,39 @@ function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [collectibleCount, gapSize, gateCount, level.params, playerX, reverseDirection, reversedGravity, speed]);
+  }, [collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, reverseDirection, reversedGravity, speed]);
+
+  const progressPercent = clamp((frame.passed / gateCount) * 100, 0, 100);
+  const showOverlay = mode === "prototype";
+
+  useEffect(() => {
+    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    completedRef.current = true;
+    onComplete({
+      gameId: "flappy",
+      levelId: level.levelId,
+      status: frame.status,
+      reason: frame.reason,
+      elapsedMs: Math.round(frame.time * 1000),
+      stats: {
+        failures: frame.failures,
+        progressPercent: Math.round(progressPercent),
+        passedGates: frame.passed,
+        gateCount,
+        collected: frame.collected,
+        collectibleCount,
+        forcedAdvance: mode === "base" && frame.status === "failed",
+      },
+    });
+  }, [collectibleCount, frame.collected, frame.failures, frame.passed, frame.reason, frame.status, frame.time, gateCount, level.levelId, mode, onComplete, progressPercent]);
 
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
-        <span>通过 {frame.passed}/{gateCount}</span>
-        <span>收集 {frame.collected}/{collectibleCount}</span>
-      </div>
+        <div className="mini-score">
+          <span>通过 {frame.passed}/{gateCount}</span>
+          <span>收集 {frame.collected}/{collectibleCount}</span>
+          {mode === "base" ? <span>失误 {Math.min(frame.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+        </div>
       <div
         className={`prototype-stage flappy-stage ${reverseDirection ? "reverse" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         role="application"
@@ -756,13 +920,13 @@ function FlappyPrototype({
           );
         })}
         <div
-          className="flappy-player-shell"
+          className={`flappy-player-shell ${frame.time < frame.invincibleUntil ? "invincible" : ""}`}
           style={{ transform: `translate(${playerX - PLAYER_SIZE / 2}px, ${frame.playerY - PLAYER_SIZE / 2}px)` }}
         >
           <div className={`prototype-player-box flappy-player ${reversedGravity ? "reversed" : ""}`} style={{ transform: `rotate(${frame.playerTurns * 90}deg)` }} />
         </div>
         {!frame.started ? <div className="prototype-start-hint flappy-start-hint">点击开始</div> : null}
-        <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} />
+        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );
@@ -786,13 +950,17 @@ function knifeSectorPath(zone: KnifeForbiddenZone) {
 
 function KnifeHitPrototype({
   level,
+  mode,
   runSeed,
   onBackToSelect,
+  onComplete,
   onRestart,
 }: {
   level: MiniGameLevelConfig;
+  mode: MiniGameRunMode;
   runSeed: string;
   onBackToSelect: () => void;
+  onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
   const shotCount = numberParam(level.params, "shotCount", 6);
@@ -809,13 +977,16 @@ function KnifeHitPrototype({
   );
   const initialAngles = useMemo(() => generateKnifeInitialAngles(level, runSeed, forbiddenArcs), [forbiddenArcs, level, runSeed]);
   const timeoutRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
   const [frame, setFrame] = useState<KnifeFrame>({
     time: 0,
     rotation: 0,
     insertedAngles: [],
     initialAngles,
+    failedAngles: [],
     failedAngle: null,
     shotIndex: 0,
+    failures: 0,
     timer: hasCountdown ? countdown : null,
     flying: false,
     launcherReadyAt: 0,
@@ -831,13 +1002,45 @@ function KnifeHitPrototype({
       forbiddenZones: forbiddenArcs,
       impactAngle,
       initialAngles: current.initialAngles,
-      insertedAngles: current.insertedAngles,
+      insertedAngles: [...current.insertedAngles, ...current.failedAngles],
     });
 
     if (outcome.kind === "collision") {
+      if (mode === "base") {
+        const nextShotIndex = current.shotIndex + 1;
+        const nextFailures = current.failures + 1;
+        return {
+          ...current,
+          failedAngles: [...current.failedAngles, outcome.impactAngle],
+          failedAngle: outcome.impactAngle,
+          failures: nextFailures,
+          flying: false,
+          launcherReadyAt: current.time + 0.06,
+          reason: "撞到已插入长条",
+          shotIndex: nextShotIndex,
+          status: nextShotIndex >= shotCount ? "failed" : "playing",
+          timer: hasCountdown ? countdown : null,
+        };
+      }
       return { ...current, failedAngle: outcome.impactAngle, flying: false, status: "failed", reason: "撞到已插入长条" };
     }
     if (outcome.kind === "forbidden") {
+      if (mode === "base") {
+        const nextShotIndex = current.shotIndex + 1;
+        const nextFailures = current.failures + 1;
+        return {
+          ...current,
+          failedAngles: [...current.failedAngles, outcome.impactAngle],
+          failedAngle: outcome.impactAngle,
+          failures: nextFailures,
+          flying: false,
+          launcherReadyAt: current.time + 0.06,
+          reason: "命中危险区域",
+          shotIndex: nextShotIndex,
+          status: nextShotIndex >= shotCount ? "failed" : "playing",
+          timer: hasCountdown ? countdown : null,
+        };
+      }
       return { ...current, failedAngle: outcome.impactAngle, flying: false, status: "failed", reason: "命中危险区域" };
     }
 
@@ -849,7 +1052,7 @@ function KnifeHitPrototype({
         flying: false,
         insertedAngles: nextInserted,
         shotIndex: nextShotIndex,
-        status: "passed",
+        status: current.failures > 0 && mode === "base" ? "failed" : "passed",
         reason: `全部 ${shotCount} 发命中`,
       };
     }
@@ -862,7 +1065,7 @@ function KnifeHitPrototype({
       launcherReadyAt: current.time + 0.06,
       timer: hasCountdown ? countdown : null,
     };
-  }, [countdown, forbiddenArcs, hasCountdown, shotCount]);
+  }, [countdown, forbiddenArcs, hasCountdown, mode, shotCount]);
 
   const launch = useCallback(() => {
     setFrame((current) => {
@@ -892,6 +1095,20 @@ function KnifeHitPrototype({
         if (nextTimer !== null && !current.flying) {
           nextTimer -= delta;
           if (nextTimer <= 0) {
+            if (mode === "base") {
+              const nextShotIndex = current.shotIndex + 1;
+              return {
+                ...current,
+                failures: current.failures + 1,
+                launcherReadyAt: nextTime + 0.06,
+                reason: "倒计时结束",
+                shotIndex: nextShotIndex,
+                status: nextShotIndex >= shotCount ? "failed" : "playing",
+                time: nextTime,
+                timer: hasCountdown ? countdown : null,
+                rotation: normalizeDegrees(current.rotation + speed * delta),
+              };
+            }
             status = "failed";
             reason = "倒计时结束";
             nextTimer = 0;
@@ -914,18 +1131,39 @@ function KnifeHitPrototype({
       cancelAnimationFrame(frameId);
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     };
-  }, [baseRotationSpeed, phaseDuration, sineRotationEnabled, sweepPerPhase]);
+  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, shotCount, sineRotationEnabled, sweepPerPhase]);
 
   const remaining = shotCount - frame.shotIndex;
   const wheelRotation = `rotate(${frame.rotation}deg)`;
   const showLauncher = frame.status === "playing" && (frame.flying || frame.time >= frame.launcherReadyAt);
+  const showOverlay = mode === "prototype";
+
+  useEffect(() => {
+    if (!onComplete || completedRef.current || frame.status === "playing") return;
+    completedRef.current = true;
+    onComplete({
+      gameId: "knife",
+      levelId: level.levelId,
+      status: frame.status,
+      reason: frame.reason,
+      elapsedMs: Math.round(frame.time * 1000),
+      stats: {
+        failures: frame.failures,
+        hits: frame.insertedAngles.length,
+        shotCount,
+        fired: frame.shotIndex,
+        forcedAdvance: mode === "base" && frame.status === "failed",
+      },
+    });
+  }, [frame.failures, frame.insertedAngles.length, frame.reason, frame.shotIndex, frame.status, frame.time, level.levelId, mode, onComplete, shotCount]);
 
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
-        <span>已发 {frame.shotIndex}/{shotCount}</span>
-        {hasCountdown ? <span>倒计时 {(frame.timer ?? 0).toFixed(1)}s</span> : null}
-        {sineRotationEnabled ? <span>正弦转速</span> : null}
+        <div className="mini-score">
+          <span>已发 {frame.shotIndex}/{shotCount}</span>
+          {mode === "base" ? <span>命中 {frame.insertedAngles.length}/{shotCount}</span> : null}
+          {hasCountdown ? <span>倒计时 {(frame.timer ?? 0).toFixed(1)}s</span> : null}
+          {sineRotationEnabled ? <span>正弦转速</span> : null}
       </div>
       <div
         className={`prototype-stage knife-stage ${frame.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
@@ -957,8 +1195,11 @@ function KnifeHitPrototype({
             {frame.insertedAngles.map((angle, index) => (
               <span className="knife-arrow knife-stuck" key={`${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
+            {frame.failedAngles.map((angle, index) => (
+              <span className="knife-arrow knife-stuck failed" key={`failed-${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
+            ))}
             {frame.failedAngle !== null ? (
-              <span className="knife-arrow knife-stuck failed" style={{ transform: `rotate(${frame.failedAngle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
+              mode === "prototype" ? <span className="knife-arrow knife-stuck failed" style={{ transform: `rotate(${frame.failedAngle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} /> : null
             ) : null}
           </div>
         </div>
@@ -968,7 +1209,7 @@ function KnifeHitPrototype({
             <span key={index} />
           ))}
         </div>
-        <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} />
+        {showOverlay ? <PrototypeEndOverlay status={frame.status} reason={frame.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>
   );
