@@ -110,8 +110,14 @@ import {
   type SearchPattern,
   type SearchScene,
 } from "@/lib/search-scenes";
+import {
+  MiniGameEntryPanel,
+  MiniGameLevelSelectScreen,
+  MiniGamePlayScreen,
+} from "./mini-game-prototypes";
+import type { MiniGameId } from "@/lib/mini-game-prototypes";
 
-type Stage = AppStage;
+type Stage = AppStage | "mini-game";
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type AdvancedChallengeState =
   | { mode: "select"; roundId: RoundId }
@@ -129,6 +135,9 @@ type AdvancedChallengeState =
       requiredCorrect: number;
       reason: string;
     };
+type MiniGamePrototypeState =
+  | { mode: "select"; gameId: MiniGameId }
+  | { mode: "playing"; gameId: MiniGameId; levelId: string; attemptId: number };
 
 type RoundConfig = {
   id: RoundId;
@@ -265,6 +274,7 @@ export default function Home() {
   const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
+  const [miniGameState, setMiniGameState] = useState<MiniGamePrototypeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
@@ -272,6 +282,7 @@ export default function Home() {
   const trialsRef = useRef<TrialEvent[]>([]);
   const advancedProgressRef = useRef(advancedProgress);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
+  const miniGameStateRef = useRef<MiniGamePrototypeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
@@ -355,6 +366,7 @@ export default function Home() {
     setRestartConfirmOpen(false);
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge(null);
+    setMiniGameState(null);
     setLuckDrawOutcome(null);
     roundCompletionLockedRef.current = false;
   }, [clearShareCopyToastTimer]);
@@ -402,6 +414,10 @@ export default function Home() {
   useEffect(() => {
     advancedChallengeRef.current = advancedChallenge;
   }, [advancedChallenge]);
+
+  useEffect(() => {
+    miniGameStateRef.current = miniGameState;
+  }, [miniGameState]);
 
   useEffect(() => {
     roundIndexRef.current = roundIndex;
@@ -556,6 +572,37 @@ export default function Home() {
     setStage("result");
   }, [releaseHistoryGuard, scrollResultToTop]);
 
+  const openMiniGame = useCallback((gameId: MiniGameId) => {
+    setMiniGameState({ mode: "select", gameId });
+    setStage("mini-game");
+  }, []);
+
+  const startMiniGameLevel = useCallback((levelId: string) => {
+    const current = miniGameStateRef.current;
+    if (!current) return;
+    setMiniGameState({
+      mode: "playing",
+      gameId: current.gameId,
+      levelId,
+      attemptId: Date.now(),
+    });
+    setStage("mini-game");
+  }, []);
+
+  const closeMiniGame = useCallback(() => {
+    const current = miniGameStateRef.current;
+    if (current?.mode === "playing") {
+      setMiniGameState({ mode: "select", gameId: current.gameId });
+      setStage("mini-game");
+      return;
+    }
+
+    setMiniGameState(null);
+    releaseHistoryGuard();
+    scrollResultToTop();
+    setStage("result");
+  }, [releaseHistoryGuard, scrollResultToTop]);
+
   const drawLuck = useCallback(() => {
     const result = recordLuckDraw(advancedProgressRef.current, Math.floor(Math.random() * 101));
     if (!result.outcome) return null;
@@ -663,6 +710,12 @@ export default function Home() {
   }, [persistGameState, resetCurrentRunState]);
 
   const handleAppBack = useCallback((): AppBackNavigation => {
+    if (stage === "mini-game") {
+      const currentMode = miniGameStateRef.current?.mode;
+      closeMiniGame();
+      return currentMode === "playing" ? "guard" : "release";
+    }
+
     const navigation = resolveAppBackNavigation({
       stage,
       restartConfirmOpen,
@@ -690,7 +743,7 @@ export default function Home() {
       return navigation;
     }
     return navigation;
-  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
+  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeMiniGame, closeShareImage, restartConfirmOpen, stage]);
 
   useEffect(() => {
     appBackHandlerRef.current = handleAppBack;
@@ -711,11 +764,14 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const historyLayer = getAppBackHistoryLayer({
-      stage,
-      restartConfirmOpen,
-      advancedBackSource: advancedChallenge?.mode ?? null,
-    });
+    const historyLayer: AppBackHistoryLayer =
+      stage === "mini-game"
+        ? (miniGameState?.mode === "playing" ? 2 : 1)
+        : getAppBackHistoryLayer({
+            stage,
+            restartConfirmOpen,
+            advancedBackSource: advancedChallenge?.mode ?? null,
+          });
     if (historyLayer === 0) {
       releaseHistoryGuard();
       return undefined;
@@ -746,7 +802,7 @@ export default function Home() {
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [advancedChallenge, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
+  }, [advancedChallenge, miniGameState, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
 
   return (
     <main className="app-shell">
@@ -758,6 +814,19 @@ export default function Home() {
           rankTitle={shareImageTitle}
           result={shareImageResult}
           shareCopyNoticeId={shareCopyNoticeId}
+        />
+      ) : stage === "mini-game" && miniGameState?.mode === "select" ? (
+        <MiniGameLevelSelectScreen
+          gameId={miniGameState.gameId}
+          onBack={requestAppBack}
+          onStartLevel={startMiniGameLevel}
+        />
+      ) : stage === "mini-game" && miniGameState?.mode === "playing" ? (
+        <MiniGamePlayScreen
+          attemptId={miniGameState.attemptId}
+          gameId={miniGameState.gameId}
+          levelId={miniGameState.levelId}
+          onBackToSelect={requestAppBack}
         />
       ) : stage === "luck" ? (
         <LuckDrawScreen
@@ -785,6 +854,7 @@ export default function Home() {
           trials={safeTrials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
+          onOpenMiniGame={openMiniGame}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
@@ -809,6 +879,7 @@ export default function Home() {
           trials={trials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
+          onOpenMiniGame={openMiniGame}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
@@ -4587,6 +4658,7 @@ function ResultScreen({
   advancedUnlockPulseId,
   imageShareState,
   debugToolsVisible,
+  onOpenMiniGame,
   onOpenAdvancedChallenge,
   onOpenLuckDraw,
   onResetTestData,
@@ -4598,6 +4670,7 @@ function ResultScreen({
   advancedUnlockPulseId: number;
   imageShareState: ImageShareState;
   debugToolsVisible: boolean;
+  onOpenMiniGame: (gameId: MiniGameId) => void;
   onOpenAdvancedChallenge: (roundId: RoundId) => void;
   onOpenLuckDraw: () => void;
   onResetTestData: () => void;
@@ -4738,6 +4811,8 @@ function ResultScreen({
           ) : null}
         </div>
       </div>
+
+      <MiniGameEntryPanel onOpenGame={onOpenMiniGame} />
 
     </section>
   );
