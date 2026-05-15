@@ -444,6 +444,18 @@ test("base aim source is a single unlimited advanced-arrow round requiring eight
   assert.match(advancedAimSource, /shotsFired/);
 });
 
+test("base aim keeps one moving target active after each hit until eight hits", () => {
+  const source = appPageSource();
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const SEARCH_ROUND_COUNT");
+  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "function SearchPatternPreview");
+
+  assert.match(aimSource, /targetCount:\s*1/);
+  assert.match(aimSource, /keepTargetOnHit:\s*true/);
+  assert.match(aimSource, /replaceTargetOnHit:\s*false/);
+  assert.match(advancedAimSource, /keepTargetOnHit/);
+  assert.match(advancedAimSource, /keepTargetOnHit\s*\?[\s\S]*nextTargets[\s\S]*:[\s\S]*nextTargets\.map/);
+});
+
 test("arrow shot resolution uses the impact target as the visible stuck position on hits", () => {
   const hit = resolveArrowShot({
     fieldWidthPx: 390,
@@ -556,15 +568,21 @@ test("five base braking trials count as a completed scoring dimension", () => {
 
 test("base braking source uses five rounds with advanced danger placement and graphics", () => {
   const source = appPageSource();
+  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const brakingSource = sourceBetween(source, "function BrakingRound", "function PatienceRound");
 
   assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
+  assert.match(source, /DINO_FAILURE_FEEDBACK_MS/);
   assert.match(brakingSource, /AdvancedBrakeHazard/);
   assert.match(brakingSource, /getAdvancedBrakeDangerLeft/);
   assert.match(brakingSource, /getAdvancedBrakeEventOptions/);
   assert.match(brakingSource, /advanced-brake-track/);
   assert.match(brakingSource, /advanced-hazard/);
+  assert.match(brakingSource, /scheduleDinoNext/);
   assert.doesNotMatch(brakingSource, /rand\(10,\s*16\)/);
+  assert.match(styles, /\.dino-panel\.crashed \.advanced-runner/);
+  assert.match(styles, /\.dino-panel\.early \.advanced-runner/);
+  assert.match(styles, /\.dino-panel\.crashed \.advanced-hazard/);
 });
 
 test("dinosaur stop resolution is stricter than the old 420ms window", () => {

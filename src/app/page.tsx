@@ -1384,7 +1384,7 @@ function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
 }
 
 type AdvancedAimMode = "track" | "incoming" | "decoy" | "boss";
-type AdvancedAimRoute = "circle" | "ellipse" | "figure-eight" | "diagonal" | "incoming";
+type AdvancedAimRoute = "circle" | "ellipse" | "figure-eight" | "diagonal" | "horizontal" | "incoming";
 
 type AdvancedAimBounds = {
   minX: number;
@@ -1447,7 +1447,7 @@ function getAdvancedAimBounds(rect: Pick<DOMRect, "width" | "height">): Advanced
 
 function advancedAimRouteFromConfig(config: AdvancedStageConfig): AdvancedAimRoute {
   const route = String(config.params.route ?? "circle");
-  if (route === "ellipse" || route === "figure-eight" || route === "diagonal" || route === "incoming") return route;
+  if (route === "ellipse" || route === "figure-eight" || route === "diagonal" || route === "horizontal" || route === "incoming") return route;
   return "circle";
 }
 
@@ -1548,7 +1548,7 @@ function makeAdvancedAimMovingEntity({
   }
 
   const vx = (Math.random() > 0.5 ? 1 : -1) * speed;
-  const vy = (Math.random() > 0.5 ? 1 : -1) * speed * 0.72;
+  const vy = route === "horizontal" ? 0 : (Math.random() > 0.5 ? 1 : -1) * speed * 0.72;
   const radiusX = Math.min((bounds.maxX - bounds.minX) * 0.28, 90);
   const radiusY = Math.min((bounds.maxY - bounds.minY) * 0.24, 70);
   return {
@@ -1697,6 +1697,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
   const requiredHits = getParamNumber(config, "requiredHits", targetCount);
   const unlimitedArrows = getParamBoolean(config, "unlimitedArrows", false);
   const replaceTargetOnHit = getParamBoolean(config, "replaceTargetOnHit", false);
+  const keepTargetOnHit = getParamBoolean(config, "keepTargetOnHit", false);
   const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
   const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
   const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
@@ -1934,7 +1935,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 normalizedError: result.collision.normalizedError,
               },
             });
-            nextTargets = nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
+            nextTargets = keepTargetOnHit ? nextTargets : nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
             if (replaceTargetOnHit && hitCountRef.current < requiredHits) {
               const replacementIndex = spawnedTargetsRef.current;
               spawnedTargetsRef.current += 1;
@@ -1991,6 +1992,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     config,
     failOnFlyOut,
     finish,
+    keepTargetOnHit,
     mode,
     recordAimTrial,
     spawnIntervalMs,
@@ -3018,12 +3020,13 @@ const BASIC_AIM_CONFIG: AdvancedStageConfig = {
   passText: "",
   params: {
     aimMode: "track",
-    route: "ellipse",
+    route: "horizontal",
     arrowCount: AIM_REQUIRED_HITS,
     targetCount: 1,
     requiredHits: AIM_REQUIRED_HITS,
     unlimitedArrows: true,
-    replaceTargetOnHit: true,
+    keepTargetOnHit: true,
+    replaceTargetOnHit: false,
     failOnFlyOut: false,
     decoyCount: 0,
     targetSize: 58,
@@ -3263,6 +3266,7 @@ const DINO_TRIAL_COUNT = 5;
 const DINO_RUNNER_WIDTH_PERCENT = 8;
 const DINO_HAZARD_WIDTH_PERCENT = 6;
 const DINO_SPEED_PER_SECOND = 26;
+const DINO_FAILURE_FEEDBACK_MS = 820;
 
 type DinoStatus = "ready" | "running" | "danger" | "stopped" | "crashed" | "early";
 
@@ -3338,6 +3342,17 @@ function BrakingRound({ onComplete }: RoundProps) {
     };
   }, []);
 
+  const scheduleDinoNext = useCallback(
+    (correct: boolean) => {
+      const delayMs = correct ? 520 : DINO_FAILURE_FEEDBACK_MS;
+      transitionTimerRef.current = window.setTimeout(() => {
+        if (index >= DINO_TRIAL_COUNT - 1) onComplete([...trialsRef.current]);
+        else start(index + 1);
+      }, delayMs);
+    },
+    [index, onComplete, start],
+  );
+
   const completeTrial = useCallback(
     (event: Partial<TrialEvent>) => {
       if (answeredRef.current) return;
@@ -3348,10 +3363,9 @@ function BrakingRound({ onComplete }: RoundProps) {
       holdingRef.current = false;
       previousHazardRef.current = hazardRef.current;
       trialsRef.current.push(trial("braking", index, event));
-      if (index >= DINO_TRIAL_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 520);
+      scheduleDinoNext(event.correct !== false);
     },
-    [index, onComplete, start],
+    [index, scheduleDinoNext],
   );
 
   const showHazard = useCallback(() => {
@@ -3437,8 +3451,9 @@ function BrakingRound({ onComplete }: RoundProps) {
     const earlyStop = stopResult.earlyStop;
     const stopLatencyMs = stopResult.stopLatencyMs;
     const safeStop = stopResult.safeStop;
-    setStatus(earlyStop ? "early" : "stopped");
-    statusRef.current = earlyStop ? "early" : "stopped";
+    const nextStatus: DinoStatus = earlyStop ? "early" : safeStop ? "stopped" : "crashed";
+    setStatus(nextStatus);
+    statusRef.current = nextStatus;
     trialsRef.current.push(
       trial("braking", index, {
         shownAt: hazardShownAt ?? trialStartedAtRef.current,
@@ -3459,17 +3474,17 @@ function BrakingRound({ onComplete }: RoundProps) {
       }),
     );
     previousHazardRef.current = releasedHazard;
-    if (index >= DINO_TRIAL_COUNT - 1) onComplete(trialsRef.current);
-    else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 520);
+    scheduleDinoNext(safeStop);
   };
 
   const showThreat = hazard !== null && (status === "danger" || status === "stopped" || status === "crashed");
+  const statusLabel = status === "danger" ? "松手" : status === "crashed" ? "撞上" : status === "early" ? "早了" : status === "stopped" ? "停住" : holding ? "前进" : "长按";
 
   return (
     <div className={`braking-panel dino-panel ${status}`}>
       <div className="mini-score">
         <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
-        <span>{status === "danger" ? "松手" : holding ? "前进" : "长按"}</span>
+        <span>{statusLabel}</span>
       </div>
       <div className="advanced-brake-track" aria-hidden="true">
         <div className="advanced-brake-lane">

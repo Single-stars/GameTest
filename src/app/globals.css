@@ -1035,7 +1035,11 @@ h1 {
   translate: -50% 0;
   border-radius: 8px;
   background: var(--ink);
-  will-change: left;
+  transition:
+    background 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
+  will-change: left, transform, filter;
 }
 
 .advanced-hazard {
@@ -1052,6 +1056,40 @@ h1 {
 .advanced-hazard.fake {
   background: #918a7e;
   box-shadow: 0 0 0 10px rgba(24, 24, 24, 0.08);
+}
+
+.dino-panel.crashed .advanced-runner {
+  background: var(--red);
+  filter: drop-shadow(0 0 0.8rem rgba(230, 83, 73, 0.8));
+  transform: rotate(-9deg) translateY(4px);
+}
+
+.dino-panel.early .advanced-runner {
+  background: #918a7e;
+  filter: drop-shadow(0 0 0.7rem rgba(24, 24, 24, 0.22));
+  transform: scaleX(0.82) translateY(2px);
+}
+
+.dino-panel.stopped .advanced-runner {
+  filter: drop-shadow(0 0 0.55rem rgba(47, 155, 104, 0.55));
+}
+
+.dino-panel.crashed .advanced-hazard {
+  animation: brake-danger-hit 340ms ease-in-out 2;
+  box-shadow: 0 0 0 14px rgba(230, 83, 73, 0.24), 0 18px 34px rgba(230, 83, 73, 0.24);
+}
+
+@keyframes brake-danger-hit {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  35% {
+    transform: translateX(-5px);
+  }
+  70% {
+    transform: translateX(5px);
+  }
 }
 
 .advanced-hazard.simultaneous::after {
