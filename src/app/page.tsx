@@ -3,7 +3,6 @@
 /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
 
 import NextImage from "next/image";
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -20,12 +19,6 @@ import {
   type AdvancedAimArrow,
   type AdvancedAimEntity,
 } from "@/lib/advanced-aim";
-import {
-  chooseAdvancedRhythmLane,
-  isAdvancedRhythmBeatActive,
-  resolveAdvancedRhythmCadence,
-  type AdvancedRhythmActiveBeat,
-} from "@/lib/advanced-rhythm";
 import {
   ADVANCED_MEMORY_ROTATE_MS,
   buildAdvancedMemoryPhaseSchedule,
@@ -53,7 +46,6 @@ import {
   type AdvancedBrakeEvent,
   type AdvancedStageConfig,
 } from "@/lib/advanced-challenges";
-import { buildAdvancedStroopMismatchIndexes } from "@/lib/advanced-stroop";
 import {
   buildPerfectTrials,
   buildShareText,
@@ -184,17 +176,17 @@ const rounds: RoundConfig[] = [
   },
   {
     id: "stroop",
-    title: "字色判断",
+    title: "一路向下",
     measure: "专注力",
-    rule: "只看字体颜色，不看字义。",
-    action: "连续 5 题，错点和慢点都会扣分。",
+    rule: "左右半屏控制小方块，落到更低的平台并避开危险层板。",
+    action: "基础关失误会在当前相机中线生成平台续跑，超过 3 次失误后进入下一轮。",
   },
   {
     id: "rhythm",
-    title: "双圈节拍",
+    title: "跳一跳",
     measure: "节奏感",
-    rule: "圆环贴近内圈时点对应一侧。",
-    action: "太早、太晚、漏点或点错边都会扣分。",
+    rule: "长按蓄力，松手让小方块跳到下一个平台。",
+    action: "基础关失误会重置到原本的下一个平台续跑，超过 3 次失误后进入下一轮。",
   },
   {
     id: "memory",
@@ -222,9 +214,6 @@ const rounds: RoundConfig[] = [
 const now = () => performance.now();
 const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const STROOP_TRIAL_COUNT = 5;
-const RHYTHM_LATE_WINDOW_MS = 240;
-const RHYTHM_HIT_WINDOW_MS = 160;
 const MEMORY_REVEAL_MS = 1600;
 
 function pointerKind(value?: string): PointerKind {
@@ -988,6 +977,8 @@ function PlayFrame({
 
 function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
   if (round === "search") return "doodle";
+  if (round === "stroop") return "fall-down";
+  if (round === "rhythm") return "square-jump";
   if (round === "memory") return "flappy";
   if (round === "patience") return "knife";
   return null;
@@ -996,9 +987,10 @@ function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
 type MiniAdvancedStageConfig = AdvancedStageConfig & { params: AdvancedStageConfig["params"] & { miniGameId: MiniGameId; miniLevelId: string } };
 
 function isMiniGameAdvancedConfig(config?: AdvancedStageConfig): config is MiniAdvancedStageConfig {
+  const miniGameIds: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump", "fall-down"];
   return (
     typeof config?.params.miniGameId === "string" &&
-    (config.params.miniGameId === "doodle" || config.params.miniGameId === "flappy" || config.params.miniGameId === "knife") &&
+    miniGameIds.includes(config.params.miniGameId as MiniGameId) &&
     typeof config.params.miniLevelId === "string"
   );
 }
@@ -1087,10 +1079,6 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
         return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
       case "search":
         return <AdvancedSearchRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "stroop":
-        return <AdvancedStroopRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "rhythm":
-        return <AdvancedRhythmRound advancedConfig={advancedConfig} onComplete={onComplete} />;
       case "memory":
         return <AdvancedMemoryRound advancedConfig={advancedConfig} onComplete={onComplete} />;
       case "braking":
@@ -1110,10 +1098,6 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
       return <AimRound onComplete={onComplete} />;
     case "search":
       return <SearchRound onComplete={onComplete} />;
-    case "stroop":
-      return <StroopRound onComplete={onComplete} />;
-    case "rhythm":
-      return <RhythmRound onComplete={onComplete} />;
     case "memory":
       return <MemoryRound onComplete={onComplete} />;
     case "braking":
@@ -1156,7 +1140,6 @@ function buildAdvancedPerfectTrials(config: AdvancedStageConfig): TrialEvent[] {
     getParamNumber(config, "requiredGreenClicks", 0) ||
     getParamNumber(config, "targetCount", 0) ||
     getParamNumber(config, "roundCount", 0) ||
-    getParamNumber(config, "hitCount", 0) ||
     getParamNumber(config, "hazardCount", 0) ||
     1;
   return Array.from({ length: count }, (_, index) =>
@@ -1167,15 +1150,13 @@ function buildAdvancedPerfectTrials(config: AdvancedStageConfig): TrialEvent[] {
       value:
         config.dimension === "reaction"
           ? { signalColor: "green" }
-          : config.dimension === "rhythm"
-            ? { offsetMs: 0, beatType: "true" }
-            : config.dimension === "search"
-              ? { targetCount: 3, selectedCount: 3 }
-              : config.dimension === "patience"
-                ? { waitMs: getParamNumber(config, "waitMs", 6000), durationMs: getParamNumber(config, "waitMs", 6000), skipped: false }
-                : config.dimension === "braking"
-                  ? { exited: index === count - 1, collision: false, earlyStop: false }
-                  : { shotHit: true },
+          : config.dimension === "search"
+            ? { targetCount: 3, selectedCount: 3 }
+            : config.dimension === "patience"
+              ? { waitMs: getParamNumber(config, "waitMs", 6000), durationMs: getParamNumber(config, "waitMs", 6000), skipped: false }
+              : config.dimension === "braking"
+                ? { exited: index === count - 1, collision: false, earlyStop: false }
+                : { shotHit: true },
     }),
   );
 }
@@ -2208,521 +2189,6 @@ function AdvancedSearchRound({ advancedConfig, onComplete }: RoundProps) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-type AdvancedStroopItem = {
-  id: number;
-  word: (typeof colorWords)[number];
-  color: (typeof colorWords)[number];
-  x: number;
-  y: number;
-  rotation: number;
-  fromX?: string;
-  fromY?: string;
-  fromRotation?: number;
-  durationMs?: number;
-  delayMs?: number;
-};
-
-const stroopScatterAnchors = [
-  { x: 18, y: 24 },
-  { x: 52, y: 16 },
-  { x: 80, y: 30 },
-  { x: 30, y: 43 },
-  { x: 66, y: 52 },
-  { x: 14, y: 68 },
-  { x: 46, y: 79 },
-  { x: 83, y: 72 },
-];
-
-const stroopFlyAnchors = [
-  { x: 20, y: 24 },
-  { x: 52, y: 17 },
-  { x: 78, y: 31 },
-  { x: 68, y: 60 },
-  { x: 38, y: 70 },
-  { x: 16, y: 56 },
-];
-
-const stroopFlyStarts = [
-  { x: "-82vw", y: "-44svh", rotation: -30 },
-  { x: "-8vw", y: "-62svh", rotation: 22 },
-  { x: "80vw", y: "-40svh", rotation: -24 },
-  { x: "88vw", y: "8svh", rotation: 28 },
-  { x: "72vw", y: "56svh", rotation: -26 },
-  { x: "4vw", y: "66svh", rotation: 20 },
-  { x: "-86vw", y: "52svh", rotation: -22 },
-  { x: "-78vw", y: "6svh", rotation: 24 },
-];
-
-function shuffledIndexes(length: number): number[] {
-  const indexes = Array.from({ length }, (_, index) => index);
-  for (let index = indexes.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(rand(0, index + 1));
-    [indexes[index], indexes[swapIndex]] = [indexes[swapIndex], indexes[index]];
-  }
-  return indexes;
-}
-
-function makeAdvancedStroopLayout(config: AdvancedStageConfig, count: number) {
-  const flyMode = config.variant === "stroop-moving-count" || config.variant === "stroop-boss";
-  const anchors = flyMode ? stroopFlyAnchors : stroopScatterAnchors;
-  const anchorOrder = shuffledIndexes(anchors.length);
-  const startOffset = Math.floor(rand(0, stroopFlyStarts.length));
-
-  return Array.from({ length: count }, (_, index) => {
-    const anchor = anchors[anchorOrder[index % anchorOrder.length]];
-    const rotation = rand(-18, 18);
-    const item = {
-      x: clamp(anchor.x + rand(-6, 6), 10, 90),
-      y: clamp(anchor.y + rand(-7, 7), 14, 86),
-      rotation,
-    };
-
-    if (!flyMode) return item;
-
-    const startIndex = (startOffset + Math.floor((index * stroopFlyStarts.length) / count)) % stroopFlyStarts.length;
-    const start = stroopFlyStarts[startIndex];
-    return {
-      ...item,
-      fromX: start.x,
-      fromY: start.y,
-      fromRotation: rotation + start.rotation,
-      durationMs: rand(1780, config.variant === "stroop-boss" ? 2180 : 2060),
-      delayMs: index * 70 + rand(0, 70),
-    };
-  });
-}
-
-function makeAdvancedStroopItems(config: AdvancedStageConfig, roundIndex: number): AdvancedStroopItem[] {
-  const count = getParamNumber(config, "cardCount", getParamNumber(config, "movingWordCount", 1));
-  const mismatchIndexes = new Set(buildAdvancedStroopMismatchIndexes({ itemCount: count, roundIndex, variant: config.variant }));
-  const layout = makeAdvancedStroopLayout(config, count);
-  return Array.from({ length: count }, (_, index) => {
-    const word = colorWords[(roundIndex + index) % colorWords.length];
-    let color = word;
-    if (config.variant !== "stroop-flash-color" && mismatchIndexes.has(index)) {
-      color = colorWords[(colorWords.findIndex((item) => item.key === word.key) + 1) % colorWords.length];
-    } else if (config.variant === "stroop-flash-color" && roundIndex % 2 === 1) {
-      color = colorWords[(colorWords.findIndex((item) => item.key === word.key) + 2) % colorWords.length];
-    }
-    return {
-      id: roundIndex * 10 + index,
-      word,
-      color,
-      ...layout[index],
-    };
-  });
-}
-
-function AdvancedStroopRound({ advancedConfig, onComplete }: RoundProps) {
-  const config = advancedConfig!;
-  const roundCount = getParamNumber(config, "roundCount", 5);
-  const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<"wait" | "show" | "answer">("wait");
-  const [items, setItems] = useState<AdvancedStroopItem[]>(() => makeAdvancedStroopItems(config, 0));
-  const shownAtRef = useRef(now());
-  const answerShownAtRef = useRef(now());
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const timerRef = useRef<number | null>(null);
-
-  const start = useCallback(
-    (nextIndex: number) => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      const nextItems = makeAdvancedStroopItems(config, nextIndex);
-      setItems(nextItems);
-      setIndex(nextIndex);
-      setPhase("wait");
-      shownAtRef.current = now();
-      timerRef.current = window.setTimeout(() => {
-        setPhase("show");
-        answerShownAtRef.current = now();
-        if (config.variant === "stroop-flash-color") {
-          timerRef.current = window.setTimeout(() => setPhase("answer"), getParamNumber(config, "flashMs", 520));
-        } else if (config.variant === "stroop-moving-count" || config.variant === "stroop-boss") {
-          timerRef.current = window.setTimeout(() => setPhase("answer"), config.variant === "stroop-boss" ? 2800 : 2500);
-        }
-      }, 520);
-    },
-    [config],
-  );
-
-  useEffect(() => {
-    start(0);
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-  }, [start]);
-
-  const record = (event: ReactPointerEvent<HTMLElement>, correct: boolean, value: Record<string, number | string | boolean | null>) => {
-    trialsRef.current.push(
-      trial("stroop", index, {
-        shownAt: answerShownAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: correct ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value,
-      }),
-    );
-    if (index >= roundCount - 1) onComplete(trialsRef.current);
-    else window.setTimeout(() => start(index + 1), 180);
-  };
-
-  const answerColor = (event: ReactPointerEvent<HTMLButtonElement>, key: string) => {
-    const item = items[0];
-    record(event, key === item.color.key, { congruent: item.word.key === item.color.key });
-  };
-
-  const answerMismatchCard = (event: ReactPointerEvent<HTMLButtonElement>, item: AdvancedStroopItem) => {
-    record(event, item.word.key !== item.color.key, { mismatch: item.word.key !== item.color.key });
-  };
-
-  const answerMismatchCount = (event: ReactPointerEvent<HTMLButtonElement>, selected: number) => {
-    const targetCount = items.filter((item) => item.word.key !== item.color.key).length;
-    record(event, selected === targetCount, { targetCount, selectedCount: selected });
-  };
-
-  const mismatchCount = items.filter((item) => item.word.key !== item.color.key).length;
-
-  return (
-    <div className={`stroop-panel advanced-stroop ${config.variant}`}>
-      <div className="mini-score">
-        <span>{index + 1}/{roundCount}</span>
-      </div>
-      {phase === "wait" ? (
-        <div className="stroop-word-placeholder">等</div>
-      ) : config.variant === "stroop-flash-color" ? (
-        <>
-          {phase === "show" ? (
-            <div className="stroop-word" style={{ color: items[0].color.value }}>
-              {items[0].word.label}
-            </div>
-          ) : (
-            <div className="stroop-word-placeholder" aria-hidden="true" />
-          )}
-          {phase === "answer" ? (
-            <div className="color-grid no-swatches">
-              {colorWords.map((color) => (
-                <button className="color-button" key={color.key} type="button" onPointerDown={(event) => answerColor(event, color.key)}>
-                  {color.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : config.variant === "stroop-mismatch-card" ? (
-        <div className="advanced-word-scatter-field">
-          {items.map((item) => (
-            <button
-              className="advanced-word-card"
-              key={item.id}
-              style={
-                {
-                  "--word-rotate": `${item.rotation}deg`,
-                  color: item.color.value,
-                  left: `${item.x}%`,
-                  top: `${item.y}%`,
-                } as CSSProperties
-              }
-              type="button"
-              onPointerDown={(event) => answerMismatchCard(event, item)}
-            >
-              <span style={{ color: item.color.value }}>{item.word.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <>
-          {phase === "show" ? (
-            <div className="advanced-moving-word-field">
-              {items.map((item, itemIndex) => (
-                <span
-                  className={`advanced-moving-word ${config.variant === "stroop-boss" ? "flicker" : ""}`}
-                  key={item.id}
-                  style={
-                    {
-                      "--word-fly-ms": `${item.durationMs ?? 2100}ms`,
-                      "--word-from-rotate": `${item.fromRotation ?? item.rotation}deg`,
-                      "--word-from-x": item.fromX ?? "-68vw",
-                      "--word-from-y": item.fromY ?? "-18px",
-                      "--word-rotate": `${item.rotation}deg`,
-                      animationDelay: `${item.delayMs ?? itemIndex * 90}ms`,
-                      color: item.color.value,
-                      left: `${item.x}%`,
-                      top: `${item.y}%`,
-                    } as CSSProperties
-                  }
-                >
-                  {item.word.label}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <div className="search-answer-panel">
-              <p>不一致的字有几个？</p>
-              <div className="count-options">
-                {makeCountOptions(mismatchCount, items.length).map((option) => (
-                  <button className="count-option" key={option} type="button" onPointerDown={(event) => answerMismatchCount(event, option)}>
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-type AdvancedBeat = AdvancedRhythmActiveBeat & {
-  id: number;
-  fake: boolean;
-  resolved: boolean;
-};
-
-function makeAdvancedBeat(config: AdvancedStageConfig, index: number, startedAt: number, activeBeats: AdvancedBeat[], thresholdMs: number): AdvancedBeat {
-  const lanes = getParamNumber(config, "lanes", 2);
-  const fakeEnabled = getParamBoolean(config, "fakeBeats");
-  return {
-    id: index,
-    lane: chooseAdvancedRhythmLane({
-      lanes,
-      activeBeats,
-      now: startedAt,
-      thresholdMs,
-      randomInt: (exclusiveMax) => Math.floor(rand(0, exclusiveMax)),
-    }),
-    fake: fakeEnabled && index % 4 === 2,
-    startedAt,
-    duration: Math.max(520, 900 - config.level * 34 + rand(-90, 90)),
-    resolved: false,
-  };
-}
-
-function advancedBeatOffsetMs(beat: AdvancedBeat, frameNow: number) {
-  return Math.round(frameNow - beat.startedAt - beat.duration);
-}
-
-function advancedBeatRingScale(beat: AdvancedBeat, frameNow: number) {
-  const progress = Math.max(0, (frameNow - beat.startedAt) / beat.duration);
-  return progress <= 1 ? 1.72 - progress * 0.72 : Math.max(0.18, 1 - (progress - 1) * 1.35);
-}
-
-function nearestAdvancedBeat(beats: AdvancedBeat[], frameNow: number) {
-  return [...beats].sort((a, b) => Math.abs(advancedBeatOffsetMs(a, frameNow)) - Math.abs(advancedBeatOffsetMs(b, frameNow)))[0] ?? null;
-}
-
-function pickAdvancedBeatForTap(beats: AdvancedBeat[], lane: number, frameNow: number, thresholdMs: number) {
-  const activeBeats = beats.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: frameNow, thresholdMs }));
-  const laneBeats = activeBeats.filter((beat) => beat.lane === lane);
-  const hittableTrueBeat = nearestAdvancedBeat(
-    laneBeats.filter((beat) => !beat.fake && Math.abs(advancedBeatOffsetMs(beat, frameNow)) <= thresholdMs),
-    frameNow,
-  );
-  if (hittableTrueBeat) return hittableTrueBeat;
-
-  const laneFakeBeat = nearestAdvancedBeat(
-    laneBeats.filter((beat) => beat.fake),
-    frameNow,
-  );
-  if (laneFakeBeat) return laneFakeBeat;
-
-  const laneTrueBeat = nearestAdvancedBeat(
-    laneBeats.filter((beat) => !beat.fake),
-    frameNow,
-  );
-  if (laneTrueBeat) return laneTrueBeat;
-
-  const wrongLaneTrueBeat = nearestAdvancedBeat(
-    activeBeats.filter((beat) => !beat.fake),
-    frameNow,
-  );
-  if (wrongLaneTrueBeat) return wrongLaneTrueBeat;
-
-  return nearestAdvancedBeat(activeBeats, frameNow);
-}
-
-function AdvancedRhythmRound({ advancedConfig, onComplete }: RoundProps) {
-  const config = advancedConfig!;
-  const hitCount = getParamNumber(config, "hitCount", 10);
-  const lanes = getParamNumber(config, "lanes", 2);
-  const threshold = getParamNumber(config, "offsetThresholdMs", 100);
-  const cadence = useMemo(() => resolveAdvancedRhythmCadence(config.level), [config.level]);
-  const [beats, setBeats] = useState<AdvancedBeat[]>([]);
-  const [frameNow, setFrameNow] = useState(() => now());
-  const [hitProgress, setHitProgress] = useState(0);
-  const beatsRef = useRef<AdvancedBeat[]>([]);
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const completedRef = useRef(false);
-  const nextIndexRef = useRef(0);
-  const spawnedTrueCountRef = useRef(0);
-  const trueHitsRef = useRef(0);
-  const timersRef = useRef<number[]>([]);
-  const spawnBeatRef = useRef<() => void>(() => undefined);
-
-  const clearTimers = useCallback(() => {
-    for (const timer of timersRef.current) window.clearTimeout(timer);
-    timersRef.current = [];
-  }, []);
-
-  const addTimer = useCallback((callback: () => void, delayMs: number) => {
-    const timer = window.setTimeout(callback, delayMs);
-    timersRef.current.push(timer);
-  }, []);
-
-  const publishBeats = useCallback((updater: (current: AdvancedBeat[]) => AdvancedBeat[]) => {
-    const nextBeats = updater(beatsRef.current);
-    beatsRef.current = nextBeats;
-    setBeats(nextBeats);
-  }, []);
-
-  const complete = useCallback(
-    (events: TrialEvent[] = trialsRef.current) => {
-      if (completedRef.current) return;
-      completedRef.current = true;
-      clearTimers();
-      onComplete([...events]);
-    },
-    [clearTimers, onComplete],
-  );
-
-  const resolveBeat = useCallback(
-    (beatId: number) => {
-      if (completedRef.current) return;
-      const currentBeat = beatsRef.current.find((beat) => beat.id === beatId);
-      if (!currentBeat || currentBeat.resolved) return;
-
-      publishBeats((current) => current.map((beat) => (beat.id === beatId ? { ...beat, resolved: true } : beat)));
-
-      if (currentBeat.fake) {
-        if (!cadence.overlap && spawnedTrueCountRef.current < hitCount) addTimer(() => spawnBeatRef.current(), 90);
-        return;
-      }
-
-      trialsRef.current.push(
-        trial("rhythm", currentBeat.id, {
-          shownAt: currentBeat.startedAt,
-          responseAt: null,
-          correct: false,
-          errorType: "timeout",
-          value: { offsetMs: threshold + 1, beatType: "true", lane: currentBeat.lane, targetLane: currentBeat.lane },
-        }),
-      );
-      complete();
-    },
-    [addTimer, cadence.overlap, complete, hitCount, publishBeats, threshold],
-  );
-
-  const spawnBeat = useCallback(() => {
-    if (completedRef.current || spawnedTrueCountRef.current >= hitCount) return;
-
-    const startedAt = now();
-    const nextBeat = makeAdvancedBeat(config, nextIndexRef.current, startedAt, beatsRef.current, threshold);
-    nextIndexRef.current += 1;
-    if (!nextBeat.fake) spawnedTrueCountRef.current += 1;
-
-    publishBeats((current) => [
-      ...current.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: startedAt, thresholdMs: threshold }) || !beat.resolved),
-      nextBeat,
-    ]);
-    addTimer(() => resolveBeat(nextBeat.id), nextBeat.duration + threshold + cadence.resolveBufferMs);
-
-    if (cadence.overlap && cadence.spawnIntervalMs !== null && spawnedTrueCountRef.current < hitCount) {
-      addTimer(() => spawnBeatRef.current(), cadence.spawnIntervalMs);
-    }
-  }, [addTimer, cadence.overlap, cadence.resolveBufferMs, cadence.spawnIntervalMs, config, hitCount, publishBeats, resolveBeat, threshold]);
-
-  useEffect(() => {
-    spawnBeatRef.current = spawnBeat;
-  }, [spawnBeat]);
-
-  useEffect(() => {
-    completedRef.current = false;
-    nextIndexRef.current = 0;
-    spawnedTrueCountRef.current = 0;
-    trueHitsRef.current = 0;
-    trialsRef.current = [];
-    beatsRef.current = [];
-    setBeats([]);
-    setHitProgress(0);
-    clearTimers();
-    spawnBeat();
-    return () => {
-      clearTimers();
-    };
-  }, [clearTimers, spawnBeat]);
-
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      setFrameNow(now());
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const tap = (event: ReactPointerEvent<HTMLButtonElement>, lane: number) => {
-    if (completedRef.current) return;
-    const responseAt = now();
-    const selectedBeat = pickAdvancedBeatForTap(beatsRef.current, lane, responseAt, threshold);
-    if (!selectedBeat) return;
-
-    const offsetMs = advancedBeatOffsetMs(selectedBeat, responseAt);
-    const correct = !selectedBeat.fake && lane === selectedBeat.lane && Math.abs(offsetMs) <= threshold;
-    publishBeats((current) => current.map((beat) => (beat.id === selectedBeat.id ? { ...beat, resolved: true } : beat)));
-    trialsRef.current.push(
-      trial("rhythm", selectedBeat.id, {
-        shownAt: selectedBeat.startedAt,
-        responseAt,
-        correct,
-        errorType: selectedBeat.fake ? "false_alarm" : lane === selectedBeat.lane ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: { offsetMs, beatType: selectedBeat.fake ? "fake" : "true", lane, targetLane: selectedBeat.lane },
-      }),
-    );
-    if (!correct) {
-      complete();
-      return;
-    }
-    trueHitsRef.current += 1;
-    setHitProgress(trueHitsRef.current);
-    if (trueHitsRef.current >= hitCount) complete();
-    else if (!cadence.overlap) addTimer(() => spawnBeatRef.current(), 90);
-  };
-
-  const activeBeats = beats.filter((beat) => isAdvancedRhythmBeatActive({ beat, now: frameNow, thresholdMs: threshold }));
-  const hasActiveFakeBeat = activeBeats.some((beat) => beat.fake);
-
-  return (
-    <div className={`rhythm-panel advanced-rhythm lanes-${lanes}`}>
-      <div className="mini-score">
-        <span>{Math.min(hitCount, hitProgress)}/{hitCount}</span>
-        <span>{hasActiveFakeBeat ? "不点" : `偏差 ≤ ${threshold}ms`}</span>
-      </div>
-      {Array.from({ length: lanes }, (_, lane) => {
-        const laneBeats = activeBeats.filter((beat) => beat.lane === lane);
-        const active = laneBeats.length > 0;
-        return (
-          <button className={`rhythm-target ${active ? "active" : "inactive"}`} key={lane} type="button" onPointerDown={(event) => tap(event, lane)}>
-            <span className="judge-line" />
-            {laneBeats.map((laneBeat) => (
-              <span
-                className="shrinking-ring"
-                key={laneBeat.id}
-                style={{
-                  transform: `scale(${advancedBeatRingScale(laneBeat, frameNow)})`,
-                  ...(laneBeat.fake ? { borderColor: "rgba(145, 138, 126, 0.62)", borderStyle: "dashed" } : {}),
-                }}
-              />
-            ))}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -3995,230 +3461,6 @@ function SearchRound({ onComplete }: RoundProps) {
   );
 }
 
-function makeCountOptions(targetCount: number, totalDots: number) {
-  const options = new Set([targetCount]);
-  const offsets = shuffle([-1, 1, -2, 2]);
-  for (const offset of offsets) {
-    if (options.size >= 4) break;
-    const next = targetCount + offset;
-    if (next >= 0 && next <= totalDots) options.add(next);
-  }
-
-  let fallbackDistance = 3;
-  while (options.size < 4) {
-    for (const offset of [-fallbackDistance, fallbackDistance]) {
-      const next = targetCount + offset;
-      if (next >= 0 && next <= totalDots) options.add(next);
-      if (options.size >= 4) break;
-    }
-    fallbackDistance += 1;
-  }
-
-  return shuffle([...options]);
-}
-
-const colorWords = [
-  { key: "red", label: "红", value: "#e65349" },
-  { key: "blue", label: "蓝", value: "#2f80ed" },
-  { key: "yellow", label: "黄", value: "#d39b2a" },
-  { key: "green", label: "绿", value: "#2f9b68" },
-] as const;
-
-function StroopRound({ onComplete }: RoundProps) {
-  const [index, setIndex] = useState(0);
-  const [item, setItem] = useState(() => makeStroopItem(0));
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const shownAtRef = useRef(now());
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const answeredRef = useRef(false);
-
-  const start = useCallback((nextIndex: number) => {
-    setIndex(nextIndex);
-    setItem(makeStroopItem(nextIndex));
-    setIsTransitioning(false);
-    shownAtRef.current = now();
-    answeredRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    start(0);
-  }, [start]);
-
-  const answer = (event: ReactPointerEvent<HTMLButtonElement>, key: string) => {
-    if (answeredRef.current) return;
-    answeredRef.current = true;
-    setIsTransitioning(true);
-    const correct = key === item.color.key;
-    trialsRef.current.push(
-      trial("stroop", index, {
-        shownAt: shownAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: correct ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: { congruent: item.word.key === item.color.key },
-      }),
-    );
-    if (index >= STROOP_TRIAL_COUNT - 1) onComplete(trialsRef.current);
-    else window.setTimeout(() => start(index + 1), 180);
-  };
-
-  return (
-    <div className="stroop-panel">
-      <div className="mini-score">
-        <span>{index + 1}/{STROOP_TRIAL_COUNT}</span>
-        <span>点字体颜色</span>
-      </div>
-      {!isTransitioning ? (
-        <div className="stroop-word" style={{ color: item.color.value }}>
-          {item.word.label}
-        </div>
-      ) : (
-        <div className="stroop-word-placeholder" aria-hidden="true" />
-      )}
-      {!isTransitioning ? (
-        <div className="color-grid no-swatches">
-          {colorWords.map((color) => (
-            <button className="color-button" key={color.key} type="button" onPointerDown={(event) => answer(event, color.key)}>
-              {color.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function makeStroopItem(index: number) {
-  const word = colorWords[Math.floor(rand(0, colorWords.length))];
-  if (index % 3 === 0) {
-    return { word, color: word };
-  }
-  let color = colorWords[Math.floor(rand(0, colorWords.length))];
-  if (color.key === word.key) {
-    color = colorWords[(colorWords.findIndex((item) => item.key === word.key) + 1) % colorWords.length];
-  }
-  return { word, color };
-}
-
-const rhythmSequence = [
-  { lane: "left", duration: 620 },
-  { lane: "left", duration: 560 },
-  { lane: "right", duration: 700 },
-  { lane: "left", duration: 610 },
-  { lane: "right", duration: 740 },
-  { lane: "right", duration: 540 },
-  { lane: "left", duration: 660 },
-  { lane: "right", duration: 720 },
-  { lane: "left", duration: 580 },
-  { lane: "left", duration: 680 },
-] as const;
-
-function RhythmRound({ onComplete }: RoundProps) {
-  const [index, setIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const startedAtRef = useRef(now());
-  const ringRef = useRef<HTMLSpanElement | null>(null);
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const doneRef = useRef(false);
-  const transitionTimerRef = useRef<number | null>(null);
-  const activeLane = rhythmSequence[index]?.lane ?? "left";
-  const targetMs = rhythmSequence[index]?.duration ?? 950;
-
-  const start = useCallback((nextIndex: number) => {
-    if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
-    setIndex(nextIndex);
-    setIsTransitioning(false);
-    startedAtRef.current = now();
-    doneRef.current = false;
-    if (ringRef.current) {
-      ringRef.current.style.transform = "scale(1.72)";
-    }
-  }, []);
-
-  useEffect(() => {
-    start(0);
-    return () => {
-      if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
-    };
-  }, [start]);
-
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      const elapsed = now() - startedAtRef.current;
-      const progress = elapsed / targetMs;
-      const ringScale = progress <= 1 ? 1.72 - progress * 0.72 : Math.max(0.18, 1 - (progress - 1) * 1.35);
-      if (ringRef.current) {
-        ringRef.current.style.transform = `scale(${ringScale})`;
-      }
-      if (elapsed >= targetMs + RHYTHM_LATE_WINDOW_MS && !doneRef.current) {
-        doneRef.current = true;
-        setIsTransitioning(true);
-        trialsRef.current.push(
-          trial("rhythm", index, {
-            shownAt: startedAtRef.current,
-            responseAt: null,
-            correct: false,
-            errorType: "timeout",
-            value: { offsetMs: RHYTHM_LATE_WINDOW_MS, lane: activeLane, targetLane: activeLane },
-          }),
-        );
-        if (index >= 9) onComplete(trialsRef.current);
-        else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 140);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [activeLane, index, onComplete, start, targetMs]);
-
-  const tap = (event: ReactPointerEvent<HTMLButtonElement>, lane: "left" | "right") => {
-    if (doneRef.current) return;
-    doneRef.current = true;
-    setIsTransitioning(true);
-    const offsetMs = Math.round(now() - startedAtRef.current - targetMs);
-    const correct = lane === activeLane && Math.abs(offsetMs) <= RHYTHM_HIT_WINDOW_MS;
-    trialsRef.current.push(
-      trial("rhythm", index, {
-        shownAt: startedAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: lane === activeLane ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: { offsetMs, lane, targetLane: activeLane },
-      }),
-    );
-    if (index >= 9) onComplete(trialsRef.current);
-    else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 140);
-  };
-
-  return (
-    <div className="rhythm-panel dual">
-      <div className="mini-score">
-        <span>{index + 1}/10</span>
-        <span>{activeLane === "left" ? "左" : "右"}</span>
-      </div>
-      {(["left", "right"] as const).map((lane) => {
-        const laneIsActive = lane === activeLane && !isTransitioning;
-        return (
-          <button
-            className={`rhythm-target ${laneIsActive ? "active" : "inactive"}`}
-            key={lane}
-            type="button"
-            onPointerDown={(event) => tap(event, lane)}
-            aria-label={lane === "left" ? "左节奏圈" : "右节奏圈"}
-          >
-            <span className="judge-line" />
-            {laneIsActive ? <span className="shrinking-ring" ref={ringRef} style={{ transform: "scale(1.72)" }} /> : null}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 const memoryColors = [
   { key: "red", value: "#e65349" },
   { key: "blue", value: "#2f80ed" },
@@ -4801,7 +4043,12 @@ function ResultScreen({
       roundId: "rhythm",
       label: "节奏感",
       score: result.scores.rhythm,
-      detail: result.metrics.rhythmAvgOffsetMs !== null ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms` : "不足",
+      detail:
+        result.metrics.rhythmAvgOffsetMs !== null
+          ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms`
+          : result.metrics.rhythmAccuracy !== null
+            ? `${Math.round(result.metrics.rhythmAccuracy * 100)}%`
+            : "不足",
     },
     {
       roundId: "memory",
@@ -4898,18 +4145,6 @@ function ResultScreen({
           ) : null}
         </div>
       </div>
-
-      <section className="prototype-test-entry" aria-labelledby="prototype-test-entry-title">
-        <div className="prototype-test-card">
-          <div>
-            <div className="prototype-test-title" id="prototype-test-entry-title">小游戏原型测试</div>
-            <div className="prototype-test-desc">测试方块跃迁与一路向下原型</div>
-          </div>
-          <Link className="primary-button prototype-test-button" href="/mini-game-prototypes">
-            进入测试
-          </Link>
-        </div>
-      </section>
 
     </section>
   );

@@ -76,12 +76,9 @@ export type DerivedMetrics = {
   stroopTotalMs: number | null;
   stroopAvgMs: number | null;
   stroopErrorRate: number | null;
-  stroopInterferenceMs: number | null;
   rhythmAvgOffsetMs: number | null;
-  rhythmSdOffsetMs: number | null;
   rhythmAccuracy: number | null;
   rhythmMissRate: number | null;
-  rhythmWrongLaneRate: number | null;
   memoryAccuracy: number | null;
   memoryAvgMs: number | null;
   stopFalseAlarmRate: number | null;
@@ -121,6 +118,8 @@ export type Point2D = {
   x: number;
   y: number;
 };
+
+type ScoredMiniGameId = "doodle" | "flappy" | "knife" | "square-jump" | "fall-down";
 
 export type CircleHitTarget = Point2D & {
   radius: number;
@@ -199,19 +198,33 @@ export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
         }),
       ];
     case "stroop":
-      return Array.from({ length: 5 }, (_, index) =>
-        perfectTrial("stroop", index, {
-          responseAt: index * 1000 + 600,
-          value: { congruent: index % 2 === 0 },
+      return [
+        perfectTrial("stroop", 0, {
+          responseAt: 1700,
+          value: {
+            mode: "mini-fall-down-base",
+            miniGameId: "fall-down",
+            score: 100,
+            failures: 0,
+            progressPercent: 100,
+            elapsedMs: 1700,
+          },
         }),
-      );
+      ];
     case "rhythm":
-      return Array.from({ length: 10 }, (_, index) =>
-        perfectTrial("rhythm", index, {
-          responseAt: index * 1000 + 500,
-          value: { offsetMs: 0, lane: index % 2 === 0 ? "left" : "right", targetLane: index % 2 === 0 ? "left" : "right" },
+      return [
+        perfectTrial("rhythm", 0, {
+          responseAt: 1800,
+          value: {
+            mode: "mini-square-jump-base",
+            miniGameId: "square-jump",
+            score: 100,
+            failures: 0,
+            progressPercent: 100,
+            elapsedMs: 1800,
+          },
         }),
-      );
+      ];
     case "memory":
       return [
         perfectTrial("memory", 0, {
@@ -367,7 +380,7 @@ export function resolveDinoStop({
 const clamp = (value: number, min = 0, max = 100) =>
   Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
 
-function miniGameScoreTrial(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+function miniGameScoreTrial(trials: TrialEvent[], gameId: ScoredMiniGameId) {
   return trials.find((trial) => {
     const mode = String(trial.value?.mode ?? "");
     const explicitGameId = trial.value?.gameId ?? trial.value?.miniGameId;
@@ -375,19 +388,19 @@ function miniGameScoreTrial(trials: TrialEvent[], gameId: "doodle" | "flappy" | 
   });
 }
 
-function miniGameScore(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+function miniGameScore(trials: TrialEvent[], gameId: ScoredMiniGameId) {
   const value = Number(miniGameScoreTrial(trials, gameId)?.value?.score);
   return Number.isFinite(value) ? clamp(value) : null;
 }
 
-function miniGameElapsedMs(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+function miniGameElapsedMs(trials: TrialEvent[], gameId: ScoredMiniGameId) {
   const trial = miniGameScoreTrial(trials, gameId);
   const explicitElapsed = Number(trial?.value?.elapsedMs);
   if (Number.isFinite(explicitElapsed)) return explicitElapsed;
   return trial ? rt(trial) : null;
 }
 
-function miniGameFailures(trials: TrialEvent[], gameId: "doodle" | "flappy" | "knife") {
+function miniGameFailures(trials: TrialEvent[], gameId: ScoredMiniGameId) {
   const failures = Number(miniGameScoreTrial(trials, gameId)?.value?.failures);
   return Number.isFinite(failures) ? Math.max(0, Math.round(failures)) : null;
 }
@@ -400,13 +413,6 @@ const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
-};
-
-const standardDeviation = (values: number[]) => {
-  const avg = mean(values);
-  if (avg === null || values.length < 2) return null;
-  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
 };
 
 const rt = (trial: TrialEvent) =>
@@ -480,28 +486,13 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
   });
 
   const stroopTrials = byRound("stroop");
-  const stroopCorrect = correctTrials(stroopTrials);
-  const stroopTimes = stroopTrials
-    .map((trial) => validRt(trial, 120, 6000))
-    .filter((value): value is number => value !== null);
-  const congruentTimes = stroopCorrect
-    .filter((trial) => trial.value?.congruent === true)
-    .map((trial) => validRt(trial, 150, 3000))
-    .filter((value): value is number => value !== null);
-  const incongruentTimes = stroopCorrect
-    .filter((trial) => trial.value?.congruent === false)
-    .map((trial) => validRt(trial, 150, 3000))
-    .filter((value): value is number => value !== null);
-  const congruentAvg = mean(congruentTimes);
-  const incongruentAvg = mean(incongruentTimes);
+  const fallDownMiniScore = miniGameScore(stroopTrials, "fall-down");
+  const fallDownMiniFailures = miniGameFailures(stroopTrials, "fall-down");
+  const fallDownMiniElapsedMs = miniGameElapsedMs(stroopTrials, "fall-down");
 
   const rhythmTrials = byRound("rhythm");
-  const offsets = rhythmTrials
-    .map((trial) => Math.abs(Number(trial.value?.offsetMs)))
-    .filter((value) => Number.isFinite(value));
-  const rhythmCorrect = correctTrials(rhythmTrials);
-  const rhythmMisses = rhythmTrials.filter((trial) => trial.errorType === "timeout").length;
-  const rhythmWrongLane = rhythmTrials.filter((trial) => trial.errorType === "wrong").length;
+  const squareJumpMiniScore = miniGameScore(rhythmTrials, "square-jump");
+  const squareJumpMiniFailures = miniGameFailures(rhythmTrials, "square-jump");
 
   const memoryTrials = byRound("memory");
   const memoryMiniScore = miniGameScore(memoryTrials, "flappy");
@@ -536,8 +527,8 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     reactionTimes.length >= 3,
     aimTrials.length >= 8,
     searchMiniScore !== null || searchTrials.length >= 4,
-    stroopTrials.length >= 5,
-    rhythmTrials.length >= 8,
+    fallDownMiniScore !== null,
+    squareJumpMiniScore !== null,
     memoryMiniScore !== null || memoryTrials.length >= 3,
     brakingTrials.length >= 8,
     patienceTrial !== undefined,
@@ -559,16 +550,13 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     searchSelectedTotal: searchMiniScore !== null ? null : searchSelectedTotal,
     searchMeanCountError: searchMiniFailures ?? mean(searchCountErrors),
     searchCountQuality: searchMiniScore !== null ? searchMiniScore / 100 : mean(searchCountQualities),
-    stroopAccuracy: ratio(stroopCorrect.length, stroopTrials.length),
-    stroopTotalMs: stroopTimes.length === 0 ? null : stroopTimes.reduce((sum, value) => sum + value, 0),
-    stroopAvgMs: mean(stroopTimes),
-    stroopErrorRate: ratio(stroopTrials.length - stroopCorrect.length, stroopTrials.length),
-    stroopInterferenceMs: congruentAvg === null || incongruentAvg === null ? null : incongruentAvg - congruentAvg,
-    rhythmAvgOffsetMs: mean(offsets),
-    rhythmSdOffsetMs: standardDeviation(offsets),
-    rhythmAccuracy: ratio(rhythmCorrect.length, rhythmTrials.length),
-    rhythmMissRate: ratio(rhythmMisses, rhythmTrials.length),
-    rhythmWrongLaneRate: ratio(rhythmWrongLane, rhythmTrials.length),
+    stroopAccuracy: fallDownMiniScore !== null ? fallDownMiniScore / 100 : null,
+    stroopTotalMs: fallDownMiniElapsedMs,
+    stroopAvgMs: fallDownMiniElapsedMs,
+    stroopErrorRate: fallDownMiniFailures !== null ? Math.min(1, fallDownMiniFailures / 4) : null,
+    rhythmAvgOffsetMs: null,
+    rhythmAccuracy: squareJumpMiniScore !== null ? squareJumpMiniScore / 100 : null,
+    rhythmMissRate: squareJumpMiniFailures !== null ? Math.min(1, squareJumpMiniFailures / 4) : null,
     memoryAccuracy: memoryMiniScore !== null ? memoryMiniScore / 100 : ratio(memoryHits.length, memoryTrials.length),
     memoryAvgMs: memoryMiniElapsedMs ?? mean(memoryTimes),
     stopFalseAlarmRate: ratio(stopFalseAlarms, stopTrials.length),
@@ -586,6 +574,8 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
 export function calculateScores(trials: TrialEvent[]): ScoreSummary {
   const metrics = deriveMetrics(trials);
   const miniDoodleScore = miniGameScore(trials.filter((trial) => trial.roundId === "search"), "doodle");
+  const miniFallDownScore = miniGameScore(trials.filter((trial) => trial.roundId === "stroop"), "fall-down");
+  const miniSquareJumpScore = miniGameScore(trials.filter((trial) => trial.roundId === "rhythm"), "square-jump");
   const miniFlappyScore = miniGameScore(trials.filter((trial) => trial.roundId === "memory"), "flappy");
   const miniKnifeScore = miniGameScore(trials.filter((trial) => trial.roundId === "patience"), "knife");
 
@@ -618,19 +608,8 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
             metrics.searchWrongTaps * 7,
         ));
 
-  const interference = clamp(
-    (metrics.stroopAccuracy ?? 0) * 100 -
-      Math.max(0, ((metrics.stroopTotalMs ?? 0) - 6000) / 5000) * 12 -
-      (metrics.stroopErrorRate ?? 0) * 18,
-  );
-
-  const rhythm = clamp(
-    (metrics.rhythmAccuracy ?? 0) * 45 +
-      scoreFromLowerIsBetter(metrics.rhythmAvgOffsetMs, 26, 170, 36) * 0.35 +
-      scoreFromLowerIsBetter(metrics.rhythmSdOffsetMs, 20, 140, 42) * 0.2 -
-      (metrics.rhythmWrongLaneRate ?? 0) * 30 -
-      (metrics.rhythmMissRate ?? 0) * 38,
-  );
+  const interference = miniFallDownScore ?? 0;
+  const rhythm = miniSquareJumpScore ?? 0;
 
   const memory = miniFlappyScore ?? clamp((metrics.memoryAccuracy ?? 0) * 100 - Math.max(0, ((metrics.memoryAvgMs ?? 0) - 1600) / 2200) * 12);
 

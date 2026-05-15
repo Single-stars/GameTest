@@ -1,5 +1,6 @@
 import type { RoundId, TrialEvent } from "./scoring";
-type MiniGameId = "doodle" | "flappy" | "knife";
+
+type MiniGameId = "doodle" | "flappy" | "knife" | "square-jump" | "fall-down";
 
 export type AdvancedDifficulty = "easy" | "medium" | "hard" | "boss";
 
@@ -59,9 +60,22 @@ const miniVariantSlug: Record<MiniGameId, Record<string, string>> = {
     不可插区域: "forbidden-zone",
     综合最终关: "final",
   },
+  "square-jump": {
+    移动落点: "moving-landing",
+    二段跳跃: "double-jump",
+    重力平台: "gravity-platform",
+    综合最终关: "final",
+  },
+  "fall-down": {
+    移动层板: "moving-layer",
+    脆弱层板: "fragile-layer",
+    危险层板: "danger-layer",
+    综合最终关: "final",
+  },
 };
 type MiniAdvancedLevelInput = {
   order: number;
+  levelId?: string;
   variant: string;
   goalText: string;
   description: string;
@@ -255,36 +269,6 @@ function aimConfigs() {
   ];
 }
 
-function stroopConfigs() {
-  return [
-    config(1, "stroop-flash-color", "过关要求：5 轮全选对字体颜色，每题 ≤ 2000ms。", { roundCount: 5, answerTimeLimitMs: 2000, flashMs: 620 }),
-    config(2, "stroop-mismatch-card", "过关要求：5 轮全部点中唯一不一致字卡。", { roundCount: 5, cardCount: 4, mismatchCount: 1 }),
-    config(3, "stroop-moving-count", "过关要求：5 轮全部数准不一致字的数量。", { roundCount: 5, movingWordCount: 3 }),
-    config(4, "stroop-flash-color", "过关要求：5 轮全选对字体颜色，每题 ≤ 1500ms。", { roundCount: 5, answerTimeLimitMs: 1500, flashMs: 500 }),
-    config(5, "stroop-mismatch-card", "过关要求：5 轮全部点中唯一不一致字卡。", { roundCount: 5, cardCount: 6, mismatchCount: 1 }),
-    config(6, "stroop-moving-count", "过关要求：5 轮全部数准不一致字的数量。", { roundCount: 5, movingWordCount: 4 }),
-    config(7, "stroop-flash-color", "过关要求：5 轮全选对字体颜色，每题 ≤ 1000ms。", { roundCount: 5, answerTimeLimitMs: 1000, flashMs: 400 }),
-    config(8, "stroop-mismatch-card", "过关要求：5 轮全部点中唯一不一致字卡。", { roundCount: 5, cardCount: 8, mismatchCount: 1 }),
-    config(9, "stroop-moving-count", "过关要求：5 轮全部数准不一致字的数量。", { roundCount: 5, movingWordCount: 5 }),
-    config(10, "stroop-boss", "过关要求：5 轮全部数准 6 个飞行字里的不一致数量。", { roundCount: 5, movingWordCount: 6, answerTimeLimitMs: null, flicker: true }),
-  ];
-}
-
-function rhythmConfigs() {
-  return [
-    config(1, "rhythm-dual-speed", "过关要求：命中 10 次真拍，每次偏差 ≤ 100ms。", { hitCount: 10, offsetThresholdMs: 100, lanes: 2, fakeBeats: false }),
-    config(2, "rhythm-four-circle", "过关要求：命中 10 次四圈节拍，每次偏差 ≤ 100ms。", { hitCount: 10, offsetThresholdMs: 100, lanes: 4, fakeBeats: false }),
-    config(3, "rhythm-fake-beat", "过关要求：命中 10 次真拍，假拍不能点，偏差 ≤ 100ms。", { hitCount: 10, offsetThresholdMs: 100, lanes: 2, fakeBeats: true }),
-    config(4, "rhythm-dual-speed", "过关要求：命中 12 次真拍，每次偏差 ≤ 80ms。", { hitCount: 12, offsetThresholdMs: 80, lanes: 2, fakeBeats: false }),
-    config(5, "rhythm-four-circle", "过关要求：命中 12 次四圈节拍，每次偏差 ≤ 80ms。", { hitCount: 12, offsetThresholdMs: 80, lanes: 4, fakeBeats: false }),
-    config(6, "rhythm-fake-beat", "过关要求：命中 12 次真拍，假拍不能点，偏差 ≤ 80ms。", { hitCount: 12, offsetThresholdMs: 80, lanes: 2, fakeBeats: true }),
-    config(7, "rhythm-dual-speed", "过关要求：命中 18 次真拍，每次偏差 ≤ 60ms。", { hitCount: 18, offsetThresholdMs: 60, lanes: 2, fakeBeats: false, overlap: true }),
-    config(8, "rhythm-four-circle", "过关要求：命中 18 次四圈节拍，每次偏差 ≤ 60ms。", { hitCount: 18, offsetThresholdMs: 60, lanes: 4, fakeBeats: false, overlap: true }),
-    config(9, "rhythm-fake-beat", "过关要求：命中 18 次真拍，假拍不能点，偏差 ≤ 60ms。", { hitCount: 18, offsetThresholdMs: 60, lanes: 2, fakeBeats: true, overlap: true }),
-    config(10, "rhythm-boss", "过关要求：命中 20 次真拍，假拍不能点，每次偏差 ≤ 50ms。", { hitCount: 20, offsetThresholdMs: 50, lanes: 4, fakeBeats: true, overlap: true }),
-  ];
-}
-
 function brakingConfigs() {
   return [
     config(1, "braking-single-red", "过关要求：长按前进，红色危险出现时松手，到终点。", {
@@ -443,8 +427,9 @@ function miniAdvancedLevel(
   goalText: string,
   description: string,
   params: AdvancedStageConfig["params"],
+  levelId?: string,
 ): MiniAdvancedLevelInput {
-  return { order, variant, goalText, description, params };
+  return { order, levelId, variant, goalText, description, params };
 }
 
 const miniAdvancedLevels: Record<MiniGameId, MiniAdvancedLevelInput[]> = {
@@ -484,6 +469,30 @@ const miniAdvancedLevels: Record<MiniGameId, MiniAdvancedLevelInput[]> = {
     miniAdvancedLevel(9, "不可插区域", "命中 11 发，避开禁区", "3 块不可插区域，总面积约 24%。", { shotCount: 11, forbiddenZoneCount: 3, forbiddenZoneRatio: 0.24, initialObstacleCount: 3 }),
     miniAdvancedLevel(10, "综合最终关", "命中 13 发，避开禁区和旧刀", "倒计时、正弦转速和不可插区域同时出现。", { shotCount: 13, shotCountdown: 2.3, sineRotationEnabled: true, phaseDuration: 2.7, sweepPerPhase: 405, forbiddenZoneCount: 2, forbiddenZoneRatio: 0.2, initialObstacleCount: 3 }),
   ],
+  "square-jump": [
+    miniAdvancedLevel(1, "移动落点", "预判移动平台并完成 4 次跳跃", "1 个慢速移动平台，平台较宽，距离变化小。", {}, "square-jump-moving-easy"),
+    miniAdvancedLevel(2, "移动落点", "预判移动平台并完成 5 次跳跃", "连续 3 个中速移动平台，宽度正常，距离略随机。", {}, "square-jump-moving-normal"),
+    miniAdvancedLevel(3, "移动落点", "预判快速移动平台并完成 6 次跳跃", "多个快速窄平台会反向移动，需要提前预判落点。", {}, "square-jump-moving-hard"),
+    miniAdvancedLevel(4, "二段跳跃", "用二段跳完成 4 次跳跃", "跳起后可在空中再次蓄力，悬停后释放完成二段跳。", {}, "square-jump-double-easy"),
+    miniAdvancedLevel(5, "二段跳跃", "用二段跳完成 5 次跳跃", "平台距离更远，空中二段蓄力会悬停，释放后继续前进。", {}, "square-jump-double-normal"),
+    miniAdvancedLevel(6, "二段跳跃", "用二段跳完成 6 次跳跃", "窄平台和远距离同时出现，需要在空中把握二段蓄力时机。", {}, "square-jump-double-hard"),
+    miniAdvancedLevel(7, "重力平台", "根据重力状态完成 4 次跳跃", "只出现正常和变轻平台，变轻后会跳得更远。", {}, "square-jump-gravity-easy"),
+    miniAdvancedLevel(8, "重力平台", "根据三种重力完成 5 次跳跃", "正常、变轻、加重平台都会出现，需要连续判断当前状态。", {}, "square-jump-gravity-normal"),
+    miniAdvancedLevel(9, "重力平台", "根据重力反向考验完成 6 次跳跃", "反向考验更多：变轻接近平台、加重接远平台，容错更低。", {}, "square-jump-gravity-hard"),
+    miniAdvancedLevel(10, "综合最终关", "连续跳到终点平台", "综合移动落点、二段跳和重力切换平台，一路跳到终点。", {}, "square-jump-final"),
+  ],
+  "fall-down": [
+    miniAdvancedLevel(1, "移动层板", "通过慢速移动层板", "少量移动平台，宽度较大，练习预判下落位置。", {}, "fall-down-moving-easy"),
+    miniAdvancedLevel(2, "移动层板", "通过连续移动层板", "移动平台数量增加，间距变大，需要提前调整左右位置。", {}, "fall-down-moving-normal"),
+    miniAdvancedLevel(3, "移动层板", "通过高压移动层板", "连续移动窄平台，部分方向相反，顶部压线更快。", {}, "fall-down-moving-hard"),
+    miniAdvancedLevel(4, "脆弱层板", "避开碎裂压力下降", "少量脆弱平台，踩上后约 1.8 秒碎裂。", {}, "fall-down-fragile-easy"),
+    miniAdvancedLevel(5, "脆弱层板", "连续通过脆弱层板", "脆弱平台数量增加，碎裂时间更短，不能停留太久。", {}, "fall-down-fragile-normal"),
+    miniAdvancedLevel(6, "脆弱层板", "在碎裂前连续下降", "连续脆弱窄平台，最后几层几乎不能停留。", {}, "fall-down-fragile-hard"),
+    miniAdvancedLevel(7, "危险层板", "避开危险平台下降", "少量红色危险平台，安全路线明显。", {}, "fall-down-danger-easy"),
+    miniAdvancedLevel(8, "危险层板", "选择安全层板下降", "危险平台数量增加，部分安全平台更窄。", {}, "fall-down-danger-normal"),
+    miniAdvancedLevel(9, "危险层板", "连续避开危险层板", "危险平台和窄安全平台交错，需要连续选择路线。", {}, "fall-down-danger-hard"),
+    miniAdvancedLevel(10, "综合最终关", "完成百层试炼", "综合移动、脆弱和危险层板，下降到终点平台。", {}, "fall-down-final"),
+  ],
 };
 
 function miniGameConfigs(gameId: MiniGameId) {
@@ -493,7 +502,7 @@ function miniGameConfigs(gameId: MiniGameId) {
     return config(index + 1, `mini-${gameId}-${miniVariantSlug[gameId][level.variant] ?? level.variant}`, `过关要求：${level.goalText}。${level.description}`, {
       ...level.params,
       miniGameId: gameId,
-      miniLevelId: `${gameId}-${sourceOrder}`,
+      miniLevelId: level.levelId ?? `${gameId}-${sourceOrder}`,
     });
   });
 }
@@ -631,8 +640,8 @@ export const ADVANCED_STAGE_CONFIGS: Record<RoundId, AdvancedStageConfig[]> = {
   reaction: createDimensionConfigs("reaction", reactionConfigs()),
   aim: createDimensionConfigs("aim", aimConfigs()),
   search: createDimensionConfigs("search", miniGameConfigs("doodle")),
-  stroop: createDimensionConfigs("stroop", stroopConfigs()),
-  rhythm: createDimensionConfigs("rhythm", rhythmConfigs()),
+  stroop: createDimensionConfigs("stroop", miniGameConfigs("fall-down")),
+  rhythm: createDimensionConfigs("rhythm", miniGameConfigs("square-jump")),
   memory: createDimensionConfigs("memory", miniGameConfigs("flappy")),
   braking: createDimensionConfigs("braking", brakingConfigs()),
   patience: createDimensionConfigs("patience", miniGameConfigs("knife")),
@@ -798,38 +807,13 @@ function evaluateSearch(config: AdvancedStageConfig, trials: TrialEvent[]) {
 }
 
 function evaluateStroop(config: AdvancedStageConfig, trials: TrialEvent[]) {
-  const required = numberParam(config, "roundCount", 5);
-  const limit = config.params.answerTimeLimitMs === null ? null : numberParam(config, "answerTimeLimitMs", 0);
-  const wrong = trials.find((trial) => trial.correct === false);
-  if (wrong) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：点错字色");
-  if (limit !== null && limit > 0) {
-    const slow = trials.find((trial) => reactionMs(trial) !== null && (reactionMs(trial) ?? 0) > limit);
-    if (slow) return fail(config, trials.filter((trial) => trial.correct === true).length, required, `失败：答题超时，要求 ≤ ${limit}ms`);
-  }
-  const correct = trials.filter((trial) => trial.correct === true).length;
-  if (correct < required) return fail(config, correct, required, `失败：少完成 ${required - correct} 轮`);
-  return pass(config, correct, required);
+  if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
+  return fail(config, 0, 1, "failed: replaced mini-game config required");
 }
 
 function evaluateRhythm(config: AdvancedStageConfig, trials: TrialEvent[]) {
-  const required = numberParam(config, "hitCount", 10);
-  const threshold = numberParam(config, "offsetThresholdMs", 100);
-  const fakeTap = trials.find((trial) => trial.value?.beatType === "fake" && trial.responseAt !== null);
-  if (fakeTap) return fail(config, 0, required, "失败：点到了假拍");
-  const wrongLane = trials.find((trial) => trial.errorType === "wrong");
-  if (wrongLane) return fail(config, 0, required, "失败：点错圈");
-  const missed = trials.find((trial) => trial.errorType === "timeout" || trial.responseAt === null);
-  if (missed) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：漏拍");
-  const trueBeats = trials.filter((trial) => trial.value?.beatType !== "fake");
-  for (const item of trueBeats) {
-    const offset = Math.abs(Number(item.value?.offsetMs));
-    if (Number.isFinite(offset) && offset > threshold) {
-      return fail(config, trueBeats.filter((trial) => trial.correct === true).length, required, `失败：偏差 ${Math.round(offset)}ms，要求 ≤ ${threshold}ms`);
-    }
-  }
-  const correct = trueBeats.filter((trial) => trial.correct === true).length;
-  if (correct < required) return fail(config, correct, required, `失败：少命中 ${required - correct} 次真拍`);
-  return pass(config, correct, required);
+  if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
+  return fail(config, 0, 1, "failed: replaced mini-game config required");
 }
 
 function evaluateMemory(config: AdvancedStageConfig, trials: TrialEvent[]) {

@@ -53,18 +53,14 @@ function strongBaseline(): TrialEvent[] {
         target: { x: 180, y: 300, size: 40, distance: 0, difficulty: 1, setSize: 24 + index * 4 },
       }),
     ),
-    ...Array.from({ length: 5 }, (_, index) =>
-      trial("stroop", index, {
-        responseAt: index * 1000 + 560,
-        value: { congruent: index % 2 === 0 },
-      }),
-    ),
-    ...Array.from({ length: 10 }, (_, index) =>
-      trial("rhythm", index, {
-        responseAt: index * 1000 + 500,
-        value: { offsetMs: index % 2 === 0 ? 28 : -34, lane: index % 2 === 0 ? "left" : "right" },
-      }),
-    ),
+    trial("stroop", 0, {
+      responseAt: 1700,
+      value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 96, failures: 0, progressPercent: 100, elapsedMs: 1700 },
+    }),
+    trial("rhythm", 0, {
+      responseAt: 1800,
+      value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 95, failures: 0, progressPercent: 100, elapsedMs: 1800 },
+    }),
     ...Array.from({ length: 4 }, (_, index) =>
       trial("memory", index, {
         responseAt: index * 1000 + 780,
@@ -227,12 +223,14 @@ test("perfect normal all-correct rounds can display 100", () => {
       { targetCount: 5, selectedCount: 5, decisionMs: 950, difficulty: 3, totalDots: 26 },
       { targetCount: 4, selectedCount: 4, decisionMs: 980, difficulty: 4, totalDots: 30 },
     ]),
-    ...Array.from({ length: 5 }, (_, index) =>
-      trial("stroop", index, {
-        responseAt: index * 1000 + 650,
-        value: { congruent: index % 2 === 0 },
-      }),
-    ),
+    trial("stroop", 0, {
+      responseAt: 1700,
+      value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 100, failures: 0, progressPercent: 100, elapsedMs: 1700 },
+    }),
+    trial("rhythm", 0, {
+      responseAt: 1800,
+      value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 100, failures: 0, progressPercent: 100, elapsedMs: 1800 },
+    }),
     ...Array.from({ length: 3 }, (_, index) =>
       trial("memory", index, {
         responseAt: index * 1000 + 820,
@@ -250,6 +248,7 @@ test("perfect normal all-correct rounds can display 100", () => {
 
   assert.equal(scores.search, 100);
   assert.equal(scores.interference, 100);
+  assert.equal(scores.rhythm, 100);
   assert.equal(scores.memory, 100);
   assert.equal(scores.braking, 100);
   assert.equal(scores.waiting, 100);
@@ -316,7 +315,31 @@ test("mini-game base trial scores replace the old search memory and waiting dime
   assert.equal(messyScores.waiting < perfectScores.waiting, true);
 });
 
-test("very slow all-correct decisions can lose a small amount", () => {
+test("new square jump and fall down base trials score rhythm and interference dimensions", () => {
+  const scores = calculateScores([
+    trial("stroop", 0, {
+      correct: true,
+      value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 87, failures: 1, progressPercent: 95 },
+    }),
+    trial("rhythm", 0, {
+      correct: true,
+      value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 93, failures: 0, progressPercent: 100 },
+    }),
+  ]);
+
+  assert.equal(scores.interference, 87);
+  assert.equal(scores.rhythm, 93);
+  assert.equal(scores.confidence, 25);
+
+  const stroopPerfect = buildPerfectTrials("stroop")[0];
+  const rhythmPerfect = buildPerfectTrials("rhythm")[0];
+  assert.equal(stroopPerfect.value?.mode, "mini-fall-down-base");
+  assert.equal(stroopPerfect.value?.miniGameId, "fall-down");
+  assert.equal(rhythmPerfect.value?.mode, "mini-square-jump-base");
+  assert.equal(rhythmPerfect.value?.miniGameId, "square-jump");
+});
+
+test("very slow all-correct decisions and lower mini-game scores can lose a small amount", () => {
   const scores = calculateScores([
     ...searchCountTrials([
       { targetCount: 3, selectedCount: 3, decisionMs: 4200, difficulty: 1, totalDots: 18 },
@@ -324,12 +347,10 @@ test("very slow all-correct decisions can lose a small amount", () => {
       { targetCount: 5, selectedCount: 5, decisionMs: 4400, difficulty: 3, totalDots: 26 },
       { targetCount: 4, selectedCount: 4, decisionMs: 4500, difficulty: 4, totalDots: 30 },
     ]),
-    ...Array.from({ length: 5 }, (_, index) =>
-      trial("stroop", index, {
-        responseAt: index * 1000 + 2200,
-        value: { congruent: index % 2 === 0 },
-      }),
-    ),
+    trial("stroop", 0, {
+      responseAt: 2400,
+      value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 92, failures: 1, progressPercent: 92, elapsedMs: 2400 },
+    }),
     ...Array.from({ length: 3 }, (_, index) =>
       trial("memory", index, {
         responseAt: index * 1000 + 2900,
@@ -504,41 +525,54 @@ test("high average with a weak braking dimension is capped below top rank", () =
   assert.equal(result.rankScore < 88, true);
 });
 
-test("five stroop trials are enough for a completed interference dimension", () => {
-  const fiveStroopTrials = strongBaseline().filter((event) => event.roundId !== "stroop" || event.trialIndex < 5);
+test("replaced dimensions require mini-game trials to count as completed", () => {
+  const withoutReplaced = strongBaseline().filter((event) => event.roundId !== "stroop" && event.roundId !== "rhythm");
+  const legacyReplaced = [
+    ...withoutReplaced,
+    ...Array.from({ length: 5 }, (_, index) =>
+      trial("stroop", index, {
+        responseAt: index * 1000 + 520,
+        value: { legacyMode: "removed-stroop" },
+      }),
+    ),
+    ...Array.from({ length: 8 }, (_, index) =>
+      trial("rhythm", index, {
+        responseAt: index * 1000 + 500,
+        value: { legacyMode: "removed-rhythm" },
+      }),
+    ),
+  ];
 
-  const scores = calculateScores(fiveStroopTrials);
+  const legacyScores = calculateScores(legacyReplaced);
 
-  assert.equal(scores.confidence, 100);
+  assert.equal(legacyScores.interference, 0);
+  assert.equal(legacyScores.rhythm, 0);
+  assert.equal(legacyScores.confidence, 75);
+  assert.equal(calculateScores(strongBaseline()).confidence, 100);
 });
 
-test("stroop score uses errors and total time rather than per-question timeout", () => {
-  const fastClean = strongBaseline();
-  const slowClean = strongBaseline().map((event) => {
-    if (event.roundId !== "stroop") return event;
-    return {
-      ...event,
-      responseAt: event.shownAt + 1500,
-      correct: true,
-      errorType: undefined,
-    } satisfies TrialEvent;
-  });
-  const fastMessy = strongBaseline().map((event) => {
-    if (event.roundId !== "stroop") return event;
-    return {
-      ...event,
-      responseAt: event.shownAt + 520,
-      correct: event.trialIndex < 2,
-      errorType: event.trialIndex < 2 ? undefined : "wrong",
-    } satisfies TrialEvent;
+test("fall-down and square-jump mini-game scores directly drive replaced dimensions", () => {
+  const lowerMiniScores = strongBaseline().map((event) => {
+    if (event.roundId === "stroop") {
+      return {
+        ...event,
+        value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 62, failures: 3, progressPercent: 70, elapsedMs: 2600 },
+      } satisfies TrialEvent;
+    }
+    if (event.roundId === "rhythm") {
+      return {
+        ...event,
+        value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 58, failures: 4, progressPercent: 64, elapsedMs: 2800 },
+      } satisfies TrialEvent;
+    }
+    return event;
   });
 
-  const fastCleanScore = calculateScores(fastClean).interference;
-  const slowCleanScore = calculateScores(slowClean).interference;
-  const fastMessyScore = calculateScores(fastMessy).interference;
+  const scores = calculateScores(lowerMiniScores);
 
-  assert.equal(fastCleanScore > slowCleanScore, true);
-  assert.equal(slowCleanScore > fastMessyScore, true);
+  assert.equal(scores.interference, 62);
+  assert.equal(scores.rhythm, 58);
+  assert.equal(scores.confidence, 100);
 });
 
 test("search scoring treats near count errors better than large count errors", () => {
@@ -585,37 +619,6 @@ test("search count metrics expose target totals, selected totals and mean count 
   assert.equal(metrics.searchSelectedTotal, 17);
   assert.equal(metrics.searchMeanCountError, 0.75);
   assert.equal(metrics.searchAvgMs, 992.5);
-});
-
-test("rhythm score penalizes wrong lane and missed beats, not only timing offset", () => {
-  const wrongLane = strongBaseline().map((event) => {
-    if (event.roundId !== "rhythm") return event;
-    return {
-      ...event,
-      correct: event.trialIndex < 5,
-      errorType: event.trialIndex < 5 ? undefined : "wrong",
-      value: { offsetMs: 35, lane: event.trialIndex % 2 === 0 ? "left" : "right" },
-    } satisfies TrialEvent;
-  });
-  const missed = strongBaseline().map((event) => {
-    if (event.roundId !== "rhythm") return event;
-    return event.trialIndex < 4
-      ? event
-      : ({
-          ...event,
-          responseAt: null,
-          correct: false,
-          errorType: "timeout",
-          value: { offsetMs: 300, lane: "miss" },
-        } satisfies TrialEvent);
-  });
-
-  const baseline = calculateScores(strongBaseline()).rhythm;
-  const wrongLaneScore = calculateScores(wrongLane).rhythm;
-  const missedScore = calculateScores(missed).rhythm;
-
-  assert.equal(baseline > wrongLaneScore, true);
-  assert.equal(wrongLaneScore > missedScore, true);
 });
 
 test("insufficient data lowers confidence and returns the lowest rank", () => {

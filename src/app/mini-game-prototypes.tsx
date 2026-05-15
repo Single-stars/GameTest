@@ -510,6 +510,8 @@ type FallDownRuntime = {
   inputDirection: -1 | 0 | 1;
   layersReached: number;
   currentPlatformId: number;
+  failures: number;
+  respawnUntil: number;
   status: PrototypeStatus;
   reason: string;
   platforms: FallDownPlatform[];
@@ -574,6 +576,7 @@ type SquareJumpUnifiedRuntime = {
   started: boolean;
   time: number;
   jumps: number;
+  failures: number;
   charge: number;
   chargeElapsedMs: number;
   state: SquareJumpUnifiedState;
@@ -596,8 +599,9 @@ type SquareJumpUnifiedRuntime = {
   exitingPlatform: SquareJumpBasePlatform | null;
   exitingVisualOffsetY: number;
   nextVisualOffsetY: number;
-  feedback: "Good" | "";
+  feedback: "Good" | "提醒" | "";
   feedbackUntil: number;
+  respawnUntil: number;
   timer: number | null;
   status: PrototypeStatus;
   reason: string;
@@ -673,6 +677,7 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
     exitingVisualOffsetY: 0,
     feedback: "",
     feedbackUntil: 0,
+    failures: 0,
     jumpPlan: null,
     jumpStartedAt: 0,
     jumps: 0,
@@ -685,6 +690,7 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
     playerX: currentPlatform.x,
     playerY: currentPlatform.y - PLAYER_SIZE / 2,
     reason: "",
+    respawnUntil: 0,
     started: false,
     state: "idle",
     status: "playing",
@@ -722,6 +728,67 @@ function updateSquareJumpAdvanceAnimation(current: SquareJumpUnifiedRuntime) {
     current.advancePlan = null;
     if (current.state === "advancing") current.state = "idle";
   }
+}
+
+function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string) {
+  const failures = current.failures + 1;
+  current.failures = failures;
+  current.reason = reason;
+  current.advancePlan = null;
+  current.jumpPlan = null;
+  current.charge = 0;
+  current.chargeElapsedMs = 0;
+  current.doubleJumpUsed = false;
+
+  if (failures >= BASE_FAILURE_LIMIT) {
+    current.reason = "失败达到 3 次，进入下一关";
+    current.state = "failed";
+    current.status = "failed";
+    return true;
+  }
+
+  const nextJumps = current.jumps + 1;
+  const requiredJumps = current.platforms.length - 1;
+  const leavingPlatform = { ...current.currentPlatform };
+  const landedPlatform = { ...current.nextPlatform };
+  const landedPlatformX = getSquareJumpBasePlatformX(landedPlatform, current.time);
+  current.feedback = "提醒";
+  current.feedbackUntil = current.time + 0.75;
+  current.respawnUntil = current.time + 1.1;
+  current.jumps = nextJumps;
+  current.playerX = getSquareJumpBasePlatformX(landedPlatform, current.time);
+  current.playerY = landedPlatform.y - PLAYER_SIZE / 2;
+  current.playerOffsetOnCurrent = current.playerX - landedPlatformX;
+  current.currentIndex = current.nextIndex;
+  current.currentPlatform = landedPlatform;
+  current.activeGravity = resolveSquareJumpActiveGravity(current.activeGravity, landedPlatform.gravity);
+
+  if (nextJumps >= requiredJumps) {
+    current.reason = `到达终点平台，失误 ${failures} 次`;
+    current.state = "success";
+    current.status = "passed";
+    return true;
+  }
+
+  const cameraStart = { ...current.camera };
+  const futureIndex = current.nextIndex + 1;
+  const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
+  const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX);
+  current.nextIndex = futureIndex;
+  current.nextPlatform = futurePlatform;
+  current.timer = null;
+  current.exitingPlatform = leavingPlatform;
+  current.exitingVisualOffsetY = 0;
+  current.advancePlan = createSquareJumpBaseAdvancePlan({
+    cameraEnd,
+    cameraStart,
+    stageHeight: STAGE_HEIGHT,
+  });
+  current.advanceStartedAt = current.time + SQUARE_JUMP_ADVANCE_DELAY;
+  current.nextVisualOffsetY = current.advancePlan.nextPlatformStartVisualOffsetY;
+  current.state = "advancing";
+  current.status = "playing";
+  return true;
 }
 
 function SquareJumpPrototype({
@@ -938,6 +1005,11 @@ function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
+            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
+              syncView();
+              if (current.status === "playing") frameId = requestAnimationFrame(tick);
+              return;
+            }
             fail("掉下去了");
             return;
           }
@@ -963,6 +1035,11 @@ function SquareJumpPrototype({
           const screenX = STAGE_WIDTH / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = STAGE_HEIGHT / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > STAGE_WIDTH + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > STAGE_HEIGHT + PLAYER_SIZE) {
+            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
+              syncView();
+              if (current.status === "playing") frameId = requestAnimationFrame(tick);
+              return;
+            }
             fail("掉下去了");
             return;
           }
@@ -975,7 +1052,7 @@ function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, level, recordFrame, requiredJumps, syncView]);
+  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, level, mode, recordFrame, requiredJumps, syncView]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -988,7 +1065,7 @@ function SquareJumpPrototype({
       reason: latest.reason,
       elapsedMs: Math.round(latest.time * 1000),
       stats: {
-        failures: view.status === "failed" ? 1 : 0,
+        failures: latest.failures,
         progressPercent: Math.round((latest.jumps / requiredJumps) * 100),
         jumps: latest.jumps,
         requiredJumps,
@@ -1019,6 +1096,7 @@ function SquareJumpPrototype({
       <div className="mini-score">
         <span>进度 {view.jumps}/{requiredJumps}</span>
         <span>重力 {squareGravityLabel(gravity)}</span>
+        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
         {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
       </div>
       <div
@@ -1064,7 +1142,7 @@ function SquareJumpPrototype({
             );
           })}
           <div
-            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.feedback ? "landed" : ""}`}
+            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.feedback ? "landed" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
             style={{
               left: `${view.playerX - PLAYER_SIZE / 2}px`,
               top: `${view.playerY - PLAYER_SIZE / 2}px`,
@@ -1312,6 +1390,45 @@ function fallPlatformX(platform: FallDownPlatform, time: number) {
   return clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 14, STAGE_WIDTH - platform.width / 2 - 14);
 }
 
+function recoverFallDownBaseFailure(current: FallDownRuntime, reason: string) {
+  const failures = current.failures + 1;
+  current.failures = failures;
+  current.reason = reason;
+  current.inputDirection = 0;
+  current.vx = 0;
+  current.vy = 0;
+
+  if (failures >= BASE_FAILURE_LIMIT) {
+    current.reason = "失败达到 3 次，进入下一关";
+    current.status = "failed";
+    return false;
+  }
+
+  const platformY = current.cameraY + STAGE_HEIGHT * 0.5;
+  const platformWidth = 132;
+  const platformX = clamp(current.playerX, platformWidth / 2 + 14, STAGE_WIDTH - platformWidth / 2 - 14);
+  const respawnPlatform: FallDownPlatform = {
+    id: -2000 - failures,
+    x: platformX,
+    y: platformY,
+    width: platformWidth,
+    kind: "normal",
+    shape: "flat",
+    range: 0,
+    speed: 0,
+    phase: 0,
+    steppedAt: null,
+    broken: false,
+  };
+  current.platforms.unshift(respawnPlatform);
+  current.currentPlatformId = respawnPlatform.id;
+  current.playerX = respawnPlatform.x;
+  current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
+  current.respawnUntil = current.time + 1.1;
+  current.status = "playing";
+  return true;
+}
+
 function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string): FallDownRuntime {
   const platforms = makeFallDownPlatforms(level, runSeed);
   const startPlatform = platforms[0];
@@ -1327,6 +1444,8 @@ function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string): Fal
     inputDirection: 0,
     layersReached: 0,
     currentPlatformId: 0,
+    failures: 0,
+    respawnUntil: 0,
     status: "playing",
     reason: "",
     platforms,
@@ -1372,13 +1491,21 @@ function FallDownPrototype({
   const fail = useCallback(
     (reason: string) => {
       const current = runtimeRef.current;
+      if (mode === "base" && recoverFallDownBaseFailure(current, reason)) {
+        syncView();
+        return;
+      }
+      if (mode === "base") {
+        syncView();
+        return;
+      }
       current.status = "failed";
       current.reason = reason;
       current.inputDirection = 0;
       current.vx = 0;
       syncView();
     },
-    [syncView],
+    [mode, syncView],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1537,13 +1664,14 @@ function FallDownPrototype({
       reason: latest.reason,
       elapsedMs: Math.round(latest.time * 1000),
       stats: {
-        failures: view.status === "failed" ? 1 : 0,
+        failures: latest.failures,
         progressPercent: Math.round((latest.layersReached / Math.max(1, requiredLayers)) * 100),
         layersReached: latest.layersReached,
         requiredLayers,
+        forcedAdvance: mode === "base" && view.status === "failed",
       },
     });
-  }, [level.levelId, onComplete, requiredLayers, view.status]);
+  }, [level.levelId, mode, onComplete, requiredLayers, view.status]);
 
   const showOverlay = mode === "prototype";
   const pressureScreenY = view.pressureWorldY - view.cameraY;
@@ -1553,6 +1681,7 @@ function FallDownPrototype({
       <div className="mini-score">
         <span>进度 {view.layersReached}/{requiredLayers}</span>
         <span>压线 {Math.max(0, pressureScreenY).toFixed(0)}px</span>
+        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
         className={`prototype-stage fall-down-stage ${view.status === "failed" ? "failed" : ""}`}
@@ -1625,7 +1754,7 @@ function FallDownPrototype({
             />
           );
         })}
-        <div className="fall-down-player-shell" style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
+        <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
           <div className="prototype-player-box fall-down-player" />
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}

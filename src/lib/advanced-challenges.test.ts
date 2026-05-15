@@ -15,6 +15,7 @@ import {
   shouldShowPerfectClearShortcut,
   type AdvancedDifficulty,
 } from "./advanced-challenges.ts";
+import { getMiniGameLevels, type MiniGameId } from "./mini-game-prototypes.ts";
 import type { RoundId, TrialEvent } from "./scoring.ts";
 
 const viewport = { width: 390, height: 844, dpr: 3 };
@@ -148,28 +149,39 @@ test("advanced aim configs describe real archery target types and arrow parity",
 
 test("advanced config maps the replaced dimensions to the new mini-game advanced levels", () => {
   const orderedMiniLevels = [1, 4, 7, 2, 5, 8, 3, 6, 9, 10];
+  const orderedPrototypeLevelIds = (gameId: MiniGameId) => {
+    const advancedLevels = getMiniGameLevels(gameId).filter((level) => level.kind === "advanced");
+    return orderedMiniLevels.map((sourceOrder) => advancedLevels[sourceOrder - 1].levelId);
+  };
+  const squareJumpLevelIds = orderedPrototypeLevelIds("square-jump");
+  const fallDownLevelIds = orderedPrototypeLevelIds("fall-down");
+
   for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     const miniLevel = orderedMiniLevels[level - 1];
     assert.equal(getAdvancedStageConfig("search", level).params.miniGameId, "doodle");
     assert.equal(getAdvancedStageConfig("search", level).params.miniLevelId, `doodle-${miniLevel}`);
+    assert.equal(getAdvancedStageConfig("stroop", level).params.miniGameId, "fall-down");
+    assert.equal(getAdvancedStageConfig("stroop", level).params.miniLevelId, fallDownLevelIds[level - 1]);
+    assert.equal(getAdvancedStageConfig("rhythm", level).params.miniGameId, "square-jump");
+    assert.equal(getAdvancedStageConfig("rhythm", level).params.miniLevelId, squareJumpLevelIds[level - 1]);
     assert.equal(getAdvancedStageConfig("memory", level).params.miniGameId, "flappy");
     assert.equal(getAdvancedStageConfig("memory", level).params.miniLevelId, `flappy-${miniLevel}`);
     assert.equal(getAdvancedStageConfig("patience", level).params.miniGameId, "knife");
     assert.equal(getAdvancedStageConfig("patience", level).params.miniLevelId, `knife-${miniLevel}`);
-    assert.equal(getAdvancedStageConfig("stroop", level).params.roundCount, 5);
   }
 
   assert.equal(getAdvancedStageConfig("search", 1).variant, "mini-doodle-moving-platform");
   assert.equal(getAdvancedStageConfig("search", 2).variant, "mini-doodle-risk-platform");
   assert.equal(getAdvancedStageConfig("search", 3).variant, "mini-doodle-moving-obstacle");
+  assert.equal(getAdvancedStageConfig("stroop", 1).variant, "mini-fall-down-moving-layer");
+  assert.equal(getAdvancedStageConfig("stroop", 10).variant, "mini-fall-down-final");
+  assert.equal(getAdvancedStageConfig("rhythm", 1).variant, "mini-square-jump-moving-landing");
+  assert.equal(getAdvancedStageConfig("rhythm", 10).variant, "mini-square-jump-final");
   assert.equal(getAdvancedStageConfig("memory", 2).variant, "mini-flappy-collectible-path");
   assert.equal(getAdvancedStageConfig("memory", 3).variant, "mini-flappy-reverse-gravity");
   assert.equal(getAdvancedStageConfig("patience", 10).variant, "mini-knife-final");
-  assert.equal(getAdvancedStageConfig("stroop", 1).params.answerTimeLimitMs, 2000);
-  assert.equal(getAdvancedStageConfig("stroop", 4).params.answerTimeLimitMs, 1500);
-  assert.equal(getAdvancedStageConfig("stroop", 7).params.answerTimeLimitMs, 1000);
-  assert.equal(getAdvancedStageConfig("stroop", 10).params.answerTimeLimitMs, null);
-  assert.equal(getAdvancedStageConfig("rhythm", 10).params.offsetThresholdMs, 50);
+  assert.equal(getAdvancedStageConfig("stroop", 1).params.roundCount, undefined);
+  assert.equal(getAdvancedStageConfig("rhythm", 10).params.offsetThresholdMs, undefined);
 });
 
 test("advanced braking configs follow the square-stop variant columns and difficulty rows", () => {
@@ -384,15 +396,19 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   assert.equal(redClick.reason, "失败：点到了红灯");
 });
 
-test("advanced completion evaluates rhythm offset thresholds and mini-game challenge outcomes", () => {
+test("advanced completion evaluates replaced dimensions through mini-game challenge outcomes", () => {
   const rhythm = getAdvancedStageConfig("rhythm", 4);
-  const rhythmTrials = Array.from({ length: 12 }, (_, index) =>
-    trial("rhythm", index, { value: { offsetMs: index === 4 ? 91 : 48, beatType: "true" } }),
-  );
-  const rhythmResult = evaluateAdvancedChallengeCompletion(rhythm, rhythmTrials);
+  const rhythmResult = evaluateAdvancedChallengeCompletion(rhythm, [
+    trial("rhythm", 0, { correct: false, errorType: "miss", value: { mode: "mini-game", miniGameId: "square-jump", miniLevelId: rhythm.params.miniLevelId, reason: "掉下去了" } }),
+  ]);
 
   assert.equal(rhythmResult.passed, false);
-  assert.equal(rhythmResult.reason, "失败：偏差 91ms，要求 ≤ 80ms");
+  assert.equal(rhythmResult.reason, "失败：掉下去了");
+
+  const fallDown = getAdvancedStageConfig("stroop", 2);
+  const fallDownResult = evaluateAdvancedChallengeCompletion(fallDown, [
+    trial("stroop", 0, { correct: true, value: { mode: "mini-game", miniGameId: "fall-down", miniLevelId: fallDown.params.miniLevelId, reason: "到达终点平台" } }),
+  ]);
 
   const doodle = getAdvancedStageConfig("search", 3);
   const doodleResult = evaluateAdvancedChallengeCompletion(doodle, [
@@ -406,6 +422,8 @@ test("advanced completion evaluates rhythm offset thresholds and mini-game chall
   assert.equal(doodleResult.passed, false);
   assert.equal(doodleResult.reason, "失败：碰到移动障碍");
   assert.equal(doodleResult.requiredCorrect, 1);
+  assert.equal(fallDownResult.passed, true);
+  assert.equal(fallDownResult.reason, "通过");
   assert.equal(flappyResult.passed, true);
   assert.equal(flappyResult.reason, "通过");
 });

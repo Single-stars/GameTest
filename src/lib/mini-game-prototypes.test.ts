@@ -961,6 +961,25 @@ test("square jump base advance keeps two platforms visible and advances by camer
   assert.doesNotMatch(componentSource, /current\.playerX = current\.advancePlan\.playerEndX/);
 });
 
+test("square jump base misses respawn on the original next platform before forced advance", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const squareJumpSource = componentSource.slice(componentSource.indexOf("type SquareJumpUnifiedState"), componentSource.indexOf("function fallDownPlatformKindBag"));
+
+  assert.match(squareJumpSource, /failures: number;/);
+  assert.match(squareJumpSource, /respawnUntil: number;/);
+  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string\)/);
+  assert.match(squareJumpSource, /const failures = current\.failures \+ 1;/);
+  assert.match(squareJumpSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(squareJumpSource, /失败达到 3 次，进入下一关/);
+  assert.match(squareJumpSource, /const landedPlatform = \{ \.\.\.current\.nextPlatform \};/);
+  assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(landedPlatform, current\.time\);/);
+  assert.match(squareJumpSource, /current\.currentPlatform = landedPlatform;/);
+  assert.match(squareJumpSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
+  assert.match(squareJumpSource, /mode === "base" && recoverSquareJumpBaseMiss\(current, "掉下去了"\)/);
+  assert.match(squareJumpSource, /failures: latest\.failures,/);
+  assert.match(squareJumpSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
+});
+
 test("mini game prototype restart advances the run seed every time", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
 
@@ -1063,6 +1082,27 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });
 
+test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(fallDownSource, /failures: number;/);
+  assert.match(fallDownSource, /respawnUntil: number;/);
+  assert.match(fallDownSource, /function recoverFallDownBaseFailure\(current: FallDownRuntime, reason: string\)/);
+  assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
+  assert.match(fallDownSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
+  assert.match(fallDownSource, /const platformY = current\.cameraY \+ STAGE_HEIGHT \* 0\.5;/);
+  assert.match(fallDownSource, /id: -2000 - failures,/);
+  assert.match(fallDownSource, /kind: "normal",/);
+  assert.match(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
+  assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
+  assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
+  assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason\)/);
+  assert.match(fallDownSource, /failures: latest\.failures,/);
+  assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
+});
+
 test("fall down platform layout varies by run seed", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
@@ -1153,12 +1193,11 @@ test("new prototype test levels keep required public fields populated", () => {
   }
 });
 
-test("prototype test entry copy exists in app sources", () => {
+test("prototype test route and result-page entry are removed after formal replacement", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const prototypeConfigSource = readFileSync(new URL("./mini-game-prototypes.ts", import.meta.url), "utf8");
 
-  assert.match(appPageSource, /小游戏原型测试/);
-  assert.match(appPageSource, /测试方块跃迁与一路向下原型/);
+  assert.doesNotMatch(appPageSource, /小游戏原型测试|测试方块跃迁与一路向下原型|href="\/mini-game-prototypes"|prototype-test-entry/);
   assert.match(prototypeConfigSource, /方块跃迁/);
   assert.match(prototypeConfigSource, /一路向下/);
   assert.doesNotMatch(appPageSource, /星球跃迁|反向星球|高速星球|星链终点/);
