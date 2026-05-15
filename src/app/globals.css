@@ -1958,6 +1958,30 @@ h1 {
   pointer-events: none;
 }
 
+.mini-game-perf-panel {
+  position: absolute;
+  z-index: 36;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 132px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(255, 253, 248, 0.92);
+  color: rgba(24, 24, 24, 0.78);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+.mini-game-perf-panel strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
 .knife-wheel-svg {
   position: absolute;
   inset: 0;
@@ -2349,7 +2373,7 @@ h1 {
   transition: none;
   animation: none;
   transform: none;
-  will-change: left, top;
+  will-change: transform;
 }
 
 .square-jump-base-player-shell.jumping,

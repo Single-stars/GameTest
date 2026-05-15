@@ -879,17 +879,30 @@ test("square jump lets charging start during camera advance without cancelling s
   assert.doesNotMatch(componentSource, /className="prototype-start-button"[\s\S]*start\(\)/);
 });
 
-test("square jump base rendering anchors position with left and top instead of shell transforms", () => {
+test("square jump base rendering keeps hot-path positions on transforms", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const updateDomSource = componentSource.slice(
+    componentSource.indexOf("const updateSquareJumpDom = useCallback"),
+    componentSource.indexOf("const fail = useCallback", componentSource.indexOf("const updateSquareJumpDom = useCallback")),
+  );
+  const renderSource = componentSource.slice(
+    componentSource.indexOf("const platforms = selectSquareJumpVisiblePlatforms(view.currentPlatform, view.nextPlatform, view.exitingPlatform);"),
+    componentSource.indexOf("{DEBUG_MINI_GAME_HITBOX ?", componentSource.indexOf("const platforms = selectSquareJumpVisiblePlatforms(view.currentPlatform, view.nextPlatform, view.exitingPlatform);")),
+  );
 
   assert.match(componentSource, /className=\{`square-jump-base-player-shell/);
-  assert.match(componentSource, /left: `\$\{view\.playerX - PLAYER_SIZE \/ 2\}px`/);
-  assert.match(componentSource, /top: `\$\{view\.playerY - PLAYER_SIZE \/ 2\}px`/);
   assert.match(componentSource, /className=\{`square-jump-base-platform/);
-  assert.match(componentSource, /top: `\$\{platform\.y \+ visualOffsetY\}px`/);
+  assert.match(updateDomSource, /node\.style\.transform = transformPoint3d\(platformX - platform\.width \/ 2, platform\.y \+ visualOffsetY\);/);
+  assert.doesNotMatch(updateDomSource, /node\.style\.left =/);
+  assert.doesNotMatch(updateDomSource, /node\.style\.top =/);
+  assert.match(updateDomSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(current\.playerX - PLAYER_SIZE \/ 2, current\.playerY - PLAYER_SIZE \/ 2\);/);
+  assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.left =/);
+  assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.top =/);
+  assert.match(renderSource, /transform: transformPoint3d\(platformX - platform\.width \/ 2, platform\.y \+ visualOffsetY\)/);
+  assert.match(renderSource, /transform: transformPoint3d\(view\.playerX - PLAYER_SIZE \/ 2, view\.playerY - PLAYER_SIZE \/ 2\)/);
   assert.match(globalCss, /\.square-jump-base-player-shell[\s\S]*transition: none;[\s\S]*animation: none;/);
-  assert.match(globalCss, /\.square-jump-base-player-shell\.landed[\s\S]*animation: none;/);
+  assert.match(globalCss, /\.square-jump-base-player-shell[\s\S]*will-change: transform;/);
 });
 
 test("square jump runtime supports double jump hover charging and 90 degree turns", () => {
@@ -975,11 +988,92 @@ test("square jump and fall down paint animation frames without per-frame React s
   assert.doesNotMatch(squareJumpSource, /\n\s*syncView\(\);\s*frameId = requestAnimationFrame\(tick\);/);
 
   assert.match(fallDownSource, /lastUiSyncRef/);
-  assert.match(fallDownSource, /updateFallDownDom\(current\)/);
+  assert.match(fallDownSource, /paintFallDownFrame\(current\)/);
+  assert.match(fallDownSource, /updateFallDownDom\(frame\)/);
   assert.match(fallDownSource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
   assert.match(fallDownSource, /playerShellRef/);
   assert.match(fallDownSource, /fallPlatformRefs/);
   assert.doesNotMatch(fallDownSource, /\n\s*syncView\(\);\s*frameId = requestAnimationFrame\(tick\);/);
+});
+
+test("hidden mini game performance panel is URL-gated and ref-backed", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const perfSource = componentSource.slice(componentSource.indexOf("type MiniGamePerfMetrics"), componentSource.indexOf("export function MiniGameEmbeddedStage"));
+  const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+
+  assert.match(componentSource, /const MINI_GAME_PERF_PANEL_SYNC_MS = 500;/);
+  assert.match(perfSource, /function isMiniGamePerfPanelEnabled\(\)/);
+  assert.match(perfSource, /new URLSearchParams\(window\.location\.search\)\.get\("perf"\) === "1"/);
+  assert.match(perfSource, /function useMiniGamePerfMonitor\(label: string\)/);
+  assert.match(perfSource, /metricsRef = useRef/);
+  assert.match(perfSource, /if \(time - metrics\.lastPanelAt < MINI_GAME_PERF_PANEL_SYNC_MS\) return;/);
+  assert.match(perfSource, /setSnapshot\(createMiniGamePerfSnapshot\(metrics\)\)/);
+  assert.doesNotMatch(perfSource, /console\.log/);
+  assert.match(perfSource, /FPS/);
+  assert.match(perfSource, /p95/);
+  assert.match(perfSource, /dropped/);
+  assert.match(perfSource, /update/);
+  assert.match(perfSource, /render/);
+  assert.match(perfSource, /sync/);
+  assert.match(squareJumpSource, /useMiniGamePerfMonitor\("Square Jump"\)/);
+  assert.match(fallDownSource, /useMiniGamePerfMonitor\("Fall Down"\)/);
+  assert.match(doodleSource, /useMiniGamePerfMonitor\("Doodle"\)/);
+  assert.match(squareJumpSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
+  assert.match(fallDownSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
+  assert.match(doodleSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
+});
+
+test("doodle and fall down hot paths avoid pointermove sync and repeated linear DOM lookups", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const fallDownPointerMoveSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDirection = useCallback"), fallDownSource.indexOf("const beginFallDownDirection"));
+  const fallDownDomSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDom = useCallback"), fallDownSource.indexOf("const resumeFallDownInput"));
+  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+  const doodlePointerMoveSource = doodleSource.slice(doodleSource.indexOf("const updateDoodleDirection = useCallback"), doodleSource.indexOf("const beginDoodleDirection"));
+  const doodleDomSource = doodleSource.slice(doodleSource.indexOf("const updateDom = (current: DoodleFrame) =>"), doodleSource.indexOf("const tick = (time: number) =>"));
+
+  assert.match(fallDownSource, /onPointerMove=\{updateFallDownDirection\}/);
+  assert.match(fallDownPointerMoveSource, /fallDownInputDirectionRef\.current = direction;/);
+  assert.match(fallDownPointerMoveSource, /resumeFallDownInput\(current, direction\);/);
+  assert.doesNotMatch(fallDownPointerMoveSource, /syncView\(/);
+  assert.match(fallDownDomSource, /const platformById = new Map\(current\.platforms\.map/);
+  assert.match(fallDownDomSource, /const hazardById = new Map\(current\.fallingHazards\.map/);
+  assert.doesNotMatch(fallDownDomSource, /current\.platforms\.find/);
+  assert.doesNotMatch(fallDownDomSource, /current\.fallingHazards\.find/);
+
+  assert.match(doodleSource, /onPointerMove=\{updateDoodleDirection\}/);
+  assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = chooseDoodleDirection\(event\);/);
+  assert.doesNotMatch(doodlePointerMoveSource, /syncDoodleView|setView/);
+  assert.match(doodleDomSource, /const platformById = new Map\(current\.platforms\.map/);
+  assert.match(doodleDomSource, /const hazardById = new Map\(current\.hazards\.map/);
+  assert.doesNotMatch(doodleDomSource, /current\.platforms\.find/);
+  assert.doesNotMatch(doodleDomSource, /current\.hazards\.find/);
+});
+
+test("performance-sensitive prototype ticks cache level params outside RAF loops", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
+  const squareJumpTickSource = squareJumpSource.slice(squareJumpSource.indexOf("const tick = (time: number) =>"), squareJumpSource.indexOf("frameId = requestAnimationFrame(tick);", squareJumpSource.indexOf("const tick = (time: number) =>")));
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const fallDownTickSource = fallDownSource.slice(fallDownSource.indexOf("const tick = (time: number) =>"), fallDownSource.indexOf("frameId = requestAnimationFrame(tick);", fallDownSource.indexOf("const tick = (time: number) =>")));
+  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+  const doodleTickSource = doodleSource.slice(doodleSource.indexOf("const tick = (time: number) =>"), doodleSource.indexOf("frameId = requestAnimationFrame(tick);", doodleSource.indexOf("const tick = (time: number) =>")));
+
+  assert.match(squareJumpSource, /const flyAwayLandingCatchDepth = numberParam\(level\.params, "flyAwayLandingCatchDepth", PLAYER_SIZE \* 1\.25\);/);
+  assert.match(squareJumpSource, /const targetLandingPadding = numberParam\(level\.params, "targetLandingPadding", 12\);/);
+  assert.doesNotMatch(squareJumpTickSource, /numberParam\(level\.params, "flyAwayLandingCatchDepth"/);
+  assert.doesNotMatch(squareJumpTickSource, /numberParam\(level\.params, "targetLandingPadding"/);
+
+  assert.match(fallDownSource, /const fragileTime = numberParam\(level\.params, "fragileTime", 1\.2\);/);
+  assert.match(fallDownSource, /const topPressureSpeed = numberParam\(level\.params, "topPressureSpeed", 18\);/);
+  assert.doesNotMatch(fallDownTickSource, /numberParam\(level\.params, "fragileTime"/);
+  assert.doesNotMatch(fallDownTickSource, /numberParam\(level\.params, "topPressureSpeed"/);
+
+  assert.match(doodleSource, /const riskTotal = numberParam\(level\.params, "requiredRiskPlatforms", 0\);/);
+  assert.match(doodleSource, /const riskJumpMultiplier = numberParam\(level\.params, "riskJumpMultiplier", 1\);/);
+  assert.doesNotMatch(doodleTickSource, /numberParam\(level\.params/);
 });
 
 test("square jump base misses respawn on the original next platform before forced advance", () => {
@@ -1108,7 +1202,7 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /resumeFallDownInput\(current, direction\);/);
   assert.match(fallDownSource, /if \(fallDownPointerIdRef\.current !== event\.pointerId\) return;/);
   assert.match(fallDownSource, /fallDownPointerIdRef\.current = event\.pointerId;/);
-  assert.match(fallDownSource, /onPointerMove=\{setDirectionFromPointer\}/);
+  assert.match(fallDownSource, /onPointerMove=\{updateFallDownDirection\}/);
   assert.doesNotMatch(fallDownSource, /onPointerLeave=\{stopDirection\}/);
   assert.match(fallDownSource, /onLostPointerCapture=\{stopDirection\}/);
   assert.match(fallDownSource, /const stopDirection = useCallback/);
@@ -1121,7 +1215,8 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /current\.vy = 0;/);
   assert.match(fallDownSource, /current\.respawnUntil = 0;/);
   assert.match(fallDownSource, /const previousTime = current\.time;/);
-  assert.match(fallDownSource, /const carriedPlatform = current\.platforms\.find/);
+  assert.match(fallDownSource, /const platformById = new Map\(current\.platforms\.map/);
+  assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
   assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time\) - previousPlatformX/);
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });

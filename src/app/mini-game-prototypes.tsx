@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -78,6 +79,9 @@ const DEBUG_MINI_GAME_FPS = false;
 const BASE_FAILURE_LIMIT = 3;
 const MINI_GAME_UI_SYNC_MS = 120;
 const MINI_GAME_TIMER_SYNC_MS = 100;
+const MINI_GAME_PERF_PANEL_SYNC_MS = 500;
+const MINI_GAME_PERF_SAMPLE_LIMIT = 240;
+const MINI_GAME_FRAME_BUDGET_MS = 1000 / 60;
 
 type PrototypeStatus = "playing" | "passed" | "failed";
 type MiniGameRunMode = "prototype" | "base" | "advanced";
@@ -88,6 +92,33 @@ export type MiniGameCompletion = {
   reason: string;
   elapsedMs: number;
   stats: Record<string, number | string | boolean | null>;
+};
+
+type MiniGamePerfMetrics = {
+  droppedFrames: number;
+  firstFrameAt: number;
+  frameMs: number[];
+  frames: number;
+  label: string;
+  lastFrameAt: number;
+  lastPanelAt: number;
+  reactSyncs: number;
+  renderMs: number[];
+  updateMs: number[];
+};
+
+type MiniGamePerfSnapshot = {
+  avgFrameMs: number;
+  avgRenderMs: number;
+  avgUpdateMs: number;
+  droppedFrames: number;
+  fps: number;
+  label: string;
+  p95FrameMs: number;
+  p95RenderMs: number;
+  p95UpdateMs: number;
+  reactSyncs: number;
+  worstFrameMs: number;
 };
 
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
@@ -256,6 +287,128 @@ function useMiniGameFpsCounter(enabled: boolean) {
 function MiniGameFpsBadge({ fps }: { fps: number }) {
   if (!DEBUG_MINI_GAME_FPS) return null;
   return <div className="mini-game-fps-badge">FPS {fps}</div>;
+}
+
+function createMiniGamePerfMetrics(label: string): MiniGamePerfMetrics {
+  return {
+    droppedFrames: 0,
+    firstFrameAt: 0,
+    frameMs: [],
+    frames: 0,
+    label,
+    lastFrameAt: 0,
+    lastPanelAt: 0,
+    reactSyncs: 0,
+    renderMs: [],
+    updateMs: [],
+  };
+}
+
+function pushMiniGamePerfSample(samples: number[], value: number) {
+  samples.push(value);
+  if (samples.length > MINI_GAME_PERF_SAMPLE_LIMIT) samples.shift();
+}
+
+function averageMiniGamePerfSample(samples: number[]) {
+  if (samples.length === 0) return 0;
+  return samples.reduce((total, value) => total + value, 0) / samples.length;
+}
+
+function percentileMiniGamePerfSample(samples: number[], percentile: number) {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((left, right) => left - right);
+  const index = clamp(Math.ceil(sorted.length * percentile) - 1, 0, sorted.length - 1);
+  return sorted[index];
+}
+
+function createMiniGamePerfSnapshot(metrics: MiniGamePerfMetrics): MiniGamePerfSnapshot {
+  const elapsed = metrics.firstFrameAt > 0 && metrics.lastFrameAt > metrics.firstFrameAt ? metrics.lastFrameAt - metrics.firstFrameAt : 0;
+  return {
+    avgFrameMs: averageMiniGamePerfSample(metrics.frameMs),
+    avgRenderMs: averageMiniGamePerfSample(metrics.renderMs),
+    avgUpdateMs: averageMiniGamePerfSample(metrics.updateMs),
+    droppedFrames: metrics.droppedFrames,
+    fps: elapsed > 0 ? Math.round((metrics.frames * 1000) / elapsed) : 0,
+    label: metrics.label,
+    p95FrameMs: percentileMiniGamePerfSample(metrics.frameMs, 0.95),
+    p95RenderMs: percentileMiniGamePerfSample(metrics.renderMs, 0.95),
+    p95UpdateMs: percentileMiniGamePerfSample(metrics.updateMs, 0.95),
+    reactSyncs: metrics.reactSyncs,
+    worstFrameMs: metrics.frameMs.length > 0 ? Math.max(...metrics.frameMs) : 0,
+  };
+}
+
+function isMiniGamePerfPanelEnabled() {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("perf") === "1";
+}
+
+function subscribeMiniGamePerfPanel() {
+  return () => undefined;
+}
+
+function useMiniGamePerfMonitor(label: string) {
+  const metricsRef = useRef<MiniGamePerfMetrics>(createMiniGamePerfMetrics(label));
+  const enabled = useSyncExternalStore(subscribeMiniGamePerfPanel, isMiniGamePerfPanelEnabled, () => false);
+  const [snapshot, setSnapshot] = useState<MiniGamePerfSnapshot>(() => createMiniGamePerfSnapshot(createMiniGamePerfMetrics(label)));
+
+  const recordReactSync = useCallback(() => {
+    if (!enabled) return;
+    metricsRef.current.reactSyncs += 1;
+  }, [enabled]);
+
+  const recordFrame = useCallback(
+    (time: number, updateMs: number, renderMs: number) => {
+      if (!enabled) return;
+      const metrics = metricsRef.current;
+      if (metrics.firstFrameAt === 0) metrics.firstFrameAt = time;
+      if (metrics.lastPanelAt === 0) metrics.lastPanelAt = time;
+      const previousFrameAt = metrics.lastFrameAt;
+      metrics.lastFrameAt = time;
+      metrics.frames += 1;
+      if (previousFrameAt > 0) {
+        const frameMs = time - previousFrameAt;
+        pushMiniGamePerfSample(metrics.frameMs, frameMs);
+        if (frameMs > MINI_GAME_FRAME_BUDGET_MS * 1.5) {
+          metrics.droppedFrames += Math.max(1, Math.floor(frameMs / MINI_GAME_FRAME_BUDGET_MS) - 1);
+        }
+      }
+      pushMiniGamePerfSample(metrics.updateMs, updateMs);
+      pushMiniGamePerfSample(metrics.renderMs, renderMs);
+      if (time - metrics.lastPanelAt < MINI_GAME_PERF_PANEL_SYNC_MS) return;
+      metrics.lastPanelAt = time;
+      setSnapshot(createMiniGamePerfSnapshot(metrics));
+    },
+    [enabled],
+  );
+
+  return {
+    enabled,
+    metricsRef,
+    recordFrame,
+    recordReactSync,
+    snapshot: enabled ? snapshot : null,
+  };
+}
+
+function formatMiniGamePerfValue(value: number) {
+  return value.toFixed(value >= 100 ? 0 : 1);
+}
+
+function MiniGamePerfPanel({ snapshot }: { snapshot: MiniGamePerfSnapshot | null }) {
+  if (!snapshot) return null;
+  return (
+    <div className="mini-game-perf-panel" aria-live="off">
+      <strong>{snapshot.label}</strong>
+      <span>FPS {snapshot.fps}</span>
+      <span>avg {formatMiniGamePerfValue(snapshot.avgFrameMs)}ms</span>
+      <span>p95 {formatMiniGamePerfValue(snapshot.p95FrameMs)}ms</span>
+      <span>worst {formatMiniGamePerfValue(snapshot.worstFrameMs)}ms</span>
+      <span>dropped {snapshot.droppedFrames}</span>
+      <span>update {formatMiniGamePerfValue(snapshot.avgUpdateMs)}/{formatMiniGamePerfValue(snapshot.p95UpdateMs)}ms</span>
+      <span>render {formatMiniGamePerfValue(snapshot.avgRenderMs)}/{formatMiniGamePerfValue(snapshot.p95RenderMs)}ms</span>
+      <span>sync {snapshot.reactSyncs}</span>
+    </div>
+  );
 }
 
 export function MiniGameEmbeddedStage({
@@ -656,6 +809,8 @@ function SquareJumpPrototype({
   const requiredJumps = numberParam(level.params, "jumpsRequired", 5);
   const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
+  const flyAwayLandingCatchDepth = numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25);
+  const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
   const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed), [level, runSeed]);
   const runtimeRef = useRef<SquareJumpUnifiedRuntime>(initialRuntime);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
@@ -666,13 +821,16 @@ function SquareJumpPrototype({
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
-  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const perf = useMiniGamePerfMonitor("Square Jump");
+  const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const [view, setView] = useState<SquareJumpUnifiedRuntime>(() => makeSquareJumpUnifiedView(initialRuntime));
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
+    recordReactSync();
     setView(makeSquareJumpUnifiedView(runtimeRef.current));
-  }, []);
+  }, [recordReactSync]);
 
   const updateSquareJumpDom = useCallback(
     (current: SquareJumpUnifiedRuntime) => {
@@ -704,15 +862,13 @@ function SquareJumpPrototype({
           stageHeight: STAGE_HEIGHT,
         });
         node.style.display = "";
-        node.style.left = `${platformX - platform.width / 2}px`;
-        node.style.top = `${platform.y + visualOffsetY}px`;
+        node.style.transform = transformPoint3d(platformX - platform.width / 2, platform.y + visualOffsetY);
         node.style.height = `${platformHeight}px`;
         node.style.width = `${platform.width}px`;
       }
 
       if (playerShellRef.current) {
-        playerShellRef.current.style.left = `${current.playerX - PLAYER_SIZE / 2}px`;
-        playerShellRef.current.style.top = `${current.playerY - PLAYER_SIZE / 2}px`;
+        playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
       if (playerBoxRef.current) {
         const isRuntimeCharging = current.state === "charging" || current.state === "airCharging";
@@ -861,11 +1017,18 @@ function SquareJumpPrototype({
     let last = performance.now();
 
     const tick = (time: number) => {
-      recordFrame(time);
+      recordDebugFrame(time);
+      const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       const current = runtimeRef.current;
       let eventChanged = false;
+      const paintSquareFrame = () => {
+        const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
+        const renderStartedAt = perfEnabled ? performance.now() : 0;
+        updateSquareJumpDom(current);
+        if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
+      };
 
       if (current.status === "playing") {
         current.time += delta;
@@ -922,7 +1085,7 @@ function SquareJumpPrototype({
             } else {
               eventChanged = true;
               if (advanceToNextPlatform(current)) {
-                updateSquareJumpDom(current);
+                paintSquareFrame();
                 return;
               }
             }
@@ -930,7 +1093,7 @@ function SquareJumpPrototype({
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
-              updateSquareJumpDom(current);
+              paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
               return;
@@ -943,11 +1106,11 @@ function SquareJumpPrototype({
           current.playerX = point.x;
           current.playerY = point.y;
           const flyAwayLanding = (!doubleJumpEnabled || current.doubleJumpUsed) ? resolveSquareJumpBaseFlyAwayLanding({
-            catchDepth: numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25),
+            catchDepth: flyAwayLandingCatchDepth,
             plan: current.jumpPlan,
             progress: jumpProgress,
             squareSize: PLAYER_SIZE,
-            targetPadding: numberParam(level.params, "targetLandingPadding", 12),
+            targetPadding: targetLandingPadding,
             targetPlatform: {
               ...current.nextPlatform,
               x: getSquareJumpBasePlatformX(current.nextPlatform, current.time),
@@ -957,7 +1120,7 @@ function SquareJumpPrototype({
             current.playerY = current.nextPlatform.y - PLAYER_SIZE / 2;
             eventChanged = true;
             if (advanceToNextPlatform(current)) {
-              updateSquareJumpDom(current);
+              paintSquareFrame();
               return;
             }
           }
@@ -965,7 +1128,7 @@ function SquareJumpPrototype({
           const screenY = STAGE_HEIGHT / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > STAGE_WIDTH + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > STAGE_HEIGHT + PLAYER_SIZE) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
-              updateSquareJumpDom(current);
+              paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
               return;
@@ -976,7 +1139,7 @@ function SquareJumpPrototype({
         }
       }
 
-      updateSquareJumpDom(current);
+      paintSquareFrame();
       if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncView(time);
       }
@@ -985,7 +1148,7 @@ function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, level, mode, recordFrame, requiredJumps, syncView, updateSquareJumpDom]);
+  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, syncView, targetLandingPadding, updateSquareJumpDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -1042,6 +1205,7 @@ function SquareJumpPrototype({
         onPointerUp={releaseJump}
       >
         <MiniGameFpsBadge fps={fps} />
+        <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="square-progress-background" ref={progressBackgroundRef} style={squareProgressBackgroundStyle(view.camera)} aria-hidden="true" />
         <div ref={worldLayerRef} style={worldLayerStyle} aria-hidden="true">
           {platforms.map((platform) => {
@@ -1066,8 +1230,9 @@ function SquareJumpPrototype({
                   else squarePlatformRefs.current.delete(platform.id);
                 }}
                 style={{
-                  left: `${platformX - platform.width / 2}px`,
-                  top: `${platform.y + visualOffsetY}px`,
+                  left: "0px",
+                  top: "0px",
+                  transform: transformPoint3d(platformX - platform.width / 2, platform.y + visualOffsetY),
                   height: `${platformHeight}px`,
                   width: `${platform.width}px`,
                 }}
@@ -1082,8 +1247,9 @@ function SquareJumpPrototype({
             className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.feedback ? "landed" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
             ref={playerShellRef}
             style={{
-              left: `${view.playerX - PLAYER_SIZE / 2}px`,
-              top: `${view.playerY - PLAYER_SIZE / 2}px`,
+              left: "0px",
+              top: "0px",
+              transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2),
               width: `${PLAYER_SIZE}px`,
               height: `${PLAYER_SIZE}px`,
             }}
@@ -1419,6 +1585,8 @@ function FallDownPrototype({
 }) {
   const requiredLayers = numberParam(level.params, "layersRequired", 12);
   const fallDownPlayerSpeed = numberParam(level.params, "playerSpeed", 230);
+  const fragileTime = numberParam(level.params, "fragileTime", 1.2);
+  const topPressureSpeed = numberParam(level.params, "topPressureSpeed", 18);
   const initialRuntime = useMemo(() => createFallDownRuntime(level, runSeed), [level, runSeed]);
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
   const dangerLineRef = useRef<HTMLDivElement | null>(null);
@@ -1429,13 +1597,16 @@ function FallDownPrototype({
   const fallDownPointerIdRef = useRef<number | null>(null);
   const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
-  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const perf = useMiniGamePerfMonitor("Fall Down");
+  const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
+    recordReactSync();
     setView(makeFallDownView(runtimeRef.current));
-  }, []);
+  }, [recordReactSync]);
 
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime) => {
@@ -1443,9 +1614,11 @@ function FallDownPrototype({
       if (dangerLineRef.current) {
         dangerLineRef.current.style.transform = transformPoint3d(0, pressureScreenY);
       }
+      const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
+      const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
 
       for (const [id, node] of fallPlatformRefs.current) {
-        const platform = current.platforms.find((item) => item.id === id);
+        const platform = platformById.get(id);
         if (!platform || platform.broken) {
           node.style.display = "none";
           continue;
@@ -1456,7 +1629,6 @@ function FallDownPrototype({
           node.style.display = "none";
           continue;
         }
-        const fragileTime = numberParam(level.params, "fragileTime", 1.2);
         const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && current.time - platform.steppedAt >= Math.max(0, fragileTime - 0.45);
         node.style.display = "";
         node.className = `fall-platform kind-${platform.kind} ${platform.id === current.currentPlatformId ? "current" : ""} ${fragileWarning ? "fragile-warning" : ""}`;
@@ -1465,7 +1637,7 @@ function FallDownPrototype({
       }
 
       for (const [id, node] of fallHazardRefs.current) {
-        const hazard = current.fallingHazards.find((item) => item.id === id);
+        const hazard = hazardById.get(id);
         if (!hazard) {
           node.style.display = "none";
           continue;
@@ -1484,7 +1656,7 @@ function FallDownPrototype({
         playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
       }
     },
-    [level.params],
+    [fragileTime],
   );
 
   const resumeFallDownInput = useCallback(
@@ -1526,7 +1698,7 @@ function FallDownPrototype({
     return event.clientX < rect.left + rect.width / 2 ? -1 : 1;
   }
 
-  const setDirectionFromPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  const updateFallDownDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (fallDownPointerIdRef.current !== event.pointerId) return;
     const current = runtimeRef.current;
@@ -1534,15 +1706,15 @@ function FallDownPrototype({
     const direction = chooseFallDownDirection(event);
     fallDownInputDirectionRef.current = direction;
     resumeFallDownInput(current, direction);
-    syncView();
-  }, [resumeFallDownInput, syncView]);
+  }, [resumeFallDownInput]);
 
   const beginFallDownDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     fallDownPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDirectionFromPointer(event);
-  }, [setDirectionFromPointer]);
+    updateFallDownDirection(event);
+    syncView();
+  }, [syncView, updateFallDownDirection]);
 
   const stopDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
@@ -1560,14 +1732,21 @@ function FallDownPrototype({
     let last = performance.now();
 
     const tick = (time: number) => {
-      recordFrame(time);
+      recordDebugFrame(time);
+      const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       const current = runtimeRef.current;
       let eventChanged = false;
+      const paintFallDownFrame = (frame: FallDownRuntime) => {
+        const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
+        const renderStartedAt = perfEnabled ? performance.now() : 0;
+        updateFallDownDom(frame);
+        if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
+      };
       const continueAfterRecoverableFailure = (reason: string) => {
         if (fail(reason)) {
-          updateFallDownDom(runtimeRef.current);
+          paintFallDownFrame(runtimeRef.current);
           frameId = requestAnimationFrame(tick);
         }
       };
@@ -1578,7 +1757,8 @@ function FallDownPrototype({
 
         if (current.started) {
           let platformCarryX = 0;
-          const carriedPlatform = current.platforms.find((platform) => platform.id === current.currentPlatformId);
+          const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
+          const carriedPlatform = platformById.get(current.currentPlatformId);
           if (carriedPlatform && carriedPlatform.kind === "moving" && !carriedPlatform.broken) {
             const previousPlatformX = fallPlatformX(carriedPlatform, previousTime);
             const isOnCarriedPlatform =
@@ -1595,7 +1775,7 @@ function FallDownPrototype({
           current.cameraY = advanceFallDownCamera({
             cameraY: current.cameraY,
             delta,
-            speed: numberParam(level.params, "topPressureSpeed", 18),
+            speed: topPressureSpeed,
           });
           current.pressureWorldY = current.cameraY - PLAYER_SIZE;
           current.vx = current.inputDirection * fallDownPlayerSpeed;
@@ -1642,7 +1822,7 @@ function FallDownPrototype({
             if (platform.kind === "finish") {
               current.status = "passed";
               current.reason = `成功下降 ${requiredLayers} 层，到达终点平台`;
-              updateFallDownDom(current);
+              paintFallDownFrame(current);
               syncView(time);
               return;
             }
@@ -1651,7 +1831,7 @@ function FallDownPrototype({
 
           for (const platform of current.platforms) {
             const fragileState = expireFallDownFragilePlatform({
-              fragileTime: numberParam(level.params, "fragileTime", 1.2),
+              fragileTime: fragileTime,
               kind: platform.kind,
               now: current.time,
               steppedAt: platform.steppedAt,
@@ -1680,7 +1860,7 @@ function FallDownPrototype({
         }
       }
 
-      updateFallDownDom(current);
+      paintFallDownFrame(current);
       if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncView(time);
       }
@@ -1689,7 +1869,7 @@ function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [fail, fallDownPlayerSpeed, level.params, recordFrame, requiredLayers, syncView, updateFallDownDom]);
+  }, [fail, fallDownPlayerSpeed, fragileTime, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, syncView, topPressureSpeed, updateFallDownDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -1728,16 +1908,16 @@ function FallDownPrototype({
         onLostPointerCapture={stopDirection}
         onPointerCancel={stopDirection}
         onPointerDown={beginFallDownDirection}
-        onPointerMove={setDirectionFromPointer}
+        onPointerMove={updateFallDownDirection}
         onPointerUp={stopDirection}
       >
         <MiniGameFpsBadge fps={fps} />
+        <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="fall-danger-line" ref={dangerLineRef} style={{ transform: transformPoint3d(0, pressureScreenY) }} aria-hidden="true" />
         {view.platforms.map((platform) => {
           const platformX = fallPlatformX(platform, view.time);
           const screenY = platform.y - view.cameraY;
           if (screenY < -80 || screenY > STAGE_HEIGHT + 80 || platform.broken) return null;
-          const fragileTime = numberParam(level.params, "fragileTime", 1.2);
           const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && view.time - platform.steppedAt >= Math.max(0, fragileTime - 0.45);
           return (
             <div
@@ -1935,15 +2115,18 @@ function DoodleJumpPrototype({
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
   const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
-  const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const perf = useMiniGamePerfMonitor("Doodle");
+  const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer));
 
   const syncDoodleView = useCallback(
     (time = performance.now()) => {
       lastUiSyncRef.current = time;
+      recordReactSync();
       setView(makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer));
     },
-    [visibleBuffer, world.targetHeight],
+    [recordReactSync, visibleBuffer, world.targetHeight],
   );
 
   useEffect(() => {
@@ -1990,6 +2173,8 @@ function DoodleJumpPrototype({
     let last = performance.now();
 
     const updateDom = (current: DoodleFrame) => {
+      const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
+      const hazardById = new Map(current.hazards.map((hazard) => [hazard.id, hazard]));
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(
           current.playerX - PLAYER_SIZE / 2,
@@ -2005,7 +2190,7 @@ function DoodleJumpPrototype({
       }
 
       for (const [id, node] of platformRefs.current) {
-        const platform = current.platforms.find((item) => item.id === id);
+        const platform = platformById.get(id);
         if (!platform || platform.used) {
           node.style.display = "none";
           continue;
@@ -2017,7 +2202,7 @@ function DoodleJumpPrototype({
       }
 
       for (const [id, node] of hazardRefs.current) {
-        const hazard = current.hazards.find((item) => item.id === id);
+        const hazard = hazardById.get(id);
         if (!hazard) continue;
         const position = movingHazardPosition(hazard, current.time);
         const y = STAGE_HEIGHT - (position.y - current.cameraY) - hazard.size / 2;
@@ -2028,17 +2213,24 @@ function DoodleJumpPrototype({
     };
 
     const tick = (time: number) => {
-      recordFrame(time);
+      recordDebugFrame(time);
+      const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
+      const paintDoodleFrame = (frame: DoodleFrame) => {
+        const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
+        const renderStartedAt = perfEnabled ? performance.now() : 0;
+        updateDom(frame);
+        if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
+      };
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
-        updateDom(current);
+        paintDoodleFrame(current);
         return;
       }
       if (!current.started) {
-        updateDom(current);
+        paintDoodleFrame(current);
         frameId = requestAnimationFrame(tick);
         return;
       }
@@ -2077,7 +2269,13 @@ function DoodleJumpPrototype({
 
       const cameraY = Math.max(current.cameraY, nextY - STAGE_HEIGHT * 0.45);
       if (status === "playing" && riskHit < riskTotal) {
-        const missedRisk = current.platforms.find((platform) => !platform.used && platform.risk && cameraY > platform.y + STAGE_HEIGHT * 0.34);
+        let missedRisk = false;
+        for (const platform of current.platforms) {
+          if (!platform.used && platform.risk && cameraY > platform.y + STAGE_HEIGHT * 0.34) {
+            missedRisk = true;
+            break;
+          }
+        }
         if (missedRisk) {
           status = "failed";
           reason = "漏踩高风险平台";
@@ -2150,7 +2348,7 @@ function DoodleJumpPrototype({
           current.invincibleUntil = nextTime + 1.1;
           current.status = "playing";
           current.reason = reason;
-          updateDom(current);
+          paintDoodleFrame(current);
           syncDoodleView(time);
           frameId = requestAnimationFrame(tick);
           return;
@@ -2161,7 +2359,7 @@ function DoodleJumpPrototype({
 
       current.status = status;
       current.reason = reason;
-      updateDom(current);
+      paintDoodleFrame(current);
 
       if (status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncDoodleView(time);
@@ -2171,7 +2369,7 @@ function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [mode, recordFrame, riskJumpMultiplier, riskTotal, syncDoodleView, world.targetHeight]);
+  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleView, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
 
@@ -2215,6 +2413,7 @@ function DoodleJumpPrototype({
         onPointerUp={stopDoodleDirection}
       >
         <MiniGameFpsBadge fps={fps} />
+        <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div
           className="doodle-progress-line"
           ref={progressLineRef}
