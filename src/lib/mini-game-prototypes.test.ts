@@ -961,6 +961,26 @@ test("square jump base advance keeps two platforms visible and advances by camer
   assert.doesNotMatch(componentSource, /current\.playerX = current\.advancePlan\.playerEndX/);
 });
 
+test("square jump and fall down paint animation frames without per-frame React state sync", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(squareJumpSource, /lastUiSyncRef/);
+  assert.match(squareJumpSource, /updateSquareJumpDom\(current\)/);
+  assert.match(squareJumpSource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.match(squareJumpSource, /playerShellRef/);
+  assert.match(squareJumpSource, /squarePlatformRefs/);
+  assert.doesNotMatch(squareJumpSource, /\n\s*syncView\(\);\s*frameId = requestAnimationFrame\(tick\);/);
+
+  assert.match(fallDownSource, /lastUiSyncRef/);
+  assert.match(fallDownSource, /updateFallDownDom\(current\)/);
+  assert.match(fallDownSource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.match(fallDownSource, /playerShellRef/);
+  assert.match(fallDownSource, /fallPlatformRefs/);
+  assert.doesNotMatch(fallDownSource, /\n\s*syncView\(\);\s*frameId = requestAnimationFrame\(tick\);/);
+});
+
 test("square jump base misses respawn on the original next platform before forced advance", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const squareJumpSource = componentSource.slice(componentSource.indexOf("type SquareJumpUnifiedState"), componentSource.indexOf("function fallDownPlatformKindBag"));

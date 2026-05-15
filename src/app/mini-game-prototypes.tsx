@@ -811,13 +811,84 @@ function SquareJumpPrototype({
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
   const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed), [level, runSeed]);
   const runtimeRef = useRef<SquareJumpUnifiedRuntime>(initialRuntime);
+  const worldLayerRef = useRef<HTMLDivElement | null>(null);
+  const progressBackgroundRef = useRef<HTMLDivElement | null>(null);
+  const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const playerBoxRef = useRef<HTMLDivElement | null>(null);
+  const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
+  const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [view, setView] = useState<SquareJumpUnifiedRuntime>(() => makeSquareJumpUnifiedView(initialRuntime));
 
-  const syncView = useCallback(() => {
+  const syncView = useCallback((time = performance.now()) => {
+    lastUiSyncRef.current = time;
     setView(makeSquareJumpUnifiedView(runtimeRef.current));
   }, []);
+
+  const updateSquareJumpDom = useCallback(
+    (current: SquareJumpUnifiedRuntime) => {
+      if (progressBackgroundRef.current) {
+        const backgroundStyle = squareProgressBackgroundStyle(current.camera);
+        progressBackgroundRef.current.style.backgroundPosition = String(backgroundStyle.backgroundPosition ?? "");
+      }
+      if (worldLayerRef.current) {
+        worldLayerRef.current.style.transform = squareBaseWorldTransform(current.camera);
+      }
+
+      const visiblePlatforms = selectSquareJumpVisiblePlatforms(current.currentPlatform, current.nextPlatform, current.exitingPlatform);
+      const visibleIds = new Set(visiblePlatforms.map((platform) => platform.id));
+      for (const [id, node] of squarePlatformRefs.current) {
+        if (!visibleIds.has(id)) node.style.display = "none";
+      }
+      for (const platform of visiblePlatforms) {
+        const node = squarePlatformRefs.current.get(platform.id);
+        if (!node) continue;
+        const isCurrent = platform.id === current.currentPlatform.id;
+        const isNext = platform.id === current.nextPlatform.id && !isCurrent;
+        const isExiting = current.exitingPlatform?.id === platform.id;
+        const visualOffsetY = isNext ? current.nextVisualOffsetY : isExiting ? current.exitingVisualOffsetY : 0;
+        const platformX = getSquareJumpBasePlatformX(platform, current.time);
+        const platformHeight = getSquareJumpBasePlatformHeight({
+          camera: current.camera,
+          platformY: platform.y + visualOffsetY,
+          stageBottom: SQUARE_BASE_STAGE_BOTTOM,
+          stageHeight: STAGE_HEIGHT,
+        });
+        node.style.display = "";
+        node.style.left = `${platformX - platform.width / 2}px`;
+        node.style.top = `${platform.y + visualOffsetY}px`;
+        node.style.height = `${platformHeight}px`;
+        node.style.width = `${platform.width}px`;
+      }
+
+      if (playerShellRef.current) {
+        playerShellRef.current.style.left = `${current.playerX - PLAYER_SIZE / 2}px`;
+        playerShellRef.current.style.top = `${current.playerY - PLAYER_SIZE / 2}px`;
+      }
+      if (playerBoxRef.current) {
+        const isRuntimeCharging = current.state === "charging" || current.state === "airCharging";
+        const scaleX = isRuntimeCharging ? 1 + current.charge * 0.18 : 1;
+        const scaleY = isRuntimeCharging ? 1 - current.charge * 0.24 : 1;
+        const offsetY = isRuntimeCharging ? (PLAYER_SIZE * current.charge * 0.24) / 2 : 0;
+        playerBoxRef.current.style.transform = `translateY(${offsetY}px) scaleX(${scaleX}) scaleY(${scaleY}) rotate(${current.playerTurns * 90}deg)`;
+      }
+      if (tutorialPreviewRef.current) {
+        const previewPlan = level.levelId === "square-jump-base" && current.jumps < 3 && current.state === "charging" ? createSquareJumpPlan(level, current) : null;
+        if (previewPlan) {
+          tutorialPreviewRef.current.style.display = "";
+          tutorialPreviewRef.current.style.transform = transformPoint3d(
+            STAGE_WIDTH / 2 + (previewPlan.landingX - current.camera.cameraX) * current.camera.scale - 15,
+            STAGE_HEIGHT / 2 + (SQUARE_JUMP_PLATFORM_Y - current.camera.cameraY) * current.camera.scale + 12,
+          );
+        } else {
+          tutorialPreviewRef.current.style.display = "none";
+        }
+      }
+    },
+    [level],
+  );
 
   const fail = useCallback(
     (reason: string) => {
@@ -947,6 +1018,7 @@ function SquareJumpPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       const current = runtimeRef.current;
+      let eventChanged = false;
 
       if (current.status === "playing") {
         current.time += delta;
@@ -999,14 +1071,20 @@ function SquareJumpPrototype({
               current.doubleJumpUsed = false;
               current.jumpPlan = null;
               current.state = "idle";
+              eventChanged = true;
             } else {
-              if (advanceToNextPlatform(current)) return;
+              eventChanged = true;
+              if (advanceToNextPlatform(current)) {
+                updateSquareJumpDom(current);
+                return;
+              }
             }
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
-              syncView();
+              updateSquareJumpDom(current);
+              syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
               return;
             }
@@ -1030,13 +1108,18 @@ function SquareJumpPrototype({
           }) : null;
           if (flyAwayLanding) {
             current.playerY = current.nextPlatform.y - PLAYER_SIZE / 2;
-            if (advanceToNextPlatform(current)) return;
+            eventChanged = true;
+            if (advanceToNextPlatform(current)) {
+              updateSquareJumpDom(current);
+              return;
+            }
           }
           const screenX = STAGE_WIDTH / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = STAGE_HEIGHT / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > STAGE_WIDTH + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > STAGE_HEIGHT + PLAYER_SIZE) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
-              syncView();
+              updateSquareJumpDom(current);
+              syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
               return;
             }
@@ -1046,13 +1129,16 @@ function SquareJumpPrototype({
         }
       }
 
-      syncView();
+      updateSquareJumpDom(current);
+      if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+        syncView(time);
+      }
       frameId = requestAnimationFrame(tick);
     };
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, level, mode, recordFrame, requiredJumps, syncView]);
+  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, level, mode, recordFrame, requiredJumps, syncView, updateSquareJumpDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -1109,8 +1195,8 @@ function SquareJumpPrototype({
         onPointerUp={releaseJump}
       >
         <MiniGameFpsBadge fps={fps} />
-        <div className="square-progress-background" style={squareProgressBackgroundStyle(view.camera)} aria-hidden="true" />
-        <div style={worldLayerStyle} aria-hidden="true">
+        <div className="square-progress-background" ref={progressBackgroundRef} style={squareProgressBackgroundStyle(view.camera)} aria-hidden="true" />
+        <div ref={worldLayerRef} style={worldLayerStyle} aria-hidden="true">
           {platforms.map((platform) => {
             const isCurrent = platform.id === view.currentPlatform.id;
             const isNext = platform.id === view.nextPlatform.id && !isCurrent;
@@ -1128,6 +1214,10 @@ function SquareJumpPrototype({
               <div
                 className={`square-jump-base-platform ${isCurrent ? "current" : ""} ${isNext ? "preview" : ""} ${isExiting ? "exiting" : ""} ${platform.moving ? "moving" : ""} ${platform.timed ? "timed" : ""} gravity-${platform.gravity ?? "normal"} ${platform.finish ? "finish" : ""}`}
                 key={platform.id}
+                ref={(node) => {
+                  if (node) squarePlatformRefs.current.set(platform.id, node);
+                  else squarePlatformRefs.current.delete(platform.id);
+                }}
                 style={{
                   left: `${platformX - platform.width / 2}px`,
                   top: `${platform.y + visualOffsetY}px`,
@@ -1143,6 +1233,7 @@ function SquareJumpPrototype({
           })}
           <div
             className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.feedback ? "landed" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
+            ref={playerShellRef}
             style={{
               left: `${view.playerX - PLAYER_SIZE / 2}px`,
               top: `${view.playerY - PLAYER_SIZE / 2}px`,
@@ -1152,6 +1243,7 @@ function SquareJumpPrototype({
           >
             <div
               className="prototype-player-box square-jump-base-player-visual"
+              ref={playerBoxRef}
               style={{ transform: `translateY(${chargingSquash.offsetY}px) scaleX(${chargingSquash.scaleX}) scaleY(${chargingSquash.scaleY}) rotate(${view.playerTurns * 90}deg)` }}
             />
           </div>
@@ -1190,6 +1282,7 @@ function SquareJumpPrototype({
         {tutorialPreviewPlan ? (
           <div
             className="square-tutorial-landing-preview"
+            ref={tutorialPreviewRef}
             style={{
               transform: transformPoint3d(
                 STAGE_WIDTH / 2 + (tutorialPreviewPlan.landingX - view.camera.cameraX) * view.camera.scale - 15,
@@ -1480,13 +1573,69 @@ function FallDownPrototype({
   const fallDownPlayerSpeed = numberParam(level.params, "playerSpeed", 230);
   const initialRuntime = useMemo(() => createFallDownRuntime(level, runSeed), [level, runSeed]);
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
+  const dangerLineRef = useRef<HTMLDivElement | null>(null);
+  const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
+  const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
+  const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
 
-  const syncView = useCallback(() => {
+  const syncView = useCallback((time = performance.now()) => {
+    lastUiSyncRef.current = time;
     setView(makeFallDownView(runtimeRef.current));
   }, []);
+
+  const updateFallDownDom = useCallback(
+    (current: FallDownRuntime) => {
+      const pressureScreenY = current.pressureWorldY - current.cameraY;
+      if (dangerLineRef.current) {
+        dangerLineRef.current.style.transform = transformPoint3d(0, pressureScreenY);
+      }
+
+      for (const [id, node] of fallPlatformRefs.current) {
+        const platform = current.platforms.find((item) => item.id === id);
+        if (!platform || platform.broken) {
+          node.style.display = "none";
+          continue;
+        }
+        const platformX = fallPlatformX(platform, current.time);
+        const screenY = platform.y - current.cameraY;
+        if (screenY < -80 || screenY > STAGE_HEIGHT + 80) {
+          node.style.display = "none";
+          continue;
+        }
+        const fragileTime = numberParam(level.params, "fragileTime", 1.2);
+        const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && current.time - platform.steppedAt >= Math.max(0, fragileTime - 0.45);
+        node.style.display = "";
+        node.className = `fall-platform kind-${platform.kind} ${platform.id === current.currentPlatformId ? "current" : ""} ${fragileWarning ? "fragile-warning" : ""}`;
+        node.style.transform = transformPoint3d(platformX - platform.width / 2, screenY);
+        node.style.width = `${platform.width}px`;
+      }
+
+      for (const [id, node] of fallHazardRefs.current) {
+        const hazard = current.fallingHazards.find((item) => item.id === id);
+        if (!hazard) {
+          node.style.display = "none";
+          continue;
+        }
+        const hazardX = fallDownFallingHazardX(hazard, current.time);
+        const hazardY = fallDownFallingHazardScreenY(hazard, current.time);
+        if (hazardY < -80 || hazardY > STAGE_HEIGHT + 80) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
+        node.style.transform = `${transformPoint3d(hazardX - hazard.size / 2, hazardY - hazard.size / 2)} rotate(45deg)`;
+      }
+
+      if (playerShellRef.current) {
+        playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
+      }
+    },
+    [level.params],
+  );
 
   const fail = useCallback(
     (reason: string) => {
@@ -1539,6 +1688,7 @@ function FallDownPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       const current = runtimeRef.current;
+      let eventChanged = false;
 
       if (current.status === "playing") {
         const previousTime = current.time;
@@ -1606,10 +1756,12 @@ function FallDownPrototype({
             current.currentPlatformId = platform.id;
             current.layersReached = Math.max(current.layersReached, platform.id);
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
+            eventChanged = true;
             if (platform.kind === "finish") {
               current.status = "passed";
               current.reason = `成功下降 ${requiredLayers} 层，到达终点平台`;
-              syncView();
+              updateFallDownDom(current);
+              syncView(time);
               return;
             }
             break;
@@ -1624,6 +1776,7 @@ function FallDownPrototype({
             });
             if (fragileState.broken && !platform.broken) {
               platform.broken = true;
+              eventChanged = true;
               if (platform.id === current.currentPlatformId) {
                 current.currentPlatformId = -1;
                 current.vy = Math.max(current.vy, 90);
@@ -1645,13 +1798,16 @@ function FallDownPrototype({
         }
       }
 
-      syncView();
+      updateFallDownDom(current);
+      if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+        syncView(time);
+      }
       frameId = requestAnimationFrame(tick);
     };
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [fail, fallDownPlayerSpeed, level.params, recordFrame, requiredLayers, syncView]);
+  }, [fail, fallDownPlayerSpeed, level.params, recordFrame, requiredLayers, syncView, updateFallDownDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -1693,7 +1849,7 @@ function FallDownPrototype({
         onPointerUp={stopDirection}
       >
         <MiniGameFpsBadge fps={fps} />
-        <div className="fall-danger-line" style={{ transform: transformPoint3d(0, pressureScreenY) }} aria-hidden="true" />
+        <div className="fall-danger-line" ref={dangerLineRef} style={{ transform: transformPoint3d(0, pressureScreenY) }} aria-hidden="true" />
         {view.platforms.map((platform) => {
           const platformX = fallPlatformX(platform, view.time);
           const screenY = platform.y - view.cameraY;
@@ -1704,6 +1860,10 @@ function FallDownPrototype({
             <div
               className={`fall-platform kind-${platform.kind} ${platform.id === view.currentPlatformId ? "current" : ""} ${fragileWarning ? "fragile-warning" : ""}`}
               key={platform.id}
+              ref={(node) => {
+                if (node) fallPlatformRefs.current.set(platform.id, node);
+                else fallPlatformRefs.current.delete(platform.id);
+              }}
               style={{
                 transform: transformPoint3d(platformX - platform.width / 2, screenY),
                 width: `${platform.width}px`,
@@ -1741,6 +1901,10 @@ function FallDownPrototype({
               aria-hidden="true"
               className="fall-down-falling-hazard"
               key={hazard.id}
+              ref={(node) => {
+                if (node) fallHazardRefs.current.set(hazard.id, node);
+                else fallHazardRefs.current.delete(hazard.id);
+              }}
               style={{
                 background: "var(--red)",
                 borderRadius: "5px",
@@ -1754,7 +1918,7 @@ function FallDownPrototype({
             />
           );
         })}
-        <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
+        <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} ref={playerShellRef} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
           <div className="prototype-player-box fall-down-player" />
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
