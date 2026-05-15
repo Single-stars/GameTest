@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect */
 
 import NextImage from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -4897,6 +4898,18 @@ function ResultScreen({
           ) : null}
         </div>
       </div>
+
+      <section className="prototype-test-entry" aria-labelledby="prototype-test-entry-title">
+        <div className="prototype-test-card">
+          <div>
+            <div className="prototype-test-title" id="prototype-test-entry-title">小游戏原型测试</div>
+            <div className="prototype-test-desc">测试方块跃迁与一路向下原型</div>
+          </div>
+          <Link className="primary-button prototype-test-button" href="/mini-game-prototypes">
+            进入测试
+          </Link>
+        </div>
+      </section>
 
     </section>
   );

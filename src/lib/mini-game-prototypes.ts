@@ -1,4 +1,4 @@
-export type MiniGameId = "doodle" | "flappy" | "knife";
+export type MiniGameId = "doodle" | "flappy" | "knife" | "square-jump" | "fall-down";
 export type MiniGameLevelKind = "advanced" | "base";
 export type MiniGameDifficulty = "基础" | "简单" | "普通" | "困难" | "最终";
 export type MiniGameParams = Record<string, number | string | boolean | null>;
@@ -169,6 +169,496 @@ function stringParam(params: MiniGameParams, key: string, fallback: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+export type SquareJumpBasePlatform = {
+  finish?: boolean;
+  gravity?: "normal" | "light" | "heavy";
+  id: string;
+  moving?: boolean;
+  phase?: number;
+  range?: number;
+  speed?: number;
+  timed?: boolean;
+  x: number;
+  y: number;
+  width: number;
+};
+
+export type SquareJumpBaseLandingResult = "stay" | "advance" | "fall";
+
+export type SquareJumpBaseJumpPlan = {
+  arcHeight: number;
+  durationMs: number;
+  jumpEndX: number;
+  jumpEndY: number;
+  jumpStartX: number;
+  jumpStartY: number;
+  landingPlatformId: string | null;
+  landingX: number;
+  power: number;
+  result: SquareJumpBaseLandingResult;
+};
+
+export type SquareJumpBaseAdvancePlan = {
+  cameraEnd: SquareJumpBaseCameraFrame;
+  cameraStart: SquareJumpBaseCameraFrame;
+  durationMs: number;
+  nextPlatformStartVisualOffsetY: number;
+  riseDurationMs: number;
+};
+
+export type SquareJumpBaseCameraFrame = {
+  cameraX: number;
+  cameraY: number;
+  scale: number;
+};
+
+function smoothStep(value: number) {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+export function getSquareJumpChargeAt({
+  cycling,
+  elapsedMs,
+  maxHoldMs,
+}: {
+  cycling: boolean;
+  elapsedMs: number;
+  maxHoldMs: number;
+}) {
+  if (!Number.isFinite(maxHoldMs) || maxHoldMs <= 0) return 0;
+  const raw = Math.max(0, elapsedMs) / maxHoldMs;
+  if (!cycling) return clamp(raw, 0, 1);
+  const phase = raw % 2;
+  return phase <= 1 ? phase : 2 - phase;
+}
+
+export function getSquareJumpGravityMultiplier(gravity: NonNullable<SquareJumpBasePlatform["gravity"]>) {
+  if (gravity === "light") return 1.55;
+  if (gravity === "heavy") return 0.58;
+  return 1;
+}
+
+export function resolveSquareJumpActiveGravity(
+  currentGravity: NonNullable<SquareJumpBasePlatform["gravity"]>,
+  landedGravity?: SquareJumpBasePlatform["gravity"],
+) {
+  if (landedGravity === "light" || landedGravity === "heavy") return landedGravity;
+  return currentGravity;
+}
+
+export function selectSquareJumpVisiblePlatforms(
+  currentPlatform: SquareJumpBasePlatform,
+  nextPlatform: SquareJumpBasePlatform,
+  exitingPlatform?: SquareJumpBasePlatform | null,
+) {
+  const platforms = [currentPlatform];
+  if (currentPlatform.id !== nextPlatform.id) platforms.push(nextPlatform);
+  if (exitingPlatform && !platforms.some((platform) => platform.id === exitingPlatform.id)) platforms.push(exitingPlatform);
+  return platforms;
+}
+
+export function getSquareJumpBasePlatformHeight({
+  camera,
+  platformY,
+  stageBottom,
+  stageHeight,
+}: {
+  camera: SquareJumpBaseCameraFrame;
+  platformY: number;
+  stageBottom: number;
+  stageHeight: number;
+}) {
+  const cameraBottomWorld = camera.cameraY + stageHeight / 2 / Math.max(0.001, camera.scale);
+  return Math.max(0, stageBottom - platformY, cameraBottomWorld - platformY);
+}
+
+export function getSquareJumpBasePlatformX(platform: Pick<SquareJumpBasePlatform, "moving" | "phase" | "range" | "speed" | "x">, time: number) {
+  const range = platform.moving ? (platform.range ?? 0) : 0;
+  const speed = platform.moving ? (platform.speed ?? 0) : 0;
+  if (range === 0 || speed === 0) return platform.x;
+  return platform.x + Math.sin(time * speed + (platform.phase ?? 0)) * range;
+}
+
+export function getSquareJumpBasePlayerXOnPlatform({
+  offset,
+  platform,
+  time,
+}: {
+  offset: number;
+  platform: Pick<SquareJumpBasePlatform, "moving" | "phase" | "range" | "speed" | "x">;
+  time: number;
+}) {
+  return getSquareJumpBasePlatformX(platform, time) + offset;
+}
+
+export function resolveSquareJumpBaseLandingByX({
+  currentPlatform,
+  landingX,
+  nextPlatform,
+  targetPadding = 0,
+}: {
+  currentPlatform: SquareJumpBasePlatform;
+  landingX: number;
+  nextPlatform: SquareJumpBasePlatform;
+  targetPadding?: number;
+}) {
+  const insideCurrent = landingX >= currentPlatform.x - currentPlatform.width / 2 && landingX <= currentPlatform.x + currentPlatform.width / 2;
+  if (insideCurrent) return { landingPlatformId: currentPlatform.id, result: "stay" as const };
+
+  const insideNext = landingX >= nextPlatform.x - nextPlatform.width / 2 - targetPadding && landingX <= nextPlatform.x + nextPlatform.width / 2 + targetPadding;
+  if (insideNext) return { landingPlatformId: nextPlatform.id, result: "advance" as const };
+
+  return { landingPlatformId: null, result: "fall" as const };
+}
+
+export function shouldSquareJumpDeferLandingResolution({
+  doubleJumpEnabled,
+  doubleJumpUsed,
+  result,
+}: {
+  doubleJumpEnabled: boolean;
+  doubleJumpUsed: boolean;
+  result: SquareJumpBaseLandingResult;
+}) {
+  return doubleJumpEnabled && !doubleJumpUsed && result === "fall";
+}
+
+export function createSquareJumpBaseJumpPlan({
+  currentPlatform,
+  holdMs,
+  maxHoldMs,
+  maxJumpDistance,
+  minJumpDistance,
+  nextPlatform,
+  playerX,
+  playerY,
+  squareSize,
+  targetLandingPadding = 0,
+}: {
+  currentPlatform: SquareJumpBasePlatform;
+  holdMs: number;
+  maxHoldMs: number;
+  maxJumpDistance: number;
+  minJumpDistance: number;
+  nextPlatform: SquareJumpBasePlatform;
+  playerX: number;
+  playerY?: number;
+  squareSize: number;
+  targetLandingPadding?: number;
+}): SquareJumpBaseJumpPlan {
+  const rawPower = clamp(maxHoldMs > 0 ? holdMs / maxHoldMs : 0, 0, 1);
+  const power = smoothStep(rawPower);
+  const landingX = playerX + minJumpDistance + power * (maxJumpDistance - minJumpDistance);
+  const landing = resolveSquareJumpBaseLandingByX({ currentPlatform, landingX, nextPlatform, targetPadding: targetLandingPadding });
+  const landingPlatform = landing.landingPlatformId === currentPlatform.id ? currentPlatform : landing.landingPlatformId === nextPlatform.id ? nextPlatform : null;
+  const startY = playerY ?? currentPlatform.y - squareSize / 2;
+  const endY = (landingPlatform?.y ?? currentPlatform.y) - squareSize / 2;
+
+  return {
+    arcHeight: 42 + power * 34,
+    durationMs: 360 + power * 80,
+    jumpEndX: landingX,
+    jumpEndY: endY,
+    jumpStartX: playerX,
+    jumpStartY: startY,
+    landingPlatformId: landing.landingPlatformId,
+    landingX,
+    power,
+    result: landing.result,
+  };
+}
+
+export function sampleSquareJumpBaseJump(plan: SquareJumpBaseJumpPlan, progress: number) {
+  const t = clamp(progress, 0, 1);
+  if (t >= 1) return { x: plan.jumpEndX, y: plan.jumpEndY };
+  return {
+    x: plan.jumpStartX + (plan.jumpEndX - plan.jumpStartX) * t,
+    y: plan.jumpStartY + (plan.jumpEndY - plan.jumpStartY) * t - plan.arcHeight * Math.sin(Math.PI * t),
+  };
+}
+
+export function sampleSquareJumpBaseFlyAway(plan: SquareJumpBaseJumpPlan, progress: number) {
+  const t = Math.max(0, progress);
+  if (t <= 1) return sampleSquareJumpBaseJump(plan, t);
+  const extra = t - 1;
+  const dx = plan.jumpEndX - plan.jumpStartX;
+  const dy = plan.jumpEndY - plan.jumpStartY;
+  const endVelocityY = dy + plan.arcHeight * Math.PI;
+  return {
+    x: plan.jumpEndX + dx * extra,
+    y: plan.jumpEndY + endVelocityY * extra + plan.arcHeight * 0.92 * extra * extra,
+  };
+}
+
+export function resolveSquareJumpBaseFlyAwayLanding({
+  catchDepth = 40,
+  plan,
+  progress,
+  squareSize,
+  targetPadding = 0,
+  targetPlatform,
+}: {
+  catchDepth?: number;
+  plan: SquareJumpBaseJumpPlan;
+  progress: number;
+  squareSize: number;
+  targetPadding?: number;
+  targetPlatform: SquareJumpBasePlatform;
+}): { landingPlatformId: string; result: "advance" } | null {
+  const point = sampleSquareJumpBaseFlyAway(plan, progress);
+  const playerBottom = point.y + squareSize / 2;
+  const catchTop = targetPlatform.y;
+  const catchBottom = targetPlatform.y + Math.max(0, catchDepth);
+  if (playerBottom < catchTop || playerBottom > catchBottom) return null;
+
+  const targetLeft = targetPlatform.x - targetPlatform.width / 2 - targetPadding;
+  const targetRight = targetPlatform.x + targetPlatform.width / 2 + targetPadding;
+  if (point.x < targetLeft || point.x > targetRight) return null;
+
+  return { landingPlatformId: targetPlatform.id, result: "advance" };
+}
+
+export function createSquareJumpBaseAdvancePlan({
+  cameraEnd,
+  cameraStart,
+  durationMs = 760,
+  riseDurationMs = 620,
+  stageHeight,
+}: {
+  cameraEnd: SquareJumpBaseCameraFrame;
+  cameraStart: SquareJumpBaseCameraFrame;
+  durationMs?: number;
+  riseDurationMs?: number;
+  stageHeight: number;
+}): SquareJumpBaseAdvancePlan {
+  return {
+    cameraEnd: { ...cameraEnd },
+    cameraStart: { ...cameraStart },
+    durationMs,
+    nextPlatformStartVisualOffsetY: stageHeight * 0.25,
+    riseDurationMs,
+  };
+}
+
+export function sampleSquareJumpBaseAdvanceCamera(plan: Pick<SquareJumpBaseAdvancePlan, "cameraEnd" | "cameraStart">, progress: number) {
+  const t = smoothStep(progress);
+  return {
+    cameraX: plan.cameraStart.cameraX + (plan.cameraEnd.cameraX - plan.cameraStart.cameraX) * t,
+    cameraY: plan.cameraStart.cameraY + (plan.cameraEnd.cameraY - plan.cameraStart.cameraY) * t,
+    scale: plan.cameraStart.scale + (plan.cameraEnd.scale - plan.cameraStart.scale) * t,
+  };
+}
+
+export function sampleSquareJumpBaseRiseIn(plan: Pick<SquareJumpBaseAdvancePlan, "nextPlatformStartVisualOffsetY">, progress: number) {
+  return plan.nextPlatformStartVisualOffsetY * (1 - smoothStep(progress));
+}
+
+export function fitSquareJumpBaseCamera({
+  currentPlatform,
+  marginX = 44,
+  marginY = 70,
+  maxScale = 1.15,
+  minScale = 0.34,
+  nextPlatform,
+  playerX,
+  stageBottom,
+  stageHeight,
+  stageWidth,
+}: {
+  currentPlatform: SquareJumpBasePlatform;
+  marginX?: number;
+  marginY?: number;
+  maxScale?: number;
+  minScale?: number;
+  nextPlatform: SquareJumpBasePlatform;
+  playerX: number;
+  stageBottom: number;
+  stageHeight: number;
+  stageWidth: number;
+}) {
+  const currentRange = currentPlatform.range ?? 0;
+  const nextRange = nextPlatform.range ?? 0;
+  const minX = Math.min(currentPlatform.x - currentRange - currentPlatform.width / 2, nextPlatform.x - nextRange - nextPlatform.width / 2, playerX);
+  const maxX = Math.max(currentPlatform.x + currentRange + currentPlatform.width / 2, nextPlatform.x + nextRange + nextPlatform.width / 2, playerX);
+  const minY = Math.min(currentPlatform.y, nextPlatform.y) - marginY;
+  const maxY = stageBottom;
+  const scaleX = stageWidth / Math.max(1, maxX - minX + marginX * 2);
+  const scaleY = stageHeight / Math.max(1, maxY - minY + marginY * 2);
+  return {
+    cameraX: (minX + maxX) / 2,
+    cameraY: (minY + maxY) / 2,
+    scale: clamp(Math.min(scaleX, scaleY), minScale, maxScale),
+  };
+}
+
+function getSquareJumpPlatformWidth(level: MiniGameLevelConfig, index: number, rand: () => number) {
+  const fixedWidth = numberParam(level.params, "platformWidth", 0);
+  if (level.levelId !== "square-jump-base" && fixedWidth > 0) {
+    const finishBonus = index === numberParam(level.params, "jumpsRequired", 5) ? 12 : 0;
+    const jitter = index === 0 ? 0 : (rand() - 0.5) * Math.min(14, fixedWidth * 0.12);
+    return Math.max(50, fixedWidth + finishBonus + jitter);
+  }
+  const minWidth = numberParam(level.params, "basePlatformWidthMin", 90);
+  const maxWidth = numberParam(level.params, "basePlatformWidthMax", 130);
+  return minWidth + rand() * (maxWidth - minWidth);
+}
+
+function getSquareJumpPlatformGravity(level: MiniGameLevelConfig, index: number): NonNullable<SquareJumpBasePlatform["gravity"]> {
+  const pattern = stringParam(level.params, "gravityPattern", "normal")
+    .split("|")
+    .filter((item): item is NonNullable<SquareJumpBasePlatform["gravity"]> => item === "normal" || item === "light" || item === "heavy");
+  return pattern[index % Math.max(1, pattern.length)] ?? "normal";
+}
+
+function isGeneratedSquareJumpPlatformMoving(level: MiniGameLevelConfig, targetIndex: number) {
+  const movingCount = numberParam(level.params, "movingPlatformCount", 0);
+  const movingStaticEvery = numberParam(level.params, "movingStaticEvery", 0);
+  const finalMix = booleanParam(level.params, "finalMix");
+  if (finalMix) return targetIndex === 2 || targetIndex === 6;
+  if (movingStaticEvery > 0 && targetIndex > 0 && targetIndex < numberParam(level.params, "jumpsRequired", 5) && targetIndex % movingStaticEvery === 0) return false;
+  return targetIndex > 0 && targetIndex <= movingCount;
+}
+
+export function generateSquareJumpPlatformSequence(
+  level: MiniGameLevelConfig,
+  runSeed: string,
+  {
+    count,
+    platformY = 435,
+    startX = 120,
+    startWidth = 128,
+  }: {
+    count?: number;
+    platformY?: number;
+    startX?: number;
+    startWidth?: number;
+  } = {},
+) {
+  const rand = createSeededRandom(`${level.levelId}:${runSeed}:square-jump-platforms`);
+  const platformCount = Math.max(2, Math.floor(count ?? numberParam(level.params, "jumpsRequired", 5) + 1));
+  const minDistance = numberParam(level.params, "distanceMin", 180);
+  const maxDistance = numberParam(level.params, "distanceMax", 330);
+  const maxJumpDistance = numberParam(level.params, "powerDistanceMax", numberParam(level.params, "maxJumpDistance", 360));
+  const secondMaxJumpDistance = numberParam(level.params, "secondPowerDistanceMax", 0);
+  const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
+  const reverseMoving = booleanParam(level.params, "reverseMoving");
+  const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
+  const gravityChallenge = booleanParam(level.params, "gravityChallenge");
+  let activeGravity: NonNullable<SquareJumpBasePlatform["gravity"]> = "normal";
+
+  const platforms: SquareJumpBasePlatform[] = [
+    {
+      finish: false,
+      gravity: "normal",
+      id: "platform-0",
+      moving: false,
+      phase: rand() * Math.PI * 2,
+      range: 0,
+      speed: 0,
+      timed: false,
+      width: startWidth + (rand() - 0.5) * 12,
+      x: startX + (rand() - 0.5) * 22,
+      y: platformY,
+    },
+  ];
+
+  for (let index = 1; index < platformCount; index += 1) {
+    const current = platforms[index - 1];
+    const moving = isGeneratedSquareJumpPlatformMoving(level, index);
+    const reverse = reverseMoving && index % 2 === 0 ? -1 : 1;
+    const width = getSquareJumpPlatformWidth(level, index, rand);
+    const range = moving ? numberParam(level.params, "movingRange", 0) * (0.86 + rand() * 0.28) : 0;
+    const gravityMultiplier = getSquareJumpGravityMultiplier(activeGravity);
+    const totalMaxJumpDistance = (maxJumpDistance + (doubleJumpEnabled ? secondMaxJumpDistance : 0)) * gravityMultiplier;
+    const farthestCenterDistance = Math.max(80, totalMaxJumpDistance + width / 2 + targetLandingPadding - range - 4);
+    let localMinDistance = minDistance;
+    let localMaxDistance = maxDistance;
+    if (gravityChallenge && activeGravity === "light") {
+      localMinDistance = Math.max(96, minDistance * 0.72);
+      localMaxDistance = Math.max(localMinDistance, minDistance * 0.98);
+    } else if (gravityChallenge && activeGravity === "heavy") {
+      localMinDistance = Math.max(minDistance, maxDistance * 0.82);
+      localMaxDistance = maxDistance;
+    }
+    const reachableMinDistance = Math.min(localMinDistance, farthestCenterDistance);
+    const reachableMaxDistance = Math.max(reachableMinDistance, Math.min(localMaxDistance, farthestCenterDistance));
+    const randomDistance = localMinDistance + rand() * Math.max(0, localMaxDistance - localMinDistance);
+    const distance = clamp(randomDistance, reachableMinDistance, reachableMaxDistance);
+    const targetGravity = getSquareJumpPlatformGravity(level, Math.max(0, index - 1));
+
+    platforms.push({
+      finish: index === numberParam(level.params, "jumpsRequired", 5),
+      gravity: targetGravity,
+      id: `platform-${index}`,
+      moving,
+      phase: rand() * Math.PI * 2,
+      range,
+      speed: moving ? numberParam(level.params, "movingSpeed", 0) * reverse * (0.86 + rand() * 0.28) : 0,
+      timed: false,
+      width,
+      x: current.x + distance,
+      y: platformY,
+    });
+    activeGravity = resolveSquareJumpActiveGravity(activeGravity, targetGravity);
+  }
+
+  return platforms;
+}
+
+export function advanceFallDownCamera({
+  cameraY,
+  delta,
+  speed,
+}: {
+  cameraY: number;
+  delta: number;
+  speed: number;
+}) {
+  return cameraY + speed * delta;
+}
+
+export function resolveFallDownCameraBounds({
+  bottomFailLine,
+  cameraY,
+  playerWorldY,
+  squareSize,
+  topFailLine,
+}: {
+  bottomFailLine?: number;
+  cameraY: number;
+  playerWorldY: number;
+  squareSize: number;
+  stageHeight: number;
+  topFailLine?: number;
+}) {
+  const screenY = playerWorldY - cameraY;
+  if (screenY < (topFailLine ?? -squareSize)) {
+    return { status: "failed" as const, reason: "too-slow" };
+  }
+  if (bottomFailLine !== undefined && screenY > bottomFailLine) {
+    return { status: "failed" as const, reason: "too-deep" };
+  }
+  return { status: "playing" as const, reason: "" };
+}
+
+export function expireFallDownFragilePlatform({
+  fragileTime,
+  kind,
+  now,
+  steppedAt,
+}: {
+  fragileTime: number;
+  kind: string;
+  now: number;
+  steppedAt: number | null;
+}) {
+  return {
+    broken: kind === "fragile" && steppedAt !== null && now - steppedAt >= fragileTime,
+    directFailure: false,
+  };
 }
 
 export function getMiniGameLowPowerMode({
@@ -533,6 +1023,34 @@ function baseLevel(
   };
 }
 
+function prototypeLevel(
+  gameId: MiniGameId,
+  levelId: string,
+  order: number,
+  code: string,
+  title: string,
+  kind: MiniGameLevelKind,
+  difficulty: MiniGameDifficulty,
+  variant: string,
+  description: string,
+  goalText: string,
+  params: MiniGameParams,
+): MiniGameLevelConfig {
+  return {
+    gameId,
+    levelId,
+    order,
+    kind,
+    code,
+    title,
+    difficulty,
+    variant,
+    description,
+    goalText,
+    params,
+  };
+}
+
 const doodleBaseParams = {
   targetHeightScreens: 3,
   movingPlatformRatio: 0,
@@ -855,6 +1373,333 @@ const knifeLevels: MiniGameLevelConfig[] = [
   baseLevel("knife", "基础关", "Knife Hit 基础关", "普通匀速转盘，发射 6 个，初始障碍 1 个。", "命中 6 发", knifeBaseParams),
 ];
 
+const squareJumpBaseParams = {
+  prototype: "square-jump",
+  jumpsRequired: 8,
+  platformWidth: 110,
+  basePlatformWidthMin: 92,
+  basePlatformWidthMax: 124,
+  distanceMin: 136,
+  distanceMax: 226,
+  minJumpDistance: 28,
+  maxJumpDistance: 220,
+  precomputedJumpAnimation: true,
+  powerDistanceMin: 34,
+  powerDistanceMax: 220,
+  secondPowerDistanceMin: 30,
+  secondPowerDistanceMax: 180,
+  targetLandingPadding: 9,
+  flyAwayLandingCatchDepth: 40,
+  keepNextPlatformVisible: true,
+  landingKeepsActualX: true,
+  useCameraScale: true,
+  sweptLandingCollision: false,
+  doubleJumpEnabled: false,
+  cyclingChargeOnDoubleJump: false,
+  currentAnchorRatio: 0.28,
+  nextMinRatio: 0.62,
+  nextMaxRatio: 0.84,
+  movingPlatformCount: 0,
+  movingSpeed: 0,
+  movingRange: 0,
+  timedWindow: null,
+  timedFinalWindow: null,
+  gravityPattern: "normal",
+  gravityChallenge: false,
+  finalMix: false,
+};
+
+const squareJumpVariantParams = {
+  ...squareJumpBaseParams,
+  precomputedJumpAnimation: true,
+  sweptLandingCollision: false,
+};
+
+const squareJumpLevels: MiniGameLevelConfig[] = [
+  prototypeLevel("square-jump", "square-jump-base", 0, "基础关", "基础关", "base", "基础", "基础关", "长按蓄力，松手让小方块跳到下一个平台，连续成功 5 次通关。", "连续跳到 5 个平台", squareJumpBaseParams),
+  prototypeLevel("square-jump", "square-jump-moving-easy", 1, "1-1", "移动落点", "advanced", "简单", "移动落点", "1 个慢速移动平台，平台较宽，距离变化小。", "预判移动平台并完成 4 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 7,
+    platformWidth: 100,
+    distanceMin: 142,
+    distanceMax: 218,
+    movingPlatformCount: 1,
+    movingSpeed: 1.35,
+    movingRange: 34,
+  }),
+  prototypeLevel("square-jump", "square-jump-moving-normal", 2, "1-2", "移动落点", "advanced", "普通", "移动落点", "连续 3 个中速移动平台，宽度正常，距离略随机。", "预判移动平台并完成 5 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 8,
+    platformWidth: 82,
+    distanceMin: 156,
+    distanceMax: 218,
+    movingPlatformCount: 3,
+    movingSpeed: 1.9,
+    movingRange: 48,
+  }),
+  prototypeLevel("square-jump", "square-jump-moving-hard", 3, "1-3", "移动落点", "advanced", "困难", "移动落点", "多个快速窄平台会反向移动，需要提前预判落点。", "预判快速移动平台并完成 6 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 9,
+    platformWidth: 68,
+    distanceMin: 164,
+    distanceMax: 204,
+    movingPlatformCount: 9,
+    movingStaticEvery: 4,
+    movingSpeed: 2.6,
+    movingRange: 58,
+    reverseMoving: true,
+  }),
+  prototypeLevel("square-jump", "square-jump-double-easy", 4, "2-1", "二段跳跃", "advanced", "简单", "二段跳跃", "跳起后可在空中再次蓄力，悬停后释放完成二段跳。", "用二段跳完成 4 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 5,
+    platformWidth: 96,
+    distanceMin: 296,
+    distanceMax: 350,
+    powerDistanceMax: 220,
+    secondPowerDistanceMax: 180,
+    doubleJumpEnabled: true,
+    cyclingChargeOnDoubleJump: true,
+    timedWindow: null,
+    timedFinalWindow: null,
+  }),
+  prototypeLevel("square-jump", "square-jump-double-normal", 5, "2-2", "二段跳跃", "advanced", "普通", "二段跳跃", "平台距离更远，空中二段蓄力会悬停，释放后继续前进。", "用二段跳完成 5 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 6,
+    platformWidth: 82,
+    distanceMin: 320,
+    distanceMax: 385,
+    powerDistanceMax: 220,
+    secondPowerDistanceMax: 180,
+    doubleJumpEnabled: true,
+    cyclingChargeOnDoubleJump: true,
+    timedWindow: null,
+    timedFinalWindow: null,
+  }),
+  prototypeLevel("square-jump", "square-jump-double-hard", 6, "2-3", "二段跳跃", "advanced", "困难", "二段跳跃", "窄平台和远距离同时出现，需要在空中把握二段蓄力时机。", "用二段跳完成 6 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 7,
+    platformWidth: 70,
+    distanceMin: 350,
+    distanceMax: 415,
+    powerDistanceMax: 220,
+    secondPowerDistanceMax: 180,
+    doubleJumpEnabled: true,
+    cyclingChargeOnDoubleJump: true,
+    timedWindow: null,
+    timedFinalWindow: null,
+  }),
+  prototypeLevel("square-jump", "square-jump-gravity-easy", 7, "3-1", "重力平台", "advanced", "简单", "重力平台", "只出现正常和变轻平台，变轻后会跳得更远。", "根据重力状态完成 4 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 7,
+    platformWidth: 96,
+    distanceMin: 132,
+    distanceMax: 220,
+    gravityPattern: "normal|light|normal|light",
+    gravityChallenge: true,
+  }),
+  prototypeLevel("square-jump", "square-jump-gravity-normal", 8, "3-2", "重力平台", "advanced", "普通", "重力平台", "正常、变轻、加重平台都会出现，需要连续判断当前状态。", "根据三种重力完成 5 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 8,
+    platformWidth: 82,
+    distanceMin: 138,
+    distanceMax: 220,
+    gravityPattern: "normal|light|heavy|normal|light",
+    gravityChallenge: true,
+  }),
+  prototypeLevel("square-jump", "square-jump-gravity-hard", 9, "3-3", "重力平台", "advanced", "困难", "重力平台", "反向考验更多：变轻接近平台、加重接远平台，容错更低。", "根据重力反向考验完成 6 次跳跃", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 12,
+    platformWidth: 68,
+    distanceMin: 142,
+    distanceMax: 214,
+    gravityPattern: "light|normal|heavy|light|heavy|normal",
+    gravityChallenge: true,
+  }),
+  prototypeLevel("square-jump", "square-jump-final", 10, "最终关", "方块终跃", "advanced", "最终", "综合最终关", "综合移动落点、二段跳和重力切换平台，一路跳到终点。", "连续跳到终点平台", {
+    ...squareJumpVariantParams,
+    jumpsRequired: 15,
+    platformWidth: 70,
+    distanceMin: 330,
+    distanceMax: 410,
+    movingPlatformCount: 3,
+    movingSpeed: 2.1,
+    movingRange: 54,
+    powerDistanceMax: 220,
+    secondPowerDistanceMax: 180,
+    doubleJumpEnabled: true,
+    cyclingChargeOnDoubleJump: true,
+    timedWindow: null,
+    timedFinalWindow: null,
+    gravityPattern: "normal|normal|light|normal|heavy|light|normal|normal",
+    gravityChallenge: true,
+    finalMix: true,
+    reverseMoving: true,
+  }),
+].map((level) => ({
+  ...level,
+  description:
+    level.levelId === "square-jump-base"
+      ? `长按蓄力，松手让小方块跳到下一个平台，连续成功 ${level.params.jumpsRequired} 次通关。`
+      : level.description,
+  goalText:
+    level.levelId === "square-jump-final"
+      ? `连续完成 ${level.params.jumpsRequired} 次跳跃到终点平台`
+      : `连续完成 ${level.params.jumpsRequired} 次跳跃`,
+}));
+
+const fallDownBaseParams = {
+  prototype: "fall-down",
+  layersRequired: 10,
+  platformWidth: 112,
+  platformGapMin: 96,
+  platformGapMax: 132,
+  playerSpeed: 230,
+  topPressureSpeed: 42,
+  movingPlatformCount: 0,
+  movingSpeed: 0,
+  movingRange: 0,
+  fragilePlatformCount: 0,
+  fragileTime: 0,
+  dangerPlatformCount: 0,
+  fallingHazardCount: 0,
+  fallingHazardSpeed: 132,
+  fallingHazardSize: 22,
+  ledgePlatformCount: 0,
+  finalMix: false,
+};
+
+const fallDownLevels: MiniGameLevelConfig[] = [
+  prototypeLevel("fall-down", "fall-down-base", 0, "基础关", "一路向下基础关", "base", "基础", "基础关", "左右半屏控制小方块横向移动，落到更低的平台并下降到终点层。", "下降 10 层到终点", fallDownBaseParams),
+  prototypeLevel("fall-down", "fall-down-moving-easy", 1, "1-1", "移动层板", "advanced", "简单", "移动层板", "少量移动平台，宽度较大，练习预判下落位置。", "通过慢速移动层板", {
+    ...fallDownBaseParams,
+    layersRequired: 14,
+    platformWidth: 104,
+    platformGapMin: 98,
+    platformGapMax: 136,
+    movingPlatformCount: 7,
+    movingSpeed: 0.75,
+    movingRange: 52,
+    topPressureSpeed: 44,
+  }),
+  prototypeLevel("fall-down", "fall-down-moving-normal", 2, "1-2", "移动层板", "advanced", "普通", "移动层板", "移动平台数量增加，间距变大，需要提前调整左右位置。", "通过连续移动层板", {
+    ...fallDownBaseParams,
+    layersRequired: 18,
+    platformWidth: 84,
+    platformGapMin: 112,
+    platformGapMax: 154,
+    topPressureSpeed: 54,
+    movingPlatformCount: 11,
+    movingSpeed: 1,
+    movingRange: 68,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 132,
+    fallingHazardSize: 22,
+  }),
+  prototypeLevel("fall-down", "fall-down-moving-hard", 3, "1-3", "移动层板", "advanced", "困难", "移动层板", "连续移动窄平台，部分方向相反，顶部压线更快。", "通过高压移动层板", {
+    ...fallDownBaseParams,
+    layersRequired: 22,
+    platformWidth: 68,
+    platformGapMin: 124,
+    platformGapMax: 172,
+    topPressureSpeed: 66,
+    movingPlatformCount: 16,
+    movingSpeed: 1.35,
+    movingRange: 88,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 158,
+    fallingHazardSize: 23,
+    ledgePlatformCount: 5,
+    reverseMoving: true,
+  }),
+  prototypeLevel("fall-down", "fall-down-fragile-easy", 4, "2-1", "脆弱层板", "advanced", "简单", "脆弱层板", "少量脆弱平台，踩上后约 1.8 秒碎裂。", "避开碎裂压力下降", {
+    ...fallDownBaseParams,
+    layersRequired: 14,
+    platformWidth: 104,
+    topPressureSpeed: 44,
+    fragilePlatformCount: 7,
+    fragileTime: 1.8,
+  }),
+  prototypeLevel("fall-down", "fall-down-fragile-normal", 5, "2-2", "脆弱层板", "advanced", "普通", "脆弱层板", "脆弱平台数量增加，碎裂时间更短，不能停留太久。", "连续通过脆弱层板", {
+    ...fallDownBaseParams,
+    layersRequired: 18,
+    platformWidth: 84,
+    platformGapMin: 110,
+    platformGapMax: 152,
+    topPressureSpeed: 54,
+    fragilePlatformCount: 11,
+    fragileTime: 1.35,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 132,
+    fallingHazardSize: 22,
+  }),
+  prototypeLevel("fall-down", "fall-down-fragile-hard", 6, "2-3", "脆弱层板", "advanced", "困难", "脆弱层板", "连续脆弱窄平台，最后几层几乎不能停留。", "在碎裂前连续下降", {
+    ...fallDownBaseParams,
+    layersRequired: 22,
+    platformWidth: 66,
+    platformGapMin: 124,
+    platformGapMax: 172,
+    topPressureSpeed: 68,
+    fragilePlatformCount: 16,
+    fragileTime: 0.95,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 160,
+    fallingHazardSize: 23,
+    ledgePlatformCount: 5,
+  }),
+  prototypeLevel("fall-down", "fall-down-danger-easy", 7, "3-1", "危险层板", "advanced", "简单", "危险层板", "少量红色危险平台，安全路线明显。", "避开危险平台下降", {
+    ...fallDownBaseParams,
+    layersRequired: 14,
+    platformWidth: 104,
+    topPressureSpeed: 46,
+    dangerPlatformCount: 5,
+  }),
+  prototypeLevel("fall-down", "fall-down-danger-normal", 8, "3-2", "危险层板", "advanced", "普通", "危险层板", "危险平台数量增加，部分安全平台更窄。", "选择安全层板下降", {
+    ...fallDownBaseParams,
+    layersRequired: 18,
+    platformWidth: 82,
+    platformGapMin: 112,
+    platformGapMax: 156,
+    topPressureSpeed: 58,
+    dangerPlatformCount: 8,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 146,
+    fallingHazardSize: 22,
+  }),
+  prototypeLevel("fall-down", "fall-down-danger-hard", 9, "3-3", "危险层板", "advanced", "困难", "危险层板", "危险平台和窄安全平台交错，需要连续选择路线。", "连续避开危险层板", {
+    ...fallDownBaseParams,
+    layersRequired: 22,
+    platformWidth: 66,
+    platformGapMin: 124,
+    platformGapMax: 174,
+    topPressureSpeed: 72,
+    dangerPlatformCount: 11,
+    fallingHazardCount: 2,
+    fallingHazardSpeed: 180,
+    fallingHazardSize: 24,
+    ledgePlatformCount: 5,
+  }),
+  prototypeLevel("fall-down", "fall-down-final", 10, "最终关", "百层试炼", "advanced", "最终", "综合最终关", "综合移动、脆弱和危险层板，下降到终点平台。", "完成百层试炼", {
+    ...fallDownBaseParams,
+    layersRequired: 30,
+    platformWidth: 72,
+    platformGapMin: 118,
+    platformGapMax: 170,
+    topPressureSpeed: 74,
+    movingPlatformCount: 12,
+    movingSpeed: 1.15,
+    movingRange: 86,
+    fragilePlatformCount: 10,
+    fragileTime: 1,
+    dangerPlatformCount: 10,
+    fallingHazardCount: 4,
+    fallingHazardSpeed: 178,
+    fallingHazardSize: 24,
+    ledgePlatformCount: 8,
+    finalMix: true,
+    reverseMoving: true,
+  }),
+];
+
 export const MINI_GAME_PROTOTYPES: MiniGameDefinition[] = [
   {
     id: "doodle",
@@ -879,6 +1724,22 @@ export const MINI_GAME_PROTOTYPES: MiniGameDefinition[] = [
     summary: "点击发射，命中转盘",
     instruction: "点击发射，避开已插入物体和不可插区域，发射完指定数量通关。",
     levels: knifeLevels,
+  },
+  {
+    id: "square-jump",
+    title: "方块跃迁",
+    shortTitle: "方块跃迁",
+    summary: "长按蓄力，松手跳到平台",
+    instruction: "长按屏幕蓄力，松手让小方块向右跳跃。根据移动、限时和重力平台调整节奏。",
+    levels: squareJumpLevels,
+  },
+  {
+    id: "fall-down",
+    title: "一路向下",
+    shortTitle: "一路向下",
+    summary: "横向移动，落到下方平台",
+    instruction: "左右半屏控制小方块横向移动，持续落到更低的平台，避开危险层板和顶部压线。",
+    levels: fallDownLevels,
   },
 ];
 
