@@ -72,7 +72,7 @@ const KNIFE_SHOT_GEOMETRY = getKnifeShotGeometry(KNIFE_FIRE_POINT, KNIFE_DISC_CE
 const KNIFE_FIRE_ANGLE = KNIFE_SHOT_GEOMETRY.impactAngle;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
-const DOODLE_PLAYER_SPEED = 250;
+const DOODLE_PLAYER_SPEED = 315;
 const DEBUG_MINI_GAME_HITBOX = false;
 const DEBUG_MINI_GAME_FPS = false;
 const BASE_FAILURE_LIMIT = 3;
@@ -1426,6 +1426,7 @@ function FallDownPrototype({
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
+  const fallDownPointerIdRef = useRef<number | null>(null);
   const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
@@ -1527,18 +1528,27 @@ function FallDownPrototype({
 
   const setDirectionFromPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    if (fallDownPointerIdRef.current !== event.pointerId) return;
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
-    event.currentTarget.setPointerCapture(event.pointerId);
     const direction = chooseFallDownDirection(event);
     fallDownInputDirectionRef.current = direction;
     resumeFallDownInput(current, direction);
     syncView();
   }, [resumeFallDownInput, syncView]);
 
+  const beginFallDownDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    fallDownPointerIdRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDirectionFromPointer(event);
+  }, [setDirectionFromPointer]);
+
   const stopDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
+    if (event && fallDownPointerIdRef.current !== null && fallDownPointerIdRef.current !== event.pointerId) return;
     fallDownInputDirectionRef.current = 0;
+    fallDownPointerIdRef.current = null;
     const current = runtimeRef.current;
     current.inputDirection = 0;
     current.vx = 0;
@@ -1715,9 +1725,10 @@ function FallDownPrototype({
         className={`prototype-stage fall-down-stage ${view.status === "failed" ? "failed" : ""}`}
         role="application"
         aria-label="一路向下"
+        onLostPointerCapture={stopDirection}
         onPointerCancel={stopDirection}
-        onPointerDown={setDirectionFromPointer}
-        onPointerLeave={stopDirection}
+        onPointerDown={beginFallDownDirection}
+        onPointerMove={setDirectionFromPointer}
         onPointerUp={stopDirection}
       >
         <MiniGameFpsBadge fps={fps} />
@@ -1914,6 +1925,7 @@ function DoodleJumpPrototype({
   const visibleBuffer = isLowPowerDevice ? 96 : 160;
   const initialRuntime = useMemo(() => createDoodleRuntime(world), [world]);
   const inputDirectionRef = useRef(0);
+  const inputPointerIdRef = useRef<number | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const playerBoxRef = useRef<HTMLDivElement | null>(null);
@@ -1952,14 +1964,24 @@ function DoodleJumpPrototype({
     return event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
   }
 
+  const updateDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (inputPointerIdRef.current !== event.pointerId) return;
+    inputDirectionRef.current = chooseDoodleDirection(event);
+  }, []);
+
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    inputPointerIdRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
     inputDirectionRef.current = chooseDoodleDirection(event);
     startDoodle();
   }, [startDoodle]);
 
-  const stopDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  const stopDoodleDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
+    event?.preventDefault();
+    if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
+    inputPointerIdRef.current = null;
     inputDirectionRef.current = 0;
   }, []);
 
@@ -2186,14 +2208,11 @@ function DoodleJumpPrototype({
         ref={stageRef}
         role="application"
         aria-label="Doodle Jump 型小游戏"
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          beginDoodleDirection(event);
-        }}
-        onPointerUp={stopDoodleDirection}
-        onPointerLeave={stopDoodleDirection}
+        onLostPointerCapture={stopDoodleDirection}
         onPointerCancel={stopDoodleDirection}
+        onPointerDown={beginDoodleDirection}
+        onPointerMove={updateDoodleDirection}
+        onPointerUp={stopDoodleDirection}
       >
         <MiniGameFpsBadge fps={fps} />
         <div

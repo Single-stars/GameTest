@@ -443,6 +443,7 @@ test("fall down levels encode downward platform variants and pressure rules", ()
     assert.ok(Number(level.params.layersRequired) >= 10);
     assert.ok(Number(level.params.platformGapMin) > 0);
     assert.ok(Number(level.params.platformGapMax) >= Number(level.params.platformGapMin));
+    assert.equal(level.params.playerSpeed, 288);
     assert.ok(Number(level.params.topPressureSpeed) > 0);
   }
 
@@ -451,7 +452,7 @@ test("fall down levels encode downward platform variants and pressure rules", ()
   assert.equal(base.params.movingPlatformCount, 0);
   assert.equal(base.params.fragilePlatformCount, 0);
   assert.equal(base.params.dangerPlatformCount, 0);
-  assert.equal(base.params.playerSpeed, 230);
+  assert.equal(base.params.playerSpeed, 288);
   assert.equal(base.params.topPressureSpeed, 42);
   assert.equal(base.params.fallingHazardCount, 0);
   assert.equal(movingEasy.params.layersRequired, 14);
@@ -1088,7 +1089,6 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.doesNotMatch(fallDownSource, /prototype-start-button/);
   assert.doesNotMatch(fallDownSource, /prototype-start-hint fall-start-hint/);
   assert.doesNotMatch(fallDownSource, /按住左半屏|按住右半屏|按住左右半屏|按住屏幕/);
-  assert.doesNotMatch(fallDownSource, /onPointerMove=\{setDirectionFromPointer\}/);
   assert.doesNotMatch(fallDownSource, /current\.vx \+= current\.inputDirection \* 1120 \* delta/);
   assert.doesNotMatch(fallDownSource, /if \(current\.inputDirection === 0\) current\.vx \*= 0\.84/);
   assert.doesNotMatch(fallDownSource, /fall-down-player-shell \$\{view\.feedback \? "landed" : ""\}/);
@@ -1096,6 +1096,7 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.doesNotMatch(fallDownSource, /current\.feedback = platform\.id === requiredLayers/);
   assert.doesNotMatch(fallDownSource, /feedbackUntil/);
   assert.match(fallDownSource, /const fallDownInputDirectionRef = useRef<FallDownRuntime\["inputDirection"\]>\(0\);/);
+  assert.match(fallDownSource, /const fallDownPointerIdRef = useRef<number \| null>\(null\);/);
   assert.match(fallDownSource, /const resumeFallDownInput = useCallback/);
   assert.match(fallDownSource, /current\.started = true;/);
   assert.match(fallDownSource, /current\.respawnUntil = 0;/);
@@ -1105,12 +1106,17 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /function chooseFallDownDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
   assert.match(fallDownSource, /fallDownInputDirectionRef\.current = direction;/);
   assert.match(fallDownSource, /resumeFallDownInput\(current, direction\);/);
+  assert.match(fallDownSource, /if \(fallDownPointerIdRef\.current !== event\.pointerId\) return;/);
+  assert.match(fallDownSource, /fallDownPointerIdRef\.current = event\.pointerId;/);
+  assert.match(fallDownSource, /onPointerMove=\{setDirectionFromPointer\}/);
+  assert.doesNotMatch(fallDownSource, /onPointerLeave=\{stopDirection\}/);
+  assert.match(fallDownSource, /onLostPointerCapture=\{stopDirection\}/);
   assert.match(fallDownSource, /const stopDirection = useCallback/);
   assert.match(fallDownSource, /fallDownInputDirectionRef\.current = 0;/);
+  assert.match(fallDownSource, /fallDownPointerIdRef\.current = null;/);
   assert.match(fallDownSource, /current\.inputDirection = 0;/);
   assert.match(fallDownSource, /current\.vx = 0;/);
   assert.match(fallDownSource, /onPointerUp=\{stopDirection\}/);
-  assert.match(fallDownSource, /onPointerLeave=\{stopDirection\}/);
   assert.match(fallDownSource, /onPointerCancel=\{stopDirection\}/);
   assert.match(fallDownSource, /current\.vy = 0;/);
   assert.match(fallDownSource, /current\.respawnUntil = 0;/);
@@ -1134,19 +1140,26 @@ test("doodle jump moves only while pressing the left or right half of the screen
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function movingGateY"));
 
+  assert.match(componentSource, /const DOODLE_PLAYER_SPEED = 315;/);
   assert.doesNotMatch(doodleSource, /controlXRef/);
   assert.doesNotMatch(doodleSource, /setControlFromPointer/);
-  assert.doesNotMatch(doodleSource, /onPointerMove=\{/);
   assert.doesNotMatch(doodleSource, /current\.playerX \+ \(controlXRef\.current - current\.playerX\)/);
   assert.match(doodleSource, /const inputDirectionRef = useRef\(0\);/);
+  assert.match(doodleSource, /const inputPointerIdRef = useRef<number \| null>\(null\);/);
   assert.match(doodleSource, /function chooseDoodleDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(doodleSource, /const updateDoodleDirection = useCallback/);
+  assert.match(doodleSource, /if \(inputPointerIdRef\.current !== event\.pointerId\) return;/);
   assert.match(doodleSource, /inputDirectionRef\.current = chooseDoodleDirection\(event\);/);
+  assert.match(doodleSource, /inputPointerIdRef\.current = event\.pointerId;/);
   assert.match(doodleSource, /const stopDoodleDirection = useCallback/);
   assert.match(doodleSource, /inputDirectionRef\.current = 0;/);
+  assert.match(doodleSource, /inputPointerIdRef\.current = null;/);
   assert.match(doodleSource, /current\.playerX = clamp\(current\.playerX \+ inputDirectionRef\.current \* DOODLE_PLAYER_SPEED \* delta/);
+  assert.match(doodleSource, /onPointerMove=\{updateDoodleDirection\}/);
   assert.match(doodleSource, /onPointerUp=\{stopDoodleDirection\}/);
-  assert.match(doodleSource, /onPointerLeave=\{stopDoodleDirection\}/);
+  assert.doesNotMatch(doodleSource, /onPointerLeave=\{stopDoodleDirection\}/);
   assert.match(doodleSource, /onPointerCancel=\{stopDoodleDirection\}/);
+  assert.match(doodleSource, /onLostPointerCapture=\{stopDoodleDirection\}/);
 });
 
 test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {

@@ -1579,7 +1579,7 @@ const fallDownBaseParams = {
   platformWidth: 112,
   platformGapMin: 96,
   platformGapMax: 132,
-  playerSpeed: 230,
+  playerSpeed: 288,
   topPressureSpeed: 42,
   movingPlatformCount: 0,
   movingSpeed: 0,
