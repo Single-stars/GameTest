@@ -171,6 +171,19 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function makeDoodleNoisePoints(rand: () => number, count: number) {
+  return Array.from({ length: Math.max(2, count) }, () => rand());
+}
+
+function doodleSmoothNoise(points: number[], position: number) {
+  const left = Math.floor(position);
+  const t = position - left;
+  const smooth = t * t * (3 - 2 * t);
+  const leftIndex = ((left % points.length) + points.length) % points.length;
+  const rightIndex = (leftIndex + 1) % points.length;
+  return points[leftIndex] * (1 - smooth) + points[rightIndex] * smooth;
+}
+
 export type SquareJumpBasePlatform = {
   finish?: boolean;
   gravity?: "normal" | "light" | "heavy";
@@ -744,6 +757,12 @@ export function generateDoodleWorldLayout(
     .filter((motion): motion is DoodleMovementPattern => allMotions.includes(motion as DoodleMovementPattern));
   const patterns = movementPatterns.length > 0 ? movementPatterns : allMotions.slice(0, 1);
   const riskIndexes = new Set<number>();
+  const hardLayout = targetScreens >= 8 || level.levelId === "doodle-10";
+  const gapNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
+  const xNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
+  const widthNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
+  const lanePattern = hardLayout ? [0.04, 0.96, 0.5, 0.8, 0.2] : [0.04, 0.96, 0.5, 0.8, 0.2];
+  const laneOffset = Math.floor(rand() * lanePattern.length);
 
   for (let index = 1; index <= requiredRiskPlatforms; index += 1) {
     riskIndexes.add(clamp(Math.round((index / (requiredRiskPlatforms + 1)) * (platformCount - 3)) + 1, 2, platformCount - 2));
@@ -752,32 +771,25 @@ export function generateDoodleWorldLayout(
   const platforms: GeneratedDoodlePlatform[] = [];
   let previousX = stageWidth / 2;
   let previousY = startPlatformY;
-  let sameSideRun = 0;
-  let previousSide = 0;
 
   for (let index = 0; index < platformCount; index += 1) {
     const risk = riskIndexes.has(index);
-    const hardLayout = targetScreens >= 8 || level.levelId === "doodle-10";
     const baseWidth = hardLayout ? 72 : 86;
-    const width = index === 0 ? 112 : risk ? clamp(riskWidth + (rand() - 0.5) * 10, 52, 94) : clamp(baseWidth + (rand() - 0.5) * 18, 62, 98);
+    const widthNoise = doodleSmoothNoise(widthNoisePoints, index * 0.53);
+    const width = index === 0 ? 112 : risk ? clamp(riskWidth + (widthNoise - 0.5) * 10, 52, 94) : clamp(baseWidth + (widthNoise - 0.5) * 18, 62, 98);
     const minGap = clamp(platformGap - (hardLayout ? 14 : 20), 80, 116);
     const maxGap = clamp(platformGap + (hardLayout ? 18 : 22), minGap + 10, 130);
-    const gap = index === 0 ? 0 : minGap + rand() * (maxGap - minGap);
-    const maxDeltaX = targetScreens <= 5 ? 112 : targetScreens <= 7 ? 150 : 182;
-    const forceSideChange = sameSideRun >= 2;
-    const largeOffset = rand() < (hardLayout ? 0.34 : 0.24);
-    let side = rand() < 0.5 ? -1 : 1;
-    if (forceSideChange) side = -previousSide || side;
-    const magnitude = maxDeltaX * (largeOffset ? 0.62 + rand() * 0.38 : 0.22 + rand() * 0.5);
-    const offset = index === 0 ? 0 : side * magnitude;
-    const centerJitter = (rand() - 0.5) * 20;
-    const x = index === 0 ? stageWidth / 2 : clamp(previousX + offset + centerJitter, width / 2 + 20, stageWidth - width / 2 - 20);
+    const gapNoise = doodleSmoothNoise(gapNoisePoints, index * 0.61);
+    const gap = index === 0 ? 0 : minGap + gapNoise * (maxGap - minGap);
+    const xNoise = doodleSmoothNoise(xNoisePoints, index * 0.47);
+    const lane = (index + laneOffset) % lanePattern.length;
+    const spreadTargetRatio = clamp(lanePattern[lane] + (xNoise - 0.5) * (hardLayout ? 0.18 : 0.22), 0.02, 0.98);
+    const targetX = width / 2 + 20 + spreadTargetRatio * (stageWidth - width - 40);
+    const horizontalStep = targetScreens <= 5 ? 150 : targetScreens <= 7 ? 174 : 196;
+    const x = index === 0 ? stageWidth / 2 : clamp(previousX + clamp(targetX - previousX, -horizontalStep, horizontalStep), width / 2 + 20, stageWidth - width / 2 - 20);
     const y = index === 0 ? startPlatformY : previousY + gap;
     const moving = index > 0 && movingRatio > 0 && rand() < movingRatio;
 
-    if (side === previousSide) sameSideRun += 1;
-    else sameSideRun = 1;
-    previousSide = side;
     previousX = x;
     previousY = y;
 

@@ -34,6 +34,15 @@ function sourceBetween(source: string, start: string, end: string) {
   return source.slice(startIndex, endIndex);
 }
 
+function cssBlock(source: string, selector: string) {
+  const marker = `${selector} {`;
+  const startIndex = source.indexOf(marker);
+  assert.notEqual(startIndex, -1, `missing CSS selector: ${selector}`);
+  const endIndex = source.indexOf("\n}", startIndex);
+  assert.notEqual(endIndex, -1, `missing CSS block end: ${selector}`);
+  return source.slice(startIndex, endIndex + 2);
+}
+
 function trial(roundId: RoundId, trialIndex: number, patch: Partial<TrialEvent> = {}): TrialEvent {
   return {
     roundId,
@@ -431,8 +440,8 @@ test("arrow precision ignores the practice shot", () => {
 
 test("base aim source is a single unlimited advanced-arrow round requiring eight hits", () => {
   const source = appPageSource();
-  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const SEARCH_ROUND_COUNT");
-  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "function SearchPatternPreview");
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
+  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.match(aimSource, /AIM_REQUIRED_HITS\s*=\s*8/);
   assert.match(aimSource, /AdvancedAimRound/);
@@ -446,14 +455,64 @@ test("base aim source is a single unlimited advanced-arrow round requiring eight
 
 test("base aim keeps one moving target active after each hit until eight hits", () => {
   const source = appPageSource();
-  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const SEARCH_ROUND_COUNT");
-  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "function SearchPatternPreview");
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
+  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.match(aimSource, /targetCount:\s*1/);
   assert.match(aimSource, /keepTargetOnHit:\s*true/);
   assert.match(aimSource, /replaceTargetOnHit:\s*false/);
   assert.match(advancedAimSource, /keepTargetOnHit/);
   assert.match(advancedAimSource, /keepTargetOnHit\s*\?[\s\S]*nextTargets[\s\S]*:[\s\S]*nextTargets\.map/);
+});
+
+test("advanced aim keeps target, arrow, and long-press button UI styles active", () => {
+  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(cssBlock(styles, ".advanced-aim-target"), /background:\s*var\(--red\);/);
+  assert.match(cssBlock(styles, ".advanced-aim-target"), /box-shadow:/);
+  assert.match(cssBlock(styles, ".advanced-aim-target::after"), /background:\s*#ffffff;/);
+  assert.match(cssBlock(styles, ".advanced-aim-target.decoy"), /border-style:\s*dashed;/);
+  assert.match(cssBlock(styles, ".advanced-arrow-shot"), /transform-origin:\s*50% 0;/);
+  assert.match(cssBlock(styles, ".advanced-arrow-shot.hit"), /background:\s*var\(--green\);/);
+  assert.match(cssBlock(styles, ".run-button"), /touch-action:\s*none;/);
+  assert.match(cssBlock(styles, ".run-button::after"), /border-radius:\s*50%;/);
+});
+
+test("base aim doubles target movement without accelerating advanced aim levels", () => {
+  const source = appPageSource();
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
+  const aimSpeedSource = sourceBetween(source, "const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS", "function moveAdvancedAimEntity");
+
+  assert.match(aimSource, /targetSpeedMultiplier:\s*2,/);
+  assert.doesNotMatch(aimSpeedSource, /const ADVANCED_AIM_TARGET_SPEED_MULTIPLIER\s*=\s*2;/);
+  assert.doesNotMatch(aimSpeedSource, /return speed \* ADVANCED_AIM_TARGET_SPEED_MULTIPLIER;/);
+  assert.match(aimSpeedSource, /const targetSpeedMultiplier = getParamNumber\(config, "targetSpeedMultiplier", 1\);/);
+  assert.match(aimSpeedSource, /const speed = advancedAimTargetSpeed\(config, mode, kind\) \* targetSpeedMultiplier;/);
+  assert.match(
+    aimSpeedSource,
+    /angularSpeed:\s*\(\(mode === "track" \? 0\.0018 : 0\.0022\) \+ config\.level \* 0\.00012\) \* targetSpeedMultiplier,/,
+  );
+});
+
+test("base aim target spawns in a higher vertical band without changing advanced defaults", () => {
+  const source = appPageSource();
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
+  const aimSpawnSource = sourceBetween(source, "function getAdvancedAimBounds", "function advancedAimRouteFromConfig");
+
+  assert.match(aimSource, /targetMinYRatio:\s*0\.18,/);
+  assert.match(aimSource, /targetMaxYRatio:\s*0\.48,/);
+  assert.match(aimSpawnSource, /function getAdvancedAimSpawnBounds\(config: AdvancedStageConfig, rect: Pick<DOMRect, "width" \| "height">\)/);
+  assert.match(aimSpawnSource, /getParamNumber\(config, "targetMinYRatio", Number\.NaN\)/);
+  assert.match(aimSpawnSource, /getParamNumber\(config, "targetMaxYRatio", Number\.NaN\)/);
+  assert.match(aimSpawnSource, /return \{ \.\.\.bounds, minY, maxY \};/);
+});
+
+test("base aim does not render miss text feedback inside the play field", () => {
+  const source = appPageSource();
+  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
+
+  assert.doesNotMatch(advancedAimSource, /aim-feedback/);
+  assert.doesNotMatch(advancedAimSource, /setFeedback/);
 });
 
 test("arrow shot resolution uses the impact target as the visible stuck position on hits", () => {
@@ -569,7 +628,7 @@ test("five base braking trials count as a completed scoring dimension", () => {
 test("base braking source uses five rounds with advanced danger placement and graphics", () => {
   const source = appPageSource();
   const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  const brakingSource = sourceBetween(source, "function BrakingRound", "function PatienceRound");
+  const brakingSource = sourceBetween(source, "function BrakingRound", "function getRoundConfig");
 
   assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
   assert.match(source, /DINO_FAILURE_FEEDBACK_MS/);
@@ -579,10 +638,30 @@ test("base braking source uses five rounds with advanced danger placement and gr
   assert.match(brakingSource, /advanced-brake-track/);
   assert.match(brakingSource, /advanced-hazard/);
   assert.match(brakingSource, /scheduleDinoNext/);
+  assert.match(brakingSource, /const trackRef = useRef<HTMLDivElement \| null>\(null\);/);
+  assert.match(brakingSource, /const \[trackMetrics, setTrackMetrics\] = useState\(\{ runnerWidthPercent: 8, hazardWidthPercent: 6 \}\);/);
+  assert.match(brakingSource, /runnerWidthPercent: trackMetrics\.runnerWidthPercent,/);
+  assert.match(brakingSource, /hazardWidthPercent: trackMetrics\.hazardWidthPercent,/);
+  assert.match(brakingSource, /ref=\{trackRef\}/);
   assert.doesNotMatch(brakingSource, /rand\(10,\s*16\)/);
+  assert.doesNotMatch(brakingSource, /runnerWidthPercent: DINO_RUNNER_WIDTH_PERCENT/);
+  assert.doesNotMatch(brakingSource, /hazardWidthPercent: DINO_HAZARD_WIDTH_PERCENT/);
   assert.match(styles, /\.dino-panel\.crashed \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.early \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.crashed \.advanced-hazard/);
+});
+
+test("braking feedback flashes early releases and uses red glow instead of recoloring crashes", () => {
+  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const crashedRunner = cssBlock(styles, ".dino-panel.crashed .advanced-runner");
+  const earlyRunner = cssBlock(styles, ".dino-panel.early .advanced-runner");
+
+  assert.doesNotMatch(crashedRunner, /background:\s*var\(--red\);/);
+  assert.match(crashedRunner, /box-shadow:\s*0 0 0 10px rgba\(230, 83, 73, 0\.22\)/);
+  assert.match(crashedRunner, /transform:\s*rotate\(-7deg\) translateY\(2px\);/);
+  assert.doesNotMatch(earlyRunner, /background:\s*#918a7e;/);
+  assert.match(earlyRunner, /animation:\s*brake-early-flash 420ms ease-in-out 2;/);
+  assert.match(styles, /@keyframes brake-early-flash/);
 });
 
 test("dinosaur stop resolution is stricter than the old 420ms window", () => {

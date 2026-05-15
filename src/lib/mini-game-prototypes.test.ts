@@ -1000,11 +1000,20 @@ test("square jump base misses respawn on the original next platform before force
   assert.match(squareJumpSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });
 
-test("mini game prototype restart advances the run seed every time", () => {
+test("formal mini-game rounds create run seeds outside the removed prototype shell", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const baseRoundSource = appPageSource.slice(appPageSource.indexOf("function MiniGameBaseRound"), appPageSource.indexOf("function MiniGameAdvancedRound"));
+  const advancedRoundSource = appPageSource.slice(appPageSource.indexOf("function MiniGameAdvancedRound"), appPageSource.indexOf("function RoundRenderer"));
 
-  assert.match(componentSource, /const restart = useCallback\(\(\) => setRunId\(\(current\) => current \+ 1\), \[\]\);/);
+  assert.doesNotMatch(componentSource, /function MiniGamePlayScreen/);
   assert.doesNotMatch(componentSource, /setRunId\(Date\.now\(\)\)/);
+  assert.match(baseRoundSource, /const \[runId\] = useState\(\(\) => Date\.now\(\)\);/);
+  assert.match(baseRoundSource, /createMiniGameRunSeed\(levelId, runId\)/);
+  assert.match(baseRoundSource, /runSeed=\{runSeed\}/);
+  assert.match(advancedRoundSource, /const \[runId\] = useState\(\(\) => Date\.now\(\)\);/);
+  assert.match(advancedRoundSource, /createMiniGameRunSeed\(config\.params\.miniLevelId, runId\)/);
+  assert.match(advancedRoundSource, /runSeed=\{runSeed\}/);
 });
 
 test("square jump library removes obsolete physics landing helpers", () => {
@@ -1086,20 +1095,39 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.doesNotMatch(fallDownSource, /prototype-feedback/);
   assert.doesNotMatch(fallDownSource, /current\.feedback = platform\.id === requiredLayers/);
   assert.doesNotMatch(fallDownSource, /feedbackUntil/);
-  assert.match(fallDownSource, /function chooseFallDownDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(fallDownSource, /const fallDownInputDirectionRef = useRef<FallDownRuntime\["inputDirection"\]>\(0\);/);
+  assert.match(fallDownSource, /const resumeFallDownInput = useCallback/);
   assert.match(fallDownSource, /current\.started = true;/);
-  assert.match(fallDownSource, /current\.inputDirection = chooseFallDownDirection\(event\);/);
+  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
+  assert.match(fallDownSource, /current\.inputDirection = direction;/);
+  assert.match(fallDownSource, /current\.vx = direction \* fallDownPlayerSpeed;/);
+  assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{\s*resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
+  assert.match(fallDownSource, /function chooseFallDownDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(fallDownSource, /fallDownInputDirectionRef\.current = direction;/);
+  assert.match(fallDownSource, /resumeFallDownInput\(current, direction\);/);
   assert.match(fallDownSource, /const stopDirection = useCallback/);
+  assert.match(fallDownSource, /fallDownInputDirectionRef\.current = 0;/);
   assert.match(fallDownSource, /current\.inputDirection = 0;/);
   assert.match(fallDownSource, /current\.vx = 0;/);
   assert.match(fallDownSource, /onPointerUp=\{stopDirection\}/);
   assert.match(fallDownSource, /onPointerLeave=\{stopDirection\}/);
   assert.match(fallDownSource, /onPointerCancel=\{stopDirection\}/);
   assert.match(fallDownSource, /current\.vy = 0;/);
+  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
   assert.match(fallDownSource, /const previousTime = current\.time;/);
   assert.match(fallDownSource, /const carriedPlatform = current\.platforms\.find/);
   assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time\) - previousPlatformX/);
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
+});
+
+test("fall down base recovery keeps the animation loop alive after a recoverable failure", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
+  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason\)\) \{[\s\S]*?return true;/);
+  assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
+  assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
 });
 
 test("doodle jump moves only while pressing the left or right half of the screen", () => {
@@ -1137,6 +1165,7 @@ test("fall down base failures respawn on a safe platform at the current camera m
   assert.match(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
+  assert.match(fallDownSource, /current\.started = false;/);
   assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason\)/);
   assert.match(fallDownSource, /failures: latest\.failures,/);
   assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
@@ -1432,6 +1461,33 @@ test("doodle generated layout is stable for a seed and changes across seeds", ()
     first.platforms.slice(1, 8).map((platform) => [Math.round(platform.x), Math.round(platform.y), Math.round(platform.width)]),
     different.platforms.slice(1, 8).map((platform) => [Math.round(platform.x), Math.round(platform.y), Math.round(platform.width)]),
   );
+});
+
+test("doodle generated platforms use smooth lane noise to stay horizontally distributed", () => {
+  const source = readFileSync(new URL("mini-game-prototypes.ts", import.meta.url), "utf8");
+  const layout = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-base"), "spread-seed-40");
+  const platforms = layout.platforms.slice(1);
+  const xs = platforms.map((platform) => platform.x);
+  const spread = Math.max(...xs) - Math.min(...xs);
+  let centerRun = 0;
+  let maxCenterRun = 0;
+
+  for (const x of xs) {
+    if (x >= 130 && x <= 230) {
+      centerRun += 1;
+      maxCenterRun = Math.max(maxCenterRun, centerRun);
+    } else {
+      centerRun = 0;
+    }
+  }
+
+  assert.match(source, /function makeDoodleNoisePoints\(rand: \(\) => number, count: number\)/);
+  assert.match(source, /function doodleSmoothNoise\(points: number\[\], position: number\)/);
+  assert.match(source, /const lanePattern = hardLayout \? \[0\.04, 0\.96, 0\.5, 0\.8, 0\.2\] : \[0\.04, 0\.96, 0\.5, 0\.8, 0\.2\];/);
+  assert.ok(spread >= 200, `expected doodle platforms to span at least 200px horizontally, got ${spread}`);
+  assert.ok(maxCenterRun <= 4, `expected no long centered platform run, got ${maxCenterRun}`);
+  assert.ok(xs.some((x) => x <= 115), "expected at least one clearly left-side platform");
+  assert.ok(xs.some((x) => x >= 245), "expected at least one clearly right-side platform");
 });
 
 test("mini-game low power helper is SSR safe and follows mobile or low-core hints", () => {

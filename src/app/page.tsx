@@ -19,18 +19,6 @@ import {
   type AdvancedAimArrow,
   type AdvancedAimEntity,
 } from "@/lib/advanced-aim";
-import {
-  ADVANCED_MEMORY_ROTATE_MS,
-  buildAdvancedMemoryPhaseSchedule,
-  buildAdvancedMemoryFlashOrder,
-  buildAdvancedMemoryOptions,
-  chooseAdvancedMemoryQuestion,
-  makeAdvancedMemoryCells,
-  type AdvancedMemoryCell,
-  type AdvancedMemoryColorKey,
-  type AdvancedMemoryQuestion,
-  type AdvancedMemoryRotation,
-} from "@/lib/advanced-memory";
 import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
 import {
   evaluateAdvancedChallengeCompletion,
@@ -95,13 +83,6 @@ import {
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
-import {
-  makeAdvancedSearchScene,
-  makeSearchScene,
-  patternKey,
-  type SearchPattern,
-  type SearchScene,
-} from "@/lib/search-scenes";
 import {
   MiniGameEmbeddedStage,
   type MiniGameCompletion,
@@ -213,7 +194,15 @@ const rounds: RoundConfig[] = [
 const now = () => performance.now();
 const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const MEMORY_REVEAL_MS = 1600;
+
+function shuffle<T>(items: T[]) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+}
 
 function pointerKind(value?: string): PointerKind {
   return value === "mouse" || value === "touch" || value === "pen" ? value : "unknown";
@@ -1076,14 +1065,8 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
         return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
       case "aim":
         return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "search":
-        return <AdvancedSearchRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "memory":
-        return <AdvancedMemoryRound advancedConfig={advancedConfig} onComplete={onComplete} />;
       case "braking":
         return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "patience":
-        return <AdvancedPatienceRound advancedConfig={advancedConfig} onComplete={onComplete} />;
     }
   }
   const baseMiniGameId = miniGameIdForBaseRound(round);
@@ -1095,14 +1078,8 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
       return <ReactionRound onComplete={onComplete} />;
     case "aim":
       return <AimRound onComplete={onComplete} />;
-    case "search":
-      return <SearchRound onComplete={onComplete} />;
-    case "memory":
-      return <MemoryRound onComplete={onComplete} />;
     case "braking":
       return <BrakingRound onComplete={onComplete} />;
-    case "patience":
-      return <PatienceRound onComplete={onComplete} />;
   }
 }
 
@@ -1445,6 +1422,19 @@ function getAdvancedAimBounds(rect: Pick<DOMRect, "width" | "height">): Advanced
   return { minX, maxX, minY, maxY };
 }
 
+function getAdvancedAimSpawnBounds(config: AdvancedStageConfig, rect: Pick<DOMRect, "width" | "height">) {
+  const bounds = getAdvancedAimBounds(rect);
+  const targetMinYRatio = getParamNumber(config, "targetMinYRatio", Number.NaN);
+  const targetMaxYRatio = getParamNumber(config, "targetMaxYRatio", Number.NaN);
+  if (!Number.isFinite(targetMinYRatio) && !Number.isFinite(targetMaxYRatio)) return bounds;
+
+  const rawMinY = Number.isFinite(targetMinYRatio) ? rect.height * targetMinYRatio : bounds.minY;
+  const rawMaxY = Number.isFinite(targetMaxYRatio) ? rect.height * targetMaxYRatio : bounds.maxY;
+  const minY = clamp(rawMinY, bounds.minY, bounds.maxY);
+  const maxY = clamp(Math.max(rawMaxY, minY), minY, bounds.maxY);
+  return { ...bounds, minY, maxY };
+}
+
 function advancedAimRouteFromConfig(config: AdvancedStageConfig): AdvancedAimRoute {
   const route = String(config.params.route ?? "circle");
   if (route === "ellipse" || route === "figure-eight" || route === "diagonal" || route === "horizontal" || route === "incoming") return route;
@@ -1453,10 +1443,11 @@ function advancedAimRouteFromConfig(config: AdvancedStageConfig): AdvancedAimRou
 
 function advancedAimTargetSpeed(config: AdvancedStageConfig, mode: AdvancedAimMode, kind: "target" | "distractor") {
   const base = kind === "distractor" ? 0.06 : 0.052;
-  if (mode === "incoming") return 0.19 + config.level * 0.018;
-  if (mode === "boss") return kind === "distractor" ? 0.1 : 0.18 + config.level * 0.012;
-  if (mode === "decoy") return base + config.level * 0.009;
-  return base + config.level * 0.007;
+  let speed = base + config.level * 0.007;
+  if (mode === "incoming") speed = 0.19 + config.level * 0.018;
+  if (mode === "boss") speed = kind === "distractor" ? 0.1 : 0.18 + config.level * 0.012;
+  if (mode === "decoy") speed = base + config.level * 0.009;
+  return speed;
 }
 
 function makeAdvancedAimMovingEntity({
@@ -1474,10 +1465,11 @@ function makeAdvancedAimMovingEntity({
   rect: DOMRect;
   spawnedAt: number;
 }): AdvancedAimMovingEntity {
-  const bounds = getAdvancedAimBounds(rect);
+  const bounds = getAdvancedAimSpawnBounds(config, rect);
   const targetSize = getParamNumber(config, "targetSize", 52);
   const size = kind === "distractor" ? Math.max(34, targetSize - 5) : targetSize;
-  const speed = advancedAimTargetSpeed(config, mode, kind);
+  const targetSpeedMultiplier = getParamNumber(config, "targetSpeedMultiplier", 1);
+  const speed = advancedAimTargetSpeed(config, mode, kind) * targetSpeedMultiplier;
   const baseX = rand(bounds.minX + size, bounds.maxX - size);
   const baseY = rand(bounds.minY + size, bounds.maxY - size);
   const phase = index * 0.86 + (kind === "distractor" ? 1.7 : 0);
@@ -1569,7 +1561,7 @@ function makeAdvancedAimMovingEntity({
     radiusX,
     radiusY,
     phase,
-    angularSpeed: (mode === "track" ? 0.0018 : 0.0022) + config.level * 0.00012,
+    angularSpeed: ((mode === "track" ? 0.0018 : 0.0022) + config.level * 0.00012) * targetSpeedMultiplier,
   };
 }
 
@@ -1705,7 +1697,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
   const [arrows, setArrows] = useState<AdvancedAimArrowView[]>([]);
   const [firedCount, setFiredCount] = useState(0);
   const [hitCount, setHitCount] = useState(0);
-  const [feedback, setFeedback] = useState<"hit" | "miss" | "blocked" | null>(null);
   const areaRef = useRef<HTMLDivElement | null>(null);
   const rectRef = useRef<DOMRect | null>(null);
   const targetsRef = useRef<AdvancedAimMovingEntity[]>([]);
@@ -1780,7 +1771,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     lastFrameAtRef.current = startedAt;
     setFiredCount(0);
     setHitCount(0);
-    setFeedback(null);
     publishArrows([]);
 
     const initialTargets =
@@ -1848,7 +1838,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
             ...aimAttemptValue(),
           },
         });
-        setFeedback("miss");
         finish();
         return;
       }
@@ -1881,7 +1870,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                   ...aimAttemptValue(),
                 },
               });
-              setFeedback("miss");
               return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
             }
             return { ...movedArrow, status: "flying" as const };
@@ -1909,7 +1897,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
               entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
             );
             blocked = true;
-            setFeedback("blocked");
             return { ...movedArrow, active: false, status: "blocked" as const, settledAt: frameNow };
           }
 
@@ -1951,7 +1938,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 }),
               ];
             }
-            setFeedback("hit");
             return null;
           }
           return { ...movedArrow, active: false, status: "hit" as const, settledAt: frameNow };
@@ -2033,7 +2019,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     firedCountRef.current += 1;
     setFiredCount(firedCountRef.current);
     publishArrows([...arrowsRef.current, nextArrow]);
-    setFeedback(null);
   };
 
   const arrowsLeft = unlimitedArrows ? null : Math.max(0, arrowCount - firedCount);
@@ -2097,385 +2082,6 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
           }}
         />
       ))}
-      {feedback ? (
-        <div className={`aim-feedback ${feedback === "hit" ? "hit" : "miss"}`}>
-          {feedback === "hit" ? "命中" : feedback === "blocked" ? "撞到干扰靶" : "未命中"}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SearchPatternPreview({ patterns }: { patterns: SearchPattern[] }) {
-  return (
-    <div className="advanced-pattern-row">
-      {patterns.map((pattern) => (
-        <span
-          className={`search-dot static-pattern ${pattern.shape} ${pattern.hollow ? "hollow" : ""}`}
-          key={patternKey(pattern)}
-          style={{
-            "--dot-color": pattern.color,
-            background: pattern.hollow ? "transparent" : pattern.color,
-            borderColor: pattern.color,
-          } as CSSProperties}
-        />
-      ))}
-    </div>
-  );
-}
-
-function AdvancedSearchRound({ advancedConfig, onComplete }: RoundProps) {
-  const config = advancedConfig!;
-  const roundCount = getParamNumber(config, "roundCount", 3);
-  const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<"brief" | "watch" | "answer">("brief");
-  const [scene, setScene] = useState<SearchScene>(() => makeAdvancedSearchScene(config, 0));
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const shownAtRef = useRef(now());
-  const answerShownAtRef = useRef(now());
-  const timerRef = useRef<number | null>(null);
-
-  const start = useCallback(
-    (nextIndex: number) => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      const nextScene = makeAdvancedSearchScene(config, nextIndex);
-      setScene(nextScene);
-      setIndex(nextIndex);
-      shownAtRef.current = now();
-      setPhase("brief");
-      timerRef.current = window.setTimeout(() => {
-        setPhase("watch");
-        timerRef.current = window.setTimeout(() => {
-          answerShownAtRef.current = now();
-          setPhase("answer");
-        }, nextScene.durationMs);
-      }, 1100);
-    },
-    [config],
-  );
-
-  useEffect(() => {
-    start(0);
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-  }, [start]);
-
-  const answer = (event: ReactPointerEvent<HTMLButtonElement>, selectedCount: number) => {
-    if (phase !== "answer") return;
-    const countError = Math.abs(scene.targetCount - selectedCount);
-    trialsRef.current.push(
-      trial("search", index, {
-        scheduledAt: shownAtRef.current,
-        shownAt: answerShownAtRef.current,
-        responseAt: now(),
-        correct: countError === 0,
-        errorType: countError === 0 ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: { targetCount: scene.targetCount, selectedCount, countError, totalDots: scene.totalDots },
-      }),
-    );
-    if (index >= roundCount - 1) onComplete(trialsRef.current);
-    else window.setTimeout(() => start(index + 1), 200);
-  };
-
-  return (
-    <div className="game-area search-area barrage-search advanced-search">
-      <div className="mini-score">
-        <span>{index + 1}/{roundCount}</span>
-      </div>
-      {phase === "brief" ? (
-        <div className="search-answer-panel pattern-brief">
-          <p>目标图案</p>
-          <SearchPatternPreview patterns={scene.targetPatterns} />
-        </div>
-      ) : phase === "watch" ? (
-        scene.dots.map((dot) => (
-          <span
-            aria-hidden="true"
-            className={`search-dot barrage ${dot.shape} ${dot.hollow ? "hollow" : ""}`}
-            key={dot.id}
-            style={{
-              "--from-x": `${dot.fromX}%`,
-              "--from-y": `${dot.fromY}%`,
-              "--to-x": `${dot.toX}%`,
-              "--to-y": `${dot.toY}%`,
-              "--dot-color": dot.color,
-              width: `${dot.size}px`,
-              height: `${dot.size}px`,
-              background: dot.hollow ? "transparent" : dot.color,
-              borderColor: dot.color,
-              animationDuration: `${dot.durationMs}ms`,
-              animationDelay: `${dot.delayMs}ms`,
-            } as CSSProperties}
-          />
-        ))
-      ) : (
-        <div className="search-answer-panel">
-          <p>目标图案一共有几个？</p>
-          <div className="count-options">
-            {scene.options.map((option) => (
-              <button className="count-option" key={option} type="button" onPointerDown={(event) => answer(event, option)}>
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type AdvancedMemoryPhase = "show" | "flash" | "hide" | "rotate" | "answer" | "feedback";
-
-const ADVANCED_MEMORY_FEEDBACK_MS = 680;
-const ADVANCED_MEMORY_BLANK_COLOR = "#f1ece4";
-
-function pickAdvancedMemoryRotation(): AdvancedMemoryRotation {
-  return [90, 180, 270][Math.floor(rand(0, 3))] as AdvancedMemoryRotation;
-}
-
-function isAdvancedMemoryRotationRound(config: AdvancedStageConfig) {
-  return config.variant === "memory-rotation" || config.variant === "memory-boss" || getParamBoolean(config, "rotation", false);
-}
-
-function isAdvancedMemoryFlashRound(config: AdvancedStageConfig) {
-  return config.variant === "memory-sequence-flash" || config.variant === "memory-boss";
-}
-
-function AdvancedMemoryRound({ advancedConfig, onComplete }: RoundProps) {
-  const config = advancedConfig!;
-  const roundCount = getParamNumber(config, "roundCount", 3);
-  const [index, setIndex] = useState(0);
-  const [cells, setCells] = useState<AdvancedMemoryCell[]>(() =>
-    makeAdvancedMemoryCells({
-      gridSize: getParamNumber(config, "gridSize", 4),
-      coloredCount: getParamNumber(config, "coloredCount", 4),
-    }),
-  );
-  const [question, setQuestion] = useState<AdvancedMemoryQuestion | null>(null);
-  const [phase, setPhase] = useState<AdvancedMemoryPhase>("show");
-  const [flashIndex, setFlashIndex] = useState<number | null>(null);
-  const [rotation, setRotation] = useState(0);
-  const [selectedColor, setSelectedColor] = useState<AdvancedMemoryColorKey | null>(null);
-  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
-  const shownAtRef = useRef(now());
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const timersRef = useRef<number[]>([]);
-  const answeredRef = useRef(false);
-
-  const clearTimers = useCallback(() => {
-    for (const timer of timersRef.current) window.clearTimeout(timer);
-    timersRef.current = [];
-  }, []);
-
-  const start = useCallback(
-    (nextIndex: number) => {
-      clearTimers();
-      const gridSize = getParamNumber(config, "gridSize", 4);
-      const coloredCount = getParamNumber(config, "coloredCount", gridSize);
-      const includeBlank = getParamBoolean(config, "includeBlank", false);
-      const nextCells = makeAdvancedMemoryCells({ gridSize, coloredCount });
-      const hasFlash = isAdvancedMemoryFlashRound(config);
-      const hasRotation = isAdvancedMemoryRotationRound(config);
-      const nextRotation = hasRotation ? pickAdvancedMemoryRotation() : 0;
-      const nextQuestion = chooseAdvancedMemoryQuestion({
-        cells: nextCells,
-        gridSize,
-        rotationDegrees: nextRotation,
-        allowBlankQuestion: includeBlank,
-      });
-      const flashOrder = buildAdvancedMemoryFlashOrder(nextCells);
-      const showMs = getParamNumber(config, "showMs", 1500);
-      const flashMs = getParamNumber(config, "flashMs", 560);
-      const flashGapMs = getParamNumber(config, "flashGapMs", 120);
-      const flashStepMs = flashMs + flashGapMs;
-      const phaseSchedule = buildAdvancedMemoryPhaseSchedule({
-        hasFlash,
-        hasRotation,
-        showMs,
-        flashOrderLength: flashOrder.length,
-        flashMs,
-        flashGapMs,
-      });
-
-      const schedule = (callback: () => void, delayMs: number) => {
-        timersRef.current.push(window.setTimeout(callback, delayMs));
-      };
-      const enterAnswer = () => {
-        setFlashIndex(null);
-        setPhase("answer");
-        shownAtRef.current = now();
-      };
-
-      setCells(nextCells);
-      setQuestion(nextQuestion);
-      setIndex(nextIndex);
-      setRotation(0);
-      setSelectedColor(null);
-      setLastCorrect(null);
-      setFlashIndex(null);
-      answeredRef.current = false;
-      setPhase(phaseSchedule[0]?.phase === "flash" ? "flash" : "show");
-
-      if (hasFlash) {
-        flashOrder.forEach((cellIndex, orderIndex) => {
-          const offset = orderIndex * flashStepMs;
-          schedule(() => setFlashIndex(cellIndex), offset);
-          schedule(() => setFlashIndex(null), offset + flashMs);
-        });
-      }
-
-      phaseSchedule.slice(1).forEach((step) => {
-        if (step.phase === "hide") {
-          schedule(() => {
-            setFlashIndex(null);
-            setPhase("hide");
-            setRotation(0);
-          }, step.startMs);
-        } else if (step.phase === "rotate") {
-          schedule(() => {
-            setFlashIndex(null);
-            setPhase("rotate");
-            setRotation(nextRotation);
-          }, step.startMs);
-        } else if (step.phase === "answer") {
-          schedule(enterAnswer, step.startMs);
-        }
-      });
-    },
-    [clearTimers, config],
-  );
-
-  useEffect(() => {
-    start(0);
-    return clearTimers;
-  }, [clearTimers, start]);
-
-  const answer = (event: ReactPointerEvent<HTMLButtonElement>, colorKey: AdvancedMemoryColorKey) => {
-    if (phase !== "answer") return;
-    if (!question) return;
-    if (answeredRef.current) return;
-    answeredRef.current = true;
-    const correctColor = question.correctColorKey;
-    const correct = colorKey === correctColor;
-    setSelectedColor(colorKey);
-    setLastCorrect(correct);
-    setPhase("feedback");
-    trialsRef.current.push(
-      trial("memory", index, {
-        shownAt: shownAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: correct ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: {
-          targetIndex: question.targetIndexAfterRotation,
-          sourceIndex: question.sourceIndex,
-          color: correctColor,
-          selectedColor: colorKey,
-          setSize: cells.length,
-          rotationDegrees: question.rotationDegrees,
-        },
-      }),
-    );
-    timersRef.current.push(
-      window.setTimeout(() => {
-        if (index >= roundCount - 1) onComplete(trialsRef.current);
-        else start(index + 1);
-      }, ADVANCED_MEMORY_FEEDBACK_MS),
-    );
-  };
-
-  const gridColumns = cells.length <= 4 ? 2 : 3;
-  const includeBlank = getParamBoolean(config, "includeBlank", false);
-  const hasRotation = isAdvancedMemoryRotationRound(config);
-  const showFullColors = phase === "show";
-  const activeQuestion = question ?? {
-    sourceIndex: 0,
-    targetIndexAfterRotation: 0,
-    correctColorKey: "blank" as AdvancedMemoryColorKey,
-    rotationDegrees: 0 as AdvancedMemoryRotation,
-  };
-  const options = buildAdvancedMemoryOptions(includeBlank);
-  const promptText =
-    phase === "show"
-      ? "记住每个格子的颜色"
-      : phase === "flash"
-        ? "看清每次闪烁的位置和颜色"
-        : phase === "hide"
-          ? "颜色已隐藏，准备旋转"
-        : phase === "rotate"
-          ? "看清整块宫格的旋转"
-          : phase === "feedback"
-            ? lastCorrect
-              ? "答对了"
-              : "记错了，正确颜色已标出"
-            : hasRotation
-              ? "标记格原本是什么颜色？"
-              : `第 ${activeQuestion.sourceIndex + 1} 格原本是什么颜色？`;
-
-  return (
-    <div className="memory-panel advanced-memory">
-      <div className="mini-score">
-        <span>{index + 1}/{roundCount}</span>
-        <span>{promptText}</span>
-      </div>
-      <div className={`advanced-memory-board cells-${cells.length}`}>
-        <div
-          className={`memory-grid advanced-memory-grid phase-${phase}`}
-          style={{
-            gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
-            transform: rotation ? `rotate(${rotation}deg)` : undefined,
-            transitionDuration: phase === "rotate" ? `${ADVANCED_MEMORY_ROTATE_MS}ms` : undefined,
-          }}
-        >
-          {cells.map((cell, cellIndex) => {
-            const highlighted = (phase === "answer" || phase === "feedback") && cellIndex === activeQuestion.sourceIndex;
-            const flashing = phase === "flash" && cellIndex === flashIndex;
-            const feedbackReveal = phase === "feedback" && cellIndex === activeQuestion.sourceIndex;
-            const background = showFullColors || flashing || feedbackReveal ? cell.colorValue ?? ADVANCED_MEMORY_BLANK_COLOR : ADVANCED_MEMORY_BLANK_COLOR;
-
-            return (
-              <div
-                aria-label={`记忆格 ${cellIndex + 1}`}
-                className={`memory-color-cell ${highlighted ? "target-cell" : ""} ${flashing ? "flash-cell" : ""}`}
-                key={`${index}-${cell.id}`}
-                style={{ background }}
-              />
-            );
-          })}
-        </div>
-      </div>
-      <div className={`memory-options advanced-memory-options ${includeBlank ? "with-blank" : "four-col"} ${phase === "answer" || phase === "feedback" ? "visible" : "hidden"}`}>
-        {options.map((color) => {
-          const isBlank = color.key === "blank";
-          const isSelected = selectedColor === color.key;
-          const isCorrectOption = phase === "feedback" && color.key === activeQuestion.correctColorKey;
-
-          return isBlank ? (
-            <button
-              className={`memory-color-option blank-option ${isSelected ? "selected-option" : ""} ${isCorrectOption ? "correct-option" : ""}`}
-              disabled={phase !== "answer"}
-              key={color.key}
-              type="button"
-              onPointerDown={(event) => answer(event, color.key)}
-            >
-              {color.label}
-            </button>
-          ) : (
-            <button
-              aria-label={`选择颜色 ${color.label}`}
-              className={`memory-color-option ${isSelected ? "selected-option" : ""} ${isCorrectOption ? "correct-option" : ""}`}
-              disabled={phase !== "answer"}
-              key={color.key}
-              type="button"
-              onPointerDown={(event) => answer(event, color.key)}
-              style={{ background: color.value }}
-            />
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -2800,75 +2406,6 @@ function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
   );
 }
 
-function AdvancedPatienceRound({ advancedConfig, onComplete }: RoundProps) {
-  const config = advancedConfig!;
-  const duration = getParamNumber(config, "waitMs", 6000);
-  const [progress, setProgress] = useState(0);
-  const startRef = useRef(now());
-  const doneRef = useRef(false);
-  const lastPaintRef = useRef(0);
-
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" && !doneRef.current) {
-        doneRef.current = true;
-        onComplete([
-          trial("patience", 0, {
-            shownAt: startRef.current,
-            responseAt: now(),
-            correct: false,
-            errorType: "visibility",
-            value: { waitMs: Math.round(now() - startRef.current), durationMs: duration, skipped: true },
-          }),
-        ]);
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    let frame = 0;
-    const tick = () => {
-      const frameNow = now();
-      const elapsed = frameNow - startRef.current;
-      const nextProgress = clamp((elapsed / duration) * 100, 0, 100);
-      if (frameNow - lastPaintRef.current > 90 || elapsed >= duration) {
-        lastPaintRef.current = frameNow;
-        setProgress(nextProgress);
-      }
-      if (elapsed >= duration && !doneRef.current) {
-        doneRef.current = true;
-        onComplete([
-          trial("patience", 0, {
-            shownAt: startRef.current,
-            responseAt: now(),
-            correct: true,
-            value: { waitMs: duration, durationMs: duration, skipped: false },
-          }),
-        ]);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      cancelAnimationFrame(frame);
-    };
-  }, [duration, onComplete]);
-
-  return (
-    <div className="patience-panel advanced-patience">
-      <div className="mini-score">
-        <span>{Math.round(progress)}%</span>
-      </div>
-      <div className="patience-bar" aria-label="进度">
-        <span style={{ width: `${progress}%` }} />
-      </div>
-      <div className="progress-readout">
-        <strong>{Math.round(progress)}%</strong>
-      </div>
-    </div>
-  );
-}
-
 function ReactionRound({ onComplete }: RoundProps) {
   const [step, setStep] = useState(0);
   const [status, setStatus] = useState<"waiting" | "ready" | "feedback">("waiting");
@@ -3030,241 +2567,16 @@ const BASIC_AIM_CONFIG: AdvancedStageConfig = {
     failOnFlyOut: false,
     decoyCount: 0,
     targetSize: 58,
+    targetSpeedMultiplier: 2,
+    targetMinYRatio: 0.18,
+    targetMaxYRatio: 0.48,
   },
 };
 
 function AimRound({ onComplete }: RoundProps) {
   return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} />;
 }
-const SEARCH_ROUND_COUNT = 4;
-
-function SearchRound({ onComplete }: RoundProps) {
-  const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<"brief" | "watch" | "answer">("brief");
-  const [scene, setScene] = useState<SearchScene>(() => makeSearchScene(0));
-  const shownAtRef = useRef(now());
-  const answerShownAtRef = useRef(now());
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const timeoutRef = useRef<number | null>(null);
-  const answeredRef = useRef(false);
-
-  const start = useCallback((nextIndex: number) => {
-    const nextScene = makeSearchScene(nextIndex);
-    setIndex(nextIndex);
-    setScene(nextScene);
-    setPhase("brief");
-    shownAtRef.current = now();
-    answeredRef.current = false;
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = window.setTimeout(() => {
-      setPhase("watch");
-      timeoutRef.current = window.setTimeout(() => {
-        if (answeredRef.current) return;
-        answerShownAtRef.current = now();
-        setPhase("answer");
-      }, nextScene.durationMs);
-    }, 900);
-  }, []);
-
-  useEffect(() => {
-    start(0);
-    return () => {
-      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    };
-  }, [start]);
-
-  const answer = (event: ReactPointerEvent<HTMLButtonElement>, selectedCount: number) => {
-    if (answeredRef.current || phase !== "answer") return;
-    answeredRef.current = true;
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    const countError = Math.abs(scene.targetCount - selectedCount);
-    const correct = countError === 0;
-    trialsRef.current.push(
-      trial("search", index, {
-        scheduledAt: shownAtRef.current,
-        shownAt: answerShownAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: correct ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        target: { x: 0, y: 0, size: 0, difficulty: scene.difficulty, setSize: scene.totalDots },
-        value: {
-          targetCount: scene.targetCount,
-          selectedCount,
-          countError,
-          difficulty: scene.difficulty,
-          totalDots: scene.totalDots,
-          watchMs: scene.durationMs,
-        },
-      }),
-    );
-    if (index >= SEARCH_ROUND_COUNT - 1) onComplete(trialsRef.current);
-    else window.setTimeout(() => start(index + 1), 220);
-  };
-
-  return (
-    <div className="game-area search-area barrage-search">
-      <div className="mini-score">
-        <span>{index + 1}/{SEARCH_ROUND_COUNT}</span>
-        <span>数目标图案</span>
-      </div>
-      {phase === "brief" ? (
-        <div className="search-answer-panel pattern-brief">
-          <p>目标图案</p>
-          <SearchPatternPreview patterns={scene.targetPatterns} />
-        </div>
-      ) : phase === "watch" ? (
-        <>
-          <p className="search-brief">看完再选数量</p>
-          {scene.dots.map((dot) => {
-            const style = {
-              "--from-x": `${dot.fromX}%`,
-              "--from-y": `${dot.fromY}%`,
-              "--to-x": `${dot.toX}%`,
-              "--to-y": `${dot.toY}%`,
-              "--dot-color": dot.color,
-              width: `${dot.size}px`,
-              height: `${dot.size}px`,
-              background: dot.hollow ? "transparent" : dot.color,
-              borderColor: dot.color,
-              animationDuration: `${dot.durationMs}ms`,
-              animationDelay: `${dot.delayMs}ms`,
-            } as CSSProperties;
-
-            return (
-              <span
-                aria-hidden="true"
-                className={`search-dot barrage ${dot.shape} ${dot.hollow ? "hollow" : ""}`}
-                key={dot.id}
-                style={style}
-              />
-            );
-          })}
-        </>
-      ) : (
-        <div className="search-answer-panel">
-          <p>目标图案一共有几个？</p>
-          <div className="count-options">
-            {scene.options.map((option) => (
-              <button className="count-option" key={option} type="button" onPointerDown={(event) => answer(event, option)}>
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const memoryColors = [
-  { key: "red", value: "#e65349" },
-  { key: "blue", value: "#2f80ed" },
-  { key: "gold", value: "#d39b2a" },
-  { key: "green", value: "#2f9b68" },
-];
-
-function MemoryRound({ onComplete }: RoundProps) {
-  const [index, setIndex] = useState(0);
-  const [palette, setPalette] = useState(() => shuffle(memoryColors));
-  const [targetIndex, setTargetIndex] = useState(0);
-  const [revealed, setRevealed] = useState(true);
-  const shownAtRef = useRef(now());
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const revealTimerRef = useRef<number | null>(null);
-  const transitionTimerRef = useRef<number | null>(null);
-  const answeredRef = useRef(false);
-
-  const start = useCallback((nextIndex: number) => {
-    if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current);
-    if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
-
-    const nextPalette = shuffle(memoryColors);
-    const nextTargetIndex = Math.floor(rand(0, nextPalette.length));
-    setIndex(nextIndex);
-    setPalette(nextPalette);
-    setTargetIndex(nextTargetIndex);
-    setRevealed(true);
-    answeredRef.current = false;
-    shownAtRef.current = now();
-    revealTimerRef.current = window.setTimeout(() => {
-      setRevealed(false);
-    }, MEMORY_REVEAL_MS);
-  }, []);
-
-  useEffect(() => {
-    start(0);
-    return () => {
-      if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current);
-      if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
-    };
-  }, [start]);
-
-  const answer = (event: ReactPointerEvent<HTMLButtonElement>, colorKey: string) => {
-    if (revealed) return;
-    if (answeredRef.current) return;
-    answeredRef.current = true;
-    const correctColor = palette[targetIndex]?.key;
-    const correct = colorKey === correctColor;
-    trialsRef.current.push(
-      trial("memory", index, {
-        shownAt: shownAtRef.current,
-        responseAt: now(),
-        correct,
-        errorType: correct ? undefined : "wrong",
-        pointerType: pointerKind(event.pointerType),
-        value: { setSize: palette.length, targetIndex, color: correctColor },
-      }),
-    );
-    if (index >= 3) onComplete(trialsRef.current);
-    else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 220);
-  };
-
-  return (
-    <div className="memory-panel">
-      <div className="mini-score">
-        <span>{index + 1}/4</span>
-        <span>{revealed ? "记住颜色" : `选择第 ${targetIndex + 1} 格`}</span>
-      </div>
-      <div className="memory-grid color-memory">
-        {palette.map((color, cellIndex) => (
-          <div
-            className={`memory-color-cell ${!revealed && cellIndex === targetIndex ? "target-cell" : ""}`}
-            key={`${index}-${color.key}-${cellIndex}`}
-            style={{ background: revealed ? color.value : "#f1ece4" }}
-          />
-        ))}
-      </div>
-      {!revealed ? (
-        <div className="memory-options">
-          {memoryColors.map((color) => (
-            <button
-              aria-label={`选择颜色 ${color.key}`}
-              className="memory-color-option"
-              key={color.key}
-              type="button"
-              onPointerDown={(event) => answer(event, color.key)}
-              style={{ background: color.value }}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function shuffle<T>(items: T[]) {
-  const next = [...items];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  return next;
-}
-
 const DINO_TRIAL_COUNT = 5;
-const DINO_RUNNER_WIDTH_PERCENT = 8;
-const DINO_HAZARD_WIDTH_PERCENT = 6;
 const DINO_SPEED_PER_SECOND = 26;
 const DINO_FAILURE_FEEDBACK_MS = 820;
 
@@ -3288,10 +2600,12 @@ function BrakingRound({ onComplete }: RoundProps) {
   const frameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef(0);
   const runnerRef = useRef<HTMLSpanElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const answeredRef = useRef(false);
   const holdingRef = useRef(false);
   const progressRef = useRef(8);
   const statusRef = useRef<DinoStatus>("ready");
+  const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
   const start = useCallback((nextIndex: number) => {
     setIndex(nextIndex);
@@ -3320,6 +2634,27 @@ function BrakingRound({ onComplete }: RoundProps) {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, [start]);
+
+  useEffect(() => {
+    const updateTrackMetrics = () => {
+      const width = trackRef.current?.clientWidth ?? 0;
+      if (width <= 0) return;
+      setTrackMetrics({
+        runnerWidthPercent: (46 / width) * 100,
+        hazardWidthPercent: (38 / width) * 100,
+      });
+    };
+
+    updateTrackMetrics();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateTrackMetrics);
+      return () => window.removeEventListener("resize", updateTrackMetrics);
+    }
+
+    const observer = new ResizeObserver(updateTrackMetrics);
+    if (trackRef.current) observer.observe(trackRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -3384,11 +2719,11 @@ function BrakingRound({ onComplete }: RoundProps) {
     const nextThreatX =
       getAdvancedBrakeDangerLeft({
         runnerLeftPercent: progressRef.current,
-        runnerWidthPercent: DINO_RUNNER_WIDTH_PERCENT,
-        hazardWidthPercent: DINO_HAZARD_WIDTH_PERCENT,
+        runnerWidthPercent: trackMetrics.runnerWidthPercent,
+        hazardWidthPercent: trackMetrics.hazardWidthPercent,
         speedPerSecond: DINO_SPEED_PER_SECOND,
         reactionWindowMs: DINO_SAFE_STOP_WINDOW_MS,
-      }) ?? clamp(progressRef.current + DINO_RUNNER_WIDTH_PERCENT + 8, 28, 100 - DINO_HAZARD_WIDTH_PERCENT);
+      }) ?? clamp(progressRef.current + trackMetrics.runnerWidthPercent + 8, 28, 100 - trackMetrics.hazardWidthPercent);
     const nextHazard: AdvancedBrakeHazard = {
       x: nextThreatX,
       top: picked.top,
@@ -3422,7 +2757,7 @@ function BrakingRound({ onComplete }: RoundProps) {
         },
       });
     }, DINO_SAFE_STOP_WINDOW_MS);
-  }, [completeTrial, index]);
+  }, [completeTrial, index, trackMetrics.hazardWidthPercent, trackMetrics.runnerWidthPercent]);
 
   const beginRun = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (answeredRef.current || statusRef.current !== "ready") return;
@@ -3486,7 +2821,7 @@ function BrakingRound({ onComplete }: RoundProps) {
         <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
         <span>{statusLabel}</span>
       </div>
-      <div className="advanced-brake-track" aria-hidden="true">
+      <div className="advanced-brake-track" aria-hidden="true" ref={trackRef}>
         <div className="advanced-brake-lane">
           {showThreat && hazard.top ? (
             <span
@@ -3505,79 +2840,6 @@ function BrakingRound({ onComplete }: RoundProps) {
         onPointerDown={beginRun}
         onPointerUp={releaseRun}
       />
-    </div>
-  );
-}
-
-function PatienceRound({ onComplete }: RoundProps) {
-  const [progress, setProgress] = useState(0);
-  const [canSkip, setCanSkip] = useState(false);
-  const startRef = useRef(now());
-  const lastProgressPaintRef = useRef(0);
-  const doneRef = useRef(false);
-  const duration = 9000;
-
-  useEffect(() => {
-    const skipTimer = window.setTimeout(() => setCanSkip(true), 2500);
-    let frame = 0;
-    const tick = () => {
-      const frameNow = now();
-      const elapsed = frameNow - startRef.current;
-      const nextProgress = clamp((elapsed / duration) * 100, 0, 100);
-      if (frameNow - lastProgressPaintRef.current >= 90 || elapsed >= duration) {
-        lastProgressPaintRef.current = frameNow;
-        setProgress(nextProgress);
-      }
-      if (elapsed >= duration && !doneRef.current) {
-        doneRef.current = true;
-        onComplete([
-          trial("patience", 0, {
-            shownAt: startRef.current,
-            responseAt: now(),
-            correct: true,
-            value: { waitMs: duration, durationMs: duration, skipped: false },
-          }),
-        ]);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      window.clearTimeout(skipTimer);
-      cancelAnimationFrame(frame);
-    };
-  }, [onComplete]);
-
-  const skip = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (doneRef.current) return;
-    const waitMs = Math.round(now() - startRef.current);
-    doneRef.current = true;
-    onComplete([
-      trial("patience", 0, {
-        shownAt: startRef.current,
-        responseAt: now(),
-        correct: true,
-        pointerType: pointerKind(event.pointerType),
-        errorType: "skip",
-        value: { waitMs, durationMs: duration, skipped: true },
-      }),
-    ]);
-  };
-
-  return (
-    <div className="patience-panel">
-      <div className="patience-bar" aria-label="进度">
-        <span style={{ width: `${progress}%` }} />
-      </div>
-      <div className="progress-readout">
-        <strong>{Math.round(progress)}%</strong>
-      </div>
-      {canSkip ? (
-        <button className="secondary-button patience-skip-button" type="button" onPointerDown={skip}>
-          跳过
-        </button>
-      ) : null}
     </div>
   );
 }

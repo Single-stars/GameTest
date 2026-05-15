@@ -11,11 +11,9 @@ import {
 } from "react";
 
 import {
-  MINI_GAME_PROTOTYPES,
   advanceFallDownCamera,
   createSquareJumpBaseAdvancePlan,
   createSquareJumpBaseJumpPlan,
-  createMiniGameRunSeed,
   createSeededRandom,
   expireFallDownFragilePlatform,
   fitSquareJumpBaseCamera,
@@ -29,9 +27,7 @@ import {
   generateKnifeInitialAngles,
   getFlappyGateScreenX,
   getKnifeShotGeometry,
-  getMiniGame,
   getMiniGameLevel,
-  getMiniGameLevels,
   getLocalHitAngle,
   getSquareJumpChargeAt,
   getSineAngularVelocity,
@@ -211,14 +207,6 @@ function booleanParam(params: MiniGameParams, key: string, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function levelToneClass(level: MiniGameLevelConfig) {
-  if (level.order === 10 || level.code.includes("10")) return "advanced-gold";
-  if (level.order === 3 || level.order === 6 || level.order === 9) return "advanced-tier-3";
-  if (level.order === 2 || level.order === 5 || level.order === 8) return "advanced-tier-2";
-  if (level.order === 1 || level.order === 4 || level.order === 7) return "advanced-tier-1";
-  return "advanced-empty";
-}
-
 function transformPoint3d(x: number, y: number) {
   return `translate3d(${x}px, ${y}px, 0)`;
 }
@@ -268,148 +256,6 @@ function useMiniGameFpsCounter(enabled: boolean) {
 function MiniGameFpsBadge({ fps }: { fps: number }) {
   if (!DEBUG_MINI_GAME_FPS) return null;
   return <div className="mini-game-fps-badge">FPS {fps}</div>;
-}
-
-export function MiniGameEntryPanel({
-  gameIds,
-  onOpenGame,
-  subtitle,
-  title = "小游戏原型",
-}: {
-  gameIds?: MiniGameId[];
-  onOpenGame: (gameId: MiniGameId) => void;
-  subtitle?: string;
-  title?: string;
-}) {
-  const games = gameIds ? MINI_GAME_PROTOTYPES.filter((game) => gameIds.includes(game.id)) : MINI_GAME_PROTOTYPES;
-  return (
-    <section className="mini-game-entry-panel" aria-labelledby="mini-game-entry-title">
-      <div className="mini-game-entry-header">
-        <p className="eyebrow">{title}</p>
-        <h2 id="mini-game-entry-title">{title}</h2>
-        {subtitle ? <small>{subtitle}</small> : null}
-      </div>
-      <div className="mini-game-entry-grid">
-        {games.map((game) => (
-          <button className="mini-game-entry-card" key={game.id} type="button" onPointerDown={() => onOpenGame(game.id)}>
-            <span>{game.title}</span>
-            <strong>{game.shortTitle}</strong>
-            <small>{game.summary}</small>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function MiniGameLevelSelectScreen({
-  gameId,
-  onBack,
-  onStartLevel,
-}: {
-  gameId: MiniGameId;
-  onBack: () => void;
-  onStartLevel: (levelId: string) => void;
-}) {
-  const game = getMiniGame(gameId);
-  const levels = getMiniGameLevels(gameId);
-  const advancedLevels = levels.filter((level) => level.kind === "advanced");
-  const baseLevel = levels.find((level) => level.kind === "base");
-
-  return (
-    <section className="advanced-screen mini-game-select-screen">
-      <header className="advanced-topbar">
-        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-          返回
-        </button>
-        <span>小游戏原型</span>
-      </header>
-
-      <div className="advanced-hero mini-game-hero">
-        <p className="eyebrow">关卡选择</p>
-        <h1>{game.title}</h1>
-        <small>{game.instruction}</small>
-      </div>
-
-      <div className="advanced-panel mini-game-level-panel">
-        <div className="mini-game-section-title">
-          <strong>进阶关</strong>
-          <span>全部可试玩</span>
-        </div>
-        <div className="mini-game-level-list">
-          {advancedLevels.map((level) => (
-            <button
-              className={`mini-game-level-card ${levelToneClass(level)}`}
-              key={level.levelId}
-              type="button"
-              onPointerDown={() => onStartLevel(level.levelId)}
-            >
-              <span>{level.code}</span>
-              <strong>{level.title}</strong>
-              <em>{level.difficulty}</em>
-              <small>{level.description}</small>
-            </button>
-          ))}
-        </div>
-        {baseLevel ? (
-          <>
-            <div className="mini-game-section-title mini-game-base-title">
-              <strong>基础关</strong>
-              <span>手感验证</span>
-            </div>
-            <button className="mini-game-level-card mini-game-base-card advanced-empty" type="button" onPointerDown={() => onStartLevel(baseLevel.levelId)}>
-              <span>{baseLevel.code}</span>
-              <strong>{baseLevel.title}</strong>
-              <em>{baseLevel.difficulty}</em>
-              <small>{baseLevel.description}</small>
-            </button>
-          </>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-export function MiniGamePlayScreen({
-  attemptId,
-  gameId,
-  levelId,
-  onBackToSelect,
-}: {
-  attemptId: number;
-  gameId: MiniGameId;
-  levelId: string;
-  onBackToSelect: () => void;
-}) {
-  const [runId, setRunId] = useState(attemptId);
-  const game = getMiniGame(gameId);
-  const level = getMiniGameLevel(gameId, levelId);
-  const runSeed = useMemo(() => createMiniGameRunSeed(level.levelId, runId), [level.levelId, runId]);
-  const restart = useCallback(() => setRunId((current) => current + 1), []);
-
-  return (
-    <section className="play-screen mini-game-play-screen" aria-live="polite">
-      <header className="round-header advanced-round-header mini-game-round-header">
-        <div className="round-title-block">
-          <p className="eyebrow">{game.title}</p>
-          <h1>{level.code} {level.title}</h1>
-          <small>{level.goalText}</small>
-        </div>
-        <button className="advanced-back-button" type="button" onPointerDown={onBackToSelect}>
-          返回
-        </button>
-      </header>
-      <MiniGameEmbeddedStage
-        key={`${level.levelId}-${runId}`}
-        gameId={gameId}
-        levelId={levelId}
-        mode="prototype"
-        onBackToSelect={onBackToSelect}
-        onRestart={restart}
-        runSeed={runSeed}
-      />
-    </section>
-  );
 }
 
 export function MiniGameEmbeddedStage({
@@ -1489,6 +1335,7 @@ function recoverFallDownBaseFailure(current: FallDownRuntime, reason: string) {
   current.failures = failures;
   current.reason = reason;
   current.inputDirection = 0;
+  current.started = false;
   current.vx = 0;
   current.vy = 0;
 
@@ -1578,6 +1425,7 @@ function FallDownPrototype({
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
+  const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
   const lastUiSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
@@ -1638,24 +1486,38 @@ function FallDownPrototype({
     [level.params],
   );
 
+  const resumeFallDownInput = useCallback(
+    (current: FallDownRuntime, direction: FallDownRuntime["inputDirection"]) => {
+      current.started = true;
+      current.respawnUntil = 0;
+      current.inputDirection = direction;
+      current.vx = direction * fallDownPlayerSpeed;
+    },
+    [fallDownPlayerSpeed],
+  );
+
   const fail = useCallback(
-    (reason: string) => {
+    (reason: string): boolean => {
       const current = runtimeRef.current;
       if (mode === "base" && recoverFallDownBaseFailure(current, reason)) {
+        if (fallDownInputDirectionRef.current !== 0) {
+          resumeFallDownInput(current, fallDownInputDirectionRef.current);
+        }
         syncView();
-        return;
+        return true;
       }
       if (mode === "base") {
         syncView();
-        return;
+        return false;
       }
       current.status = "failed";
       current.reason = reason;
       current.inputDirection = 0;
       current.vx = 0;
       syncView();
+      return false;
     },
-    [mode, syncView],
+    [mode, resumeFallDownInput, syncView],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1667,13 +1529,16 @@ function FallDownPrototype({
     event.preventDefault();
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
-    current.started = true;
-    current.inputDirection = chooseFallDownDirection(event);
-    current.vx = current.inputDirection * fallDownPlayerSpeed;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const direction = chooseFallDownDirection(event);
+    fallDownInputDirectionRef.current = direction;
+    resumeFallDownInput(current, direction);
     syncView();
-  }, [fallDownPlayerSpeed, syncView]);
+  }, [resumeFallDownInput, syncView]);
 
-  const stopDirection = useCallback(() => {
+  const stopDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
+    event?.preventDefault();
+    fallDownInputDirectionRef.current = 0;
     const current = runtimeRef.current;
     current.inputDirection = 0;
     current.vx = 0;
@@ -1690,6 +1555,12 @@ function FallDownPrototype({
       last = time;
       const current = runtimeRef.current;
       let eventChanged = false;
+      const continueAfterRecoverableFailure = (reason: string) => {
+        if (fail(reason)) {
+          updateFallDownDom(runtimeRef.current);
+          frameId = requestAnimationFrame(tick);
+        }
+      };
 
       if (current.status === "playing") {
         const previousTime = current.time;
@@ -1734,7 +1605,7 @@ function FallDownPrototype({
             const overlapsX = Math.abs(current.playerX - hazardX) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
             const overlapsY = Math.abs(playerScreenY - hazardY) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
             if (overlapsX && overlapsY) {
-              fail("躲开下落危险");
+              continueAfterRecoverableFailure("躲开下落危险");
               return;
             }
           }
@@ -1749,7 +1620,7 @@ function FallDownPrototype({
             const horizontalOverlap = current.playerX + PLAYER_SIZE / 2 >= landingBounds.left && current.playerX - PLAYER_SIZE / 2 <= landingBounds.right;
             if (!crossedPlatform || !horizontalOverlap) continue;
             if (platform.kind === "danger") {
-              fail("踩到危险");
+              continueAfterRecoverableFailure("踩到危险");
               return;
             }
             current.playerY = platformTop - PLAYER_SIZE / 2;
@@ -1793,7 +1664,7 @@ function FallDownPrototype({
             stageHeight: STAGE_HEIGHT,
           });
           if (bounds.status === "failed") {
-            fail(bounds.reason === "too-slow" ? "太慢了" : "掉太深");
+            continueAfterRecoverableFailure(bounds.reason === "too-slow" ? "太慢了" : "掉太深");
             return;
           }
         }
