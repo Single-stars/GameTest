@@ -1102,6 +1102,25 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });
 
+test("doodle jump moves only while pressing the left or right half of the screen", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function movingGateY"));
+
+  assert.doesNotMatch(doodleSource, /controlXRef/);
+  assert.doesNotMatch(doodleSource, /setControlFromPointer/);
+  assert.doesNotMatch(doodleSource, /onPointerMove=\{/);
+  assert.doesNotMatch(doodleSource, /current\.playerX \+ \(controlXRef\.current - current\.playerX\)/);
+  assert.match(doodleSource, /const inputDirectionRef = useRef\(0\);/);
+  assert.match(doodleSource, /function chooseDoodleDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(doodleSource, /inputDirectionRef\.current = chooseDoodleDirection\(event\);/);
+  assert.match(doodleSource, /const stopDoodleDirection = useCallback/);
+  assert.match(doodleSource, /inputDirectionRef\.current = 0;/);
+  assert.match(doodleSource, /current\.playerX = clamp\(current\.playerX \+ inputDirectionRef\.current \* DOODLE_PLAYER_SPEED \* delta/);
+  assert.match(doodleSource, /onPointerUp=\{stopDoodleDirection\}/);
+  assert.match(doodleSource, /onPointerLeave=\{stopDoodleDirection\}/);
+  assert.match(doodleSource, /onPointerCancel=\{stopDoodleDirection\}/);
+});
+
 test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
@@ -1322,11 +1341,13 @@ test("flappy levels encode gates, collectibles, reversed gravity, and final rule
 
 test("knife levels encode countdown, sine rotation, forbidden zones, and final rules", () => {
   assert.equal(getMiniGameLevel("knife", "knife-base").params.shotCount, 6);
-  assert.equal(getMiniGameLevel("knife", "knife-1").params.shotCountdown, 3);
+  assert.equal(getMiniGameLevel("knife", "knife-base").params.initialObstacleCount, 4);
+  assert.equal(getMiniGameLevel("knife", "knife-1").params.shotCountdown, 2.5);
   assert.equal(getMiniGameLevel("knife", "knife-2").params.shotCountdown, 2.5);
-  assert.equal(getMiniGameLevel("knife", "knife-3").params.initialObstacleCount, 3);
+  assert.equal(getMiniGameLevel("knife", "knife-3").params.initialObstacleCount, 4);
 
   assert.equal(getMiniGameLevel("knife", "knife-4").params.sineRotationEnabled, true);
+  assert.equal(getMiniGameLevel("knife", "knife-4").params.shotCountdown, 2);
   assert.equal(getMiniGameLevel("knife", "knife-4").params.sweepPerPhase, 390);
   assert.equal(getMiniGameLevel("knife", "knife-4").params.phaseDuration, 3);
   assert.equal(getMiniGameLevel("knife", "knife-5").params.sweepPerPhase, 405);
@@ -1335,16 +1356,36 @@ test("knife levels encode countdown, sine rotation, forbidden zones, and final r
   assert.equal(getMiniGameLevel("knife", "knife-6").params.phaseDuration, 2.55);
 
   assert.equal(getMiniGameLevel("knife", "knife-7").params.forbiddenZoneCount, 1);
+  assert.equal(getMiniGameLevel("knife", "knife-7").params.shotCountdown, 1.5);
   assert.equal(getMiniGameLevel("knife", "knife-8").params.forbiddenZoneCount, 2);
   assert.equal(getMiniGameLevel("knife", "knife-9").params.forbiddenZoneRatio, 0.24);
 
   const final = getMiniGameLevel("knife", "knife-10");
   assert.equal(final.params.shotCount, 13);
-  assert.equal(final.params.shotCountdown, 2.3);
+  assert.equal(final.params.shotCountdown, 2.5);
   assert.equal(final.params.sineRotationEnabled, true);
   assert.equal(final.params.sweepPerPhase, 405);
   assert.equal(final.params.phaseDuration, 2.7);
   assert.equal(final.params.forbiddenZoneCount, 2);
+});
+
+test("knife base and advanced levels one through eight start with four quadrant knives", () => {
+  for (const levelId of ["knife-base", "knife-1", "knife-2", "knife-3", "knife-4", "knife-5", "knife-6", "knife-7", "knife-8"]) {
+    const level = getMiniGameLevel("knife", levelId);
+    const angles = generateKnifeInitialAngles(level, "quadrant-seed", generateKnifeForbiddenZones(level, "quadrant-seed"));
+
+    assert.equal(level.params.initialObstacleCount, 4, levelId);
+    assert.deepEqual(angles, [0, 90, 180, 270], levelId);
+  }
+});
+
+test("knife level descriptions reflect the tuned countdowns and four starting knives", () => {
+  assert.match(getMiniGameLevel("knife", "knife-base").description, /初始障碍 4 个/);
+  assert.match(getMiniGameLevel("knife", "knife-1").description, /每发 2\.5 秒倒计时，初始障碍 4 个/);
+  assert.match(getMiniGameLevel("knife", "knife-2").description, /初始障碍 4 个/);
+  assert.match(getMiniGameLevel("knife", "knife-3").description, /初始障碍 4 个/);
+  assert.match(getMiniGameLevel("knife", "knife-5").description, /初始障碍 4 个/);
+  assert.match(getMiniGameLevel("knife", "knife-6").description, /初始障碍 4 个/);
 });
 
 test("knife angle helpers normalize, compare shortest distance, and convert screen hits into disc-local angles", () => {

@@ -931,6 +931,15 @@ export function generateKnifeForbiddenZones(level: MiniGameLevelConfig, runSeed:
 export function generateKnifeInitialAngles(level: MiniGameLevelConfig, runSeed: string, forbiddenZones: AngleArc[] = []) {
   const count = numberParam(level.params, "initialObstacleCount", 1);
   if (count <= 0) return [];
+  const fixedAngleSource = stringParam(level.params, "initialObstacleAngles", "");
+  const fixedAngles = fixedAngleSource
+    ? fixedAngleSource
+        .split("|")
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+        .map(normalizeDegrees)
+    : [];
+  if (fixedAngles.length > 0) return fixedAngles.slice(0, count);
   const rand = createSeededRandom(`${level.levelId}:${runSeed}:knife-initial`);
   const angles: number[] = [];
   let attempts = 0;
@@ -1086,7 +1095,8 @@ const knifeBaseParams = {
   sweepPerPhase: null,
   forbiddenZoneCount: 0,
   forbiddenZoneRatio: 0,
-  initialObstacleCount: 1,
+  initialObstacleCount: 4,
+  initialObstacleAngles: "0|90|180|270",
   baseRotationSpeed: 88,
 };
 
@@ -1286,68 +1296,70 @@ const flappyLevels: MiniGameLevelConfig[] = [
 ];
 
 const knifeLevels: MiniGameLevelConfig[] = [
-  level("knife", 1, "3-1", "发射倒计时", "简单", "发射倒计时", "7 发，每发 3.0 秒倒计时，初始障碍 1 个。", "命中 7 发", {
+  level("knife", 1, "3-1", "发射倒计时", "简单", "发射倒计时", "7 发，每发 2.5 秒倒计时，初始障碍 4 个。", "命中 7 发", {
     ...knifeBaseParams,
     shotCount: 7,
-    shotCountdown: 3,
-    initialObstacleCount: 1,
+    shotCountdown: 2.5,
+    initialObstacleCount: 4,
     baseRotationSpeed: 82,
   }),
-  level("knife", 2, "3-2", "发射倒计时", "普通", "发射倒计时", "9 发，每发 2.5 秒倒计时，初始障碍 2 个。", "命中 9 发", {
+  level("knife", 2, "3-2", "发射倒计时", "普通", "发射倒计时", "9 发，每发 2.5 秒倒计时，初始障碍 4 个。", "命中 9 发", {
     ...knifeBaseParams,
     shotCount: 9,
     shotCountdown: 2.5,
-    initialObstacleCount: 2,
+    initialObstacleCount: 4,
     baseRotationSpeed: 96,
   }),
-  level("knife", 3, "3-3", "发射倒计时", "困难", "发射倒计时", "11 发，每发 2.0 秒倒计时，初始障碍 3 个。", "命中 11 发", {
+  level("knife", 3, "3-3", "发射倒计时", "困难", "发射倒计时", "11 发，每发 2.0 秒倒计时，初始障碍 4 个。", "命中 11 发", {
     ...knifeBaseParams,
     shotCount: 11,
     shotCountdown: 2,
-    initialObstacleCount: 3,
+    initialObstacleCount: 4,
     baseRotationSpeed: 106,
   }),
-  level("knife", 4, "3-4", "转速正弦波动", "简单", "转速正弦波动", "7 发，正弦周期 4.0 秒，速度按 0 到正反最快循环。", "命中 7 发", {
+  level("knife", 4, "3-4", "转速正弦波动", "简单", "转速正弦波动", "7 发，每发 2.0 秒倒计时，正弦周期 3.0 秒，初始障碍 4 个。", "命中 7 发", {
     ...knifeBaseParams,
     shotCount: 7,
+    shotCountdown: 2,
     sineRotationEnabled: true,
     phaseDuration: 3,
     sweepPerPhase: 390,
-    initialObstacleCount: 1,
+    initialObstacleCount: 4,
     baseRotationSpeed: 138,
   }),
-  level("knife", 5, "3-5", "转速正弦波动", "普通", "转速正弦波动", "9 发，正弦周期 3.0 秒，初始障碍 2 个。", "命中 9 发", {
+  level("knife", 5, "3-5", "转速正弦波动", "普通", "转速正弦波动", "9 发，正弦周期 2.8 秒，初始障碍 4 个。", "命中 9 发", {
     ...knifeBaseParams,
     shotCount: 9,
     sineRotationEnabled: true,
     phaseDuration: 2.8,
     sweepPerPhase: 405,
-    initialObstacleCount: 2,
+    initialObstacleCount: 4,
     baseRotationSpeed: 154,
   }),
-  level("knife", 6, "3-6", "转速正弦波动", "困难", "转速正弦波动", "11 发，正弦周期 2.5 秒，初始障碍 3 个。", "命中 11 发", {
+  level("knife", 6, "3-6", "转速正弦波动", "困难", "转速正弦波动", "11 发，正弦周期 2.55 秒，初始障碍 4 个。", "命中 11 发", {
     ...knifeBaseParams,
     shotCount: 11,
     sineRotationEnabled: true,
     phaseDuration: 2.55,
     sweepPerPhase: 420,
-    initialObstacleCount: 3,
+    initialObstacleCount: 4,
     baseRotationSpeed: 166,
   }),
-  level("knife", 7, "3-7", "不可插区域", "简单", "不可插区域", "7 发，1 块不可插区域，总面积约 12%。", "命中 7 发，避开禁区", {
+  level("knife", 7, "3-7", "不可插区域", "简单", "不可插区域", "7 发，每发 1.5 秒倒计时，初始障碍 4 个，1 块不可插区域，总面积约 12%。", "命中 7 发，避开禁区", {
     ...knifeBaseParams,
     shotCount: 7,
+    shotCountdown: 1.5,
     forbiddenZoneCount: 1,
     forbiddenZoneRatio: 0.12,
-    initialObstacleCount: 1,
+    initialObstacleCount: 4,
     baseRotationSpeed: 90,
   }),
-  level("knife", 8, "3-8", "不可插区域", "普通", "不可插区域", "9 发，2 块不可插区域，总面积约 18%。", "命中 9 发，避开禁区", {
+  level("knife", 8, "3-8", "不可插区域", "普通", "不可插区域", "9 发，初始障碍 4 个，2 块不可插区域，总面积约 18%。", "命中 9 发，避开禁区", {
     ...knifeBaseParams,
     shotCount: 9,
     forbiddenZoneCount: 2,
     forbiddenZoneRatio: 0.18,
-    initialObstacleCount: 2,
+    initialObstacleCount: 4,
     baseRotationSpeed: 98,
   }),
   level("knife", 9, "3-9", "不可插区域", "困难", "不可插区域", "11 发，3 块不可插区域，总面积约 24%。", "命中 11 发，避开禁区", {
@@ -1356,21 +1368,23 @@ const knifeLevels: MiniGameLevelConfig[] = [
     forbiddenZoneCount: 3,
     forbiddenZoneRatio: 0.24,
     initialObstacleCount: 3,
+    initialObstacleAngles: null,
     baseRotationSpeed: 106,
   }),
-  level("knife", 10, "3-10", "最终关", "最终", "综合最终关", "13 发，倒计时、正弦转速和不可插区域同时出现。", "命中 13 发，避开禁区和旧刀", {
+  level("knife", 10, "3-10", "最终关", "最终", "综合最终关", "13 发，每发 2.5 秒倒计时，正弦转速和不可插区域同时出现。", "命中 13 发，避开禁区和旧刀", {
     ...knifeBaseParams,
     shotCount: 13,
-    shotCountdown: 2.3,
+    shotCountdown: 2.5,
     sineRotationEnabled: true,
     phaseDuration: 2.7,
     sweepPerPhase: 405,
     forbiddenZoneCount: 2,
     forbiddenZoneRatio: 0.2,
     initialObstacleCount: 3,
+    initialObstacleAngles: null,
     baseRotationSpeed: 152,
   }),
-  baseLevel("knife", "基础关", "Knife Hit 基础关", "普通匀速转盘，发射 6 个，初始障碍 1 个。", "命中 6 发", knifeBaseParams),
+  baseLevel("knife", "基础关", "Knife Hit 基础关", "普通匀速转盘，发射 6 个，初始障碍 4 个。", "命中 6 发", knifeBaseParams),
 ];
 
 const squareJumpBaseParams = {

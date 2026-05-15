@@ -76,6 +76,7 @@ const KNIFE_SHOT_GEOMETRY = getKnifeShotGeometry(KNIFE_FIRE_POINT, KNIFE_DISC_CE
 const KNIFE_FIRE_ANGLE = KNIFE_SHOT_GEOMETRY.impactAngle;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
+const DOODLE_PLAYER_SPEED = 250;
 const DEBUG_MINI_GAME_HITBOX = false;
 const DEBUG_MINI_GAME_FPS = false;
 const BASE_FAILURE_LIMIT = 3;
@@ -2041,7 +2042,7 @@ function DoodleJumpPrototype({
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const visibleBuffer = isLowPowerDevice ? 96 : 160;
   const initialRuntime = useMemo(() => createDoodleRuntime(world), [world]);
-  const controlXRef = useRef(STAGE_WIDTH / 2);
+  const inputDirectionRef = useRef(0);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const playerBoxRef = useRef<HTMLDivElement | null>(null);
@@ -2075,12 +2076,21 @@ function DoodleJumpPrototype({
     syncDoodleView();
   }, [syncDoodleView]);
 
-  const setControlFromPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  function chooseDoodleDirection(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
-    controlXRef.current = clamp(((event.clientX - bounds.left) / bounds.width) * STAGE_WIDTH, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
+    return event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
+  }
+
+  const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    inputDirectionRef.current = chooseDoodleDirection(event);
     startDoodle();
-  };
+  }, [startDoodle]);
+
+  const stopDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    inputDirectionRef.current = 0;
+  }, []);
 
   useEffect(() => {
     let frameId = 0;
@@ -2141,7 +2151,8 @@ function DoodleJumpPrototype({
       }
 
       const nextTime = current.time + delta;
-      const nextX = clamp(current.playerX + (controlXRef.current - current.playerX) * 0.34, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
+      current.playerX = clamp(current.playerX + inputDirectionRef.current * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
+      const nextX = current.playerX;
       const previousY = current.playerY;
       let nextVy = current.playerVy - 1500 * delta;
       let nextY = current.playerY + nextVy * delta;
@@ -2307,9 +2318,11 @@ function DoodleJumpPrototype({
         onPointerDown={(event) => {
           event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
-          setControlFromPointer(event);
+          beginDoodleDirection(event);
         }}
-        onPointerMove={setControlFromPointer}
+        onPointerUp={stopDoodleDirection}
+        onPointerLeave={stopDoodleDirection}
+        onPointerCancel={stopDoodleDirection}
       >
         <MiniGameFpsBadge fps={fps} />
         <div
@@ -2363,7 +2376,7 @@ function DoodleJumpPrototype({
         >
           <div className="prototype-player-box doodle-player" ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
         </div>
-        {!view.started ? <div className="prototype-start-hint">拖动开始</div> : null}
+        {!view.started ? <div className="prototype-start-hint">按住开始</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>

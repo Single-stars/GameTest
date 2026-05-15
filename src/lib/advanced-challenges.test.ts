@@ -184,6 +184,29 @@ test("advanced config maps the replaced dimensions to the new mini-game advanced
   assert.equal(getAdvancedStageConfig("rhythm", 10).params.offsetThresholdMs, undefined);
 });
 
+test("advanced knife entrance params mirror the prototype countdowns and initial knives", () => {
+  const expectedCountdownsByMiniLevel = new Map<string, number>([
+    ["knife-1", 2.5],
+    ["knife-4", 2],
+    ["knife-7", 1.5],
+    ["knife-10", 2.5],
+  ]);
+
+  for (let level = 1; level <= 10; level += 1) {
+    const config = getAdvancedStageConfig("patience", level);
+    const miniLevelId = String(config.params.miniLevelId);
+
+    if (/^knife-[1-8]$/.test(miniLevelId)) {
+      assert.equal(config.params.initialObstacleCount, 4, miniLevelId);
+    }
+
+    const countdown = expectedCountdownsByMiniLevel.get(miniLevelId);
+    if (countdown !== undefined) {
+      assert.equal(config.params.shotCountdown, countdown, miniLevelId);
+    }
+  }
+});
+
 test("advanced braking configs follow the square-stop variant columns and difficulty rows", () => {
   assert.deepEqual(
     [1, 4, 7].map((level) => {
