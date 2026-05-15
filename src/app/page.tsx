@@ -51,7 +51,6 @@ import {
   buildShareText,
   DINO_SAFE_STOP_WINDOW_MS,
   getGameRankResult,
-  resolveArrowTrajectoryShot,
   resolveDinoStop,
   type GameRankResult,
   type PointerKind,
@@ -1695,6 +1694,9 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
   const mode = getAdvancedAimMode(config);
   const arrowCount = getParamNumber(config, "arrowCount", 8);
   const targetCount = getParamNumber(config, "targetCount", arrowCount);
+  const requiredHits = getParamNumber(config, "requiredHits", targetCount);
+  const unlimitedArrows = getParamBoolean(config, "unlimitedArrows", false);
+  const replaceTargetOnHit = getParamBoolean(config, "replaceTargetOnHit", false);
   const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
   const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
   const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
@@ -1752,6 +1754,16 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     trialsRef.current.push(item);
     return item;
   }, []);
+
+  const aimAttemptValue = useCallback(
+    () => ({
+      shotsFired: firedCountRef.current,
+      requiredHits,
+      hitCount: hitCountRef.current,
+      arrowsLeft: unlimitedArrows ? null : Math.max(0, arrowCount - firedCountRef.current),
+    }),
+    [arrowCount, requiredHits, unlimitedArrows],
+  );
 
   useEffect(() => {
     const rect = areaRef.current?.getBoundingClientRect();
@@ -1832,7 +1844,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
             shotHit: false,
             flyOut: true,
             targetId: flyOutTarget.id,
-            arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+            ...aimAttemptValue(),
           },
         });
         setFeedback("miss");
@@ -1865,7 +1877,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                   mode: "arrow",
                   shotHit: false,
                   arrowId: arrow.id,
-                  arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+                  ...aimAttemptValue(),
                 },
               });
               setFeedback("miss");
@@ -1889,7 +1901,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 hitDecoy: true,
                 arrowId: arrow.id,
                 distractorId: result.collision.entityId,
-                arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+                ...aimAttemptValue(),
               },
             });
             nextDistractors = nextDistractors.map((entity) =>
@@ -1916,13 +1928,28 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 trajectoryHit: true,
                 arrowId: arrow.id,
                 hitTargetId: hitTarget.id,
-                arrowsLeft: Math.max(0, arrowCount - firedCountRef.current),
+                ...aimAttemptValue(),
                 targetSpeed: Math.round(Math.hypot(hitTarget.vx, hitTarget.vy) * 1000),
                 shotErrorPx: result.collision.errorPx,
                 normalizedError: result.collision.normalizedError,
               },
             });
             nextTargets = nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
+            if (replaceTargetOnHit && hitCountRef.current < requiredHits) {
+              const replacementIndex = spawnedTargetsRef.current;
+              spawnedTargetsRef.current += 1;
+              nextTargets = [
+                ...nextTargets,
+                makeAdvancedAimMovingEntity({
+                  config,
+                  index: replacementIndex,
+                  kind: "target",
+                  mode,
+                  rect,
+                  spawnedAt: frameNow,
+                }),
+              ];
+            }
             setFeedback("hit");
             return null;
           }
@@ -1941,11 +1968,11 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
         finish();
         return;
       }
-      if (hitCountRef.current >= targetCount) {
+      if (hitCountRef.current >= requiredHits) {
         finish();
         return;
       }
-      if (firedCountRef.current >= arrowCount && nextArrows.every((arrow) => !arrow.active)) {
+      if (!unlimitedArrows && firedCountRef.current >= arrowCount && nextArrows.every((arrow) => !arrow.active)) {
         finish();
         return;
       }
@@ -1959,6 +1986,7 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
       frameRef.current = null;
     };
   }, [
+    aimAttemptValue,
     arrowCount,
     config,
     failOnFlyOut,
@@ -1969,11 +1997,14 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     publishArrows,
     publishDistractors,
     publishTargets,
+    replaceTargetOnHit,
+    requiredHits,
     targetCount,
+    unlimitedArrows,
   ]);
 
   const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (finishedRef.current || firedCountRef.current >= arrowCount) return;
+    if (finishedRef.current || (!unlimitedArrows && firedCountRef.current >= arrowCount)) return;
     const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
     if (!rect) return;
     rectRef.current = rect;
@@ -2003,12 +2034,12 @@ function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     setFeedback(null);
   };
 
-  const arrowsLeft = Math.max(0, arrowCount - firedCount);
+  const arrowsLeft = unlimitedArrows ? null : Math.max(0, arrowCount - firedCount);
   return (
     <div className={`game-area advanced-aim ${config.variant} mode-${mode}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score advanced-aim-score">
-        <span>剩余箭数 {arrowsLeft}</span>
-        <span>命中 {hitCount}/{targetCount}</span>
+        <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
+        <span>命中 {hitCount}/{requiredHits}</span>
       </div>
       {targets
         .filter((target) => target.active)
@@ -2976,370 +3007,32 @@ function ReactionRound({ onComplete }: RoundProps) {
   );
 }
 
-type TargetState = {
-  index: number;
-  practice: boolean;
-  x: number;
-  size: number;
-  shownAt: number;
-  direction: 1 | -1;
-  speed: number;
-};
+const AIM_REQUIRED_HITS = 8;
 
-type ArrowShotState = {
-  id: number;
-  launchX: number;
-  x: number;
-  tipY: number;
-  bottomPx: number;
-  status: "flying" | "hit" | "miss";
-  offsetXPercent?: number;
-  offsetYPx?: number;
-  stuckInTarget?: boolean;
+const BASIC_AIM_CONFIG: AdvancedStageConfig = {
+  dimension: "aim",
+  level: 1,
+  variant: "aim-track",
+  variantIndex: 1,
+  difficulty: "easy",
+  passText: "",
+  params: {
+    aimMode: "track",
+    route: "ellipse",
+    arrowCount: AIM_REQUIRED_HITS,
+    targetCount: 1,
+    requiredHits: AIM_REQUIRED_HITS,
+    unlimitedArrows: true,
+    replaceTargetOnHit: true,
+    failOnFlyOut: false,
+    decoyCount: 0,
+    targetSize: 58,
+  },
 };
-
-const AIM_SHOT_COUNT = 8;
-const AIM_TARGET_Y = 28;
-const AIM_ARROW_FLIGHT_MS = 520;
-const AIM_ARROW_START_BOTTOM_PX = 26;
-const AIM_ARROW_TIP_TO_BOTTOM_PX = 52;
-const AIM_ARROW_HIT_TOLERANCE_PX = 8;
 
 function AimRound({ onComplete }: RoundProps) {
-  const [target, setTarget] = useState<TargetState>(() => makeTarget(-1));
-  const [shot, setShot] = useState<ArrowShotState | null>(null);
-  const [feedback, setFeedback] = useState<"hit" | "miss" | null>(null);
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  const trialsRef = useRef<TrialEvent[]>([]);
-  const timeoutRef = useRef<number | null>(null);
-  const transitionTimerRef = useRef<number | null>(null);
-  const frameRef = useRef<number | null>(null);
-  const shotFrameRef = useRef<number | null>(null);
-  const lastFrameAtRef = useRef(0);
-  const answeredRef = useRef(false);
-  const targetRef = useRef<TargetState>(target);
-  const shotRef = useRef<ArrowShotState | null>(null);
-  const targetElRef = useRef<HTMLSpanElement | null>(null);
-  const shotElRef = useRef<HTMLSpanElement | null>(null);
-  const targetFrozenRef = useRef(false);
-
-  const startTarget = useCallback((index: number) => {
-    const next = makeTarget(index);
-    targetRef.current = next;
-    setTarget(next);
-    shotRef.current = null;
-    setShot(null);
-    setFeedback(null);
-    answeredRef.current = false;
-    targetFrozenRef.current = false;
-    if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
-    shotFrameRef.current = null;
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = window.setTimeout(() => {
-      if (answeredRef.current) return;
-      answeredRef.current = true;
-      const current = targetRef.current;
-      targetFrozenRef.current = true;
-      setFeedback("miss");
-      trialsRef.current.push(
-        trial("aim", index, {
-          shownAt: current.shownAt,
-          responseAt: null,
-          correct: false,
-          errorType: "timeout",
-          target: arrowTargetPayload(current),
-          value: {
-            mode: "arrow",
-            shotHit: false,
-            shotErrorPx: 999,
-            normalizedError: 99,
-            targetSpeed: current.speed,
-            flightMs: AIM_ARROW_FLIGHT_MS,
-          },
-        }),
-      );
-      if (index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => startTarget(index + 1), 520);
-    }, 3600);
-  }, [onComplete]);
-
-  useEffect(() => {
-    startTarget(-1);
-    return () => {
-      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-      if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
-    };
-  }, [startTarget]);
-
-  useEffect(() => {
-    const tick = () => {
-      const frameNow = now();
-      const lastFrameAt = lastFrameAtRef.current || frameNow;
-      const delta = frameNow - lastFrameAt;
-      lastFrameAtRef.current = frameNow;
-      if (!targetFrozenRef.current) {
-        const next = moveTarget(targetRef.current, delta);
-        targetRef.current = next;
-        if (targetElRef.current) {
-          targetElRef.current.style.left = `${next.x}%`;
-        }
-        const stuckShot = shotRef.current;
-        if (stuckShot?.stuckInTarget) {
-          const rect = areaRef.current?.getBoundingClientRect();
-          const targetCenterY = rect ? rect.height * (AIM_TARGET_Y / 100) : stuckShot.tipY;
-          const nextShot = {
-            ...stuckShot,
-            x: clamp(next.x + (stuckShot.offsetXPercent ?? 0), 4, 96),
-            tipY: targetCenterY + (stuckShot.offsetYPx ?? 0),
-            bottomPx: arrowBottomFromTip(targetCenterY + (stuckShot.offsetYPx ?? 0), rect?.height),
-          };
-          shotRef.current = nextShot;
-          if (shotElRef.current) {
-            shotElRef.current.style.left = `${nextShot.x}%`;
-            shotElRef.current.style.bottom = `${nextShot.bottomPx}px`;
-          }
-        }
-      }
-      frameRef.current = requestAnimationFrame(tick);
-    };
-    frameRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
-  }, []);
-
-  const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (answeredRef.current) return;
-    const rect = areaRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    answeredRef.current = true;
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
-    shotFrameRef.current = null;
-    const shotAt = now();
-    const current = targetRef.current;
-    const pointerType = pointerKind(event.pointerType);
-    const shotX = clamp(((event.clientX - rect.left) / rect.width) * 100, 6, 94);
-    const shotXPx = (shotX / 100) * rect.width;
-    const startTipY = rect.height - AIM_ARROW_START_BOTTOM_PX - AIM_ARROW_TIP_TO_BOTTOM_PX;
-    const endTipY = Math.max(18, rect.height * 0.1);
-    setFeedback(null);
-    const initialShot = {
-      id: current.index,
-      launchX: shotX,
-      x: shotX,
-      tipY: startTipY,
-      bottomPx: AIM_ARROW_START_BOTTOM_PX,
-      status: "flying" as const,
-    };
-    shotRef.current = initialShot;
-    setShot(initialShot);
-
-    let previousTip = { x: shotXPx, y: startTipY };
-    let bestMiss = {
-      errorPx: Number.POSITIVE_INFINITY,
-      normalizedError: 99,
-    };
-
-    const completeShot = (
-      hit: boolean,
-      impactTarget: TargetState,
-      tipY: number,
-      errorPx: number,
-      normalizedError: number,
-      offsetXPercent = 0,
-      offsetYPx = 0,
-    ) => {
-      if (shotFrameRef.current) cancelAnimationFrame(shotFrameRef.current);
-      shotFrameRef.current = null;
-      targetFrozenRef.current = !hit;
-      targetRef.current = impactTarget;
-      setTarget(impactTarget);
-      const displayX = hit ? clamp(impactTarget.x + offsetXPercent, 4, 96) : shotX;
-      const displayTipY = hit ? rect.height * (AIM_TARGET_Y / 100) + offsetYPx : tipY;
-      const nextShot = {
-        id: current.index,
-        launchX: shotX,
-        x: displayX,
-        tipY: displayTipY,
-        bottomPx: arrowBottomFromTip(displayTipY, rect.height),
-        status: hit ? ("hit" as const) : ("miss" as const),
-        offsetXPercent,
-        offsetYPx,
-        stuckInTarget: hit,
-      };
-      shotRef.current = nextShot;
-      setShot({
-        ...nextShot,
-      });
-      setFeedback(hit ? "hit" : "miss");
-      trialsRef.current.push(
-        trial("aim", current.index, {
-          shownAt: current.shownAt,
-          responseAt: shotAt,
-          correct: hit,
-          errorType: hit ? undefined : "miss",
-          pointerType,
-          target: arrowTargetPayload(impactTarget, rect),
-          value: {
-            mode: "arrow",
-            practice: current.practice,
-            shotHit: hit,
-            shotX: Math.round(shotX),
-            targetXAtImpact: Math.round(impactTarget.x),
-            shotErrorPx: errorPx,
-            normalizedError,
-            trajectoryHit: hit,
-            targetSpeed: current.speed,
-            flightMs: AIM_ARROW_FLIGHT_MS,
-          },
-        }),
-      );
-
-      if (!current.practice && current.index >= AIM_SHOT_COUNT - 1) onComplete(trialsRef.current);
-      else transitionTimerRef.current = window.setTimeout(() => startTarget(current.practice ? 0 : current.index + 1), 640);
-    };
-
-    const animateShot = () => {
-      const elapsed = now() - shotAt;
-      const progress = clamp(elapsed / AIM_ARROW_FLIGHT_MS, 0, 1);
-      const tipY = startTipY + (endTipY - startTipY) * progress;
-      const newTip = { x: shotXPx, y: tipY };
-      const impactTarget = targetRef.current;
-      const targetCenter = {
-        x: (impactTarget.x / 100) * rect.width,
-        y: rect.height * (AIM_TARGET_Y / 100),
-        radius: impactTarget.size / 2,
-      };
-      const resolution = resolveArrowTrajectoryShot({
-        oldTip: previousTip,
-        newTip,
-        target: targetCenter,
-        tolerancePx: AIM_ARROW_HIT_TOLERANCE_PX,
-      });
-      if (resolution.errorPx < bestMiss.errorPx) {
-        bestMiss = {
-          errorPx: resolution.errorPx,
-          normalizedError: resolution.normalizedError,
-        };
-      }
-      if (resolution.hit) {
-        completeShot(
-          true,
-          impactTarget,
-          resolution.displayPoint.y,
-          resolution.errorPx,
-          resolution.normalizedError,
-          (resolution.offsetFromTarget.x / rect.width) * 100,
-          resolution.offsetFromTarget.y,
-        );
-        return;
-      }
-
-      const nextShot = {
-        id: current.index,
-        launchX: shotX,
-        x: shotX,
-        tipY,
-        bottomPx: arrowBottomFromTip(tipY, rect.height),
-        status: "flying" as const,
-      };
-      shotRef.current = nextShot;
-      if (shotElRef.current) {
-        shotElRef.current.style.bottom = `${nextShot.bottomPx}px`;
-      }
-      previousTip = newTip;
-
-      if (progress >= 1) {
-        completeShot(false, impactTarget, tipY, bestMiss.errorPx, bestMiss.normalizedError);
-        return;
-      }
-      shotFrameRef.current = requestAnimationFrame(animateShot);
-    };
-
-    shotFrameRef.current = requestAnimationFrame(animateShot);
-  };
-
-  return (
-    <div className={`game-area aim-area arrow-aim ${feedback ?? ""}`} ref={areaRef} onPointerDown={shoot}>
-      <div className="mini-score">
-        <span>{target.practice ? "练习" : `${target.index + 1}/${AIM_SHOT_COUNT}`}</span>
-        <span>点屏发射</span>
-      </div>
-      <div className="aim-lane" aria-hidden="true">
-        {feedback ? <div className={`aim-feedback ${feedback}`}>{feedback === "hit" ? "命中！" : "偏了！"}</div> : null}
-        <span
-          className={`moving-target ${feedback ?? ""}`}
-          ref={targetElRef}
-          style={{
-            left: `${target.x}%`,
-            top: `${AIM_TARGET_Y}%`,
-            width: `${target.size}px`,
-            height: `${target.size}px`,
-          }}
-        >
-          <span />
-        </span>
-        {shot ? (
-          <span
-            className={`arrow-shot ${shot.status} ${shot.status === "flying" ? "flying" : "settled"} ${shot.stuckInTarget ? "stuck" : ""}`}
-            key={`${shot.id}-${shot.status}`}
-            ref={shotElRef}
-            style={{
-              left: `${shot.x}%`,
-              bottom: `${shot.bottomPx}px`,
-            } as CSSProperties}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
+  return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} />;
 }
-
-function makeTarget(index: number): TargetState {
-  const practice = index < 0;
-  return {
-    index,
-    practice,
-    x: rand(20, 80),
-    direction: Math.random() > 0.5 ? 1 : -1,
-    speed: practice ? 0.022 : 0.028 + index * 0.0045,
-    size: practice ? 64 : Math.max(46, 62 - index * 2.2),
-    shownAt: now(),
-  };
-}
-
-function moveTarget(target: TargetState, deltaMs: number): TargetState {
-  let x = target.x + target.direction * target.speed * deltaMs;
-  let direction = target.direction;
-  if (x > 88) {
-    x = 88 - (x - 88);
-    direction = -1;
-  }
-  if (x < 12) {
-    x = 12 + (12 - x);
-    direction = 1;
-  }
-  return { ...target, x, direction };
-}
-
-function arrowTargetPayload(target: TargetState, rect?: Pick<DOMRect, "width" | "height">) {
-  return {
-    x: target.x,
-    y: AIM_TARGET_Y,
-    size: target.size,
-    distance: rect ? (target.speed / 100) * rect.width * AIM_ARROW_FLIGHT_MS : target.speed * AIM_ARROW_FLIGHT_MS,
-    difficulty: 1 + target.index * 0.18,
-  };
-}
-
-function arrowBottomFromTip(tipY: number, fieldHeight?: number) {
-  if (!fieldHeight) return AIM_ARROW_START_BOTTOM_PX;
-  return Math.max(0, fieldHeight - tipY - AIM_ARROW_TIP_TO_BOTTOM_PX);
-}
-
 const SEARCH_ROUND_COUNT = 4;
 
 function SearchRound({ onComplete }: RoundProps) {
@@ -3566,7 +3259,10 @@ function shuffle<T>(items: T[]) {
   return next;
 }
 
-const DINO_TRIAL_COUNT = 8;
+const DINO_TRIAL_COUNT = 5;
+const DINO_RUNNER_WIDTH_PERCENT = 8;
+const DINO_HAZARD_WIDTH_PERCENT = 6;
+const DINO_SPEED_PER_SECOND = 26;
 
 type DinoStatus = "ready" | "running" | "danger" | "stopped" | "crashed" | "early";
 
@@ -3574,10 +3270,12 @@ function BrakingRound({ onComplete }: RoundProps) {
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<DinoStatus>("ready");
   const [progress, setProgress] = useState(8);
-  const [threatX, setThreatX] = useState(68);
+  const [hazard, setHazard] = useState<AdvancedBrakeHazard | null>(null);
   const [holding, setHolding] = useState(false);
   const trialStartedAtRef = useRef(now());
   const hazardShownAtRef = useRef<number | null>(null);
+  const hazardRef = useRef<AdvancedBrakeHazard | null>(null);
+  const previousHazardRef = useRef<AdvancedBrakeEvent | null>(null);
   const hazardDelayRef = useRef(1000);
   const trialsRef = useRef<TrialEvent[]>([]);
   const transitionTimerRef = useRef<number | null>(null);
@@ -3597,7 +3295,8 @@ function BrakingRound({ onComplete }: RoundProps) {
     statusRef.current = "ready";
     setProgress(8);
     progressRef.current = 8;
-    setThreatX(68);
+    setHazard(null);
+    hazardRef.current = null;
     setHolding(false);
     holdingRef.current = false;
     hazardShownAtRef.current = null;
@@ -3625,7 +3324,7 @@ function BrakingRound({ onComplete }: RoundProps) {
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
       if (holdingRef.current && (statusRef.current === "running" || statusRef.current === "danger")) {
-        const next = clamp(progressRef.current + delta * 0.026, 8, 78);
+        const next = clamp(progressRef.current + (delta * DINO_SPEED_PER_SECOND) / 1000, 8, 78);
         progressRef.current = next;
         if (runnerRef.current) {
           runnerRef.current.style.left = `${next}%`;
@@ -3647,6 +3346,7 @@ function BrakingRound({ onComplete }: RoundProps) {
       if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
       setHolding(false);
       holdingRef.current = false;
+      previousHazardRef.current = hazardRef.current;
       trialsRef.current.push(trial("braking", index, event));
       if (index >= DINO_TRIAL_COUNT - 1) onComplete(trialsRef.current);
       else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 520);
@@ -3657,9 +3357,33 @@ function BrakingRound({ onComplete }: RoundProps) {
   const showHazard = useCallback(() => {
     if (answeredRef.current || !holdingRef.current) return;
     hazardShownAtRef.current = now();
-    const nextThreatX = clamp(progressRef.current + rand(10, 16), 28, 82);
+    const options = getAdvancedBrakeEventOptions(1, {
+      eventIndex: index,
+      eventCount: DINO_TRIAL_COUNT,
+      previousEvent: previousHazardRef.current,
+    });
+    const picked = options.find((option) => option.correctAction === "release") ?? options[0] ?? {
+      top: "red" as const,
+      bottom: null,
+      correctAction: "release" as const,
+    };
+    const nextThreatX =
+      getAdvancedBrakeDangerLeft({
+        runnerLeftPercent: progressRef.current,
+        runnerWidthPercent: DINO_RUNNER_WIDTH_PERCENT,
+        hazardWidthPercent: DINO_HAZARD_WIDTH_PERCENT,
+        speedPerSecond: DINO_SPEED_PER_SECOND,
+        reactionWindowMs: DINO_SAFE_STOP_WINDOW_MS,
+      }) ?? clamp(progressRef.current + DINO_RUNNER_WIDTH_PERCENT + 8, 28, 100 - DINO_HAZARD_WIDTH_PERCENT);
+    const nextHazard: AdvancedBrakeHazard = {
+      x: nextThreatX,
+      top: picked.top,
+      bottom: picked.bottom,
+      correctAction: "release",
+    };
     setProgress(progressRef.current);
-    setThreatX(nextThreatX);
+    hazardRef.current = nextHazard;
+    setHazard(nextHazard);
     setStatus("danger");
     statusRef.current = "danger";
     collisionTimerRef.current = window.setTimeout(() => {
@@ -3680,11 +3404,11 @@ function BrakingRound({ onComplete }: RoundProps) {
           earlyStop: false,
           stopLatencyMs: null,
           hazardDelayMs: hazardDelayRef.current,
-          threatX: nextThreatX,
+          threatX: nextHazard.x,
         },
       });
     }, DINO_SAFE_STOP_WINDOW_MS);
-  }, [completeTrial]);
+  }, [completeTrial, index]);
 
   const beginRun = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (answeredRef.current || statusRef.current !== "ready") return;
@@ -3708,6 +3432,7 @@ function BrakingRound({ onComplete }: RoundProps) {
     setProgress(progressRef.current);
     const releasedAt = now();
     const hazardShownAt = hazardShownAtRef.current;
+    const releasedHazard = hazardRef.current;
     const stopResult = resolveDinoStop({ hazardShownAt, releasedAt });
     const earlyStop = stopResult.earlyStop;
     const stopLatencyMs = stopResult.stopLatencyMs;
@@ -3729,15 +3454,16 @@ function BrakingRound({ onComplete }: RoundProps) {
           earlyStop,
           stopLatencyMs,
           hazardDelayMs: hazardDelayRef.current,
-          threatX,
+          threatX: releasedHazard?.x ?? null,
         },
       }),
     );
+    previousHazardRef.current = releasedHazard;
     if (index >= DINO_TRIAL_COUNT - 1) onComplete(trialsRef.current);
     else transitionTimerRef.current = window.setTimeout(() => start(index + 1), 520);
   };
 
-  const showThreat = status === "danger" || status === "stopped" || status === "crashed";
+  const showThreat = hazard !== null && (status === "danger" || status === "stopped" || status === "crashed");
 
   return (
     <div className={`braking-panel dino-panel ${status}`}>
@@ -3745,11 +3471,16 @@ function BrakingRound({ onComplete }: RoundProps) {
         <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
         <span>{status === "danger" ? "松手" : holding ? "前进" : "长按"}</span>
       </div>
-      <div className="dino-track" aria-hidden="true">
-        {showThreat ? <span className="dino-threat" style={{ left: `${threatX}%` }} /> : null}
-        <span className="dino-runner" ref={runnerRef} style={{ left: `${progress}%` }}>
-          <span />
-        </span>
+      <div className="advanced-brake-track" aria-hidden="true">
+        <div className="advanced-brake-lane">
+          {showThreat && hazard.top ? (
+            <span
+              className={`advanced-hazard ${hazard.top === "gray" ? "fake" : "real"}`}
+              style={{ left: `${hazard.x}%`, translate: "0 0" }}
+            />
+          ) : null}
+          <span className="advanced-runner" ref={runnerRef} style={{ left: `${progress}%`, translate: "0 0" }} />
+        </div>
       </div>
       <button
         className={`run-button ${holding ? "active" : ""}`}

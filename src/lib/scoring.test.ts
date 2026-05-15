@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -20,6 +21,18 @@ import {
 } from "./scoring.ts";
 
 const viewport = { width: 390, height: 844, dpr: 3 };
+
+function appPageSource() {
+  return readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+}
+
+function sourceBetween(source: string, start: string, end: string) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
+  assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
 
 function trial(roundId: RoundId, trialIndex: number, patch: Partial<TrialEvent> = {}): TrialEvent {
   return {
@@ -379,6 +392,19 @@ test("arrow precision scores primarily by hits out of eight", () => {
   assert.equal(sixHits, 75);
 });
 
+test("base arrow aim with unlimited arrows scores by attempts needed for eight hits", () => {
+  const result = getGameRankResult(
+    arrowAimTrials([
+      ...Array.from({ length: 4 }, () => ({ hit: false, errorPx: 80, targetSize: 54, speed: 1.2 })),
+      ...Array.from({ length: 8 }, () => ({ hit: true, errorPx: 12, targetSize: 54, speed: 1.2 })),
+    ]),
+  );
+
+  assert.equal(result.metrics.aimHits, 8);
+  assert.equal(result.metrics.aimTotal, 12);
+  assert.equal(result.scores.targeting, 67);
+});
+
 test("arrow precision ignores the practice shot", () => {
   const practiceMiss = trial("aim", -1, {
     correct: false,
@@ -401,6 +427,21 @@ test("arrow precision ignores the practice shot", () => {
   assert.equal(result.scores.targeting, 100);
   assert.equal(result.metrics.aimHits, 8);
   assert.equal(result.metrics.aimTotal, 8);
+});
+
+test("base aim source is a single unlimited advanced-arrow round requiring eight hits", () => {
+  const source = appPageSource();
+  const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const SEARCH_ROUND_COUNT");
+  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "function SearchPatternPreview");
+
+  assert.match(aimSource, /AIM_REQUIRED_HITS\s*=\s*8/);
+  assert.match(aimSource, /AdvancedAimRound/);
+  assert.doesNotMatch(aimSource, /AIM_SHOT_COUNT/);
+  assert.match(advancedAimSource, /unlimitedArrows/);
+  assert.match(advancedAimSource, /requiredHits/);
+  assert.match(advancedAimSource, /hitCountRef\.current\s*>=\s*requiredHits/);
+  assert.match(advancedAimSource, /!unlimitedArrows[\s\S]*firedCountRef\.current\s*>=\s*arrowCount/);
+  assert.match(advancedAimSource, /shotsFired/);
 });
 
 test("arrow shot resolution uses the impact target as the visible stuck position on hits", () => {
@@ -494,6 +535,36 @@ test("dinosaur braking metrics capture safe stops and collisions", () => {
   assert.equal(metrics.dinoCollisionRate, 0.25);
   assert.equal(metrics.dinoEarlyStopRate, 0.25);
   assert.equal(metrics.dinoAvgStopMs, 200);
+});
+
+test("five base braking trials count as a completed scoring dimension", () => {
+  const trials = [
+    ...buildPerfectTrials("reaction"),
+    ...buildPerfectTrials("aim"),
+    ...buildPerfectTrials("search"),
+    ...buildPerfectTrials("stroop"),
+    ...buildPerfectTrials("rhythm"),
+    ...buildPerfectTrials("memory"),
+    ...dinoBrakeTrials(Array.from({ length: 5 }, () => ({ safeStop: true, stopLatencyMs: 180 }))),
+    ...buildPerfectTrials("patience"),
+  ];
+
+  assert.equal(buildPerfectTrials("braking").length, 5);
+  assert.equal(deriveMetrics(trials).completedDimensions, 8);
+  assert.equal(calculateScores(trials).confidence, 100);
+});
+
+test("base braking source uses five rounds with advanced danger placement and graphics", () => {
+  const source = appPageSource();
+  const brakingSource = sourceBetween(source, "function BrakingRound", "function PatienceRound");
+
+  assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
+  assert.match(brakingSource, /AdvancedBrakeHazard/);
+  assert.match(brakingSource, /getAdvancedBrakeDangerLeft/);
+  assert.match(brakingSource, /getAdvancedBrakeEventOptions/);
+  assert.match(brakingSource, /advanced-brake-track/);
+  assert.match(brakingSource, /advanced-hazard/);
+  assert.doesNotMatch(brakingSource, /rand\(10,\s*16\)/);
 });
 
 test("dinosaur stop resolution is stricter than the old 420ms window", () => {
