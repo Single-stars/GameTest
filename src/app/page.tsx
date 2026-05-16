@@ -103,6 +103,7 @@ export default function Home() {
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
+  const playShellActive = stage === "playing" || (stage === "advanced" && advancedChallenge?.mode === "playing");
 
   const clearShareCopyToastTimer = useCallback(() => {
     if (shareCopyToastTimerRef.current !== null) {
@@ -566,7 +567,7 @@ export default function Home() {
   }, [advancedChallenge, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
 
   return (
-    <main className="app-shell">
+    <main className={playShellActive ? "app-shell app-shell-play" : "app-shell"}>
       {stage === "share" ? (
         <ShareImageScreen
           appTitle={APP_TITLE}

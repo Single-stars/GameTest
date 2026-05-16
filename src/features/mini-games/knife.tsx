@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 
 import {
@@ -13,15 +14,15 @@ import {
   MINI_GAME_TIMER_SYNC_MS,
   MiniGameFpsBadge,
   PrototypeEndOverlay,
-  STAGE_HEIGHT,
-  STAGE_WIDTH,
   booleanParam,
   clamp,
   numberParam,
   useMiniGameFpsCounter,
   useMiniGameLowPowerMode,
+  useMiniGameStageSize,
   type MiniGameCompletion,
   type MiniGameRunMode,
+  type MiniGameStageSize,
   type PrototypeStatus,
 } from "@/features/mini-games/common";
 import {
@@ -39,10 +40,8 @@ import {
 const DEBUG_MINI_GAME_HITBOX = false;
 const KNIFE_WHEEL_SIZE = 190;
 const KNIFE_INSERT_RADIUS = 74;
-const KNIFE_DISC_CENTER = { x: STAGE_WIDTH / 2, y: 82 + KNIFE_WHEEL_SIZE / 2 };
-const KNIFE_FIRE_POINT = { x: STAGE_WIDTH / 2, y: STAGE_HEIGHT - 92 };
-const KNIFE_SHOT_GEOMETRY = getKnifeShotGeometry(KNIFE_FIRE_POINT, KNIFE_DISC_CENTER, KNIFE_WHEEL_SIZE / 2);
-const KNIFE_FIRE_ANGLE = KNIFE_SHOT_GEOMETRY.impactAngle;
+const KNIFE_BASE_WHEEL_TOP = 82;
+const KNIFE_BASE_LAUNCHER_BOTTOM = 92;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
 type KnifeForbiddenZone = {
@@ -85,6 +84,21 @@ function knifeSectorPath(zone: KnifeForbiddenZone) {
   const y2 = center + Math.sin(end) * radius;
   const largeArc = span > 180 ? 1 : 0;
   return `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+}
+
+function getKnifeStageGeometry(stageSize: MiniGameStageSize) {
+  const launcherBottom = clamp(stageSize.height * (KNIFE_BASE_LAUNCHER_BOTTOM / 640), 72, 112);
+  const maxWheelTop = Math.max(52, stageSize.height - KNIFE_WHEEL_SIZE - launcherBottom - 116);
+  const wheelTop = clamp(stageSize.height * (KNIFE_BASE_WHEEL_TOP / 640), 62, maxWheelTop);
+  const discCenter = { x: stageSize.width / 2, y: wheelTop + KNIFE_WHEEL_SIZE / 2 };
+  const firePoint = { x: stageSize.width / 2, y: stageSize.height - launcherBottom };
+  const shotGeometry = getKnifeShotGeometry(firePoint, discCenter, KNIFE_WHEEL_SIZE / 2);
+  return {
+    fireAngle: shotGeometry.impactAngle,
+    flightDistance: Math.max(120, firePoint.y - shotGeometry.impactPoint.y),
+    launcherBottom,
+    wheelTop,
+  };
 }
 
 function createKnifeRuntime(initialAngles: number[], hasCountdown: boolean, countdown: number): KnifeFrame {
@@ -130,6 +144,8 @@ export function KnifeHitPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
+  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const knifeGeometry = useMemo(() => getKnifeStageGeometry(stageSize), [stageSize]);
   const shotCount = numberParam(level.params, "shotCount", 6);
   const countdown = numberParam(level.params, "shotCountdown", 0);
   const hasCountdown = typeof level.params.shotCountdown === "number";
@@ -175,7 +191,7 @@ export function KnifeHitPrototype({
   const resolveShot = useCallback(() => {
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
-    const impactAngle = getLocalHitAngle(KNIFE_FIRE_ANGLE, current.rotation);
+    const impactAngle = getLocalHitAngle(knifeGeometry.fireAngle, current.rotation);
     const outcome = resolveKnifeShotOutcome({
       collisionDegrees: KNIFE_COLLISION_DEGREES,
       forbiddenZones: forbiddenArcs,
@@ -253,7 +269,7 @@ export function KnifeHitPrototype({
     current.timer = hasCountdown ? countdown : null;
     scheduleLauncherReady();
     syncKnifeView();
-  }, [countdown, forbiddenArcs, hasCountdown, mode, scheduleLauncherReady, shotCount, syncKnifeView]);
+  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, scheduleLauncherReady, shotCount, syncKnifeView]);
 
   const launch = useCallback(() => {
     const current = runtimeRef.current;
@@ -335,6 +351,11 @@ export function KnifeHitPrototype({
   const wheelRotation = `rotate(${view.rotation}deg)`;
   const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible);
   const showOverlay = mode === "prototype";
+  const stageStyle = {
+    "--knife-flight-distance": `${knifeGeometry.flightDistance}px`,
+    "--knife-launcher-bottom": `${knifeGeometry.launcherBottom}px`,
+    "--knife-wheel-top": `${knifeGeometry.wheelTop}px`,
+  } as CSSProperties;
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -366,7 +387,9 @@ export function KnifeHitPrototype({
       </div>
       <div
         className={`prototype-stage knife-stage ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        ref={stageRef}
         role="button"
+        style={stageStyle}
         tabIndex={0}
         aria-label="Knife Hit 型小游戏，点击发射"
         onPointerDown={(event) => {

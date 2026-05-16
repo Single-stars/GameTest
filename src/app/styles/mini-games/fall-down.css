@@ -15,7 +15,7 @@
   width: 100%;
   height: 3px;
   background: var(--red);
-  box-shadow: 0 0 0 8px rgba(230, 83, 73, 0.12);
+  box-shadow: var(--glow-danger);
 }
 
 .fall-platform {
@@ -40,7 +40,7 @@
   border: 1px solid rgba(24, 24, 24, 0.14);
   border-radius: 8px;
   background: var(--green);
-  box-shadow: 0 8px 18px rgba(47, 155, 104, 0.16);
+  box-shadow: var(--glow-success);
 }
 
 .fall-platform.kind-moving .fall-platform-top {
@@ -49,6 +49,7 @@
 
 .fall-platform.kind-fragile .fall-platform-top {
   background: #c7e1d1;
+  border-style: dashed;
 }
 
 .fall-platform.fragile-warning .fall-platform-top {
@@ -57,16 +58,16 @@
 
 .fall-platform.kind-danger .fall-platform-top {
   background: var(--red);
-  box-shadow: 0 0 0 6px rgba(230, 83, 73, 0.13);
+  box-shadow: var(--glow-danger);
 }
 
 .fall-platform.kind-finish .fall-platform-top {
   background: var(--gold);
-  box-shadow: 0 0 0 8px rgba(211, 155, 42, 0.16);
+  box-shadow: var(--glow-warning);
 }
 
 .fall-platform.current .fall-platform-top {
-  box-shadow: 0 0 0 7px rgba(27, 154, 170, 0.14), 0 8px 18px rgba(47, 155, 104, 0.16);
+  box-shadow: var(--glow-accent);
 }
 
 .fall-platform.danger {
@@ -103,5 +104,5 @@
 
 .fall-down-player {
   background: var(--cyan);
-  box-shadow: 0 10px 24px rgba(27, 154, 170, 0.2);
+  box-shadow: var(--glow-accent);
 }

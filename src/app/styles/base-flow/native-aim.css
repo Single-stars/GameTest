@@ -9,7 +9,7 @@
   border: 3px solid rgba(24, 24, 24, 0.2);
   border-radius: 50%;
   background: var(--red);
-  box-shadow: 0 0 0 10px rgba(230, 83, 73, 0.16), 0 14px 32px rgba(230, 83, 73, 0.2);
+  box-shadow: var(--glow-danger);
   will-change: transform;
 }
 
@@ -70,11 +70,11 @@
 
 .advanced-arrow-shot.hit {
   background: var(--green);
-  box-shadow: 0 0 0 8px rgba(47, 155, 104, 0.16);
+  box-shadow: var(--glow-success);
 }
 
 .advanced-arrow-shot.miss,
 .advanced-arrow-shot.blocked {
   background: var(--red);
-  box-shadow: 0 0 0 8px rgba(230, 83, 73, 0.14);
+  box-shadow: var(--glow-danger);
 }

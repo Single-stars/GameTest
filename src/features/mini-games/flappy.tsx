@@ -15,16 +15,16 @@ import {
   MiniGameFpsBadge,
   PLAYER_SIZE,
   PrototypeEndOverlay,
-  STAGE_HEIGHT,
-  STAGE_WIDTH,
   booleanParam,
   clamp,
   numberParam,
   transformPoint3d,
   useMiniGameFpsCounter,
   useMiniGameLowPowerMode,
+  useMiniGameStageSize,
   type MiniGameCompletion,
   type MiniGameRunMode,
+  type MiniGameStageSize,
   type PrototypeStatus,
 } from "@/features/mini-games/common";
 import {
@@ -37,7 +37,6 @@ import {
 } from "@/lib/mini-games";
 
 const FLAPPY_GATE_WIDTH = 54;
-const FLAPPY_START_PLATFORM_Y = STAGE_HEIGHT * 0.66;
 const FLAPPY_START_PLATFORM_HEIGHT = 12;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
@@ -80,14 +79,18 @@ type FlappyViewFrame = {
   visibleGates: FlappyGate[];
 };
 
-function makeFlappyLayout(level: MiniGameLevelConfig, runSeed: string) {
-  return generateFlappyGateLayout(level, runSeed, { stageHeight: STAGE_HEIGHT });
+function flappyStartPlatformY(stageHeight: number) {
+  return stageHeight * 0.66;
 }
 
-function flappyGateCenterY(gate: FlappyGate, time: number, params: MiniGameParams) {
+function makeFlappyLayout(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize) {
+  return generateFlappyGateLayout(level, runSeed, { stageHeight: stageSize.height, stageWidth: stageSize.width });
+}
+
+function flappyGateCenterY(gate: FlappyGate, time: number, params: MiniGameParams, stageHeight: number) {
   if (!gate.moving) return gate.baseCenterY;
   const movingSpeed = numberParam(params, "movingGateSpeed", 1);
-  return clamp(gate.baseCenterY + Math.sin(time * movingSpeed + gate.phase) * 42, 116, STAGE_HEIGHT - 116);
+  return clamp(gate.baseCenterY + Math.sin(time * movingSpeed + gate.phase) * 42, 116, stageHeight - 116);
 }
 
 function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): FlappyFrame {
@@ -108,7 +111,7 @@ function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): Flapp
   };
 }
 
-function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: number): FlappyViewFrame {
+function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: number, stageWidth: number): FlappyViewFrame {
   return {
     collected: frame.collected,
     failures: frame.failures,
@@ -126,7 +129,7 @@ function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: n
       gateWidth: FLAPPY_GATE_WIDTH,
       progress: frame.progress,
       reverseDirection,
-      stageWidth: STAGE_WIDTH,
+      stageWidth,
     }),
   };
 }
@@ -146,7 +149,11 @@ export function FlappyPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
-  const layout = useMemo(() => makeFlappyLayout(level, runSeed), [level, runSeed]);
+  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const stageWidth = stageSize.width;
+  const stageHeight = stageSize.height;
+  const startPlatformY = flappyStartPlatformY(stageHeight);
+  const layout = useMemo(() => makeFlappyLayout(level, runSeed, stageSize), [level, runSeed, stageSize]);
   const gates = layout.gates;
   const reversedGravity = booleanParam(level.params, "reversedGravity");
   const reverseDirection = booleanParam(level.params, "reverseDirection");
@@ -154,7 +161,7 @@ export function FlappyPrototype({
   const collectibleCount = numberParam(level.params, "collectibleCount", 0);
   const gapSize = numberParam(level.params, "gapSize", 180);
   const speed = numberParam(level.params, "speed", 118);
-  const playerX = reverseDirection ? STAGE_WIDTH - 92 : 92;
+  const playerX = reverseDirection ? stageWidth - 92 : 92;
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const visibleBuffer = isLowPowerDevice ? 88 : 130;
   const backgroundRefs: FlappyBackgroundRef[] = useMemo(
@@ -162,8 +169,8 @@ export function FlappyPrototype({
     [isLowPowerDevice, layout.backgroundRefs],
   );
   const initialPlayerY = layout.initialPlacement === "belowPlatform"
-    ? FLAPPY_START_PLATFORM_Y + FLAPPY_START_PLATFORM_HEIGHT + PLAYER_SIZE / 2
-    : FLAPPY_START_PLATFORM_Y - PLAYER_SIZE / 2;
+    ? startPlatformY + FLAPPY_START_PLATFORM_HEIGHT + PLAYER_SIZE / 2
+    : startPlatformY - PLAYER_SIZE / 2;
   const initialRuntime = useMemo(() => createFlappyRuntime(gates, initialPlayerY), [gates, initialPlayerY]);
   const runtimeRef = useRef<FlappyFrame>(initialRuntime);
   const completedRef = useRef(false);
@@ -175,15 +182,25 @@ export function FlappyPrototype({
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const playerBoxRef = useRef<HTMLDivElement | null>(null);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
-  const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer));
+  const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
 
   const syncFlappyView = useCallback(
     (time = performance.now()) => {
       lastUiSyncRef.current = time;
-      setView(makeFlappyView(runtimeRef.current, reverseDirection, visibleBuffer));
+      setView(makeFlappyView(runtimeRef.current, reverseDirection, visibleBuffer, stageWidth));
     },
-    [reverseDirection, visibleBuffer],
+    [reverseDirection, stageWidth, visibleBuffer],
   );
+
+  useEffect(() => {
+    runtimeRef.current = initialRuntime;
+    lastUiSyncRef.current = 0;
+    completedRef.current = false;
+    const timer = window.setTimeout(() => {
+      setView(makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialRuntime, reverseDirection, stageWidth, visibleBuffer]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => syncFlappyView(), 0);
@@ -209,7 +226,7 @@ export function FlappyPrototype({
         if (!node) continue;
         const spacing = 82;
         const drift = reverseDirection ? current.progress : -current.progress;
-        const cycle = STAGE_WIDTH + spacing;
+        const cycle = stageWidth + spacing;
         const x = (((ref.x + drift * 0.55) % cycle) + cycle) % cycle - spacing;
         node.style.transform = transformPoint3d(x, ref.y);
       }
@@ -221,12 +238,12 @@ export function FlappyPrototype({
         const screenX = getFlappyGateScreenX(gate, {
           progress: current.progress,
           reverseDirection,
-          stageWidth: STAGE_WIDTH,
+          stageWidth,
         });
-        const centerY = flappyGateCenterY(gate, current.time, level.params);
+        const centerY = flappyGateCenterY(gate, current.time, level.params, stageHeight);
         const topHeight = centerY - gapSize / 2;
         const bottomY = centerY + gapSize / 2;
-        topNode.style.transform = transformPoint3d(screenX, topHeight - STAGE_HEIGHT);
+        topNode.style.transform = transformPoint3d(screenX, topHeight - stageHeight);
         bottomNode.style.transform = transformPoint3d(screenX, bottomY);
 
         const collectibleNode = collectibleRefs.current.get(id);
@@ -281,9 +298,9 @@ export function FlappyPrototype({
         const screenX = getFlappyGateScreenX(gate, {
           progress: nextProgress,
           reverseDirection,
-          stageWidth: STAGE_WIDTH,
+          stageWidth,
         });
-        const centerY = flappyGateCenterY(gate, nextTime, level.params);
+        const centerY = flappyGateCenterY(gate, nextTime, level.params, stageHeight);
         const gatePassed = reverseDirection ? screenX > playerX + PLAYER_SIZE : screenX + FLAPPY_GATE_WIDTH < playerX - PLAYER_SIZE;
 
         if (!gate.passed && gatePassed) {
@@ -314,7 +331,7 @@ export function FlappyPrototype({
         }
       }
 
-      if ((nextY < PLAYER_SIZE / 2 || nextY > STAGE_HEIGHT - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
+      if ((nextY < PLAYER_SIZE / 2 || nextY > stageHeight - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
         status = "failed";
         reason = "飞出边界";
       }
@@ -369,7 +386,7 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [backgroundRefs, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, recordFrame, reverseDirection, reversedGravity, speed, syncFlappyView]);
+  }, [backgroundRefs, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, recordFrame, reverseDirection, reversedGravity, speed, stageHeight, stageWidth, syncFlappyView]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const showOverlay = mode === "prototype";
@@ -405,6 +422,7 @@ export function FlappyPrototype({
       </div>
       <div
         className={`prototype-stage flappy-stage ${reverseDirection ? "reverse" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        ref={stageRef}
         role="application"
         aria-label="Flappy Bird 型小游戏"
         onPointerDown={(event) => {
@@ -417,7 +435,7 @@ export function FlappyPrototype({
           {backgroundRefs.map((ref) => {
             const spacing = 82;
             const drift = reverseDirection ? view.progress : -view.progress;
-            const cycle = STAGE_WIDTH + spacing;
+            const cycle = stageWidth + spacing;
             const x = (((ref.x + drift * 0.55) % cycle) + cycle) % cycle - spacing;
             return (
               <span
@@ -434,15 +452,15 @@ export function FlappyPrototype({
         </div>
         <div
           className={`flappy-start-platform ${view.started ? "started" : ""}`}
-          style={{ transform: transformPoint3d(playerX - 50, FLAPPY_START_PLATFORM_Y) }}
+          style={{ transform: transformPoint3d(playerX - 50, startPlatformY) }}
         />
         {view.visibleGates.map((gate) => {
           const screenX = getFlappyGateScreenX(gate, {
             progress: view.progress,
             reverseDirection,
-            stageWidth: STAGE_WIDTH,
+            stageWidth,
           });
-          const centerY = flappyGateCenterY(gate, view.time, level.params);
+          const centerY = flappyGateCenterY(gate, view.time, level.params, stageHeight);
           const topHeight = centerY - gapSize / 2;
           const bottomY = centerY + gapSize / 2;
           const collectibleY = clamp(centerY + gate.collectibleOffset * gapSize, centerY - gapSize / 2 + 22, centerY + gapSize / 2 - 22);
@@ -454,7 +472,7 @@ export function FlappyPrototype({
                   if (node) gateTopRefs.current.set(gate.id, node);
                   else gateTopRefs.current.delete(gate.id);
                 }}
-                style={{ height: `${STAGE_HEIGHT}px`, transform: transformPoint3d(screenX, topHeight - STAGE_HEIGHT), width: `${FLAPPY_GATE_WIDTH}px` }}
+                style={{ height: `${stageHeight}px`, transform: transformPoint3d(screenX, topHeight - stageHeight), width: `${FLAPPY_GATE_WIDTH}px` }}
               />
               <div
                 className="flappy-gate bottom"
@@ -463,7 +481,7 @@ export function FlappyPrototype({
                   else gateBottomRefs.current.delete(gate.id);
                 }}
                 style={{
-                  height: `${STAGE_HEIGHT}px`,
+                  height: `${stageHeight}px`,
                   transform: transformPoint3d(screenX, bottomY),
                   width: `${FLAPPY_GATE_WIDTH}px`,
                 }}

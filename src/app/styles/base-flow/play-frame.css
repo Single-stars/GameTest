@@ -1,18 +1,37 @@
 .play-screen {
-  gap: 12px;
+  width: min(100%, 920px);
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto 4px minmax(0, 1fr);
+  gap: 8px;
+  padding:
+    calc(env(safe-area-inset-top) + var(--play-pad-y))
+    max(10px, env(safe-area-inset-right))
+    calc(env(safe-area-inset-bottom) + var(--play-pad-y))
+    max(10px, env(safe-area-inset-left));
+  overflow: hidden;
 }
 
 .round-header {
+  min-height: 44px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 18px;
-  padding-top: 8px;
+  align-items: center;
+  gap: 10px;
+  border: var(--hud-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px 6px 12px;
+  background: var(--hud-bg);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(14px);
 }
 
 .round-header h1 {
   margin: 0;
-  font-size: 36px;
+  font-size: clamp(18px, 4.8vw, 28px);
+  line-height: 1;
 }
 
 .round-title-block {
@@ -20,9 +39,11 @@
 }
 
 .round-header-actions {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .progress-pill {
@@ -38,7 +59,7 @@
 }
 
 .progress-track {
-  height: 8px;
+  height: 4px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(24, 24, 24, 0.1);
@@ -58,14 +79,14 @@
 .radar-card,
 .share-image-stage {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   box-shadow: var(--shadow);
   contain: layout paint;
 }
 
 .test-pad {
-  min-height: 62svh;
+  min-height: 0;
   display: grid;
   place-items: center;
   align-content: center;
@@ -85,8 +106,17 @@
 
 .game-area {
   position: relative;
-  min-height: 60svh;
+  min-height: 0;
   overflow: hidden;
+}
+
+.play-screen > .test-pad,
+.play-screen > .game-area,
+.play-screen > .braking-panel,
+.play-screen > .advanced-reaction-grid,
+.play-screen > .prototype-game-wrap {
+  min-height: 0;
+  align-self: stretch;
 }
 
 .advanced-play-screen .game-area,
@@ -99,23 +129,25 @@
 .mini-score {
   position: absolute;
   z-index: 5;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 10px;
+  left: 10px;
+  right: 10px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .mini-score span {
-  min-height: 30px;
+  min-height: var(--hud-height);
   display: inline-grid;
   place-items: center;
-  border: 1px solid rgba(24, 24, 24, 0.1);
-  border-radius: 999px;
-  padding: 0 11px;
-  background: rgba(255, 255, 255, 0.78);
+  border: var(--hud-border);
+  border-radius: var(--hud-radius);
+  padding: 0 10px;
+  background: var(--hud-bg);
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 6px 18px rgba(24, 24, 24, 0.07);
+  backdrop-filter: blur(12px);
 }

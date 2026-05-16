@@ -52,9 +52,10 @@ export function getFlappyInitialPlacement(level: MiniGameLevelConfig): FlappyIni
 export function generateFlappyGateLayout(
   level: MiniGameLevelConfig,
   runSeed: string,
-  options: { backgroundRefCount?: number; stageHeight?: number } = {},
+  options: { backgroundRefCount?: number; stageHeight?: number; stageWidth?: number } = {},
 ) {
   const stageHeight = options.stageHeight ?? 640;
+  const stageWidth = options.stageWidth ?? 360;
   const gateCount = numberParam(level.params, "gateCount", 6);
   const movingRatio = numberParam(level.params, "movingGateRatio", 0);
   const collectibleCount = numberParam(level.params, "collectibleCount", 0);
@@ -88,7 +89,7 @@ export function generateFlappyGateLayout(
   const backgroundRefCount = Math.max(0, Math.floor(options.backgroundRefCount ?? 14));
   const backgroundRefs = Array.from({ length: backgroundRefCount }, (_, index) => ({
     id: index,
-    x: backgroundSeed() * 360,
+    x: backgroundSeed() * stageWidth,
     y: 72 + backgroundSeed() * (stageHeight - 150),
     kind: backgroundSeed() < 0.34 ? "square" : "dash",
   }));

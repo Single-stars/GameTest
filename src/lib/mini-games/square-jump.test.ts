@@ -145,7 +145,8 @@ test("square jump stage sits lower and tap jumps are short enough for micro adju
   const componentSource = readMiniGameRuntimeSource();
   const base = getMiniGameLevel("square-jump" as MiniGameId, "square-jump-base");
 
-  assert.match(componentSource, /const SQUARE_JUMP_PLATFORM_Y = STAGE_HEIGHT \* 0\.72/);
+  assert.match(componentSource, /function getSquareJumpPlatformY\(stageHeight: number\)/);
+  assert.match(componentSource, /return stageHeight \* 0\.72;/);
   assert.ok(Number(base.params.powerDistanceMin) <= 36);
   assert.ok(Number(base.params.secondPowerDistanceMin) <= 32);
   assert.ok(Number(base.params.targetLandingPadding) <= 10);

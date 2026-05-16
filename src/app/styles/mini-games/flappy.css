@@ -40,7 +40,7 @@
 
 .flappy-player {
   background: var(--cyan);
-  box-shadow: 0 10px 22px rgba(27, 154, 170, 0.18);
+  box-shadow: var(--glow-accent);
 }
 
 .flappy-player.reversed {
@@ -54,7 +54,7 @@
   border: 1px solid rgba(24, 24, 24, 0.14);
   border-radius: 999px;
   background: var(--green);
-  box-shadow: 0 7px 16px rgba(47, 155, 104, 0.16);
+  box-shadow: var(--glow-success);
   transition: opacity 420ms ease, scale 420ms ease, transform 420ms ease;
 }
 
@@ -98,5 +98,5 @@
   border: 3px solid rgba(24, 24, 24, 0.16);
   border-radius: 50%;
   background: var(--gold);
-  box-shadow: 0 0 0 8px rgba(211, 155, 42, 0.12);
+  box-shadow: var(--glow-warning);
 }

@@ -2,6 +2,7 @@
   position: relative;
   justify-content: center;
   gap: 24px;
+  padding-block: 18px;
 }
 
 .hero-copy.compact h1 {
@@ -9,6 +10,7 @@
   font-size: 58px;
   line-height: 1;
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .hero-copy.compact {
@@ -33,9 +35,14 @@
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 253, 248, 0.84);
+  background: var(--color-surface-glass);
   color: var(--ink);
   cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
 }
 
 .icon-button:disabled,
@@ -58,6 +65,7 @@
   display: grid;
   align-content: center;
   gap: 22px;
+  padding: 4px;
 }
 
 .intro-copy {

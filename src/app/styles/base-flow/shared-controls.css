@@ -16,11 +16,11 @@ h1 {
   max-width: 640px;
   display: grid;
   gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 18px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
 }
 
 .rule-card p,
@@ -37,24 +37,31 @@ h1 {
 .primary-button,
 .secondary-button {
   width: fit-content;
-  min-height: 50px;
-  border-radius: 8px;
+  min-height: var(--button-height);
+  border-radius: var(--button-radius);
   padding: 0 24px;
   border: 0;
-  font-weight: 850;
+  font-weight: 900;
   cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 120ms ease;
 }
 
 .primary-button {
   color: #ffffff;
   background: var(--ink);
-  box-shadow: 0 14px 34px rgba(24, 24, 24, 0.16);
+  box-shadow: 0 14px 34px rgba(24, 24, 24, 0.14);
 }
 
 .secondary-button {
   border: 1px solid var(--line);
   color: var(--ink);
-  background: var(--surface);
+  background: var(--color-surface-glass);
 }
 
 .compact-button {
@@ -73,5 +80,5 @@ h1 {
 .secondary-button:active,
 .target-dot:active,
 .brake-dot:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.99);
 }

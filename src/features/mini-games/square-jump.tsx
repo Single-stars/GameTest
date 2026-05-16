@@ -18,16 +18,16 @@ import {
   MiniGamePerfPanel,
   PLAYER_SIZE,
   PrototypeEndOverlay,
-  STAGE_HEIGHT,
-  STAGE_WIDTH,
   booleanParam,
   clamp,
   numberParam,
   transformPoint3d,
   useMiniGameFpsCounter,
+  useMiniGameStageSize,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
   type MiniGameRunMode,
+  type MiniGameStageSize,
   type PrototypeStatus,
 } from "@/features/mini-games/common";
 import {
@@ -57,7 +57,6 @@ const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
 type SquareGravityState = NonNullable<SquareJumpBasePlatform["gravity"]>;
 
-const SQUARE_BASE_STAGE_BOTTOM = 640;
 const SQUARE_BASE_MAX_HOLD_MS = 900;
 
 function squareGravityMultiplier(gravity: SquareGravityState) {
@@ -84,19 +83,19 @@ function squarePlatformMark(platform: SquareJumpBasePlatform): string | null {
   return null;
 }
 
-function fitSquareBaseCamera(currentPlatform: SquareJumpBasePlatform, nextPlatform: SquareJumpBasePlatform, playerX: number) {
+function fitSquareBaseCamera(currentPlatform: SquareJumpBasePlatform, nextPlatform: SquareJumpBasePlatform, playerX: number, stageSize: MiniGameStageSize) {
   return fitSquareJumpBaseCamera({
     currentPlatform,
     nextPlatform,
     playerX,
-    stageBottom: SQUARE_BASE_STAGE_BOTTOM,
-    stageHeight: STAGE_HEIGHT,
-    stageWidth: STAGE_WIDTH,
+    stageBottom: stageSize.height,
+    stageHeight: stageSize.height,
+    stageWidth: stageSize.width,
   });
 }
 
-function squareBaseWorldTransform(camera: SquareJumpBaseCamera) {
-  return `translate3d(${STAGE_WIDTH / 2}px, ${STAGE_HEIGHT / 2}px, 0) scale(${camera.scale}) translate3d(${-camera.cameraX}px, ${-camera.cameraY}px, 0)`;
+function squareBaseWorldTransform(camera: SquareJumpBaseCamera, stageSize: MiniGameStageSize) {
+  return `translate3d(${stageSize.width / 2}px, ${stageSize.height / 2}px, 0) scale(${camera.scale}) translate3d(${-camera.cameraX}px, ${-camera.cameraY}px, 0)`;
 }
 
 function squareProgressBackgroundStyle(camera: SquareJumpBaseCamera): CSSProperties {
@@ -143,8 +142,11 @@ type SquareJumpUnifiedRuntime = {
   reason: string;
 };
 
-const SQUARE_JUMP_PLATFORM_Y = STAGE_HEIGHT * 0.72;
 const SQUARE_JUMP_ADVANCE_DELAY = 0.16;
+
+function getSquareJumpPlatformY(stageHeight: number) {
+  return stageHeight * 0.72;
+}
 
 function createSquareJumpPlan(level: MiniGameLevelConfig, runtime: SquareJumpUnifiedRuntime) {
   const gravity = runtime.activeGravity;
@@ -190,11 +192,12 @@ function createSquareJumpPlan(level: MiniGameLevelConfig, runtime: SquareJumpUni
   });
 }
 
-function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: string): SquareJumpUnifiedRuntime {
+function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize): SquareJumpUnifiedRuntime {
+  const platformY = getSquareJumpPlatformY(stageSize.height);
   const platforms = generateSquareJumpPlatformSequence(level, runSeed, {
     count: numberParam(level.params, "jumpsRequired", 5) + 1,
-    platformY: SQUARE_JUMP_PLATFORM_Y,
-    startX: 120,
+    platformY,
+    startX: clamp(stageSize.width * (120 / 360), 88, stageSize.width - 88),
     startWidth: 128,
   });
   const currentPlatform = platforms[0];
@@ -203,7 +206,7 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
     activeGravity: "normal",
     advancePlan: null,
     advanceStartedAt: 0,
-    camera: fitSquareBaseCamera(currentPlatform, nextPlatform, currentPlatform.x),
+    camera: fitSquareBaseCamera(currentPlatform, nextPlatform, currentPlatform.x, stageSize),
     charge: 0,
     chargeElapsedMs: 0,
     currentIndex: 0,
@@ -266,7 +269,7 @@ function updateSquareJumpAdvanceAnimation(current: SquareJumpUnifiedRuntime) {
   }
 }
 
-function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string) {
+function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize) {
   const failures = current.failures + 1;
   current.failures = failures;
   current.reason = reason;
@@ -309,7 +312,7 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   const cameraStart = { ...current.camera };
   const futureIndex = current.nextIndex + 1;
   const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
-  const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX);
+  const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, stageSize);
   current.nextIndex = futureIndex;
   current.nextPlatform = futurePlatform;
   current.timer = null;
@@ -318,7 +321,7 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   current.advancePlan = createSquareJumpBaseAdvancePlan({
     cameraEnd,
     cameraStart,
-    stageHeight: STAGE_HEIGHT,
+    stageHeight: stageSize.height,
   });
   current.advanceStartedAt = current.time + SQUARE_JUMP_ADVANCE_DELAY;
   current.nextVisualOffsetY = current.advancePlan.nextPlatformStartVisualOffsetY;
@@ -342,12 +345,16 @@ export function SquareJumpPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
+  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const stageWidth = stageSize.width;
+  const stageHeight = stageSize.height;
+  const platformY = getSquareJumpPlatformY(stageHeight);
   const requiredJumps = numberParam(level.params, "jumpsRequired", 5);
   const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
   const flyAwayLandingCatchDepth = numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25);
   const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
-  const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed), [level, runSeed]);
+  const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed, stageSize), [level, runSeed, stageSize]);
   const runtimeRef = useRef<SquareJumpUnifiedRuntime>(initialRuntime);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
   const progressBackgroundRef = useRef<HTMLDivElement | null>(null);
@@ -368,6 +375,16 @@ export function SquareJumpPrototype({
     setView(makeSquareJumpUnifiedView(runtimeRef.current));
   }, [recordReactSync]);
 
+  useEffect(() => {
+    runtimeRef.current = initialRuntime;
+    lastUiSyncRef.current = 0;
+    completedRef.current = false;
+    const timer = window.setTimeout(() => {
+      setView(makeSquareJumpUnifiedView(initialRuntime));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialRuntime]);
+
   const updateSquareJumpDom = useCallback(
     (current: SquareJumpUnifiedRuntime) => {
       if (progressBackgroundRef.current) {
@@ -375,7 +392,7 @@ export function SquareJumpPrototype({
         progressBackgroundRef.current.style.backgroundPosition = String(backgroundStyle.backgroundPosition ?? "");
       }
       if (worldLayerRef.current) {
-        worldLayerRef.current.style.transform = squareBaseWorldTransform(current.camera);
+        worldLayerRef.current.style.transform = squareBaseWorldTransform(current.camera, stageSize);
       }
 
       const visiblePlatforms = selectSquareJumpVisiblePlatforms(current.currentPlatform, current.nextPlatform, current.exitingPlatform);
@@ -394,8 +411,8 @@ export function SquareJumpPrototype({
         const platformHeight = getSquareJumpBasePlatformHeight({
           camera: current.camera,
           platformY: platform.y + visualOffsetY,
-          stageBottom: SQUARE_BASE_STAGE_BOTTOM,
-          stageHeight: STAGE_HEIGHT,
+          stageBottom: stageHeight,
+          stageHeight,
         });
         node.style.display = "";
         node.style.transform = transformPoint3d(platformX - platform.width / 2, platform.y + visualOffsetY);
@@ -418,15 +435,15 @@ export function SquareJumpPrototype({
         if (previewPlan) {
           tutorialPreviewRef.current.style.display = "";
           tutorialPreviewRef.current.style.transform = transformPoint3d(
-            STAGE_WIDTH / 2 + (previewPlan.landingX - current.camera.cameraX) * current.camera.scale - 15,
-            STAGE_HEIGHT / 2 + (SQUARE_JUMP_PLATFORM_Y - current.camera.cameraY) * current.camera.scale + 12,
+            stageWidth / 2 + (previewPlan.landingX - current.camera.cameraX) * current.camera.scale - 15,
+            stageHeight / 2 + (platformY - current.camera.cameraY) * current.camera.scale + 12,
           );
         } else {
           tutorialPreviewRef.current.style.display = "none";
         }
       }
     },
-    [level],
+    [level, platformY, stageHeight, stageSize, stageWidth],
   );
 
   const fail = useCallback(
@@ -469,7 +486,7 @@ export function SquareJumpPrototype({
       const cameraStart = { ...current.camera };
       const futureIndex = current.nextIndex + 1;
       const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
-      const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX);
+      const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, stageSize);
       current.nextIndex = futureIndex;
       current.nextPlatform = futurePlatform;
       current.timer = null;
@@ -478,14 +495,14 @@ export function SquareJumpPrototype({
       current.advancePlan = createSquareJumpBaseAdvancePlan({
         cameraEnd,
         cameraStart,
-        stageHeight: STAGE_HEIGHT,
+        stageHeight,
       });
       current.advanceStartedAt = current.time + SQUARE_JUMP_ADVANCE_DELAY;
       current.nextVisualOffsetY = current.advancePlan.nextPlatformStartVisualOffsetY;
       current.state = "advancing";
       return false;
     },
-    [requiredJumps, syncView],
+    [requiredJumps, stageHeight, stageSize, syncView],
   );
 
   const launchChargedJump = useCallback(() => {
@@ -628,7 +645,7 @@ export function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
-            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
+            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
               paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
@@ -660,10 +677,10 @@ export function SquareJumpPrototype({
               return;
             }
           }
-          const screenX = STAGE_WIDTH / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
-          const screenY = STAGE_HEIGHT / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
-          if (screenX > STAGE_WIDTH + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > STAGE_HEIGHT + PLAYER_SIZE) {
-            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了")) {
+          const screenX = stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
+          const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
+          if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
+            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
               paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
@@ -684,7 +701,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, syncView, targetLandingPadding, updateSquareJumpDom]);
+  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncView, targetLandingPadding, updateSquareJumpDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current || view.status === "playing") return;
@@ -710,7 +727,7 @@ export function SquareJumpPrototype({
   const worldLayerStyle: CSSProperties = {
     inset: 0,
     position: "absolute",
-    transform: squareBaseWorldTransform(view.camera),
+    transform: squareBaseWorldTransform(view.camera, stageSize),
     transformOrigin: "0 0",
     zIndex: 2,
   };
@@ -733,6 +750,7 @@ export function SquareJumpPrototype({
       </div>
       <div
         className={`prototype-stage square-jump-stage gravity-${gravity} ${view.status === "failed" ? "failed" : ""}`}
+        ref={stageRef}
         role="application"
         aria-label="方块跃迁，长按蓄力，松手跳跃"
         onPointerCancel={cancelCharge}
@@ -754,8 +772,8 @@ export function SquareJumpPrototype({
             const platformHeight = getSquareJumpBasePlatformHeight({
               camera: view.camera,
               platformY: platform.y + visualOffsetY,
-              stageBottom: SQUARE_BASE_STAGE_BOTTOM,
-              stageHeight: STAGE_HEIGHT,
+              stageBottom: stageHeight,
+              stageHeight,
             });
             return (
               <div
@@ -834,8 +852,8 @@ export function SquareJumpPrototype({
             ref={tutorialPreviewRef}
             style={{
               transform: transformPoint3d(
-                STAGE_WIDTH / 2 + (tutorialPreviewPlan.landingX - view.camera.cameraX) * view.camera.scale - 15,
-                STAGE_HEIGHT / 2 + (SQUARE_JUMP_PLATFORM_Y - view.camera.cameraY) * view.camera.scale + 12,
+                stageWidth / 2 + (tutorialPreviewPlan.landingX - view.camera.cameraX) * view.camera.scale - 15,
+                stageHeight / 2 + (platformY - view.camera.cameraY) * view.camera.scale + 12,
               ),
             }}
             aria-hidden="true"

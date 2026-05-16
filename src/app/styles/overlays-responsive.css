@@ -247,6 +247,27 @@
   .test-pad span {
     font-size: 64px;
   }
+
+  .app-shell.app-shell-play {
+    padding: 0;
+  }
+
+  .app-shell-play .play-screen {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  .app-shell-play .round-header h1 {
+    font-size: 22px;
+  }
+
+  .app-shell-play .round-measure-pill,
+  .app-shell-play .advanced-back-button {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
   .score-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

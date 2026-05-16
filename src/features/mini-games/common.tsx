@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -17,6 +18,14 @@ import {
 
 export const STAGE_WIDTH = 360;
 export const STAGE_HEIGHT = 640;
+export type MiniGameStageSize = {
+  width: number;
+  height: number;
+};
+export const DEFAULT_STAGE_SIZE: MiniGameStageSize = {
+  width: STAGE_WIDTH,
+  height: STAGE_HEIGHT,
+};
 export const PLAYER_SIZE = 32;
 export const DEBUG_MINI_GAME_FPS = false;
 export const BASE_FAILURE_LIMIT = 3;
@@ -82,10 +91,58 @@ export function transformPoint3d(x: number, y: number) {
   return `translate3d(${x}px, ${y}px, 0)`;
 }
 
-export function stagePointStyle(x: number, y: number, cameraY = 0, size = PLAYER_SIZE): CSSProperties {
+export function stagePointStyle(x: number, y: number, cameraY = 0, size = PLAYER_SIZE, stageHeight = STAGE_HEIGHT): CSSProperties {
   return {
-    transform: transformPoint3d(x - size / 2, STAGE_HEIGHT - (y - cameraY) - size / 2),
+    transform: transformPoint3d(x - size / 2, stageHeight - (y - cameraY) - size / 2),
   };
+}
+
+export function useMiniGameStageSize<T extends HTMLElement = HTMLDivElement>() {
+  const stageRef = useRef<T | null>(null);
+  const stageSizeRef = useRef<MiniGameStageSize>(DEFAULT_STAGE_SIZE);
+  const [stageSize, setStageSize] = useState<MiniGameStageSize>(DEFAULT_STAGE_SIZE);
+
+  useLayoutEffect(() => {
+    const node = stageRef.current;
+    if (!node) return undefined;
+    let frameId = 0;
+
+    const measure = () => {
+      frameId = 0;
+      const rect = node.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height));
+      const previous = stageSizeRef.current;
+      if (previous.width === width && previous.height === height) return;
+      const next = { width, height };
+      stageSizeRef.current = next;
+      setStageSize(next);
+    };
+
+    const scheduleMeasure = () => {
+      if (frameId !== 0) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(measure);
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", scheduleMeasure);
+      return () => {
+        if (frameId !== 0) window.cancelAnimationFrame(frameId);
+        window.removeEventListener("resize", scheduleMeasure);
+      };
+    }
+
+    const observer = new ResizeObserver(scheduleMeasure);
+    observer.observe(node);
+    return () => {
+      if (frameId !== 0) window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, []);
+
+  return { stageRef, stageSize, stageSizeRef };
 }
 
 export function useMiniGameLowPowerMode() {

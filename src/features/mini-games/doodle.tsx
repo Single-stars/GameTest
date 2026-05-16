@@ -17,17 +17,17 @@ import {
   MiniGamePerfPanel,
   PLAYER_SIZE,
   PrototypeEndOverlay,
-  STAGE_HEIGHT,
-  STAGE_WIDTH,
   clamp,
   numberParam,
   stagePointStyle,
   transformPoint3d,
   useMiniGameFpsCounter,
+  useMiniGameStageSize,
   useMiniGameLowPowerMode,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
   type MiniGameRunMode,
+  type MiniGameStageSize,
   type PrototypeStatus,
 } from "@/features/mini-games/common";
 import {
@@ -78,32 +78,32 @@ type DoodleViewFrame = {
   visiblePlatforms: DoodlePlatform[];
 };
 
-function makeDoodleWorld(level: MiniGameLevelConfig, runSeed: string) {
+function makeDoodleWorld(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize) {
   return generateDoodleWorldLayout(level, runSeed, {
     playerSize: PLAYER_SIZE,
-    stageHeight: STAGE_HEIGHT,
-    stageWidth: STAGE_WIDTH,
+    stageHeight: stageSize.height,
+    stageWidth: stageSize.width,
   });
 }
-function movingPlatformX(platform: DoodlePlatform, time: number) {
-  return platform.moving ? clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 12, STAGE_WIDTH - platform.width / 2 - 12) : platform.x;
+function movingPlatformX(platform: DoodlePlatform, time: number, stageWidth: number) {
+  return platform.moving ? clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 12, stageWidth - platform.width / 2 - 12) : platform.x;
 }
 
-function movingHazardPosition(hazard: DoodleHazard, time: number) {
+function movingHazardPosition(hazard: DoodleHazard, time: number, stageWidth: number) {
   if (!hazard.movementEnabled) return { x: hazard.x, y: hazard.y, size: hazard.size };
   const phase = time * hazard.speed + hazard.phase;
   const offset = Math.sin(phase) * hazard.range;
   if (hazard.movementPattern === "vertical") return { x: hazard.x, y: hazard.y + offset, size: hazard.size };
   if (hazard.movementPattern === "patrolDiagonal") {
     return {
-      x: clamp(hazard.x + offset * 0.82, hazard.size / 2 + 18, STAGE_WIDTH - hazard.size / 2 - 18),
+      x: clamp(hazard.x + offset * 0.82, hazard.size / 2 + 18, stageWidth - hazard.size / 2 - 18),
       y: hazard.y + offset * 0.42,
       size: hazard.size,
     };
   }
   if (hazard.movementPattern === "orbitSmall") {
     return {
-      x: clamp(hazard.x + Math.cos(phase) * hazard.range * 0.78, hazard.size / 2 + 18, STAGE_WIDTH - hazard.size / 2 - 18),
+      x: clamp(hazard.x + Math.cos(phase) * hazard.range * 0.78, hazard.size / 2 + 18, stageWidth - hazard.size / 2 - 18),
       y: hazard.y + Math.sin(phase) * hazard.range * 0.58,
       size: hazard.size,
     };
@@ -113,23 +113,23 @@ function movingHazardPosition(hazard: DoodleHazard, time: number) {
   }
   if (hazard.movementPattern === "slowCross") {
     return {
-      x: clamp(hazard.x + offset, hazard.size / 2 + 18, STAGE_WIDTH - hazard.size / 2 - 18),
+      x: clamp(hazard.x + offset, hazard.size / 2 + 18, stageWidth - hazard.size / 2 - 18),
       y: hazard.y + Math.sin(phase * 0.55) * 12,
       size: hazard.size,
     };
   }
   return {
-    x: clamp(hazard.x + offset, hazard.size / 2 + 18, STAGE_WIDTH - hazard.size / 2 - 18),
+    x: clamp(hazard.x + offset, hazard.size / 2 + 18, stageWidth - hazard.size / 2 - 18),
     y: hazard.y,
     size: hazard.size,
   };
 }
 
-function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>): DoodleFrame {
+function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>, stageWidth: number): DoodleFrame {
   return {
     started: false,
     time: 0,
-    playerX: STAGE_WIDTH / 2,
+    playerX: stageWidth / 2,
     playerY: world.startPlayerY,
     playerVy: 0,
     cameraY: 0,
@@ -144,7 +144,7 @@ function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>): DoodleF
   };
 }
 
-function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number): DoodleViewFrame {
+function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number, stageHeight: number): DoodleViewFrame {
   return {
     cameraY: frame.cameraY,
     failures: frame.failures,
@@ -161,12 +161,12 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
     visibleHazards: selectVisibleDoodleHazards(frame.hazards, {
       buffer,
       cameraY: frame.cameraY,
-      stageHeight: STAGE_HEIGHT,
+      stageHeight,
     }),
     visiblePlatforms: selectVisibleDoodlePlatforms(frame.platforms, {
       buffer,
       cameraY: frame.cameraY,
-      stageHeight: STAGE_HEIGHT,
+      stageHeight,
     }),
   };
 }
@@ -186,15 +186,17 @@ export function DoodleJumpPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
-  const world = useMemo(() => makeDoodleWorld(level, runSeed), [level, runSeed]);
+  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const stageWidth = stageSize.width;
+  const stageHeight = stageSize.height;
+  const world = useMemo(() => makeDoodleWorld(level, runSeed, stageSize), [level, runSeed, stageSize]);
   const riskTotal = numberParam(level.params, "requiredRiskPlatforms", 0);
   const riskJumpMultiplier = numberParam(level.params, "riskJumpMultiplier", 1);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const visibleBuffer = isLowPowerDevice ? 96 : 160;
-  const initialRuntime = useMemo(() => createDoodleRuntime(world), [world]);
+  const initialRuntime = useMemo(() => createDoodleRuntime(world, stageWidth), [stageWidth, world]);
   const inputDirectionRef = useRef(0);
   const inputPointerIdRef = useRef<number | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const playerBoxRef = useRef<HTMLDivElement | null>(null);
   const progressLineRef = useRef<HTMLDivElement | null>(null);
@@ -206,16 +208,26 @@ export function DoodleJumpPrototype({
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Doodle");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
-  const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer));
+  const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, stageHeight));
 
   const syncDoodleView = useCallback(
     (time = performance.now()) => {
       lastUiSyncRef.current = time;
       recordReactSync();
-      setView(makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer));
+      setView(makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer, stageHeight));
     },
-    [recordReactSync, visibleBuffer, world.targetHeight],
+    [recordReactSync, stageHeight, visibleBuffer, world.targetHeight],
   );
+
+  useEffect(() => {
+    runtimeRef.current = initialRuntime;
+    lastUiSyncRef.current = 0;
+    completedRef.current = false;
+    const timer = window.setTimeout(() => {
+      setView(makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, stageHeight));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialRuntime, stageHeight, visibleBuffer, world.targetHeight]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => syncDoodleView(), 0);
@@ -266,14 +278,14 @@ export function DoodleJumpPrototype({
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(
           current.playerX - PLAYER_SIZE / 2,
-          STAGE_HEIGHT - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
+          stageHeight - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
         );
       }
       if (playerBoxRef.current) {
         playerBoxRef.current.style.transform = `rotate(${current.playerTurns * 90}deg)`;
       }
       if (progressLineRef.current) {
-        const targetY = clamp(STAGE_HEIGHT - (world.targetHeight - current.cameraY), 0, STAGE_HEIGHT);
+        const targetY = clamp(stageHeight - (world.targetHeight - current.cameraY), 0, stageHeight);
         progressLineRef.current.style.transform = transformPoint3d(0, targetY);
       }
 
@@ -284,16 +296,16 @@ export function DoodleJumpPrototype({
           continue;
         }
         node.style.display = "";
-        const x = movingPlatformX(platform, current.time);
-        const y = STAGE_HEIGHT - (platform.y - current.cameraY);
+        const x = movingPlatformX(platform, current.time, stageWidth);
+        const y = stageHeight - (platform.y - current.cameraY);
         node.style.transform = transformPoint3d(x - platform.width / 2, y);
       }
 
       for (const [id, node] of hazardRefs.current) {
         const hazard = hazardById.get(id);
         if (!hazard) continue;
-        const position = movingHazardPosition(hazard, current.time);
-        const y = STAGE_HEIGHT - (position.y - current.cameraY) - hazard.size / 2;
+        const position = movingHazardPosition(hazard, current.time, stageWidth);
+        const y = stageHeight - (position.y - current.cameraY) - hazard.size / 2;
         const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
         const scale = position.size / hazard.size;
         node.style.transform = `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`;
@@ -324,7 +336,7 @@ export function DoodleJumpPrototype({
       }
 
       const nextTime = current.time + delta;
-      current.playerX = clamp(current.playerX + inputDirectionRef.current * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, STAGE_WIDTH - PLAYER_SIZE / 2);
+      current.playerX = clamp(current.playerX + inputDirectionRef.current * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, stageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
       const previousY = current.playerY;
       let nextVy = current.playerVy - 1500 * delta;
@@ -340,7 +352,7 @@ export function DoodleJumpPrototype({
         const maxY = Math.max(previousY, nextY) + PLAYER_SIZE;
         for (const platform of current.platforms) {
           if (platform.used || platform.y < minY || platform.y > maxY) continue;
-          const platformX = movingPlatformX(platform, nextTime);
+          const platformX = movingPlatformX(platform, nextTime, stageWidth);
           const crossed = previousY - PLAYER_SIZE / 2 >= platform.y && nextY - PLAYER_SIZE / 2 <= platform.y;
           const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
           if (crossed && insideX) {
@@ -355,11 +367,11 @@ export function DoodleJumpPrototype({
         }
       }
 
-      const cameraY = Math.max(current.cameraY, nextY - STAGE_HEIGHT * 0.45);
+      const cameraY = Math.max(current.cameraY, nextY - stageHeight * 0.45);
       if (status === "playing" && riskHit < riskTotal) {
         let missedRisk = false;
         for (const platform of current.platforms) {
-          if (!platform.used && platform.risk && cameraY > platform.y + STAGE_HEIGHT * 0.34) {
+          if (!platform.used && platform.risk && cameraY > platform.y + stageHeight * 0.34) {
             missedRisk = true;
             break;
           }
@@ -373,8 +385,8 @@ export function DoodleJumpPrototype({
       if (status === "playing" && nextTime >= current.invincibleUntil) {
         for (const hazard of current.hazards) {
           const movementRange = hazard.movementEnabled ? hazard.range + 18 : 0;
-          if (hazard.y + hazard.size + movementRange < cameraY - 70 || hazard.y - hazard.size - movementRange > cameraY + STAGE_HEIGHT + 70) continue;
-          const position = movingHazardPosition(hazard, nextTime);
+          if (hazard.y + hazard.size + movementRange < cameraY - 70 || hazard.y - hazard.size - movementRange > cameraY + stageHeight + 70) continue;
+          const position = movingHazardPosition(hazard, nextTime, stageWidth);
           const hitRadius = position.size / 2 + PLAYER_SIZE / 2 - 3;
           const dx = nextX - position.x;
           const dy = nextY - position.y;
@@ -413,8 +425,8 @@ export function DoodleJumpPrototype({
       if (mode === "base" && status === "failed") {
         const failures = current.failures + 1;
         if (failures <= BASE_FAILURE_LIMIT) {
-          const respawnY = cameraY + STAGE_HEIGHT * 0.34;
-          const respawnX = clamp(nextX, 70, STAGE_WIDTH - 70);
+          const respawnY = cameraY + stageHeight * 0.34;
+          const respawnX = clamp(nextX, 70, stageWidth - 70);
           const respawnPlatform: DoodlePlatform = {
             id: -1000 - failures,
             x: respawnX,
@@ -457,7 +469,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleView, world.targetHeight]);
+  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, stageHeight, stageWidth, syncDoodleView, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
 
@@ -505,11 +517,11 @@ export function DoodleJumpPrototype({
         <div
           className="doodle-progress-line"
           ref={progressLineRef}
-          style={{ transform: transformPoint3d(0, clamp(STAGE_HEIGHT - (world.targetHeight - view.cameraY), 0, STAGE_HEIGHT)) }}
+          style={{ transform: transformPoint3d(0, clamp(stageHeight - (world.targetHeight - view.cameraY), 0, stageHeight)) }}
         />
         {view.visiblePlatforms.map((platform) => {
-          const x = movingPlatformX(platform, view.time);
-          const y = STAGE_HEIGHT - (platform.y - view.cameraY);
+          const x = movingPlatformX(platform, view.time, stageWidth);
+          const y = stageHeight - (platform.y - view.cameraY);
           return (
             <div
               className={`doodle-platform ${platform.start ? "start" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
@@ -526,8 +538,8 @@ export function DoodleJumpPrototype({
           );
         })}
         {view.visibleHazards.map((hazard) => {
-          const position = movingHazardPosition(hazard, view.time);
-          const y = STAGE_HEIGHT - (position.y - view.cameraY) - hazard.size / 2;
+          const position = movingHazardPosition(hazard, view.time, stageWidth);
+          const y = stageHeight - (position.y - view.cameraY) - hazard.size / 2;
           const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
           const scale = position.size / hazard.size;
           return (
@@ -549,7 +561,7 @@ export function DoodleJumpPrototype({
         <div
           className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
           ref={playerShellRef}
-          style={stagePointStyle(view.playerX, view.playerY, view.cameraY)}
+          style={stagePointStyle(view.playerX, view.playerY, view.cameraY, PLAYER_SIZE, stageHeight)}
         >
           <div className="prototype-player-box doodle-player" ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
         </div>

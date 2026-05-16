@@ -2,12 +2,18 @@
 .reaction-pad.good {
   color: #ffffff;
   background: var(--green);
+  box-shadow: var(--glow-success);
+}
+
+.reaction-pad.early {
+  box-shadow: var(--glow-danger);
 }
 
 .advanced-reaction-grid {
-  min-height: 60svh;
+  min-height: 0;
   position: relative;
   display: grid;
+  grid-auto-rows: minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -24,9 +30,10 @@
 }
 
 .advanced-reaction-cell {
-  min-height: 26svh;
+  min-height: 0;
+  height: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted);
   font-size: clamp(34px, 10vw, 72px);
@@ -37,11 +44,13 @@
 .advanced-reaction-cell.green {
   background: var(--green);
   color: #ffffff;
+  box-shadow: var(--glow-success);
 }
 
 .advanced-reaction-cell.red {
   background: var(--red);
   color: #ffffff;
+  box-shadow: var(--glow-danger);
 }
 
 .advanced-reaction-cell.clicked {

@@ -691,7 +691,8 @@ test("braking feedback flashes early releases and uses red glow instead of recol
   const earlyRunner = cssBlock(styles, ".dino-panel.early .advanced-runner");
 
   assert.doesNotMatch(crashedRunner, /background:\s*var\(--red\);/);
-  assert.match(crashedRunner, /box-shadow:\s*0 0 0 10px rgba\(230, 83, 73, 0\.22\)/);
+  assert.match(crashedRunner, /box-shadow:\s*var\(--glow-danger\);/);
+  assert.match(styles, /--glow-danger:\s*0 0 0 8px rgba\(230, 83, 73, 0\.15\), 0 12px 28px rgba\(230, 83, 73, 0\.2\);/);
   assert.match(crashedRunner, /transform:\s*rotate\(-7deg\) translateY\(2px\);/);
   assert.doesNotMatch(earlyRunner, /background:\s*#918a7e;/);
   assert.match(earlyRunner, /animation:\s*brake-early-flash 420ms ease-in-out 2;/);

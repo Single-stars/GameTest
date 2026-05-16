@@ -255,6 +255,8 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-intro"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/play-frame"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image-screen"/);
+  assert.match(appPageSource, /const playShellActive = stage === "playing" \|\| \(stage === "advanced" && advancedChallenge\?\.mode === "playing"\);/);
+  assert.match(appPageSource, /className=\{playShellActive \? "app-shell app-shell-play" : "app-shell"\}/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/registry"/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/native-rounds"/);
@@ -326,6 +328,7 @@ test("native rounds are split by gameplay without the legacy native-rounds facad
 test("global CSS is split by app flow, mini-games, and overlays without renaming active selectors", () => {
   const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const baseFlowCss = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
+  const shellCss = readFileSync(new URL("../app/styles/base-flow/shell.css", import.meta.url), "utf8");
   const miniGamesCss = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
   const baseFlowChunks = [
     "tokens",
@@ -351,6 +354,12 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
   assert.match(globalCss, /@import "\.\/styles\/mini-games\.css";/);
   assert.match(globalCss, /@import "\.\/styles\/overlays-responsive\.css";/);
   assert.match(baseFlowCss, /@import "\.\/base-flow\/tokens\.css";/);
+  assert.match(baseFlowChunks, /overflow-x: clip;/);
+  assert.doesNotMatch(baseFlowChunks, /overflow-x: hidden;/);
+  const baseAppShellBlock = shellCss.match(/\.app-shell \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.doesNotMatch(baseAppShellBlock, /overflow/);
+  assert.match(baseFlowChunks, /\.app-shell\.app-shell-play \{/);
+  assert.doesNotMatch(baseFlowChunks, /body:has\(\.play-screen\)/);
   assert.match(baseFlowChunks, /:root \{/);
   assert.match(baseFlowChunks, /\.advanced-aim-target \{/);
   assert.equal((baseFlowChunks.match(/\.advanced-aim-target \{/g) ?? []).length, 1);
@@ -414,6 +423,7 @@ test("advanced challenge configs and completion logic are split behind a stable 
 
 test("mini-game CSS is split into ordered common and per-game chunks", () => {
   const facadeSource = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
+  const commonSource = readFileSync(new URL("../app/styles/mini-games/common.css", import.meta.url), "utf8");
   const expectedImports = [
     '@import "./mini-games/common.css";',
     '@import "./mini-games/doodle.css";',
@@ -434,12 +444,33 @@ test("mini-game CSS is split into ordered common and per-game chunks", () => {
     assert.equal(existsSync(new URL(`../app/styles/${path}`, import.meta.url)), true, path);
   }
 
-  assert.match(readFileSync(new URL("../app/styles/mini-games/common.css", import.meta.url), "utf8"), /\.prototype-game-wrap \{/);
+  assert.match(commonSource, /\.prototype-game-wrap \{/);
+  assert.match(commonSource, /\.play-screen \.prototype-game-wrap \{[\s\S]*width: 100%;[\s\S]*height: 100%;/);
+  assert.match(commonSource, /\.play-screen \.prototype-stage \{[\s\S]*width: 100%;[\s\S]*height: 100%;/);
+  assert.doesNotMatch(commonSource, /--prototype-stage-scale/);
+  assert.doesNotMatch(commonSource, /zoom:/);
+  assert.doesNotMatch(commonSource, /scale\(var\(--prototype-stage-scale\)\)/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/doodle.css", import.meta.url), "utf8"), /\.doodle-stage \{/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/flappy.css", import.meta.url), "utf8"), /\.flappy-stage \{/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/knife.css", import.meta.url), "utf8"), /\.knife-stage \{/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/square-jump.css", import.meta.url), "utf8"), /\.square-jump-stage \{/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/fall-down.css", import.meta.url), "utf8"), /\.fall-down-stage \{/);
+});
+
+test("mini-game stages use native measured dimensions instead of visual scaling", () => {
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+  const gameModules = ["doodle", "fall-down", "square-jump", "flappy", "knife"] as const;
+
+  assert.match(commonSource, /export type MiniGameStageSize =/);
+  assert.match(commonSource, /export const DEFAULT_STAGE_SIZE/);
+  assert.match(commonSource, /export function useMiniGameStageSize/);
+  assert.match(commonSource, /ResizeObserver/);
+
+  for (const moduleName of gameModules) {
+    const source = readFileSync(new URL(`../features/mini-games/${moduleName}.tsx`, import.meta.url), "utf8");
+    assert.match(source, /useMiniGameStageSize/);
+    assert.match(source, /stageSize/);
+  }
 });
 
 test("base flow CSS is split into ordered focused chunks", () => {
@@ -568,7 +599,7 @@ test("square jump base misses respawn on the original next platform before force
 
   assert.match(squareJumpSource, /failures: number;/);
   assert.match(squareJumpSource, /respawnUntil: number;/);
-  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string\)/);
+  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize\)/);
   assert.match(squareJumpSource, /const failures = current\.failures \+ 1;/);
   assert.match(squareJumpSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
   assert.match(squareJumpSource, /失败达到 3 次，进入下一关/);
@@ -576,7 +607,7 @@ test("square jump base misses respawn on the original next platform before force
   assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(landedPlatform, current\.time\);/);
   assert.match(squareJumpSource, /current\.currentPlatform = landedPlatform;/);
   assert.match(squareJumpSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
-  assert.match(squareJumpSource, /mode === "base" && recoverSquareJumpBaseMiss\(current, "掉下去了"\)/);
+  assert.match(squareJumpSource, /mode === "base" && recoverSquareJumpBaseMiss\(current, "掉下去了", stageSize\)/);
   assert.match(squareJumpSource, /failures: latest\.failures,/);
   assert.match(squareJumpSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });

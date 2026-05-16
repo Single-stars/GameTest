@@ -3,7 +3,17 @@
   width: min(100%, 390px);
   display: grid;
   justify-self: center;
+  align-self: center;
   margin-inline: auto;
+}
+
+.play-screen .prototype-game-wrap {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  align-content: stretch;
+  justify-items: stretch;
 }
 
 .prototype-game-wrap > .mini-score {
@@ -18,9 +28,9 @@
   justify-self: center;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-soft);
   contain: layout paint;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
@@ -42,8 +52,9 @@
   align-content: center;
   gap: 10px;
   padding: 22px;
-  background: rgba(255, 253, 248, 0.92);
+  background: rgba(255, 253, 248, 0.94);
   text-align: center;
+  backdrop-filter: blur(10px);
 }
 
 .prototype-end-overlay h2 {
@@ -68,13 +79,22 @@
   color: var(--red);
 }
 
+.play-screen .prototype-stage {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  align-self: stretch;
+  justify-self: stretch;
+  box-shadow: 0 12px 30px rgba(24, 24, 24, 0.1);
+}
+
 .mini-game-fps-badge {
   position: absolute;
   z-index: 35;
   right: 8px;
   bottom: 8px;
   border: 1px solid rgba(24, 24, 24, 0.16);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   padding: 4px 6px;
   background: rgba(255, 253, 248, 0.82);
   color: rgba(24, 24, 24, 0.72);
@@ -93,7 +113,7 @@
   gap: 3px;
   min-width: 132px;
   border: 1px solid rgba(24, 24, 24, 0.16);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   padding: 7px 8px;
   background: rgba(255, 253, 248, 0.92);
   color: rgba(24, 24, 24, 0.78);
@@ -117,11 +137,14 @@
   min-height: 38px;
   display: grid;
   place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 999px;
   padding: 0 16px;
   color: #ffffff;
   font-size: 22px;
   font-weight: 950;
+  box-shadow: var(--glow-success);
+  backdrop-filter: blur(10px);
   pointer-events: none;
   animation: prototype-feedback-pop 620ms ease both;
 }
@@ -132,7 +155,7 @@
 
 .prototype-feedback.perfect {
   background: var(--gold);
-  box-shadow: 0 0 0 12px rgba(211, 155, 42, 0.18);
+  box-shadow: var(--glow-warning);
 }
 
 @keyframes prototype-feedback-pop {

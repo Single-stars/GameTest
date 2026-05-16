@@ -2,7 +2,7 @@
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-  min-height: 60svh;
+  min-height: 0;
   position: relative;
   display: grid;
   place-items: center;
@@ -35,7 +35,7 @@
   width: 46px;
   aspect-ratio: 1;
   translate: -50% 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--ink);
   transition:
     background 120ms ease,
@@ -53,7 +53,7 @@
   translate: -50% 0;
   border-radius: 7px 7px 2px 2px;
   background: var(--red);
-  box-shadow: 0 0 0 10px rgba(230, 83, 73, 0.14);
+  box-shadow: var(--glow-danger);
 }
 
 .advanced-hazard.fake {
@@ -62,7 +62,7 @@
 }
 
 .dino-panel.crashed .advanced-runner {
-  box-shadow: 0 0 0 10px rgba(230, 83, 73, 0.22), 0 18px 34px rgba(230, 83, 73, 0.2);
+  box-shadow: var(--glow-danger);
   filter: drop-shadow(0 0 0.65rem rgba(230, 83, 73, 0.58));
   transform: rotate(-7deg) translateY(2px);
 }
@@ -79,7 +79,7 @@
 
 .dino-panel.crashed .advanced-hazard {
   animation: brake-danger-hit 340ms ease-in-out 2;
-  box-shadow: 0 0 0 14px rgba(230, 83, 73, 0.24), 0 18px 34px rgba(230, 83, 73, 0.24);
+  box-shadow: var(--glow-danger);
 }
 
 @keyframes brake-danger-hit {
@@ -127,7 +127,7 @@
   border: 0;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 18px 46px rgba(24, 24, 24, 0.16);
+  box-shadow: var(--shadow-soft);
 }
 
 .brake-dot.go {
@@ -158,7 +158,7 @@
   width: 54px;
   height: 54px;
   translate: -50% 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--ink);
   transition:
     filter 120ms ease,
@@ -190,7 +190,7 @@
   opacity: 0;
   border-radius: 7px 7px 2px 2px;
   background: var(--red);
-  box-shadow: 0 0 0 12px rgba(230, 83, 73, 0.16), 0 18px 34px rgba(230, 83, 73, 0.2);
+  box-shadow: var(--glow-danger);
   translate: -50% 0;
   transform: translateY(16px) scaleY(0.88);
   transition:
@@ -234,7 +234,7 @@
   justify-self: center;
   margin: 0 16px 16px;
   border: 1px dashed rgba(24, 24, 24, 0.24);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 253, 248, 0.84);
   cursor: pointer;
   touch-action: none;

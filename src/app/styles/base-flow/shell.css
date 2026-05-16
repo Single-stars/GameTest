@@ -2,7 +2,15 @@
   width: min(100%, 920px);
   min-height: 100svh;
   margin: 0 auto;
-  padding: 18px;
+  padding: var(--page-pad-y) var(--page-pad-x);
+}
+
+.app-shell.app-shell-play {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
   overflow: hidden;
 }
 

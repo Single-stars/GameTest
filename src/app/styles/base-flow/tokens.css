@@ -1,16 +1,56 @@
 :root {
-  --background: #f7f4ee;
-  --surface: #fffdf8;
-  --surface-2: #f0ebe3;
-  --ink: #181818;
-  --muted: #665f55;
-  --line: #d8d0c4;
-  --red: #e65349;
-  --blue: #2f80ed;
-  --cyan: #1b9aaa;
-  --gold: #d39b2a;
-  --green: #2f9b68;
-  --violet: #7b61ff;
+  --color-paper: #f7f4ee;
+  --color-surface: #fffdf8;
+  --color-surface-soft: #f0ebe3;
+  --color-surface-glass: rgba(255, 253, 248, 0.9);
+  --color-ink: #181818;
+  --color-muted: #665f55;
+  --color-line: #d8d0c4;
+  --color-danger: #e65349;
+  --color-blue: #2f80ed;
+  --color-accent: #1b9aaa;
+  --color-gold: #d39b2a;
+  --color-success: #2f9b68;
+  --color-purple: #7b61ff;
+  --background: var(--color-paper);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-soft);
+  --ink: var(--color-ink);
+  --muted: var(--color-muted);
+  --line: var(--color-line);
+  --red: var(--color-danger);
+  --blue: var(--color-blue);
+  --cyan: var(--color-accent);
+  --gold: var(--color-gold);
+  --green: var(--color-success);
+  --violet: var(--color-purple);
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-pill: 999px;
+  --page-pad-x: 18px;
+  --page-pad-y: 18px;
+  --play-pad-x: max(10px, env(safe-area-inset-left));
+  --play-pad-y: 8px;
+  --button-height: 50px;
+  --button-height-sm: 38px;
+  --button-height-lg: 56px;
+  --button-radius: var(--radius-sm);
+  --card-bg: var(--surface);
+  --card-border: 1px solid var(--line);
+  --card-radius: var(--radius-sm);
+  --card-padding: 18px;
+  --hud-bg: rgba(255, 253, 248, 0.86);
+  --hud-border: 1px solid rgba(24, 24, 24, 0.1);
+  --hud-radius: var(--radius-pill);
+  --hud-height: 32px;
+  --shadow-soft: 0 12px 34px rgba(24, 24, 24, 0.08);
+  --shadow-panel: 0 20px 60px rgba(24, 24, 24, 0.12);
+  --shadow-float: 0 24px 70px rgba(24, 24, 24, 0.18);
+  --glow-accent: 0 0 0 7px rgba(27, 154, 170, 0.14), 0 10px 24px rgba(27, 154, 170, 0.18);
+  --glow-success: 0 0 0 7px rgba(47, 155, 104, 0.14), 0 10px 24px rgba(47, 155, 104, 0.18);
+  --glow-danger: 0 0 0 8px rgba(230, 83, 73, 0.15), 0 12px 28px rgba(230, 83, 73, 0.2);
+  --glow-warning: 0 0 0 8px rgba(211, 155, 42, 0.16), 0 12px 28px rgba(211, 155, 42, 0.2);
   --shadow: 0 20px 60px rgba(24, 24, 24, 0.1);
 }
 
@@ -25,7 +65,7 @@ html,
 body {
   max-width: 100vw;
   min-height: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -35,6 +75,7 @@ body {
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
 }
 
 body,

@@ -133,7 +133,7 @@ test("fall down base camera moves at constant speed and only top pressure fails 
     status: "playing",
     reason: "",
   });
-  assert.match(fallDownSource, /bottomFailLine: STAGE_HEIGHT \+ PLAYER_SIZE/);
+  assert.match(fallDownSource, /bottomFailLine: stageHeight \+ PLAYER_SIZE/);
 });
 
 test("fall down fragile platforms expire without directly failing the player", () => {
@@ -149,13 +149,13 @@ test("fall down fragile platforms expire without directly failing the player", (
     broken: false,
     directFailure: false,
   });
-  assert.match(fallDownSource, /if \(screenY < -80 \|\| screenY > STAGE_HEIGHT \+ 80 \|\| platform\.broken\) return null;/);
+  assert.match(fallDownSource, /if \(screenY < -80 \|\| screenY > stageHeight \+ 80 \|\| platform\.broken\) return null;/);
   assert.doesNotMatch(fallDownSource, /fragileRatio|fall-crack|--fragile-ratio|fragileRatio > 0\.72/);
   assert.match(fallDownSource, /const fragileTime = numberParam\(level\.params, "fragileTime", 1\.2\);/);
   assert.match(fallDownSource, /const fragileWarning = platform\.kind === "fragile" && platform\.steppedAt !== null && view\.time - platform\.steppedAt >= Math\.max\(0, fragileTime - 0\.45\);/);
   assert.match(fallDownSource, /fragileWarning \? "fragile-warning" : ""/);
   assert.doesNotMatch(globalCss, /\.fall-crack/);
-  assert.match(globalCss, /\.fall-platform\.kind-fragile \.fall-platform-top \{\s*background: #c7e1d1;\s*\}/);
+  assert.match(globalCss, /\.fall-platform\.kind-fragile \.fall-platform-top \{\s*background: #c7e1d1;\s*border-style: dashed;\s*\}/);
   assert.match(globalCss, /\.fall-platform\.fragile-warning \.fall-platform-top/);
   assert.match(globalCss, /@keyframes fall-fragile-warning/);
 });
@@ -201,7 +201,7 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /const previousTime = current\.time;/);
   assert.match(fallDownSource, /const platformById = new Map\(current\.platforms\.map/);
   assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
-  assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time\) - previousPlatformX/);
+  assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time, stageWidth\) - previousPlatformX/);
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });
 
@@ -210,7 +210,7 @@ test("fall down base recovery keeps the animation loop alive after a recoverable
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
-  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason\)\) \{[\s\S]*?return true;/);
+  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)\) \{[\s\S]*?return true;/);
   assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
   assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
 });
@@ -221,18 +221,18 @@ test("fall down base failures respawn on a safe platform at the current camera m
 
   assert.match(fallDownSource, /failures: number;/);
   assert.match(fallDownSource, /respawnUntil: number;/);
-  assert.match(fallDownSource, /function recoverFallDownBaseFailure\(current: FallDownRuntime, reason: string\)/);
+  assert.match(fallDownSource, /function recoverFallDownBaseFailure\(current: FallDownRuntime, reason: string, stageSize: MiniGameStageSize\)/);
   assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
   assert.match(fallDownSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
   assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
-  assert.match(fallDownSource, /const platformY = current\.cameraY \+ STAGE_HEIGHT \* 0\.5;/);
+  assert.match(fallDownSource, /const platformY = current\.cameraY \+ stageSize\.height \* 0\.5;/);
   assert.match(fallDownSource, /id: -2000 - failures,/);
   assert.match(fallDownSource, /kind: "normal",/);
   assert.match(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(fallDownSource, /current\.started = false;/);
-  assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason\)/);
+  assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)/);
   assert.match(fallDownSource, /failures: latest\.failures,/);
   assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });
@@ -248,7 +248,7 @@ test("fall down platform layout varies by run seed", () => {
   assert.match(fallDownSource, /createSeededRandom\(`\$\{level\.levelId\}:\$\{runSeed\}:fall-down-platforms`\)/);
   assert.match(componentSource, /function makeFallDownNoisePoints\(rand: \(\) => number, count: number\)/);
   assert.match(componentSource, /function fallDownSmoothNoise\(points: number\[\], position: number\)/);
-  assert.match(fallDownSource, /function makeFallDownPlatforms\(level: MiniGameLevelConfig, runSeed: string\): FallDownPlatform\[\]/);
+  assert.match(fallDownSource, /function makeFallDownPlatforms\(level: MiniGameLevelConfig, runSeed: string, stageWidth: number\): FallDownPlatform\[\]/);
   assert.match(fallDownSource, /const kindBag = fallDownPlatformKindBag\(level, layersRequired, rand\);/);
   assert.match(fallDownSource, /kindBag\.splice\(Math\.floor\(rand\(\) \* kindBag\.length\), 1\)\[0\]/);
   assert.match(fallDownSource, /const gapNoise = fallDownSmoothNoise\(gapNoisePoints, index \* 0\.61\);/);
@@ -258,9 +258,9 @@ test("fall down platform layout varies by run seed", () => {
   assert.match(fallDownSource, /const lane = \(index \+ laneOffset\) % lanePattern\.length;/);
   assert.match(fallDownSource, /const spreadTargetRatio = clamp\(lanePattern\[lane\] \+ \(xNoise - 0\.5\) \* 0\.3, 0\.1, 0\.9\);/);
   assert.match(fallDownSource, /phase: rand\(\) \* Math\.PI \* 2/);
-  assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string\)/);
-  assert.match(fallDownSource, /makeFallDownPlatforms\(level, runSeed\)/);
-  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\)/);
+  assert.match(fallDownSource, /makeFallDownPlatforms\(level, runSeed, stageSize\.width\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, stageSize\)/);
 });
 
 test("fall down adds falling hazards and L platforms without triple danger layers", () => {
@@ -272,10 +272,10 @@ test("fall down adds falling hazards and L platforms without triple danger layer
   assert.match(componentSource, /fallingHazards: FallDownFallingHazard\[\]/);
   assert.match(componentSource, /function constrainFallDownDangerRuns\(kinds: FallDownPlatformKind\[\], rand: \(\) => number\)/);
   assert.match(componentSource, /dangerRun >= 3/);
-  assert.match(fallDownSource, /function makeFallDownFallingHazards\(level: MiniGameLevelConfig, runSeed: string\): FallDownFallingHazard\[\]/);
-  assert.match(fallDownSource, /function fallDownFallingHazardScreenY\(hazard: FallDownFallingHazard, time: number\)/);
-  assert.match(fallDownSource, /function fallDownFallingHazardX\(hazard: FallDownFallingHazard, time: number\)/);
-  assert.match(fallDownSource, /fallingHazards: makeFallDownFallingHazards\(level, runSeed\)/);
+  assert.match(fallDownSource, /function makeFallDownFallingHazards\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\): FallDownFallingHazard\[\]/);
+  assert.match(fallDownSource, /function fallDownFallingHazardScreenY\(hazard: FallDownFallingHazard, time: number, stageHeight: number\)/);
+  assert.match(fallDownSource, /function fallDownFallingHazardX\(hazard: FallDownFallingHazard, time: number, stageWidth: number\)/);
+  assert.match(fallDownSource, /fallingHazards: makeFallDownFallingHazards\(level, runSeed, stageSize\)/);
   assert.match(fallDownSource, /for \(const hazard of current\.fallingHazards\)/);
   assert.match(fallDownSource, /fall-down-falling-hazard/);
   assert.match(fallDownSource, /fall-platform-leg/);
