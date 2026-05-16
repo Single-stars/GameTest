@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -996,17 +996,52 @@ test("square jump and fall down paint animation frames without per-frame React s
   assert.doesNotMatch(fallDownSource, /\n\s*syncView\(\);\s*frameId = requestAnimationFrame\(tick\);/);
 });
 
+test("mini game common runtime utilities are extracted from embedded stage file", () => {
+  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const commonModuleUrl = new URL("../features/mini-games/common.tsx", import.meta.url);
+
+  assert.equal(existsSync(commonModuleUrl), true);
+  const commonSource = readFileSync(commonModuleUrl, "utf8");
+
+  assert.match(componentSource, /from "@\/features\/mini-games\/common"/);
+  assert.match(componentSource, /export function MiniGameEmbeddedStage/);
+  assert.doesNotMatch(componentSource, /function useMiniGamePerfMonitor\(label: string\)/);
+  assert.doesNotMatch(componentSource, /function MiniGamePerfPanel/);
+  assert.doesNotMatch(componentSource, /function PrototypeEndOverlay/);
+  assert.match(commonSource, /export type PrototypeStatus = "playing" \| "passed" \| "failed";/);
+  assert.match(commonSource, /export type MiniGameRunMode = "prototype" \| "base" \| "advanced";/);
+  assert.match(commonSource, /export type MiniGameCompletion =/);
+  assert.match(commonSource, /export const STAGE_WIDTH = 360;/);
+  assert.match(commonSource, /export const STAGE_HEIGHT = 640;/);
+  assert.match(commonSource, /export const PLAYER_SIZE = 32;/);
+  assert.match(commonSource, /export const BASE_FAILURE_LIMIT = 3;/);
+  assert.match(commonSource, /export const MINI_GAME_UI_SYNC_MS = 120;/);
+  assert.match(commonSource, /export const MINI_GAME_TIMER_SYNC_MS = 100;/);
+  assert.match(commonSource, /export function clamp/);
+  assert.match(commonSource, /export function numberParam/);
+  assert.match(commonSource, /export function booleanParam/);
+  assert.match(commonSource, /export function transformPoint3d/);
+  assert.match(commonSource, /export function stagePointStyle/);
+  assert.match(commonSource, /export function useMiniGameLowPowerMode/);
+  assert.match(commonSource, /export function useMiniGameFpsCounter/);
+  assert.match(commonSource, /export function MiniGameFpsBadge/);
+  assert.match(commonSource, /export function useMiniGamePerfMonitor/);
+  assert.match(commonSource, /export function MiniGamePerfPanel/);
+  assert.match(commonSource, /export function PrototypeEndOverlay/);
+});
+
 test("hidden mini game performance panel is URL-gated and ref-backed", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const perfSource = componentSource.slice(componentSource.indexOf("type MiniGamePerfMetrics"), componentSource.indexOf("export function MiniGameEmbeddedStage"));
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+  const perfSource = commonSource.slice(commonSource.indexOf("type MiniGamePerfMetrics"), commonSource.indexOf("export function PrototypeEndOverlay"));
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
   const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
 
-  assert.match(componentSource, /const MINI_GAME_PERF_PANEL_SYNC_MS = 500;/);
+  assert.match(commonSource, /const MINI_GAME_PERF_PANEL_SYNC_MS = 500;/);
   assert.match(perfSource, /function isMiniGamePerfPanelEnabled\(\)/);
   assert.match(perfSource, /new URLSearchParams\(window\.location\.search\)\.get\("perf"\) === "1"/);
-  assert.match(perfSource, /function useMiniGamePerfMonitor\(label: string\)/);
+  assert.match(perfSource, /export function useMiniGamePerfMonitor\(label: string\)/);
   assert.match(perfSource, /metricsRef = useRef/);
   assert.match(perfSource, /if \(time - metrics\.lastPanelAt < MINI_GAME_PERF_PANEL_SYNC_MS\) return;/);
   assert.match(perfSource, /setSnapshot\(createMiniGamePerfSnapshot\(metrics\)\)/);
@@ -1340,7 +1375,8 @@ test("fall down adds falling hazards and L platforms without triple danger layer
 
 test("prototype embedded stage keeps JSX buttons well formed", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const overlaySource = componentSource.slice(componentSource.indexOf("function PrototypeEndOverlay"), componentSource.indexOf("type FallDownPlatformKind"));
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+  const overlaySource = commonSource.slice(commonSource.indexOf("export function PrototypeEndOverlay"), commonSource.length);
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("function fallDownPlatformKindBag"));
 
   assert.doesNotMatch(overlaySource, /<button className="secondary-button"(?:(?!<\/button>)[\s\S])*<button className="primary-button"/);
