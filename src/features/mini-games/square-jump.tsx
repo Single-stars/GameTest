@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PlayerAvatar, type PlayerAvatarGravity, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -55,7 +56,7 @@ import {
 
 const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
-type SquareGravityState = NonNullable<SquareJumpBasePlatform["gravity"]>;
+type SquareGravityState = PlayerAvatarGravity & NonNullable<SquareJumpBasePlatform["gravity"]>;
 
 const SQUARE_BASE_MAX_HOLD_MS = 900;
 
@@ -146,6 +147,29 @@ const SQUARE_JUMP_ADVANCE_DELAY = 0.16;
 
 function getSquareJumpPlatformY(stageHeight: number) {
   return stageHeight * 0.72;
+}
+
+function resolveSquareJumpPlayerAvatarState(view: SquareJumpUnifiedRuntime): PlayerAvatarState {
+  if (view.status === "passed") return "success";
+  if (view.time < view.respawnUntil) return "shield";
+  if (view.state === "charging" || view.state === "airCharging") return "charge";
+  if (view.feedback === "Good") return "land";
+  if (view.state === "jumping") return "jump";
+  if (view.state === "falling") return "fall";
+  return "idle";
+}
+
+function toSquareJumpAvatarVar(value: number) {
+  return value.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function setSquareJumpAvatarChargeVars(node: HTMLElement | null, current: SquareJumpUnifiedRuntime) {
+  if (!node) return;
+  const charge = current.state === "charging" || current.state === "airCharging" ? current.charge : 0;
+  node.style.setProperty("--player-avatar-charge", toSquareJumpAvatarVar(charge));
+  node.style.setProperty("--player-avatar-charge-offset", `${toSquareJumpAvatarVar(charge * 4)}px`);
+  node.style.setProperty("--player-avatar-charge-scale-x", toSquareJumpAvatarVar(1 + charge * 0.18));
+  node.style.setProperty("--player-avatar-charge-scale-y", toSquareJumpAvatarVar(1 - charge * 0.24));
 }
 
 function createSquareJumpPlan(level: MiniGameLevelConfig, runtime: SquareJumpUnifiedRuntime) {
@@ -359,7 +383,7 @@ export function SquareJumpPrototype({
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
   const progressBackgroundRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
-  const playerBoxRef = useRef<HTMLDivElement | null>(null);
+  const playerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
@@ -423,13 +447,7 @@ export function SquareJumpPrototype({
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
-      if (playerBoxRef.current) {
-        const isRuntimeCharging = current.state === "charging" || current.state === "airCharging";
-        const scaleX = isRuntimeCharging ? 1 + current.charge * 0.18 : 1;
-        const scaleY = isRuntimeCharging ? 1 - current.charge * 0.24 : 1;
-        const offsetY = isRuntimeCharging ? (PLAYER_SIZE * current.charge * 0.24) / 2 : 0;
-        playerBoxRef.current.style.transform = `translateY(${offsetY}px) scaleX(${scaleX}) scaleY(${scaleY}) rotate(${current.playerTurns * 90}deg)`;
-      }
+      setSquareJumpAvatarChargeVars(playerAvatarRef.current, current);
       if (tutorialPreviewRef.current) {
         const previewPlan = level.levelId === "square-jump-base" && current.jumps < 3 && current.state === "charging" ? createSquareJumpPlan(level, current) : null;
         if (previewPlan) {
@@ -734,11 +752,6 @@ export function SquareJumpPrototype({
   const platforms = selectSquareJumpVisiblePlatforms(view.currentPlatform, view.nextPlatform, view.exitingPlatform);
   const tutorialPreviewPlan = level.levelId === "square-jump-base" && view.jumps < 3 && view.state === "charging" ? createSquareJumpPlan(level, view) : null;
   const isCharging = view.state === "charging" || view.state === "airCharging";
-  const chargingSquash = {
-    scaleX: isCharging ? 1 + view.charge * 0.18 : 1,
-    scaleY: isCharging ? 1 - view.charge * 0.24 : 1,
-    offsetY: isCharging ? (PLAYER_SIZE * view.charge * 0.24) / 2 : 0,
-  };
 
   return (
     <div className="prototype-game-wrap">
@@ -808,10 +821,14 @@ export function SquareJumpPrototype({
               height: `${PLAYER_SIZE}px`,
             }}
           >
-            <div
-              className="prototype-player-box square-jump-base-player-visual"
-              ref={playerBoxRef}
-              style={{ transform: `translateY(${chargingSquash.offsetY}px) scaleX(${chargingSquash.scaleX}) scaleY(${chargingSquash.scaleY}) rotate(${view.playerTurns * 90}deg)` }}
+            <PlayerAvatar
+              charge={view.charge}
+              gravity={view.activeGravity}
+              mood={isCharging ? "focused" : "normal"}
+              rotationTurns={view.playerTurns}
+              rootRef={playerAvatarRef}
+              state={resolveSquareJumpPlayerAvatarState(view)}
+              visualScale={1.18}
             />
           </div>
           {DEBUG_MINI_GAME_HITBOX ? (

@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -55,6 +56,8 @@ type DoodleFrame = {
   hazards: DoodleHazard[];
   riskHit: number;
   playerTurns: number;
+  playerDirection: PlayerAvatarDirection;
+  jumpTurnAvailable: boolean;
   failures: number;
   invincibleUntil: number;
   status: PrototypeStatus;
@@ -66,6 +69,8 @@ type DoodleViewFrame = {
   failures: number;
   invincibleUntil: number;
   playerTurns: number;
+  playerDirection: PlayerAvatarDirection;
+  playerVy: number;
   playerX: number;
   playerY: number;
   progressPercent: number;
@@ -87,6 +92,12 @@ function makeDoodleWorld(level: MiniGameLevelConfig, runSeed: string, stageSize:
 }
 function movingPlatformX(platform: DoodlePlatform, time: number, stageWidth: number) {
   return platform.moving ? clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 12, stageWidth - platform.width / 2 - 12) : platform.x;
+}
+
+function resolveDoodlePlayerDirection(direction: number): PlayerAvatarDirection {
+  if (direction < 0) return "left";
+  if (direction > 0) return "right";
+  return "none";
 }
 
 function movingHazardPosition(hazard: DoodleHazard, time: number, stageWidth: number) {
@@ -137,6 +148,8 @@ function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>, stageWid
     hazards: world.hazards,
     riskHit: 0,
     playerTurns: 0,
+    playerDirection: "none",
+    jumpTurnAvailable: false,
     failures: 0,
     invincibleUntil: 0,
     status: "playing",
@@ -150,6 +163,8 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
     failures: frame.failures,
     invincibleUntil: frame.invincibleUntil,
     playerTurns: frame.playerTurns,
+    playerDirection: frame.playerDirection,
+    playerVy: frame.playerVy,
     playerX: frame.playerX,
     playerY: frame.playerY,
     progressPercent: clamp((frame.playerY / targetHeight) * 100, 0, 100),
@@ -169,6 +184,13 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
       stageHeight,
     }),
   };
+}
+
+function resolveDoodlePlayerAvatarState(view: DoodleViewFrame): PlayerAvatarState {
+  if (view.status === "failed") return "fail";
+  if (view.status === "passed") return "success";
+  if (view.time < view.invincibleUntil) return "shield";
+  return "idle";
 }
 
 export function DoodleJumpPrototype({
@@ -198,7 +220,6 @@ export function DoodleJumpPrototype({
   const inputDirectionRef = useRef(0);
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
-  const playerBoxRef = useRef<HTMLDivElement | null>(null);
   const progressLineRef = useRef<HTMLDivElement | null>(null);
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
@@ -239,6 +260,7 @@ export function DoodleJumpPrototype({
     if (current.started || current.status !== "playing") return;
     current.started = true;
     current.playerVy = 760;
+    current.jumpTurnAvailable = true;
     syncDoodleView();
   }, [syncDoodleView]);
 
@@ -250,14 +272,16 @@ export function DoodleJumpPrototype({
   const updateDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (inputPointerIdRef.current !== event.pointerId) return;
-    inputDirectionRef.current = chooseDoodleDirection(event);
+    const direction = chooseDoodleDirection(event);
+    inputDirectionRef.current = direction;
   }, []);
 
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     inputPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-    inputDirectionRef.current = chooseDoodleDirection(event);
+    const direction = chooseDoodleDirection(event);
+    inputDirectionRef.current = direction;
     startDoodle();
   }, [startDoodle]);
 
@@ -280,9 +304,6 @@ export function DoodleJumpPrototype({
           current.playerX - PLAYER_SIZE / 2,
           stageHeight - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
         );
-      }
-      if (playerBoxRef.current) {
-        playerBoxRef.current.style.transform = `rotate(${current.playerTurns * 90}deg)`;
       }
       if (progressLineRef.current) {
         const targetY = clamp(stageHeight - (world.targetHeight - current.cameraY), 0, stageHeight);
@@ -336,16 +357,26 @@ export function DoodleJumpPrototype({
       }
 
       const nextTime = current.time + delta;
-      current.playerX = clamp(current.playerX + inputDirectionRef.current * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, stageWidth - PLAYER_SIZE / 2);
+      const inputDirection = inputDirectionRef.current;
+      current.playerDirection = resolveDoodlePlayerDirection(inputDirection);
+      current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, stageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
       const previousY = current.playerY;
       let nextVy = current.playerVy - 1500 * delta;
       let nextY = current.playerY + nextVy * delta;
       let riskHit = current.riskHit;
       let playerTurns = current.playerTurns;
+      let jumpTurnAvailable = current.jumpTurnAvailable;
       let eventChanged = false;
       let reason = "";
       let status: PrototypeStatus = "playing";
+
+      if (inputDirection !== 0 && jumpTurnAvailable) {
+        const turnDirection = inputDirection < 0 ? -1 : 1;
+        playerTurns += turnDirection;
+        jumpTurnAvailable = false;
+        eventChanged = true;
+      }
 
       if (nextVy < 0) {
         const minY = Math.min(previousY, nextY) - PLAYER_SIZE;
@@ -360,7 +391,7 @@ export function DoodleJumpPrototype({
             nextVy = 760 * (platform.risk ? riskJumpMultiplier : 1);
             platform.used = true;
             if (platform.risk) riskHit += 1;
-            playerTurns += 1;
+            jumpTurnAvailable = true;
             eventChanged = true;
             break;
           }
@@ -421,6 +452,7 @@ export function DoodleJumpPrototype({
       current.cameraY = cameraY;
       current.riskHit = riskHit;
       current.playerTurns = playerTurns;
+      current.jumpTurnAvailable = jumpTurnAvailable;
 
       if (mode === "base" && status === "failed") {
         const failures = current.failures + 1;
@@ -443,6 +475,7 @@ export function DoodleJumpPrototype({
           current.playerX = respawnX;
           current.playerY = respawnY;
           current.playerVy = 760;
+          current.jumpTurnAvailable = true;
           current.platforms.unshift(respawnPlatform);
           current.failures = failures;
           current.invincibleUntil = nextTime + 1.1;
@@ -563,7 +596,14 @@ export function DoodleJumpPrototype({
           ref={playerShellRef}
           style={stagePointStyle(view.playerX, view.playerY, view.cameraY, PLAYER_SIZE, stageHeight)}
         >
-          <div className="prototype-player-box doodle-player" ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
+          <PlayerAvatar
+            direction={view.playerDirection}
+            gravity="normal"
+            mood={view.started ? "focused" : "normal"}
+            rotationTurns={view.playerTurns}
+            state={resolveDoodlePlayerAvatarState(view)}
+            visualScale={1.22}
+          />
         </div>
         {!view.started ? <div className="prototype-start-hint">按住开始</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}

@@ -315,8 +315,31 @@
     width: min(100%, 300px);
   }
 
-  .advanced-level-grid {
-    gap: 6px;
+  .advanced-lobby-carousel {
+    --advanced-lobby-level-size: 112px;
+    --advanced-lobby-level-center: 56px;
+    --advanced-lobby-step-px: 118px;
+    min-height: 190px;
+  }
+
+  .advanced-lobby-track {
+    min-height: 190px;
+  }
+
+  .advanced-lobby-level {
+    padding: 14px 6px;
+  }
+
+  .advanced-lobby-level strong {
+    font-size: 20px;
+  }
+
+  .advanced-lobby-level.selected strong {
+    font-size: 26px;
+  }
+
+  .advanced-lobby-actions {
+    gap: 8px;
   }
 
   .luck-stat-row {
@@ -337,11 +360,6 @@
 
   .dino-track {
     min-height: 210px;
-  }
-
-  .run-button {
-    margin-inline: 12px;
-    width: calc(100% - 24px);
   }
 
 }

@@ -177,7 +177,7 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /const fallDownPointerIdRef = useRef<number \| null>\(null\);/);
   assert.match(fallDownSource, /const resumeFallDownInput = useCallback/);
   assert.match(fallDownSource, /current\.started = true;/);
-  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
+  assert.doesNotMatch(fallDownSource, /current\.respawnUntil = 0;/);
   assert.match(fallDownSource, /current\.inputDirection = direction;/);
   assert.match(fallDownSource, /current\.vx = direction \* fallDownPlayerSpeed;/);
   assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{\s*resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
@@ -197,7 +197,6 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /onPointerUp=\{stopDirection\}/);
   assert.match(fallDownSource, /onPointerCancel=\{stopDirection\}/);
   assert.match(fallDownSource, /current\.vy = 0;/);
-  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
   assert.match(fallDownSource, /const previousTime = current\.time;/);
   assert.match(fallDownSource, /const platformById = new Map\(current\.platforms\.map/);
   assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
@@ -205,14 +204,49 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });
 
+test("fall down maps its player visuals through the shared avatar without warning state", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+  const avatarStateSource = fallDownSource.slice(
+    fallDownSource.indexOf("function resolveFallDownPlayerAvatarState"),
+    fallDownSource.indexOf("function makeFallDownNoisePoints"),
+  );
+  const renderSource = fallDownSource.slice(
+    fallDownSource.indexOf("className={`fall-down-player-shell"),
+    fallDownSource.indexOf("{showOverlay ?", fallDownSource.indexOf("className={`fall-down-player-shell")),
+  );
+
+  assert.match(componentSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(componentSource, /type PlayerAvatarDirection/);
+  assert.match(componentSource, /type PlayerAvatarState/);
+  assert.match(fallDownSource, /function resolveFallDownPlayerDirection/);
+  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return "fail";/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return "shield";/);
+  assert.match(avatarStateSource, /if \(view\.started && view\.inputDirection !== 0\) return "move";/);
+  assert.match(avatarStateSource, /return "idle";/);
+  assert.doesNotMatch(avatarStateSource, /return "warning";/);
+  assert.doesNotMatch(avatarStateSource, /fragile|danger|fallingHazard|pressure/i);
+  assert.match(renderSource, /<PlayerAvatar/);
+  assert.match(renderSource, /state=\{resolveFallDownPlayerAvatarState\(view\)\}/);
+  assert.match(renderSource, /direction=\{resolveFallDownPlayerDirection\(view\.inputDirection\)\}/);
+  assert.match(renderSource, /visualScale=\{1\.18\}/);
+  assert.doesNotMatch(renderSource, /prototype-player-box fall-down-player/);
+});
+
 test("fall down base recovery keeps the animation loop alive after a recoverable failure", () => {
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const resumeInputSource = fallDownSource.slice(
+    fallDownSource.indexOf("const resumeFallDownInput = useCallback"),
+    fallDownSource.indexOf("const fail = useCallback"),
+  );
 
   assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
   assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)\) \{[\s\S]*?return true;/);
   assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
   assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
+  assert.doesNotMatch(resumeInputSource, /respawnUntil\s*=\s*0/);
 });
 
 test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {

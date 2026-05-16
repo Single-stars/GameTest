@@ -69,7 +69,7 @@ export type AdvancedChallengeRecord = {
 };
 
 export type AdvancedLevelState = "completed" | "current" | "locked";
-export type AdvancedBackSource = "select" | "intro" | "playing" | "complete";
+export type AdvancedBackSource = "select" | "intro" | "playing" | "base-playing" | "complete";
 export type AdvancedBackDestination = "result" | "challenge";
 export type AdvancedCompletionAction = "retry" | "next" | "maxed";
 export type AppStage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck";
@@ -362,7 +362,7 @@ export function getAdvancedLevelToneForState(state: AdvancedLevelState, level: n
 }
 
 export function getAdvancedBackDestination(source: AdvancedBackSource): AdvancedBackDestination {
-  return source === "playing" || source === "complete" ? "challenge" : "result";
+  return source === "playing" || source === "base-playing" || source === "complete" ? "challenge" : "result";
 }
 
 export function shouldGuardAppBack(stage: AppStage, restartConfirmOpen: boolean) {

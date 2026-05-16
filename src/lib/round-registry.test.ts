@@ -78,7 +78,8 @@ test("advanced round rendering reads formal implementations from the round regis
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
 
-  assert.match(appPageSource, /<RoundPlayer[\s\S]*phase="advanced"[\s\S]*roundId=\{round\}/);
+  assert.match(appPageSource, /<RoundPlayer[\s\S]*advancedConfig=\{props\.phase === "advanced" \? props\.advancedConfig : undefined\}/);
+  assert.match(appPageSource, /<RoundPlayer[\s\S]*phase=\{props\.phase\}[\s\S]*roundId=\{props\.round\}/);
   assert.match(roundPlayerSource, /const implementation = getRoundDefinition\(roundId\)\[phase\];/);
   assert.match(roundPlayerSource, /phase === "advanced"[\s\S]*isMiniGameAdvancedConfig\(advancedConfig\)[\s\S]*<MiniGameAdvancedRound/);
   assert.match(roundPlayerSource, /switch \(implementation\.componentId\)/);

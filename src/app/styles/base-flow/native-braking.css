@@ -2,6 +2,7 @@
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  touch-action: none;
   min-height: 0;
   position: relative;
   display: grid;
@@ -9,6 +10,7 @@
   align-content: center;
   gap: 20px;
   padding: 20px;
+  cursor: pointer;
 }
 
 .advanced-braking {
@@ -34,11 +36,10 @@
   bottom: 0;
   width: 46px;
   aspect-ratio: 1;
+  display: block;
+  overflow: visible;
   translate: -50% 0;
-  border-radius: var(--radius-sm);
-  background: var(--ink);
   transition:
-    background 120ms ease,
     box-shadow 120ms ease,
     filter 120ms ease,
     transform 120ms ease;
@@ -224,44 +225,4 @@
 
 .dino-panel.stopped .dino-runner {
   filter: drop-shadow(0 0 0.55rem rgba(47, 155, 104, 0.55));
-}
-
-.run-button {
-  position: relative;
-  z-index: 6;
-  width: calc(100% - 32px);
-  min-height: 72px;
-  justify-self: center;
-  margin: 0 16px 16px;
-  border: 1px dashed rgba(24, 24, 24, 0.24);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 253, 248, 0.84);
-  cursor: pointer;
-  touch-action: none;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.run-button::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 28px;
-  height: 28px;
-  translate: -50% -50%;
-  border: 2px solid rgba(24, 24, 24, 0.32);
-  border-radius: 50%;
-  background: var(--surface);
-}
-
-.run-button.active {
-  border-color: rgba(47, 155, 104, 0.52);
-  background: rgba(47, 155, 104, 0.08);
-}
-
-.run-button.active::after {
-  border-color: var(--green);
-  background: rgba(47, 155, 104, 0.16);
 }

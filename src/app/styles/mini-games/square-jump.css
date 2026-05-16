@@ -270,19 +270,6 @@
   transform: none;
 }
 
-.square-jump-base-player-visual {
-  width: 100%;
-  height: 100%;
-  background: var(--cyan);
-  box-shadow: var(--glow-accent);
-  transform-origin: 50% 50%;
-  transition: transform 80ms linear, box-shadow 80ms linear;
-}
-
-.square-jump-base-player-shell.charging .square-jump-base-player-visual {
-  box-shadow: var(--glow-accent);
-}
-
 .square-jump-base-debug-platform-line {
   z-index: 30;
   height: 1px;

@@ -497,7 +497,7 @@ test("base aim keeps one moving target active after each hit until eight hits", 
   assert.match(advancedAimSource, /keepTargetOnHit\s*\?[\s\S]*nextTargets[\s\S]*:[\s\S]*nextTargets\.map/);
 });
 
-test("advanced aim keeps target, arrow, and long-press button UI styles active", () => {
+test("advanced aim keeps target and arrow UI styles active", () => {
   const styles = readAppCssSource();
 
   assert.match(cssBlock(styles, ".advanced-aim-target"), /background:\s*var\(--red\);/);
@@ -506,8 +506,6 @@ test("advanced aim keeps target, arrow, and long-press button UI styles active",
   assert.match(cssBlock(styles, ".advanced-aim-target.decoy"), /border-style:\s*dashed;/);
   assert.match(cssBlock(styles, ".advanced-arrow-shot"), /transform-origin:\s*50% 0;/);
   assert.match(cssBlock(styles, ".advanced-arrow-shot.hit"), /background:\s*var\(--green\);/);
-  assert.match(cssBlock(styles, ".run-button"), /touch-action:\s*none;/);
-  assert.match(cssBlock(styles, ".run-button::after"), /border-radius:\s*50%;/);
 });
 
 test("base aim doubles target movement without accelerating advanced aim levels", () => {
@@ -683,6 +681,48 @@ test("base braking source uses five rounds with advanced danger placement and gr
   assert.match(styles, /\.dino-panel\.crashed \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.early \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.crashed \.advanced-hazard/);
+});
+
+test("braking runners use the shared avatar without warning or a separate hold button", () => {
+  const source = nativeRoundsSource();
+  const styles = readAppCssSource();
+  const advancedStart = source.indexOf("export function AdvancedBrakingRound");
+  const baseStart = source.indexOf("export function BrakingRound");
+  assert.notEqual(advancedStart, -1, "missing source marker: export function AdvancedBrakingRound");
+  assert.notEqual(baseStart, -1, "missing source marker: export function BrakingRound");
+  const advancedSource = source.slice(advancedStart, baseStart);
+  const baseSource = source.slice(baseStart);
+  const advancedStateSource = source.slice(
+    source.indexOf("function resolveAdvancedBrakingAvatarState"),
+    source.indexOf("export function AdvancedBrakingRound"),
+  );
+  const baseStateSource = source.slice(
+    source.indexOf("function resolveDinoAvatarState"),
+    source.indexOf("export function BrakingRound"),
+  );
+
+  assert.match(source, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(source, /type PlayerAvatarState/);
+  assert.match(advancedStateSource, /if \(holding\) return "move";/);
+  assert.match(advancedStateSource, /return "idle";/);
+  assert.doesNotMatch(advancedStateSource, /"warning"/);
+  assert.match(baseStateSource, /case "danger":[\s\S]*return "move";/);
+  assert.match(baseStateSource, /case "running":[\s\S]*return "move";/);
+  assert.match(baseStateSource, /case "stopped":[\s\S]*return "success";/);
+  assert.match(baseStateSource, /case "crashed":[\s\S]*return "fail";/);
+  assert.match(baseStateSource, /case "early":[\s\S]*return "hit";/);
+  assert.doesNotMatch(baseStateSource, /return "warning";/);
+  assert.match(advancedSource, /<PlayerAvatar[\s\S]*state=\{resolveAdvancedBrakingAvatarState\(holding\)\}/);
+  assert.match(baseSource, /<PlayerAvatar[\s\S]*state=\{resolveDinoAvatarState\(status\)\}/);
+  assert.match(baseSource, /direction=\{holding \? "right" : "none"\}/);
+  assert.match(advancedSource, /onPointerDown=\{begin\}/);
+  assert.match(advancedSource, /onPointerUp=\{release\}/);
+  assert.match(baseSource, /onPointerDown=\{beginRun\}/);
+  assert.match(baseSource, /onPointerUp=\{releaseRun\}/);
+  assert.doesNotMatch(advancedSource, /<button[\s\S]*run-button/);
+  assert.doesNotMatch(baseSource, /<button[\s\S]*run-button/);
+  assert.doesNotMatch(styles, /\.run-button/);
+  assert.match(styles, /\.braking-panel\s*\{[\s\S]*touch-action:\s*none;/);
 });
 
 test("braking feedback flashes early releases and uses red glow instead of recoloring crashes", () => {

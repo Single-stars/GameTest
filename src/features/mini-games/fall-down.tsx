@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -82,6 +83,20 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
+
+function resolveFallDownPlayerDirection(direction: FallDownRuntime["inputDirection"]): PlayerAvatarDirection {
+  if (direction < 0) return "left";
+  if (direction > 0) return "right";
+  return "none";
+}
+
+function resolveFallDownPlayerAvatarState(view: FallDownRuntime): PlayerAvatarState {
+  if (view.status === "failed") return "fail";
+  if (view.status === "passed") return "success";
+  if (view.time < view.respawnUntil) return "shield";
+  if (view.started && view.inputDirection !== 0) return "move";
+  return "idle";
+}
 
 function makeFallDownNoisePoints(rand: () => number, count: number) {
   return Array.from({ length: Math.max(2, count) }, () => rand());
@@ -443,7 +458,6 @@ export function FallDownPrototype({
   const resumeFallDownInput = useCallback(
     (current: FallDownRuntime, direction: FallDownRuntime["inputDirection"]) => {
       current.started = true;
-      current.respawnUntil = 0;
       current.inputDirection = direction;
       current.vx = direction * fallDownPlayerSpeed;
     },
@@ -764,7 +778,12 @@ export function FallDownPrototype({
           );
         })}
         <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} ref={playerShellRef} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
-          <div className="prototype-player-box fall-down-player" />
+          <PlayerAvatar
+            direction={resolveFallDownPlayerDirection(view.inputDirection)}
+            mood={view.started ? "focused" : "normal"}
+            state={resolveFallDownPlayerAvatarState(view)}
+            visualScale={1.18}
+          />
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>

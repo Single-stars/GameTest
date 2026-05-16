@@ -103,7 +103,9 @@ export default function Home() {
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
-  const playShellActive = stage === "playing" || (stage === "advanced" && advancedChallenge?.mode === "playing");
+  const playShellActive =
+    stage === "playing" ||
+    (stage === "advanced" && (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing"));
 
   const clearShareCopyToastTimer = useCallback(() => {
     if (shareCopyToastTimerRef.current !== null) {
@@ -438,6 +440,24 @@ export default function Home() {
     });
   }, []);
 
+  const startAdvancedBaseReplay = useCallback((level?: number) => {
+    const current = advancedChallengeRef.current;
+    if (!current) return;
+    const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
+    const selectedLevel =
+      level ??
+      (current.mode === "select"
+        ? Math.min(10, currentLevel + 1)
+        : current.level);
+    if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
+    setAdvancedChallenge({
+      mode: "base-playing",
+      roundId: current.roundId,
+      level: selectedLevel,
+      attemptId: Date.now(),
+    });
+  }, []);
+
   const completeAdvancedLevel = useCallback(
     (roundTrials: TrialEvent[]) => {
       const current = advancedChallengeRef.current;
@@ -473,6 +493,12 @@ export default function Home() {
     },
     [persistGameState],
   );
+
+  const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
+    void record.trials;
+    setAdvancedChallenge({ mode: "intro", roundId: record.roundId, level: record.level });
+    setStage("advanced");
+  }, []);
 
   const clearCurrentRunToHome = useCallback(() => {
     resetCurrentRunState();
@@ -593,11 +619,19 @@ export default function Home() {
           debugToolsVisible={debugToolsVisible}
           onBack={requestAppBack}
           onBuildPerfectTrials={buildAdvancedPerfectTrials}
+          onCompleteBaseRound={completeAdvancedBaseReplay}
           onCompleteRound={completeAdvancedLevel}
           onPickLevel={pickAdvancedLevel}
+          onRestartBaseRound={startAdvancedBaseReplay}
           onStartLevel={startAdvancedLevel}
-          renderRound={({ key, advancedConfig, round, onComplete }) => (
-            <RoundPlayer key={key} advancedConfig={advancedConfig} onComplete={onComplete} phase="advanced" roundId={round} />
+          renderRound={(props) => (
+            <RoundPlayer
+              key={props.key}
+              advancedConfig={props.phase === "advanced" ? props.advancedConfig : undefined}
+              onComplete={props.onComplete}
+              phase={props.phase}
+              roundId={props.round}
+            />
           )}
         />
       ) : stage === "home" ? (

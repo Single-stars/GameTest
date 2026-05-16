@@ -255,7 +255,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-intro"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/play-frame"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image-screen"/);
-  assert.match(appPageSource, /const playShellActive = stage === "playing" \|\| \(stage === "advanced" && advancedChallenge\?\.mode === "playing"\);/);
+  assert.match(appPageSource, /advancedChallenge\?\.mode === "playing" \|\| advancedChallenge\?\.mode === "base-playing"/);
   assert.match(appPageSource, /className=\{playShellActive \? "app-shell app-shell-play" : "app-shell"\}/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/registry"/);
@@ -473,6 +473,127 @@ test("mini-game stages use native measured dimensions instead of visual scaling"
   }
 });
 
+test("player avatar is a visual-only state system with transform-safe CSS", () => {
+  const componentUrl = new URL("../features/player-avatar/player-avatar.tsx", import.meta.url);
+  const cssUrl = new URL("../features/player-avatar/player-avatar.module.css", import.meta.url);
+
+  assert.equal(existsSync(componentUrl), true, componentUrl.pathname);
+  assert.equal(existsSync(cssUrl), true, cssUrl.pathname);
+
+  const componentSource = readFileSync(componentUrl, "utf8");
+  const cssSource = readFileSync(cssUrl, "utf8");
+
+  assert.match(componentSource, /export type PlayerAvatarState =/);
+  assert.match(componentSource, /export type PlayerAvatarMood =/);
+  assert.match(componentSource, /export type PlayerAvatarGravity = "normal" \| "light" \| "heavy";/);
+  assert.match(componentSource, /export type PlayerAvatarSkin = "cyan" \| "mint" \| "amber" \| "rose" \| "slate";/);
+  assert.match(componentSource, /type PlayerAvatarProps =/);
+  assert.match(componentSource, /export function PlayerAvatar/);
+  assert.match(componentSource, /const PLAYER_AVATAR_STATE_PRIORITY/);
+  assert.match(componentSource, /function resolvePlayerAvatarState/);
+  assert.match(componentSource, /rotationTurns\?: number;/);
+  assert.match(componentSource, /rotationDeg\?: number;/);
+  assert.match(componentSource, /charge\?: number;/);
+  assert.match(componentSource, /rootRef\?: Ref<HTMLSpanElement>;/);
+  assert.match(componentSource, /visualScale\?: number;/);
+  assert.match(componentSource, /--player-avatar-rotation/);
+  assert.match(componentSource, /--player-avatar-charge/);
+  assert.match(componentSource, /--player-avatar-visual-scale/);
+  assert.match(componentSource, /--player-avatar-size/);
+  assert.match(componentSource, /data-state=\{resolvedState\}/);
+  assert.match(componentSource, /data-mood=\{mood\}/);
+  assert.match(componentSource, /data-gravity=\{gravity\}/);
+  assert.match(componentSource, /data-skin=\{skin\}/);
+  assert.doesNotMatch(componentSource, /useState|useEffect|requestAnimationFrame|localStorage|score|collision/i);
+
+  assert.match(cssSource, /\.root/);
+  assert.match(cssSource, /overflow:\s*visible;/);
+  assert.doesNotMatch(cssSource, /contain:\s*paint/);
+  assert.match(cssSource, /\.visual/);
+  assert.match(cssSource, /scale\(var\(--player-avatar-visual-scale\)\)/);
+  assert.match(cssSource, /\.motion/);
+  assert.match(cssSource, /\.rotator/);
+  assert.match(cssSource, /transition:\s*transform 4[0-9]{2}ms cubic-bezier/);
+  assert.match(cssSource, /\.body/);
+  assert.match(cssSource, /--player-avatar-body:\s*#49b7c7;/);
+  assert.match(cssSource, /--player-avatar-outline:\s*rgba\(22,\s*83,\s*94,\s*0\.58\);/);
+  assert.match(cssSource, /\[data-skin="cyan"\]/);
+  assert.match(cssSource, /\[data-skin="mint"\]/);
+  assert.match(cssSource, /\[data-skin="amber"\]/);
+  assert.match(cssSource, /\[data-skin="rose"\]/);
+  assert.match(cssSource, /\[data-skin="slate"\]/);
+  assert.match(cssSource, /\.eye/);
+  assert.match(cssSource, /\.speedLines/);
+  assert.doesNotMatch(cssSource, /\[data-state="move"\]\s+\.speedLines/);
+  assert.doesNotMatch(cssSource, /\[data-state="fall"\]\s+\.speedLines/);
+  assert.match(cssSource, /\[data-state="boost"\]\s+\.speedLines/);
+  assert.match(cssSource, /\.sparkles/);
+  assert.match(cssSource, /\.warningMark/);
+  assert.match(cssSource, /\[data-state="idle"\]/);
+  assert.match(cssSource, /\[data-state="move"\]\[data-direction="left"\]\s+\.motion/);
+  assert.match(cssSource, /\[data-state="move"\]\[data-direction="right"\]\s+\.motion/);
+  assert.match(cssSource, /translateX\(-4%\) rotate\(-7deg\) scaleX\(1\.1\) scaleY\(0\.93\)/);
+  assert.match(cssSource, /translateX\(4%\) rotate\(7deg\) scaleX\(1\.1\) scaleY\(0\.93\)/);
+  assert.match(cssSource, /\[data-state="charge"\]/);
+  assert.match(cssSource, /\[data-state="charge"\]\s+\.motion\s*\{[\s\S]*transition:\s*transform 7[0-9]ms linear,\s*filter 120ms ease;/);
+  assert.match(cssSource, /\[data-state="success"\]/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.eye[\s\S]*background:\s*transparent;/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.leftEye[\s\S]*translate\(-46%,\s*-2%\) scale\(1\.18\)/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.rightEye[\s\S]*translate\(46%,\s*-2%\) scale\(1\.18\)/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.eye::before/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.eye::after/);
+  assert.match(cssSource, /\[data-state="success"\]\s+\.eye::before,[\s\S]*\[data-state="win"\]\s+\.eye::after[\s\S]*background:\s*var\(--player-avatar-ink\);/);
+  assert.match(cssSource, /translateX\(-30%\) rotate\(-56deg\)/);
+  assert.match(cssSource, /translateX\(30%\) rotate\(56deg\)/);
+  assert.doesNotMatch(cssSource, /\[data-state="success"\]\s+\.eye[\s\S]*border-block-start:/);
+  assert.match(cssSource, /\[data-state="warning"\]/);
+  assert.match(cssSource, /\[data-state="fail"\]/);
+  assert.match(cssSource, /\[data-gravity="light"\]/);
+  assert.match(cssSource, /\[data-gravity="heavy"\]/);
+  assert.match(cssSource, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(cssSource, /var\(--glow-accent\)/);
+  assert.doesNotMatch(cssSource, /linear-gradient\(180deg,\s*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(cssSource, /@keyframes[\s\S]*?(left|top|width|height):/);
+  assert.doesNotMatch(cssSource, /transition:\s*[^;]*(background|border|color|left|top|width|height)[^;]*;/);
+  assert.doesNotMatch(cssSource, /\[data-[^\]]+\][\s\S]*?(left|top|width|height):/);
+});
+
+test("doodle player uses the shared avatar pilot without owning visual square markup", () => {
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+
+  assert.match(doodleSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(doodleSource, /type PlayerAvatarDirection/);
+  assert.match(doodleSource, /playerVy: number;/);
+  assert.match(doodleSource, /playerDirection: PlayerAvatarDirection;/);
+  assert.match(doodleSource, /jumpTurnAvailable: boolean;/);
+  assert.match(doodleSource, /function resolveDoodlePlayerAvatarState/);
+  const avatarStateSource = doodleSource.slice(
+    doodleSource.indexOf("function resolveDoodlePlayerAvatarState"),
+    doodleSource.indexOf("export function DoodleJumpPrototype"),
+  );
+  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return "fail";/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.invincibleUntil\) return "shield";/);
+  assert.match(avatarStateSource, /return "idle";/);
+  assert.doesNotMatch(avatarStateSource, /return \["shield", view\.playerVy >= 0 \? "jump" : "fall"\]/);
+  assert.doesNotMatch(avatarStateSource, /return "move";/);
+  assert.doesNotMatch(avatarStateSource, /return "jump";/);
+  assert.doesNotMatch(avatarStateSource, /return "fall";/);
+  assert.match(doodleSource, /<PlayerAvatar/);
+  assert.match(doodleSource, /direction=\{view\.playerDirection\}/);
+  assert.match(doodleSource, /rotationTurns=\{view\.playerTurns\}/);
+  assert.match(doodleSource, /visualScale=\{1\.22\}/);
+  assert.match(doodleSource, /gravity="normal"/);
+  assert.match(doodleSource, /if \(inputDirection !== 0 && jumpTurnAvailable\)/);
+  assert.match(doodleSource, /const turnDirection = inputDirection < 0 \? -1 : 1;/);
+  assert.match(doodleSource, /jumpTurnAvailable = false;/);
+  assert.match(doodleSource, /jumpTurnAvailable = true;/);
+  assert.match(doodleSource, /current\.jumpTurnAvailable = jumpTurnAvailable;/);
+  assert.doesNotMatch(doodleSource, /if \(platform\.risk\) riskHit \+= 1;[\s\S]{0,120}playerTurns \+=/);
+  assert.doesNotMatch(doodleSource, /playerBoxRef/);
+  assert.doesNotMatch(doodleSource, /prototype-player-box doodle-player/);
+});
+
 test("base flow CSS is split into ordered focused chunks", () => {
   const facadeSource = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
   const expectedImports = [
@@ -561,7 +682,9 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   assert.doesNotMatch(fallDownDomSource, /current\.fallingHazards\.find/);
 
   assert.match(doodleSource, /onPointerMove=\{updateDoodleDirection\}/);
-  assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = chooseDoodleDirection\(event\);/);
+  assert.match(doodlePointerMoveSource, /const direction = chooseDoodleDirection\(event\);/);
+  assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = direction;/);
+  assert.doesNotMatch(doodlePointerMoveSource, /playerTurns|jumpTurnAvailable|syncDoodleView|setView/);
   assert.doesNotMatch(doodlePointerMoveSource, /syncDoodleView|setView/);
   assert.match(doodleDomSource, /const platformById = new Map\(current\.platforms\.map/);
   assert.match(doodleDomSource, /const hazardById = new Map\(current\.hazards\.map/);

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { PlayerAvatar, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -78,6 +79,13 @@ type FlappyViewFrame = {
   time: number;
   visibleGates: FlappyGate[];
 };
+
+function resolveFlappyPlayerAvatarState(view: FlappyViewFrame): PlayerAvatarState {
+  if (view.status === "failed") return "fail";
+  if (view.status === "passed") return "success";
+  if (view.time < view.invincibleUntil) return "shield";
+  return "idle";
+}
 
 function flappyStartPlatformY(stageHeight: number) {
   return stageHeight * 0.66;
@@ -180,7 +188,6 @@ export function FlappyPrototype({
   const gateBottomRefs = useRef(new Map<number, HTMLDivElement>());
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
   const playerShellRef = useRef<HTMLDivElement | null>(null);
-  const playerBoxRef = useRef<HTMLDivElement | null>(null);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
 
@@ -260,9 +267,6 @@ export function FlappyPrototype({
 
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
-      }
-      if (playerBoxRef.current) {
-        playerBoxRef.current.style.transform = `rotate(${current.playerTurns * 90}deg)`;
       }
     };
 
@@ -504,7 +508,13 @@ export function FlappyPrototype({
           ref={playerShellRef}
           style={{ transform: transformPoint3d(playerX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
         >
-          <div className={`prototype-player-box flappy-player ${reversedGravity ? "reversed" : ""}`} ref={playerBoxRef} style={{ transform: `rotate(${view.playerTurns * 90}deg)` }} />
+          <PlayerAvatar
+            direction={reverseDirection ? "left" : "right"}
+            gravity={reversedGravity ? "light" : "normal"}
+            rotationTurns={view.playerTurns}
+            state={resolveFlappyPlayerAvatarState(view)}
+            visualScale={1.18}
+          />
         </div>
         {!view.started ? <div className="prototype-start-hint flappy-start-hint">点击开始</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}

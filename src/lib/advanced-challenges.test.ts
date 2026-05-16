@@ -372,8 +372,11 @@ test("advanced braking scheduler advances only while the player is holding and n
   );
 });
 
-test("advanced braking release outcome pauses normally but fails when hold is required", () => {
-  assert.deepEqual(getAdvancedBrakeReleaseOutcome(null), { outcome: "pause" });
+test("advanced braking release outcome fails early stops before danger and when hold is required", () => {
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome(null), {
+    outcome: "failure",
+    errorType: "early_stop",
+  });
   assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "red", bottom: null, correctAction: "release" }), { outcome: "success" });
   assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "gray", bottom: null, correctAction: "hold" }), {
     outcome: "failure",

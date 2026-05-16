@@ -307,15 +307,56 @@ test("square jump keeps only the base first-three-jump tutorial preview and char
   assert.match(componentSource, /const tutorialPreviewPlan = level\.levelId === "square-jump-base" && view\.jumps < 3 && view\.state === "charging"/);
   assert.match(componentSource, /className="square-tutorial-landing-preview"/);
   assert.doesNotMatch(componentSource, /square-start-hint/);
-  assert.match(componentSource, /chargingSquash/);
-  assert.match(componentSource, /translateY\(\$\{chargingSquash\.offsetY\}px\) scaleX\(\$\{chargingSquash\.scaleX\}\) scaleY\(\$\{chargingSquash\.scaleY\}\) rotate\(\$\{view\.playerTurns \* 90\}deg\)/);
-  assert.match(componentSource, /scaleY\(\$\{chargingSquash\.scaleY\}\)/);
+  assert.doesNotMatch(componentSource, /chargingSquash/);
+  assert.match(componentSource, /<PlayerAvatar/);
+  assert.match(componentSource, /charge=\{view\.charge\}/);
+  assert.match(componentSource, /rootRef=\{playerAvatarRef\}/);
+  assert.match(componentSource, /state=\{resolveSquareJumpPlayerAvatarState\(view\)\}/);
   assert.doesNotMatch(componentSource, /square-charge-meter/);
   assert.doesNotMatch(globalCss, /\.square-charge-meter/);
   assert.match(globalCss, /transform-origin: 50% 50%/);
-  assert.match(globalCss, /\.square-jump-base-player-visual[\s\S]*transition: transform/);
+  assert.doesNotMatch(globalCss, /\.square-jump-base-player-visual/);
 }
 );
+
+test("square jump maps its player visuals through the shared avatar without fail state", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const squareSource = componentSource.slice(componentSource.indexOf("function squareGravityMultiplier"), componentSource.indexOf("export function SquareJumpPrototype"));
+  const avatarStateSource = squareSource.slice(
+    squareSource.indexOf("function resolveSquareJumpPlayerAvatarState"),
+    squareSource.indexOf("function createSquareJumpPlan"),
+  );
+  const renderSource = componentSource.slice(
+    componentSource.indexOf("className={`square-jump-base-player-shell"),
+    componentSource.indexOf("{DEBUG_MINI_GAME_HITBOX ?", componentSource.indexOf("className={`square-jump-base-player-shell")),
+  );
+
+  assert.match(componentSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(componentSource, /type PlayerAvatarState/);
+  assert.match(componentSource, /type PlayerAvatarGravity/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return "shield";/);
+  assert.match(avatarStateSource, /if \(view\.state === "charging" \|\| view\.state === "airCharging"\) return "charge";/);
+  assert.match(avatarStateSource, /if \(view\.feedback === "Good"\) return "land";/);
+  assert.ok(
+    avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return "charge";') <
+      avatarStateSource.indexOf('if (view.feedback === "Good") return "land";'),
+    "charging must override the temporary land feedback so charge squash starts during camera advance",
+  );
+  assert.match(avatarStateSource, /if \(view\.state === "jumping"\) return "jump";/);
+  assert.match(avatarStateSource, /if \(view\.state === "falling"\) return "fall";/);
+  assert.match(avatarStateSource, /return "idle";/);
+  assert.doesNotMatch(avatarStateSource, /return "fail";/);
+  assert.doesNotMatch(avatarStateSource, /view\.status === "failed"[\s\S]{0,80}"fail"/);
+  assert.match(renderSource, /<PlayerAvatar/);
+  assert.match(renderSource, /state=\{resolveSquareJumpPlayerAvatarState\(view\)\}/);
+  assert.match(renderSource, /charge=\{view\.charge\}/);
+  assert.match(renderSource, /rootRef=\{playerAvatarRef\}/);
+  assert.match(renderSource, /gravity=\{view\.activeGravity\}/);
+  assert.match(renderSource, /rotationTurns=\{view\.playerTurns\}/);
+  assert.match(renderSource, /visualScale=\{1\.18\}/);
+  assert.doesNotMatch(renderSource, /prototype-player-box square-jump-base-player-visual/);
+});
 
 test("square jump platform visuals distinguish gravity, moving, and finish platforms", () => {
   const componentSource = readMiniGameRuntimeSource();
@@ -727,6 +768,9 @@ test("square jump base rendering keeps hot-path positions on transforms", () => 
   assert.doesNotMatch(updateDomSource, /node\.style\.left =/);
   assert.doesNotMatch(updateDomSource, /node\.style\.top =/);
   assert.match(updateDomSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(current\.playerX - PLAYER_SIZE \/ 2, current\.playerY - PLAYER_SIZE \/ 2\);/);
+  assert.match(updateDomSource, /setSquareJumpAvatarChargeVars\(playerAvatarRef\.current, current\);/);
+  assert.match(componentSource, /function setSquareJumpAvatarChargeVars/);
+  assert.match(componentSource, /style\.setProperty\("--player-avatar-charge"/);
   assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.left =/);
   assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.top =/);
   assert.match(renderSource, /transform: transformPoint3d\(platformX - platform\.width \/ 2, platform\.y \+ visualOffsetY\)/);
@@ -747,7 +791,7 @@ test("square jump runtime supports double jump hover charging and 90 degree turn
   assert.doesNotMatch(componentSource, /showLandingPreview/);
   assert.match(componentSource, /const canAirCharge = doubleJumpEnabled && \(current\.state === "jumping" \|\| current\.state === "falling"\)/);
   assert.match(componentSource, /current\.playerTurns \+= 1/);
-  assert.match(componentSource, /rotate\(\$\{view\.playerTurns \* 90\}deg\)/);
+  assert.match(componentSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(componentSource, /sampleSquareJumpBaseFlyAway/);
   assert.doesNotMatch(componentSource, /current\.playerY \+= \(260 \+ fallingElapsed \* 780\) \* delta/);
   assert.doesNotMatch(globalCss, /\.square-jump-base-player-visual[\s\S]*transition: none;[\s\S]*transform: none;/);

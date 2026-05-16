@@ -125,7 +125,7 @@ export function getAdvancedBrakeSchedulerStep({
 }
 
 export function getAdvancedBrakeReleaseOutcome(event: (AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }) | null): AdvancedBrakeReleaseOutcome {
-  if (!event) return { outcome: "pause" as const };
+  if (!event) return { outcome: "failure" as const, errorType: "early_stop" as const };
   if (event.correctAction === "release") return { outcome: "success" as const };
   const hasGray = event.top === "gray" || event.bottom === "gray";
   return { outcome: "failure" as const, errorType: hasGray ? "false_alarm" : "early_stop" };

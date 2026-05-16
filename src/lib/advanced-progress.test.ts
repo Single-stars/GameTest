@@ -469,6 +469,7 @@ test("advanced back destination keeps attempts inside the selected challenge flo
   assert.equal(getAdvancedBackDestination("select"), "result");
   assert.equal(getAdvancedBackDestination("intro"), "result");
   assert.equal(getAdvancedBackDestination("playing"), "challenge");
+  assert.equal(getAdvancedBackDestination("base-playing"), "challenge");
   assert.equal(getAdvancedBackDestination("complete"), "challenge");
 });
 
