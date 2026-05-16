@@ -22,8 +22,8 @@ import {
 
 const viewport = { width: 390, height: 844, dpr: 3 };
 
-function appPageSource() {
-  return readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+function nativeRoundsSource() {
+  return readFileSync(new URL("../features/rounds/native-rounds.tsx", import.meta.url), "utf8");
 }
 
 const APP_CSS_SOURCE_URLS = [
@@ -450,9 +450,9 @@ test("arrow precision ignores the practice shot", () => {
 });
 
 test("base aim source is a single unlimited advanced-arrow round requiring eight hits", () => {
-  const source = appPageSource();
+  const source = nativeRoundsSource();
   const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
-  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
+  const advancedAimSource = sourceBetween(source, "export function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.match(aimSource, /AIM_REQUIRED_HITS\s*=\s*8/);
   assert.match(aimSource, /AdvancedAimRound/);
@@ -465,9 +465,9 @@ test("base aim source is a single unlimited advanced-arrow round requiring eight
 });
 
 test("base aim keeps one moving target active after each hit until eight hits", () => {
-  const source = appPageSource();
+  const source = nativeRoundsSource();
   const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
-  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
+  const advancedAimSource = sourceBetween(source, "export function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.match(aimSource, /targetCount:\s*1/);
   assert.match(aimSource, /keepTargetOnHit:\s*true/);
@@ -490,7 +490,7 @@ test("advanced aim keeps target, arrow, and long-press button UI styles active",
 });
 
 test("base aim doubles target movement without accelerating advanced aim levels", () => {
-  const source = appPageSource();
+  const source = nativeRoundsSource();
   const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
   const aimSpeedSource = sourceBetween(source, "const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS", "function moveAdvancedAimEntity");
 
@@ -506,7 +506,7 @@ test("base aim doubles target movement without accelerating advanced aim levels"
 });
 
 test("base aim target spawns in a higher vertical band without changing advanced defaults", () => {
-  const source = appPageSource();
+  const source = nativeRoundsSource();
   const aimSource = sourceBetween(source, "const AIM_REQUIRED_HITS", "const DINO_TRIAL_COUNT");
   const aimSpawnSource = sourceBetween(source, "function getAdvancedAimBounds", "function advancedAimRouteFromConfig");
 
@@ -519,8 +519,8 @@ test("base aim target spawns in a higher vertical band without changing advanced
 });
 
 test("base aim does not render miss text feedback inside the play field", () => {
-  const source = appPageSource();
-  const advancedAimSource = sourceBetween(source, "function AdvancedAimRound", "type AdvancedBrakeHazard");
+  const source = nativeRoundsSource();
+  const advancedAimSource = sourceBetween(source, "export function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.doesNotMatch(advancedAimSource, /aim-feedback/);
   assert.doesNotMatch(advancedAimSource, /setFeedback/);
@@ -637,9 +637,11 @@ test("five base braking trials count as a completed scoring dimension", () => {
 });
 
 test("base braking source uses five rounds with advanced danger placement and graphics", () => {
-  const source = appPageSource();
+  const source = nativeRoundsSource();
   const styles = readAppCssSource();
-  const brakingSource = sourceBetween(source, "function BrakingRound", "function getRoundConfig");
+  const brakingStart = source.indexOf("export function BrakingRound");
+  assert.notEqual(brakingStart, -1, "missing source marker: export function BrakingRound");
+  const brakingSource = source.slice(brakingStart);
 
   assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
   assert.match(source, /DINO_FAILURE_FEEDBACK_MS/);

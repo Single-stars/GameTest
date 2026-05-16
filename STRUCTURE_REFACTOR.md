@@ -216,15 +216,49 @@ Verification for this round:
 - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
 - `git diff --check`: passed.
 
+### Page UI And Native Round Extraction
+
+Completed after Formal Round Registry Round 2:
+
+- Extracted result-related page UI from `src/app/page.tsx` into `src/features/results/`:
+  - `src/features/results/result-screen.tsx`
+  - `src/features/results/luck-draw-screen.tsx`
+  - `src/features/results/restart-confirm-dialog.tsx`
+  - `src/features/results/result-icons.tsx`
+- Kept existing result copy, class names, selector usage, share-image behavior, radar chart usage, luck draw behavior, and restart-confirm behavior unchanged.
+- Extracted advanced challenge page shell into `src/features/advanced/advanced-challenge-screen.tsx`.
+- Kept `page.tsx` as the owner of app state, navigation state, `RoundRenderer`, advanced config evaluation, and callbacks.
+- Extracted native round implementations into `src/features/rounds/native-rounds.tsx`:
+  - `ReactionRound`
+  - `AimRound`
+  - `BrakingRound`
+  - `AdvancedReactionRound`
+  - `AdvancedAimRound`
+  - `AdvancedBrakingRound`
+  - `buildAdvancedPerfectTrials`
+- Kept the registry mappings, native round behavior, mini-game round behavior, scoring, persistence, CSS, and formal route shape unchanged.
+- Split architecture/source-slice guardrails into `src/lib/mini-game-architecture.test.ts` so `src/lib/mini-game-prototypes.test.ts` can focus on gameplay config/runtime expectations.
+
+Verification for this round:
+
+- `npm.cmd test`: 178/178 passed.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
+- `git diff --check`: passed.
+
 ## Current Architecture Inventory
 
 ### `src/app/page.tsx`
 
 Approximate role:
 
-- Main application screen and formal game flow.
-- Owns current formal route content.
-- Contains formal round renderer, base rounds, advanced challenge flow, result flow, and UI shell.
+- Main application screen, formal route content, and top-level game state machine.
+- Owns current stage, base round progression, advanced challenge state, result persistence, share flow, restart flow, and app back-navigation behavior.
+- Contains the formal `RoundRenderer` glue that chooses native versus mini-game implementations from `src/features/rounds/registry.ts`.
+- Delegates extracted UI/runtime blocks to feature modules:
+  - result screens under `src/features/results/`
+  - advanced challenge shell under `src/features/advanced/`
+  - native round implementations under `src/features/rounds/native-rounds.tsx`
 - Important boundaries:
   - Do not change `RoundRenderer` dispatch casually.
   - Do not change `src/features/rounds/registry.ts` mappings during structure refactor.
@@ -232,9 +266,49 @@ Approximate role:
 
 Current issue:
 
-- Still large and mixes app shell, base native rounds, advanced flow, result UI, and some glue logic.
-- Round config, mini-game round glue, share image generation, radar chart, and CSS have already been moved out.
-- Future splits should be smaller than the previous full-pass extraction and should keep native round behavior stable.
+- Still owns the main app state machine and several page-level screens such as home, intro/play frame, and share-image screen.
+- Future splits should keep navigation, persistence, and result/share behavior stable unless a separate product task explicitly changes them.
+
+### `src/features/results/*`
+
+Approximate role:
+
+- Result-page presentation modules.
+- Owns `ResultScreen`, `LuckDrawScreen`, `RestartConfirmDialog`, and small result action icons.
+- Uses the existing `share-image.ts` and `radar-chart.tsx` helpers without changing their responsibilities.
+
+Current issue:
+
+- Should stay presentation-focused.
+- Do not move top-level app stage transitions, persistence, or scoring ownership into these components during structure-only work.
+
+### `src/features/advanced/advanced-challenge-screen.tsx`
+
+Approximate role:
+
+- Presentation shell for the advanced challenge screen.
+- Receives challenge state, progress, callbacks, and a `renderRound` function from `page.tsx`.
+- Does not own `RoundRenderer` or advanced challenge config generation.
+
+Current issue:
+
+- Keep it as a shell until there is a deliberate plan to move advanced state orchestration out of `page.tsx`.
+
+### `src/features/rounds/native-rounds.tsx`
+
+Approximate role:
+
+- Owns the native React implementations for base and advanced native rounds:
+  - reaction
+  - aim
+  - braking
+- Owns native-round-local helpers needed by those components.
+- Exports `buildAdvancedPerfectTrials` for advanced perfect-clear shortcuts.
+
+Current issue:
+
+- Treat this file as gameplay-sensitive.
+- Any future split inside it should be tested carefully because it contains timer, pointer, hit-detection, and native-round completion payload logic.
 
 ### `src/app/mini-game-prototypes.tsx`
 
@@ -298,13 +372,16 @@ Current issue:
 Important test files:
 
 - `src/lib/mini-game-prototypes.test.ts`
+- `src/lib/mini-game-architecture.test.ts`
 - `src/lib/advanced-challenges.test.ts`
 - `src/lib/scoring.test.ts`
 - `src/lib/obsolete-features.test.ts`
 
 Current issue:
 
-- Some tests are source-slice tests. They are useful as guardrails during refactor, but every extraction must update them carefully so they protect architecture rather than block harmless movement.
+- `src/lib/mini-game-architecture.test.ts` owns most source-slice architecture guardrails.
+- `src/lib/mini-game-prototypes.test.ts` should stay focused on mini-game config/runtime expectations.
+- Source-slice tests are useful as guardrails during refactor, but every extraction must update them carefully so they protect architecture rather than block harmless movement.
 
 ## Formal Boundaries To Preserve
 
@@ -491,6 +568,22 @@ Risk:
 - Advanced config generation must remain unchanged.
 - `MiniGameAdvancedRound` must still receive only configs validated by `isMiniGameAdvancedConfig`.
 
+### Round 13: Page UI And Native Round Extraction
+
+Status: complete.
+
+Target:
+
+- Move result-related UI out of `src/app/page.tsx`.
+- Move the advanced challenge UI shell out of `src/app/page.tsx`.
+- Move native round implementations out of `src/app/page.tsx`.
+- Split architecture/source-slice tests away from gameplay config tests.
+
+Risk:
+
+- These components contain visible UI and gameplay-sensitive native rounds.
+- Preserve class names, copy, callbacks, scoring payloads, registry mappings, CSS, and persistence contracts exactly.
+
 ## Per-Round Checklist
 
 For every structure refactor round:
@@ -530,6 +623,7 @@ For every structure refactor round:
 | 10 | Complete | Global CSS split into imported responsibility chunks with selectors and order preserved. |
 | 11 | Complete | Formal base round implementations declared in `src/features/rounds/registry.ts`; base rendering reads registry. |
 | 12 | Complete | Formal advanced round implementations declared in `src/features/rounds/registry.ts`; advanced rendering reads registry. |
+| 13 | Complete | Result UI, advanced challenge shell, native rounds, and architecture tests extracted from `page.tsx` / mini-game test file. |
 
 ## Moved In Round 1
 
