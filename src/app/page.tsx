@@ -86,8 +86,8 @@ import {
   MiniGameAdvancedRound,
   MiniGameBaseRound,
   isMiniGameAdvancedConfig,
-  miniGameIdForBaseRound,
 } from "@/features/game-flow/mini-game-rounds";
+import { getRoundDefinition } from "@/features/rounds/registry";
 import { RadarChart } from "@/features/results/radar-chart";
 import {
   SHARE_IMAGE_HEIGHT,
@@ -874,11 +874,11 @@ function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId }
         return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
     }
   }
-  const baseMiniGameId = miniGameIdForBaseRound(round);
-  if (baseMiniGameId) {
-    return <MiniGameBaseRound gameId={baseMiniGameId} onComplete={onComplete} round={round} />;
+  const baseImplementation = getRoundDefinition(round).base;
+  if (baseImplementation.type === "mini-game") {
+    return <MiniGameBaseRound gameId={baseImplementation.gameId} onComplete={onComplete} round={round} />;
   }
-  switch (round) {
+  switch (baseImplementation.componentId) {
     case "reaction":
       return <ReactionRound onComplete={onComplete} />;
     case "aim":

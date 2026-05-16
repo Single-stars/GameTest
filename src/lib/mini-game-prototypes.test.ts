@@ -48,6 +48,10 @@ import {
   selectVisibleFlappyGates,
   type MiniGameId,
 } from "./mini-game-prototypes.ts";
+import {
+  ROUND_DEFINITIONS,
+  getRoundDefinition,
+} from "../features/rounds/registry.ts";
 
 const GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife"];
 const ALL_GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump" as MiniGameId, "fall-down" as MiniGameId];
@@ -1120,11 +1124,13 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
   const roundConfigSource = readFileSync(new URL("../features/game-flow/round-config.ts", import.meta.url), "utf8");
+  const roundRegistrySource = readFileSync(new URL("../features/rounds/registry.ts", import.meta.url), "utf8");
   const shareImageSource = readFileSync(new URL("../features/results/share-image.ts", import.meta.url), "utf8");
   const radarChartSource = readFileSync(new URL("../features/results/radar-chart.tsx", import.meta.url), "utf8");
 
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-config"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
+  assert.match(appPageSource, /from "@\/features\/rounds\/registry"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image"/);
   assert.match(appPageSource, /from "@\/features\/results\/radar-chart"/);
   assert.doesNotMatch(appPageSource, /const rounds: RoundConfig\[\] = \[/);
@@ -1133,7 +1139,11 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   assert.doesNotMatch(appPageSource, /async function createShareImage/);
   assert.doesNotMatch(appPageSource, /function RadarChart/);
 
-  assert.match(roundConfigSource, /export const rounds: RoundConfig\[\] = \[/);
+  assert.match(roundRegistrySource, /export const ROUND_DEFINITIONS/);
+  assert.match(roundConfigSource, /from "@\/features\/rounds\/registry"/);
+  assert.match(roundConfigSource, /ROUND_DEFINITIONS\.map/);
+  assert.doesNotMatch(roundConfigSource, /export const rounds: RoundConfig\[\] = \[/);
+  assert.match(miniGameRoundsSource, /from "@\/features\/rounds\/registry"/);
   assert.match(miniGameRoundsSource, /export function MiniGameBaseRound/);
   assert.match(miniGameRoundsSource, /export function MiniGameAdvancedRound/);
   assert.match(miniGameRoundsSource, /export function miniGameIdForBaseRound/);
@@ -1141,6 +1151,58 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   assert.match(shareImageSource, /export async function createShareImage/);
   assert.match(shareImageSource, /export async function copyTextToClipboard/);
   assert.match(radarChartSource, /export function RadarChart/);
+});
+
+test("formal round registry preserves official order and base implementations", () => {
+  assert.deepEqual(
+    ROUND_DEFINITIONS.map((round) => round.id),
+    ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"],
+  );
+
+  assert.deepEqual(
+    ROUND_DEFINITIONS.map((round) => [round.id, round.base]),
+    [
+      ["reaction", { type: "native", componentId: "reaction" }],
+      ["aim", { type: "native", componentId: "aim" }],
+      ["search", { type: "mini-game", gameId: "doodle" }],
+      ["stroop", { type: "mini-game", gameId: "fall-down" }],
+      ["rhythm", { type: "mini-game", gameId: "square-jump" }],
+      ["memory", { type: "mini-game", gameId: "flappy" }],
+      ["braking", { type: "native", componentId: "braking" }],
+      ["patience", { type: "mini-game", gameId: "knife" }],
+    ],
+  );
+
+  for (const round of ROUND_DEFINITIONS) {
+    assert.equal(getRoundDefinition(round.id), round);
+    assert.equal(typeof round.title, "string");
+    assert.equal(typeof round.label, "string");
+    assert.equal(typeof round.rule, "string");
+    assert.equal(typeof round.action, "string");
+    assert.notEqual(round.title.length, 0);
+    assert.notEqual(round.label.length, 0);
+    assert.notEqual(round.rule.length, 0);
+    assert.notEqual(round.action.length, 0);
+  }
+});
+
+test("base round rendering reads formal implementations from the round registry", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
+  const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
+  const baseMappingSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function miniGameIdForBaseRound"), miniGameRoundsSource.indexOf("type MiniAdvancedStageConfig"));
+
+  assert.match(roundRendererSource, /const baseImplementation = getRoundDefinition\(round\)\.base;/);
+  assert.match(roundRendererSource, /baseImplementation\.type === "mini-game"[\s\S]*<MiniGameBaseRound gameId=\{baseImplementation\.gameId\}/);
+  assert.match(roundRendererSource, /switch \(baseImplementation\.componentId\)/);
+  assert.doesNotMatch(roundRendererSource, /miniGameIdForBaseRound\(round\)/);
+  assert.match(baseMappingSource, /const implementation = getRoundDefinition\(round\)\.base;/);
+  assert.match(baseMappingSource, /implementation\.type === "mini-game" \? implementation\.gameId : null/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "search"\) return "doodle";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "stroop"\) return "fall-down";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "rhythm"\) return "square-jump";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
 });
 
 test("global CSS is split by app flow, mini-games, and overlays without renaming active selectors", () => {

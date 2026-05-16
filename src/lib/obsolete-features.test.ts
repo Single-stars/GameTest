@@ -84,11 +84,13 @@ test("legacy search memory and patience fallback rounds are removed after mini-g
   const baseMappingSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function miniGameIdForBaseRound"), miniGameRoundsSource.indexOf("type MiniAdvancedStageConfig"));
   const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
 
-  assert.match(baseMappingSource, /if \(round === "search"\) return "doodle";/);
-  assert.match(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
-  assert.match(baseMappingSource, /if \(round === "patience"\) return "knife";/);
+  assert.match(baseMappingSource, /const implementation = getRoundDefinition\(round\)\.base;/);
+  assert.match(baseMappingSource, /implementation\.type === "mini-game" \? implementation\.gameId : null/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "search"\) return "doodle";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
+  assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
   assert.match(roundRendererSource, /if \(isMiniGameAdvancedConfig\(advancedConfig\)\) \{\s*return <MiniGameAdvancedRound/);
-  assert.match(roundRendererSource, /const baseMiniGameId = miniGameIdForBaseRound\(round\);[\s\S]*return <MiniGameBaseRound/);
+  assert.match(roundRendererSource, /const baseImplementation = getRoundDefinition\(round\)\.base;[\s\S]*return <MiniGameBaseRound/);
 
   for (const [roundId, miniGameId] of [
     ["search", "doodle"],

@@ -14,6 +14,7 @@ import {
   type MiniGameId,
 } from "@/lib/mini-game-prototypes";
 import { type RoundId, type TrialEvent } from "@/lib/scoring";
+import { getRoundDefinition } from "@/features/rounds/registry";
 
 const now = () => performance.now();
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -90,12 +91,8 @@ function miniGameValue(mode: string, outcome: MiniGameCompletion, score: number)
 }
 
 export function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
-  if (round === "search") return "doodle";
-  if (round === "stroop") return "fall-down";
-  if (round === "rhythm") return "square-jump";
-  if (round === "memory") return "flappy";
-  if (round === "patience") return "knife";
-  return null;
+  const implementation = getRoundDefinition(round).base;
+  return implementation.type === "mini-game" ? implementation.gameId : null;
 }
 
 export type MiniAdvancedStageConfig = AdvancedStageConfig & { params: AdvancedStageConfig["params"] & { miniGameId: MiniGameId; miniLevelId: string } };

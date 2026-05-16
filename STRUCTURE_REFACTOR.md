@@ -140,6 +140,49 @@ Verification for the full pass:
 - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
 - Local HTTP check: `http://localhost:3000/` returned 200 after starting the dev server.
 
+### Formal Round Registry Round 1
+
+Completed after the full structure pass:
+
+- Added `src/features/rounds/registry.ts` as the single declaration point for the 8 formal base round implementations.
+- Preserved the formal round order:
+  - reaction
+  - aim
+  - search
+  - stroop
+  - rhythm
+  - memory
+  - braking
+  - patience
+- Preserved the existing internal IDs, visible titles, dimension labels, rule copy, and action copy.
+- Centralized the base implementation mapping:
+  - reaction -> native reaction
+  - aim -> native aim
+  - search -> mini-game doodle
+  - stroop -> mini-game fall-down
+  - rhythm -> mini-game square-jump
+  - memory -> mini-game flappy
+  - braking -> native braking
+  - patience -> mini-game knife
+- Kept `src/features/game-flow/round-config.ts` as the compatibility adapter for the existing `rounds` shape used by the page.
+- Kept `miniGameIdForBaseRound` exported for compatibility, but it now reads the registry instead of owning a separate hard-coded mapping.
+- Updated the base `RoundRenderer` path to read `getRoundDefinition(round).base` before deciding whether to render a native round or `MiniGameBaseRound`.
+- Left advanced challenges, scoring, storage, CSS, mini-game configs, and native component placement unchanged.
+
+Verification added:
+
+- Registry order and implementation mapping protection.
+- `round-config` derives from `ROUND_DEFINITIONS`.
+- `RoundRenderer` base path reads the registry instead of `miniGameIdForBaseRound`.
+- Old `/mini-game-prototypes` and legacy fallback protections remain active.
+
+Verification for this round:
+
+- `npm.cmd test`: 176/176 passed.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
+- `git diff --check`: passed.
+
 ## Current Architecture Inventory
 
 ### `src/app/page.tsx`
@@ -151,58 +194,71 @@ Approximate role:
 - Contains formal round renderer, base rounds, advanced challenge flow, result flow, and UI shell.
 - Important boundaries:
   - Do not change `RoundRenderer` dispatch casually.
-  - Do not change `miniGameIdForBaseRound` mapping during structure refactor.
+  - Do not change `src/features/rounds/registry.ts` mappings during structure refactor.
   - Do not change 8-round formal test order unless doing a separate product/gameplay task.
 
 Current issue:
 
-- Still too large and mixes app shell, round rendering, advanced flow, result UI, and some glue logic.
-- Should be split only after the mini-game runtime is easier to reason about.
+- Still large and mixes app shell, base native rounds, advanced flow, result UI, and some glue logic.
+- Round config, mini-game round glue, share image generation, radar chart, and CSS have already been moved out.
+- Future splits should be smaller than the previous full-pass extraction and should keep native round behavior stable.
 
 ### `src/app/mini-game-prototypes.tsx`
 
 Approximate role:
 
-- Formal embedded mini-game runtime.
-- Exports `MiniGameEmbeddedStage`.
-- Contains shared constants/helpers/hooks and all current mini-game React runtimes:
-  - Square Jump
-  - Fall Down
-  - Doodle
-  - Flappy
-  - Knife
-- Contains runtime refs, RAF loops, DOM painters, input handlers, overlays, and performance panel usage.
+- Public facade for the formal embedded mini-game runtime.
+- Re-exports `MiniGameEmbeddedStage` from `src/features/mini-games/embedded-stage.tsx`.
+- Re-exports `MiniGameCompletion` from `src/features/mini-games/common.tsx`.
+- The actual per-game React runtimes now live under `src/features/mini-games/`.
 
 Current issue:
 
-- Too large and has mixed responsibilities.
-- Shared runtime utilities, perf monitor, and five game implementations live in one file.
-- This is the safest first extraction target because shared utilities can move without changing gameplay behavior.
+- No longer a large runtime file.
+- Keep it as a compatibility facade unless all imports have been migrated intentionally.
 
 ### `src/lib/mini-game-prototypes.ts`
 
 Approximate role:
 
-- Mini-game config and pure logic layer.
-- Owns generated layouts, config helpers, physics/planning helpers, and selectors for all mini-games.
+- Public facade for mini-game config and pure logic.
+- Re-exports per-game logic from `src/lib/mini-games/*`.
 - Used heavily by tests and app runtime.
 
 Current issue:
 
-- Too large and mixes all game config/generation/pure logic in one file.
-- Should be split by game only after React runtime structure is cleaner and tests continue to prove behavior.
+- No longer owns all per-game code directly.
+- Keep public exports stable unless a separate compatibility cleanup is planned.
 
 ### `src/app/globals.css`
 
 Approximate role:
 
-- Global app styles plus formal flow styles plus all mini-game runtime styles.
-- Contains active `prototype-*` and mini-game-specific classes used by formal embedded games.
+- Ordered CSS facade.
+- Imports:
+  - `src/app/styles/base-flow.css`
+  - `src/app/styles/mini-games.css`
+  - `src/app/styles/overlays-responsive.css`
 
 Current issue:
 
-- Too large and mixes unrelated UI systems.
-- CSS splitting should happen late because many source tests and active runtime selectors depend on exact class names.
+- Keep import order stable.
+- Active selectors should not be renamed during structure work.
+
+### `src/features/rounds/registry.ts`
+
+Approximate role:
+
+- Single registry for formal base round definitions.
+- Declares the 8 formal round IDs, titles, dimension labels, rules, actions, and base implementation type.
+- Separates formal round identity from implementation type:
+  - native component
+  - embedded mini-game
+
+Current issue:
+
+- Advanced challenge routing does not read this registry yet.
+- Result labels still read through the existing `rounds` compatibility adapter.
 
 ### Tests
 
@@ -372,6 +428,21 @@ Target:
 - Split CSS into coherent groups only after component files are split.
 - Keep class names stable unless a separate visual cleanup is approved.
 
+### Round 11: Formal Round Registry
+
+Status: complete.
+
+Target:
+
+- Move the declaration of all 8 formal base round implementations into `src/features/rounds/registry.ts`.
+- Keep the existing public `rounds` adapter and mini-game helper exports stable.
+- Let the base `RoundRenderer` consult the registry for native versus mini-game implementation.
+
+Risk:
+
+- Formal round order, internal IDs, score dimensions, and display copy must not drift.
+- Advanced challenge flow remains out of scope for this round.
+
 ## Per-Round Checklist
 
 For every structure refactor round:
@@ -409,6 +480,7 @@ For every structure refactor round:
 | 8 | Complete | Pure mini-game lib logic split by game under `src/lib/mini-games/`; public facade preserved. |
 | 9 | Complete | Page-level round config, mini-game round glue, share image generation, and radar chart extracted. |
 | 10 | Complete | Global CSS split into imported responsibility chunks with selectors and order preserved. |
+| 11 | Complete | Formal base round implementations declared in `src/features/rounds/registry.ts`; base rendering reads registry. |
 
 ## Moved In Round 1
 
