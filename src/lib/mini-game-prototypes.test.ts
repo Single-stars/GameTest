@@ -1173,6 +1173,20 @@ test("formal round registry preserves official order and base implementations", 
     ],
   );
 
+  assert.deepEqual(
+    ROUND_DEFINITIONS.map((round) => [round.id, round.advanced]),
+    [
+      ["reaction", { type: "native", componentId: "advanced-reaction" }],
+      ["aim", { type: "native", componentId: "advanced-aim" }],
+      ["search", { type: "mini-game", gameId: "doodle" }],
+      ["stroop", { type: "mini-game", gameId: "fall-down" }],
+      ["rhythm", { type: "mini-game", gameId: "square-jump" }],
+      ["memory", { type: "mini-game", gameId: "flappy" }],
+      ["braking", { type: "native", componentId: "advanced-braking" }],
+      ["patience", { type: "mini-game", gameId: "knife" }],
+    ],
+  );
+
   for (const round of ROUND_DEFINITIONS) {
     assert.equal(getRoundDefinition(round.id), round);
     assert.equal(typeof round.title, "string");
@@ -1203,6 +1217,19 @@ test("base round rendering reads formal implementations from the round registry"
   assert.doesNotMatch(baseMappingSource, /if \(round === "rhythm"\) return "square-jump";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
+});
+
+test("advanced round rendering reads formal implementations from the round registry", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
+
+  assert.match(roundRendererSource, /const advancedImplementation = getRoundDefinition\(round\)\.advanced;/);
+  assert.match(roundRendererSource, /advancedImplementation\.type === "mini-game"[\s\S]*isMiniGameAdvancedConfig\(advancedConfig\)[\s\S]*<MiniGameAdvancedRound/);
+  assert.match(roundRendererSource, /switch \(advancedImplementation\.componentId\)/);
+  assert.match(roundRendererSource, /case "advanced-reaction":[\s\S]*<AdvancedReactionRound/);
+  assert.match(roundRendererSource, /case "advanced-aim":[\s\S]*<AdvancedAimRound/);
+  assert.match(roundRendererSource, /case "advanced-braking":[\s\S]*<AdvancedBrakingRound/);
+  assert.doesNotMatch(roundRendererSource, /switch \(round\)[\s\S]*case "reaction":[\s\S]*<AdvancedReactionRound/);
 });
 
 test("global CSS is split by app flow, mini-games, and overlays without renaming active selectors", () => {

@@ -183,6 +183,39 @@ Verification for this round:
 - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
 - `git diff --check`: passed.
 
+### Formal Round Registry Round 2
+
+Completed after Round 1 was committed and pushed:
+
+- Added advanced implementation declarations to `src/features/rounds/registry.ts`.
+- Preserved the formal round order, internal IDs, visible titles, dimension labels, rule copy, and action copy.
+- Centralized the advanced implementation mapping:
+  - reaction -> native advanced-reaction
+  - aim -> native advanced-aim
+  - search -> mini-game doodle
+  - stroop -> mini-game fall-down
+  - rhythm -> mini-game square-jump
+  - memory -> mini-game flappy
+  - braking -> native advanced-braking
+  - patience -> mini-game knife
+- Updated the advanced `RoundRenderer` path to read `getRoundDefinition(round).advanced` before deciding whether to render a native advanced round or `MiniGameAdvancedRound`.
+- Kept `isMiniGameAdvancedConfig` as the runtime/type guard for mini-game advanced configs.
+- Left advanced challenge config generation, scoring, storage, CSS, mini-game configs, and native advanced component behavior unchanged.
+
+Verification added:
+
+- Registry advanced mapping protection.
+- `RoundRenderer` advanced path reads the registry instead of switching on `round`.
+- Old `/mini-game-prototypes` and legacy fallback protections remain active.
+
+Verification for this round:
+
+- `node --test --experimental-strip-types src\lib\mini-game-prototypes.test.ts src\lib\obsolete-features.test.ts`: 88/88 passed.
+- `npm.cmd test`: 177/177 passed.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
+- `git diff --check`: passed.
+
 ## Current Architecture Inventory
 
 ### `src/app/page.tsx`
@@ -249,16 +282,16 @@ Current issue:
 
 Approximate role:
 
-- Single registry for formal base round definitions.
-- Declares the 8 formal round IDs, titles, dimension labels, rules, actions, and base implementation type.
+- Single registry for formal round definitions.
+- Declares the 8 formal round IDs, titles, dimension labels, rules, actions, base implementation type, and advanced implementation type.
 - Separates formal round identity from implementation type:
   - native component
   - embedded mini-game
 
 Current issue:
 
-- Advanced challenge routing does not read this registry yet.
 - Result labels still read through the existing `rounds` compatibility adapter.
+- Advanced challenge config generation remains in `src/lib/advanced-challenges.ts`; the registry only declares the render implementation path.
 
 ### Tests
 
@@ -443,6 +476,21 @@ Risk:
 - Formal round order, internal IDs, score dimensions, and display copy must not drift.
 - Advanced challenge flow remains out of scope for this round.
 
+### Round 12: Formal Round Registry Advanced Implementations
+
+Status: complete.
+
+Target:
+
+- Add `advanced` implementation declarations to `src/features/rounds/registry.ts`.
+- Keep native advanced components and mini-game advanced runtime behavior unchanged.
+- Let the advanced `RoundRenderer` path consult the registry for native versus mini-game implementation.
+
+Risk:
+
+- Advanced config generation must remain unchanged.
+- `MiniGameAdvancedRound` must still receive only configs validated by `isMiniGameAdvancedConfig`.
+
 ## Per-Round Checklist
 
 For every structure refactor round:
@@ -481,6 +529,7 @@ For every structure refactor round:
 | 9 | Complete | Page-level round config, mini-game round glue, share image generation, and radar chart extracted. |
 | 10 | Complete | Global CSS split into imported responsibility chunks with selectors and order preserved. |
 | 11 | Complete | Formal base round implementations declared in `src/features/rounds/registry.ts`; base rendering reads registry. |
+| 12 | Complete | Formal advanced round implementations declared in `src/features/rounds/registry.ts`; advanced rendering reads registry. |
 
 ## Moved In Round 1
 

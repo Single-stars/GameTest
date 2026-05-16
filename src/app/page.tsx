@@ -862,15 +862,19 @@ function PlayFrame({
 
 function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId } & RoundProps) {
   if (advancedConfig) {
-    if (isMiniGameAdvancedConfig(advancedConfig)) {
-      return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+    const advancedImplementation = getRoundDefinition(round).advanced;
+    if (advancedImplementation.type === "mini-game") {
+      if (isMiniGameAdvancedConfig(advancedConfig)) {
+        return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      }
+      return null;
     }
-    switch (round) {
-      case "reaction":
+    switch (advancedImplementation.componentId) {
+      case "advanced-reaction":
         return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "aim":
+      case "advanced-aim":
         return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "braking":
+      case "advanced-braking":
         return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
     }
   }

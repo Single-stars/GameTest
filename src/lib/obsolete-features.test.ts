@@ -89,7 +89,8 @@ test("legacy search memory and patience fallback rounds are removed after mini-g
   assert.doesNotMatch(baseMappingSource, /if \(round === "search"\) return "doodle";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
-  assert.match(roundRendererSource, /if \(isMiniGameAdvancedConfig\(advancedConfig\)\) \{\s*return <MiniGameAdvancedRound/);
+  assert.match(roundRendererSource, /const advancedImplementation = getRoundDefinition\(round\)\.advanced;/);
+  assert.match(roundRendererSource, /advancedImplementation\.type === "mini-game"[\s\S]*return <MiniGameAdvancedRound/);
   assert.match(roundRendererSource, /const baseImplementation = getRoundDefinition\(round\)\.base;[\s\S]*return <MiniGameBaseRound/);
 
   for (const [roundId, miniGameId] of [
