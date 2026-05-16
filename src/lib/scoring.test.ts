@@ -26,6 +26,17 @@ function appPageSource() {
   return readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 }
 
+const APP_CSS_SOURCE_URLS = [
+  new URL("../app/globals.css", import.meta.url),
+  new URL("../app/styles/base-flow.css", import.meta.url),
+  new URL("../app/styles/mini-games.css", import.meta.url),
+  new URL("../app/styles/overlays-responsive.css", import.meta.url),
+];
+
+function readAppCssSource() {
+  return APP_CSS_SOURCE_URLS.map((url) => readFileSync(url, "utf8")).join("\n");
+}
+
 function sourceBetween(source: string, start: string, end: string) {
   const startIndex = source.indexOf(start);
   const endIndex = source.indexOf(end, startIndex + start.length);
@@ -466,7 +477,7 @@ test("base aim keeps one moving target active after each hit until eight hits", 
 });
 
 test("advanced aim keeps target, arrow, and long-press button UI styles active", () => {
-  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const styles = readAppCssSource();
 
   assert.match(cssBlock(styles, ".advanced-aim-target"), /background:\s*var\(--red\);/);
   assert.match(cssBlock(styles, ".advanced-aim-target"), /box-shadow:/);
@@ -627,7 +638,7 @@ test("five base braking trials count as a completed scoring dimension", () => {
 
 test("base braking source uses five rounds with advanced danger placement and graphics", () => {
   const source = appPageSource();
-  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const styles = readAppCssSource();
   const brakingSource = sourceBetween(source, "function BrakingRound", "function getRoundConfig");
 
   assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
@@ -652,7 +663,7 @@ test("base braking source uses five rounds with advanced danger placement and gr
 });
 
 test("braking feedback flashes early releases and uses red glow instead of recoloring crashes", () => {
-  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const styles = readAppCssSource();
   const crashedRunner = cssBlock(styles, ".dino-panel.crashed .advanced-runner");
   const earlyRunner = cssBlock(styles, ".dino-panel.early .advanced-runner");
 

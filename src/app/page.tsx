@@ -12,7 +12,6 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import QRCode from "qrcode";
 import {
   createAdvancedAimArrow,
   resolveAdvancedAimArrowStep,
@@ -43,7 +42,6 @@ import {
   type GameRankResult,
   type PointerKind,
   type RoundId,
-  type ScoreAxis,
   type TrialEvent,
 } from "@/lib/scoring";
 import {
@@ -83,14 +81,21 @@ import {
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
+import { rounds, type RoundConfig } from "@/features/game-flow/round-config";
 import {
-  MiniGameEmbeddedStage,
-  type MiniGameCompletion,
-} from "./mini-game-prototypes";
+  MiniGameAdvancedRound,
+  MiniGameBaseRound,
+  isMiniGameAdvancedConfig,
+  miniGameIdForBaseRound,
+} from "@/features/game-flow/mini-game-rounds";
+import { RadarChart } from "@/features/results/radar-chart";
 import {
-  createMiniGameRunSeed,
-  type MiniGameId,
-} from "@/lib/mini-game-prototypes";
+  SHARE_IMAGE_HEIGHT,
+  SHARE_IMAGE_WIDTH,
+  copyTextToClipboard,
+  createShareImage,
+  type ShareImageInput,
+} from "@/features/results/share-image";
 
 type Stage = AppStage;
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
@@ -110,14 +115,6 @@ type AdvancedChallengeState =
       requiredCorrect: number;
       reason: string;
     };
-type RoundConfig = {
-  id: RoundId;
-  title: string;
-  measure: string;
-  rule: string;
-  action: string;
-};
-
 type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
   advancedConfig?: AdvancedStageConfig;
@@ -125,71 +122,10 @@ type RoundProps = {
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
-const SHARE_IMAGE_WIDTH = 900;
-const SHARE_IMAGE_HEIGHT = 820;
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 const LUCK_RULE_TEXT = "完成进阶挑战获得抽取次数。每次抽 0-100 分，只保留最高运气；已满运气，继续抽取不会降低历史最高。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
-
-const rounds: RoundConfig[] = [
-  {
-    id: "reaction",
-    title: "变色点我",
-    measure: "反应力",
-    rule: "等区域变绿后再点，提前点会记为误点。",
-    action: "首轮练习，后 3 轮计分。",
-  },
-  {
-    id: "aim",
-    title: "移动靶",
-    measure: "精准度",
-    rule: "点击屏幕发射箭，命中移动靶得分。",
-    action: "越往后靶子越快越小。",
-  },
-  {
-    id: "search",
-    title: "一路向上",
-    measure: "连续反应",
-    rule: "拖动控制小方块左右移动，踩平台一路上升。",
-    action: "基础关失败会原地续跑，超过 3 次失误后直接结算进入下一轮。",
-  },
-  {
-    id: "stroop",
-    title: "一路向下",
-    measure: "专注力",
-    rule: "左右半屏控制小方块，落到更低的平台并避开危险层板。",
-    action: "基础关失误会在当前相机中线生成平台续跑，超过 3 次失误后进入下一轮。",
-  },
-  {
-    id: "rhythm",
-    title: "跳一跳",
-    measure: "节奏感",
-    rule: "长按蓄力，松手让小方块跳到下一个平台。",
-    action: "基础关失误会重置到原本的下一个平台续跑，超过 3 次失误后进入下一轮。",
-  },
-  {
-    id: "memory",
-    title: "一路向前",
-    measure: "手眼协调",
-    rule: "点击让小方块起飞并控制高度，穿过前方门洞。",
-    action: "基础关撞到障碍会闪烁复位继续，超过 3 次失误后结算。",
-  },
-  {
-    id: "braking",
-    title: "小方块急停",
-    measure: "控制力",
-    rule: "长按前进，危险出现时立刻松手。",
-    action: "提前松手或撞上危险都会扣分。",
-  },
-  {
-    id: "patience",
-    title: "飞刀连射",
-    measure: "时机判断",
-    rule: "点击发射长条，尽量避开已经插在转盘上的长条。",
-    action: "基础关失败不打断，发射完所有长条后按命中表现计分。",
-  },
-];
 
 const now = () => performance.now();
 const rand = (min: number, max: number) => Math.random() * (max - min) + min;
@@ -236,48 +172,7 @@ function trial(
   };
 }
 
-function numberStat(outcome: MiniGameCompletion, key: string, fallback = 0) {
-  const value = Number(outcome.stats[key]);
-  return Number.isFinite(value) ? value : fallback;
-}
 
-function miniGameBaseScore(outcome: MiniGameCompletion) {
-  const failures = numberStat(outcome, "failures");
-  if (outcome.gameId === "knife") {
-    const hits = numberStat(outcome, "hits");
-    const shotCount = Math.max(1, numberStat(outcome, "shotCount", 6));
-    return Math.round(clamp((hits / shotCount) * 100 - failures * 8, 0, 100));
-  }
-  const progress = numberStat(outcome, "progressPercent");
-  const passBonus = outcome.status === "passed" ? 8 : 0;
-  return Math.round(clamp(progress + passBonus - failures * 16, 0, 100));
-}
-
-function miniGameFailureError(outcome: MiniGameCompletion): TrialEvent["errorType"] | undefined {
-  if (outcome.status === "passed") return undefined;
-  if (outcome.reason.includes("边界") || outcome.reason.includes("掉出")) return "miss";
-  if (outcome.reason.includes("倒计时")) return "timeout";
-  return "collision";
-}
-
-function miniGameValue(mode: string, outcome: MiniGameCompletion, score: number) {
-  return {
-    mode,
-    miniGameId: outcome.gameId,
-    miniLevelId: outcome.levelId,
-    passed: outcome.status === "passed",
-    score,
-    reason: outcome.reason,
-    elapsedMs: outcome.elapsedMs,
-    failures: numberStat(outcome, "failures"),
-    progressPercent: numberStat(outcome, "progressPercent", outcome.status === "passed" ? 100 : 0),
-    hits: numberStat(outcome, "hits"),
-    shotCount: numberStat(outcome, "shotCount"),
-    gateCount: numberStat(outcome, "gateCount"),
-    passedGates: numberStat(outcome, "passedGates"),
-    forcedAdvance: outcome.stats.forcedAdvance === true,
-  };
-}
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
@@ -534,7 +429,7 @@ export default function Home() {
     }
 
     try {
-      const dataUrl = await createShareImage(input);
+      const dataUrl = await createShareImage(input, APP_TAGLINE);
       setShareImageDataUrl(dataUrl);
       setImageShareState("saved");
     } catch {
@@ -963,97 +858,7 @@ function PlayFrame({
   );
 }
 
-function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
-  if (round === "search") return "doodle";
-  if (round === "stroop") return "fall-down";
-  if (round === "rhythm") return "square-jump";
-  if (round === "memory") return "flappy";
-  if (round === "patience") return "knife";
-  return null;
-}
 
-type MiniAdvancedStageConfig = AdvancedStageConfig & { params: AdvancedStageConfig["params"] & { miniGameId: MiniGameId; miniLevelId: string } };
-
-function isMiniGameAdvancedConfig(config?: AdvancedStageConfig): config is MiniAdvancedStageConfig {
-  const miniGameIds: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump", "fall-down"];
-  return (
-    typeof config?.params.miniGameId === "string" &&
-    miniGameIds.includes(config.params.miniGameId as MiniGameId) &&
-    typeof config.params.miniLevelId === "string"
-  );
-}
-
-function MiniGameBaseRound({
-  gameId,
-  onComplete,
-  round,
-}: {
-  gameId: MiniGameId;
-  onComplete: (trials: TrialEvent[]) => void;
-  round: RoundId;
-}) {
-  const levelId = `${gameId}-base`;
-  const [runId] = useState(() => Date.now());
-  const shownAtRef = useRef(now());
-  const runSeed = useMemo(() => createMiniGameRunSeed(levelId, runId), [levelId, runId]);
-  const handleComplete = useCallback(
-    (outcome: MiniGameCompletion) => {
-      const score = miniGameBaseScore(outcome);
-      onComplete([
-        trial(round, 0, {
-          shownAt: shownAtRef.current,
-          responseAt: shownAtRef.current + outcome.elapsedMs,
-          correct: outcome.status === "passed" && score >= 60,
-          errorType: miniGameFailureError(outcome),
-          value: miniGameValue(`mini-${gameId}-base`, outcome, score),
-        }),
-      ]);
-    },
-    [gameId, onComplete, round],
-  );
-
-  return (
-    <MiniGameEmbeddedStage
-      gameId={gameId}
-      levelId={levelId}
-      mode="base"
-      onComplete={handleComplete}
-      runSeed={runSeed}
-    />
-  );
-}
-
-function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advancedConfig: MiniAdvancedStageConfig; onComplete: (trials: TrialEvent[]) => void }) {
-  const config = advancedConfig;
-  const [runId] = useState(() => Date.now());
-  const shownAtRef = useRef(now());
-  const runSeed = useMemo(() => createMiniGameRunSeed(config.params.miniLevelId, runId), [config.params.miniLevelId, runId]);
-  const handleComplete = useCallback(
-    (outcome: MiniGameCompletion) => {
-      const passed = outcome.status === "passed";
-      onComplete([
-        trial(config.dimension, 0, {
-          shownAt: shownAtRef.current,
-          responseAt: shownAtRef.current + outcome.elapsedMs,
-          correct: passed,
-          errorType: passed ? undefined : miniGameFailureError(outcome),
-          value: miniGameValue("mini-game", outcome, passed ? 100 : 0),
-        }),
-      ]);
-    },
-    [config.dimension, onComplete],
-  );
-
-  return (
-    <MiniGameEmbeddedStage
-      gameId={config.params.miniGameId}
-      levelId={config.params.miniLevelId}
-      mode="advanced"
-      onComplete={handleComplete}
-      runSeed={runSeed}
-    />
-  );
-}
 
 function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId } & RoundProps) {
   if (advancedConfig) {
@@ -3406,286 +3211,4 @@ function ShareImageScreen({
 
     </section>
   );
-}
-
-function RadarChart({ axis }: { axis: { label: string; score: number }[] }) {
-  const center = 120;
-  const radius = 78;
-  const angleFor = (index: number) => -Math.PI / 2 + (index / axis.length) * Math.PI * 2;
-  const point = (index: number, scale: number) => {
-    const angle = angleFor(index);
-    return {
-      x: center + Math.cos(angle) * radius * scale,
-      y: center + Math.sin(angle) * radius * scale,
-    };
-  };
-  const polygon = axis
-    .map((item, index) => {
-      const current = point(index, item.score / 100);
-      return `${current.x},${current.y}`;
-    })
-    .join(" ");
-  const labelScaleFor = (label: string) => (label === "控制力" || label === "连续反应" || label === "手眼协调" || label === "时机判断" ? 1.34 : 1.2);
-
-  return (
-    <section className="radar-card" aria-label="八向能力图">
-      <div className="radar-visual">
-        <svg viewBox="0 0 240 240" role="img" aria-label="八项评分雷达图">
-          {[0.25, 0.5, 0.75, 1].map((scale) => (
-            <polygon
-              className="radar-ring"
-              key={scale}
-              points={axis
-                .map((_, index) => {
-                  const current = point(index, scale);
-                  return `${current.x},${current.y}`;
-                })
-                .join(" ")}
-            />
-          ))}
-          {axis.map((_, index) => {
-            const outer = point(index, 1);
-            return <line className="radar-axis" key={index} x1={center} y1={center} x2={outer.x} y2={outer.y} />;
-          })}
-          <polygon className="radar-score" points={polygon} />
-          {axis.map((item, index) => {
-            const labelPoint = point(index, labelScaleFor(item.label));
-            return (
-              <text className="radar-label" key={item.label} x={labelPoint.x} y={labelPoint.y}>
-                {item.label}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
-    </section>
-  );
-}
-
-type ShareImageInput =
-  | {
-      kind: "result";
-      rankTitle: string;
-      result: GameRankResult;
-      url: string;
-    }
-  | {
-      kind: "default";
-      url: string;
-    };
-
-async function copyTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch {
-      // Fall through to the textarea fallback for in-app browsers with stricter clipboard handling.
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-
-  try {
-    const copied = document.execCommand("copy");
-    if (!copied) throw new Error("Copy command failed");
-  } finally {
-    document.body.removeChild(textarea);
-  }
-}
-
-async function createShareImage(input: ShareImageInput) {
-  const canvas = document.createElement("canvas");
-  const width = SHARE_IMAGE_WIDTH;
-  const height = SHARE_IMAGE_HEIGHT;
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas is not available");
-
-  ctx.fillStyle = "#f7f4ee";
-  ctx.fillRect(0, 0, width, height);
-
-  const qrDataUrl = await QRCode.toDataURL(input.url, {
-    color: { dark: "#181818", light: "#fffdf8" },
-    errorCorrectionLevel: "M",
-    margin: 1,
-    width: 144,
-  });
-  const qrImage = await loadCanvasImage(qrDataUrl);
-
-  if (input.kind === "default") {
-    drawCard(ctx, 24, 24, 852, 510);
-    drawFittedText(ctx, "热血青铜", 58, 116, 784, 72, 48, "#181818");
-
-    drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 124);
-
-    drawQrFooter(ctx, qrImage, 562, "扫码开测", APP_TAGLINE);
-    return canvas.toDataURL("image/png");
-  }
-
-  drawCard(ctx, 24, 24, 852, 144);
-  drawFittedText(ctx, input.rankTitle, 58, 116, 784, 72, 42, "#181818");
-
-  drawCard(ctx, 24, 194, 852, 352);
-  drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 112);
-  drawQrFooter(ctx, qrImage, 574, "扫码来测", APP_TAGLINE);
-
-  return canvas.toDataURL("image/png");
-}
-
-function defaultShareAxis(): ScoreAxis[] {
-  const labels: Array<ScoreAxis["label"]> = ["反应力", "精准度", "连续反应", "专注力", "节奏感", "手眼协调", "控制力", "时机判断"];
-  const keys: ScoreAxis["key"][] = ["reaction", "targeting", "search", "interference", "rhythm", "memory", "braking", "waiting"];
-  return labels.map((label, index) => ({
-    key: keys[index],
-    label,
-    score: 72,
-  }));
-}
-
-function drawQrFooter(ctx: CanvasRenderingContext2D, qrImage: HTMLImageElement, y: number, title: string, subtitle: string) {
-  drawCard(ctx, 24, y, 852, 210);
-
-  const qrX = 58;
-  const qrY = y + 34;
-  roundedRect(ctx, qrX - 12, qrY - 12, 168, 168, 16);
-  ctx.fillStyle = "#fffdf8";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(24, 24, 24, 0.1)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.drawImage(qrImage, qrX, qrY, 144, 144);
-
-  drawText(ctx, title, 252, y + 86, "900 34px", "#181818");
-  drawText(ctx, subtitle, 252, y + 132, "760 26px", "#665f55");
-}
-
-function drawRadarOnCanvas(ctx: CanvasRenderingContext2D, axis: ScoreAxis[], centerX: number, centerY: number, radius: number) {
-  const angleFor = (index: number) => -Math.PI / 2 + (index / axis.length) * Math.PI * 2;
-  const point = (index: number, scale: number) => {
-    const angle = angleFor(index);
-    return {
-      x: centerX + Math.cos(angle) * radius * scale,
-      y: centerY + Math.sin(angle) * radius * scale,
-    };
-  };
-
-  ctx.lineWidth = 3;
-  for (const scale of [0.25, 0.5, 0.75, 1]) {
-    ctx.beginPath();
-    axis.forEach((_, index) => {
-      const current = point(index, scale);
-      if (index === 0) ctx.moveTo(current.x, current.y);
-      else ctx.lineTo(current.x, current.y);
-    });
-    ctx.closePath();
-    ctx.strokeStyle = "rgba(24, 24, 24, 0.12)";
-    ctx.stroke();
-  }
-
-  axis.forEach((_, index) => {
-    const outer = point(index, 1);
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.lineTo(outer.x, outer.y);
-    ctx.strokeStyle = "rgba(24, 24, 24, 0.12)";
-    ctx.stroke();
-  });
-
-  ctx.beginPath();
-  axis.forEach((item, index) => {
-    const current = point(index, item.score / 100);
-    if (index === 0) ctx.moveTo(current.x, current.y);
-    else ctx.lineTo(current.x, current.y);
-  });
-  ctx.closePath();
-  ctx.fillStyle = "rgba(27, 154, 170, 0.22)";
-  ctx.strokeStyle = "#1b9aaa";
-  ctx.lineWidth = 9;
-  ctx.fill();
-  ctx.stroke();
-
-  axis.forEach((item, index) => {
-    const labelPoint = point(index, 1.28);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    drawText(ctx, item.label, labelPoint.x, labelPoint.y, "850 22px", "#665f55", "center");
-  });
-}
-
-function drawFittedText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-  maxSize: number,
-  minSize: number,
-  color: string,
-) {
-  let size = maxSize;
-  do {
-    ctx.font = `950 ${size}px Inter, "Microsoft YaHei", sans-serif`;
-    if (ctx.measureText(text).width <= maxWidth || size <= minSize) break;
-    size -= 2;
-  } while (size >= minSize);
-  drawText(ctx, text, x, y, `950 ${size}px`, color);
-}
-
-function drawText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  font: string,
-  color: string,
-  align: CanvasTextAlign = "left",
-) {
-  ctx.fillStyle = color;
-  ctx.font = `${font} Inter, "Microsoft YaHei", sans-serif`;
-  ctx.textAlign = align;
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(text, x, y);
-}
-
-function drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
-  roundedRect(ctx, x, y, width, height, 16);
-  ctx.fillStyle = "#fffdf8";
-  ctx.fill();
-  ctx.strokeStyle = "#d8d0c4";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
-  const right = x + width;
-  const bottom = y + height;
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(right - radius, y);
-  ctx.quadraticCurveTo(right, y, right, y + radius);
-  ctx.lineTo(right, bottom - radius);
-  ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
-  ctx.lineTo(x + radius, bottom);
-  ctx.quadraticCurveTo(x, bottom, x, bottom - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
-
-function loadCanvasImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
 }

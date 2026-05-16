@@ -3,6 +3,17 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
+const APP_CSS_SOURCE_URLS = [
+  new URL("../app/globals.css", import.meta.url),
+  new URL("../app/styles/base-flow.css", import.meta.url),
+  new URL("../app/styles/mini-games.css", import.meta.url),
+  new URL("../app/styles/overlays-responsive.css", import.meta.url),
+];
+
+function readAppCssSource() {
+  return APP_CSS_SOURCE_URLS.map((url) => readFileSync(url, "utf8")).join("\n");
+}
+
 test("obsolete prototype route and entry point are removed", () => {
   const obsoleteSegment = ["control", "maze", "prototype"].join("-");
   const obsoleteEntryText = ["控制力", "原型"].join("");
@@ -22,7 +33,7 @@ test("obsolete prototype route and entry point are removed", () => {
 test("obsolete mini-game prototype shell UI is removed while embedded runtime remains", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const cssSource = readAppCssSource();
 
   for (const term of [
     "MiniGameEntryPanel",
@@ -68,8 +79,9 @@ test("obsolete mini-game prototype shell UI is removed while embedded runtime re
 
 test("legacy search memory and patience fallback rounds are removed after mini-game replacement", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  const baseMappingSource = appPageSource.slice(appPageSource.indexOf("function miniGameIdForBaseRound"), appPageSource.indexOf("type MiniAdvancedStageConfig"));
+  const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
+  const cssSource = readAppCssSource();
+  const baseMappingSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function miniGameIdForBaseRound"), miniGameRoundsSource.indexOf("type MiniAdvancedStageConfig"));
   const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
 
   assert.match(baseMappingSource, /if \(round === "search"\) return "doodle";/);
@@ -128,13 +140,12 @@ test("legacy search memory and patience fallback rounds are removed after mini-g
 
 test("replaced stroop and rhythm gameplay implementations are removed", () => {
   const appPage = new URL("../app/page.tsx", import.meta.url);
-  const appStyles = new URL("../app/globals.css", import.meta.url);
   const advancedStroop = new URL("advanced-stroop.ts", import.meta.url);
   const advancedStroopTest = new URL("advanced-stroop.test.ts", import.meta.url);
   const advancedRhythm = new URL("advanced-rhythm.ts", import.meta.url);
   const advancedRhythmTest = new URL("advanced-rhythm.test.ts", import.meta.url);
   const appPageSource = readFileSync(appPage, "utf8");
-  const cssSource = readFileSync(appStyles, "utf8");
+  const cssSource = readAppCssSource();
 
   assert.equal(existsSync(advancedStroop), false);
   assert.equal(existsSync(advancedStroopTest), false);

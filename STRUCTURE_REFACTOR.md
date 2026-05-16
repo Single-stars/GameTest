@@ -7,7 +7,8 @@ This document is the handoff file for the code-structure refactor. Read it befor
 ## Current Git Baseline
 
 - Branch: `main`
-- Recent pushed baseline: `a2147f7 perf: add mini game performance monitor`
+- Refactor start baseline after Round 1 push: `8bb2172 refactor: extract mini game common runtime`
+- Earlier performance baseline: `a2147f7 perf: add mini game performance monitor`
 - Current formal routes:
   - `/`
   - `/_not-found`
@@ -97,6 +98,47 @@ When a future change needs any of those, it is not part of this structure refact
 - Moved hot-path position writes toward `transform: translate3d(...)`.
 - Replaced repeated `find(...)` DOM lookup paths with runtime maps/caches in hot painters where already completed.
 - Commit pushed: `a2147f7 perf: add mini game performance monitor`.
+
+### Structure Refactor Full Pass
+
+Completed in the 2026-05-16 full structure pass:
+
+- Kept `src/app/mini-game-prototypes.tsx` as a tiny public facade.
+- Split the embedded mini-game runtime into feature modules:
+  - `src/features/mini-games/common.tsx`
+  - `src/features/mini-games/embedded-stage.tsx`
+  - `src/features/mini-games/doodle.tsx`
+  - `src/features/mini-games/flappy.tsx`
+  - `src/features/mini-games/knife.tsx`
+  - `src/features/mini-games/square-jump.tsx`
+  - `src/features/mini-games/fall-down.tsx`
+- Split pure mini-game config and logic while preserving the public facade `src/lib/mini-game-prototypes.ts`:
+  - `src/lib/mini-games/shared.ts`
+  - `src/lib/mini-games/doodle.ts`
+  - `src/lib/mini-games/flappy.ts`
+  - `src/lib/mini-games/knife.ts`
+  - `src/lib/mini-games/square-jump.ts`
+  - `src/lib/mini-games/fall-down.ts`
+  - `src/lib/mini-games/catalog.ts`
+- Split page-level responsibilities out of `src/app/page.tsx`:
+  - `src/features/game-flow/round-config.ts`
+  - `src/features/game-flow/mini-game-rounds.tsx`
+  - `src/features/results/share-image.ts`
+  - `src/features/results/radar-chart.tsx`
+- Split global CSS by responsibility while preserving selector names and order:
+  - `src/app/styles/base-flow.css`
+  - `src/app/styles/mini-games.css`
+  - `src/app/styles/overlays-responsive.css`
+  - `src/app/globals.css` now imports those files in order.
+- Added `allowImportingTsExtensions` to `tsconfig.json` so Node's native TypeScript test runner and Next's type checker agree on split `.ts` module imports.
+- Updated source-level tests so they read the new feature modules and CSS chunks instead of assuming everything still lives in `page.tsx`, `mini-game-prototypes.tsx`, or `globals.css`.
+
+Verification for the full pass:
+
+- `npm.cmd test`: 174/174 passed.
+- `npm.cmd run lint`: passed.
+- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
+- Local HTTP check: `http://localhost:3000/` returned 200 after starting the dev server.
 
 ## Current Architecture Inventory
 
@@ -235,7 +277,7 @@ Rules:
 
 ### Round 2: Extract Embedded Stage Dispatcher
 
-Status: next.
+Status: complete.
 
 Target:
 
@@ -248,7 +290,7 @@ Risk:
 
 ### Round 3: Extract Knife Runtime
 
-Status: pending.
+Status: complete.
 
 Reason to do early:
 
@@ -261,7 +303,7 @@ Target:
 
 ### Round 4: Extract Flappy Runtime
 
-Status: pending.
+Status: complete.
 
 Reason:
 
@@ -270,7 +312,7 @@ Reason:
 
 ### Round 5: Extract Doodle Runtime
 
-Status: pending.
+Status: complete.
 
 Risk:
 
@@ -279,7 +321,7 @@ Risk:
 
 ### Round 6: Extract Fall Down Runtime
 
-Status: pending.
+Status: complete.
 
 Risk:
 
@@ -288,7 +330,7 @@ Risk:
 
 ### Round 7: Extract Square Jump Runtime
 
-Status: pending.
+Status: complete.
 
 Risk:
 
@@ -297,7 +339,7 @@ Risk:
 
 ### Round 8: Split Pure Mini-Game Logic By Game
 
-Status: pending.
+Status: complete.
 
 Target:
 
@@ -307,7 +349,7 @@ Target:
 
 ### Round 9: Split `page.tsx`
 
-Status: pending.
+Status: complete.
 
 Target areas:
 
@@ -323,7 +365,7 @@ Risk:
 
 ### Round 10: CSS Organization
 
-Status: pending.
+Status: complete.
 
 Target:
 
@@ -358,8 +400,15 @@ For every structure refactor round:
 | --- | --- | --- |
 | 0 | Complete | Handoff document and planning context created. |
 | 1 | Complete | Common/perf utilities extracted to `src/features/mini-games/common.tsx`. |
-| 2 | Next | Extract embedded stage dispatch glue only if tests remain stable. |
-| 3+ | Pending | Do not start until Round 2 is planned and approved. |
+| 2 | Complete | Embedded stage dispatcher moved to `src/features/mini-games/embedded-stage.tsx`; app facade preserved. |
+| 3 | Complete | Knife runtime moved to `src/features/mini-games/knife.tsx`. |
+| 4 | Complete | Flappy runtime moved to `src/features/mini-games/flappy.tsx`. |
+| 5 | Complete | Doodle runtime moved to `src/features/mini-games/doodle.tsx`. |
+| 6 | Complete | Fall Down runtime moved to `src/features/mini-games/fall-down.tsx`. |
+| 7 | Complete | Square Jump runtime moved to `src/features/mini-games/square-jump.tsx`. |
+| 8 | Complete | Pure mini-game lib logic split by game under `src/lib/mini-games/`; public facade preserved. |
+| 9 | Complete | Page-level round config, mini-game round glue, share image generation, and radar chart extracted. |
+| 10 | Complete | Global CSS split into imported responsibility chunks with selectors and order preserved. |
 
 ## Moved In Round 1
 

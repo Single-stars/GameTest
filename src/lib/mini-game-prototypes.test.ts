@@ -77,6 +77,43 @@ const FALL_DOWN_LEVEL_IDS = [
   "fall-down-danger-hard",
   "fall-down-final",
 ];
+const MINI_GAME_RUNTIME_SOURCE_URLS = [
+  new URL("../app/mini-game-prototypes.tsx", import.meta.url),
+  new URL("../features/mini-games/embedded-stage.tsx", import.meta.url),
+  new URL("../features/mini-games/square-jump.tsx", import.meta.url),
+  new URL("../features/mini-games/fall-down.tsx", import.meta.url),
+  new URL("../features/mini-games/doodle.tsx", import.meta.url),
+  new URL("../features/mini-games/flappy.tsx", import.meta.url),
+  new URL("../features/mini-games/knife.tsx", import.meta.url),
+];
+const MINI_GAME_CONFIG_SOURCE_URLS = [
+  new URL("./mini-game-prototypes.ts", import.meta.url),
+  new URL("./mini-games/shared.ts", import.meta.url),
+  new URL("./mini-games/doodle.ts", import.meta.url),
+  new URL("./mini-games/flappy.ts", import.meta.url),
+  new URL("./mini-games/knife.ts", import.meta.url),
+  new URL("./mini-games/square-jump.ts", import.meta.url),
+  new URL("./mini-games/fall-down.ts", import.meta.url),
+  new URL("./mini-games/catalog.ts", import.meta.url),
+];
+const APP_CSS_SOURCE_URLS = [
+  new URL("../app/globals.css", import.meta.url),
+  new URL("../app/styles/base-flow.css", import.meta.url),
+  new URL("../app/styles/mini-games.css", import.meta.url),
+  new URL("../app/styles/overlays-responsive.css", import.meta.url),
+];
+
+function readMiniGameRuntimeSource() {
+  return MINI_GAME_RUNTIME_SOURCE_URLS.map((url) => readFileSync(url, "utf8")).join("\n");
+}
+
+function readMiniGameConfigSource() {
+  return MINI_GAME_CONFIG_SOURCE_URLS.map((url) => readFileSync(url, "utf8")).join("\n");
+}
+
+function readAppCssSource() {
+  return APP_CSS_SOURCE_URLS.map((url) => readFileSync(url, "utf8")).join("\n");
+}
 
 test("mini-game prototypes expose the original games plus two prototype tests", () => {
   assert.deepEqual(
@@ -224,7 +261,7 @@ test("square jump gravity multipliers make light and heavy states feel clearly d
 });
 
 test("square jump stage sits lower and tap jumps are short enough for micro adjustment", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const base = getMiniGameLevel("square-jump" as MiniGameId, "square-jump-base");
 
   assert.match(componentSource, /const SQUARE_JUMP_PLATFORM_Y = STAGE_HEIGHT \* 0\.72/);
@@ -380,8 +417,8 @@ test("square jump landing gives the target platform a small invisible success bu
 });
 
 test("square jump keeps only the base first-three-jump tutorial preview and charge squash feedback", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
 
   assert.doesNotMatch(componentSource, /showLandingPreview|setShowLandingPreview|square-preview-toggle/);
   assert.doesNotMatch(globalCss, /\.square-preview-toggle|\.square-landing-shadow/);
@@ -399,8 +436,8 @@ test("square jump keeps only the base first-three-jump tutorial preview and char
 );
 
 test("square jump platform visuals distinguish gravity, moving, and finish platforms", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
 
   assert.match(componentSource, /squarePlatformMark\(platform\)/);
   assert.match(componentSource, /const platformMark = squarePlatformMark\(platform\)/);
@@ -577,7 +614,7 @@ test("square jump base jump plan locks landed jumps to the platform surface", ()
 });
 
 test("square jump runtime snaps every successful landing to the platform surface", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
 
   assert.match(componentSource, /current\.playerY = current\.currentPlatform\.y - PLAYER_SIZE \/ 2/);
   assert.match(componentSource, /current\.playerY = landedPlatform\.y - PLAYER_SIZE \/ 2/);
@@ -755,7 +792,7 @@ test("square jump current platform body extends to the camera bottom after scali
 });
 
 test("square jump target platform also extends to the camera bottom when it rises in", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
 
   assert.match(componentSource, /getSquareJumpBasePlatformHeight\(\{[\s\S]*platformY:\s*platform\.y \+ visualOffsetY/);
   assert.doesNotMatch(componentSource, /index === 0[\s\S]*\? getSquareJumpBasePlatformHeight[\s\S]*: SQUARE_BASE_STAGE_BOTTOM - platform\.y/);
@@ -868,7 +905,7 @@ test("square jump moving current platform carries the landed player offset", () 
 });
 
 test("square jump lets charging start during camera advance without cancelling smooth camera motion", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
 
   assert.doesNotMatch(componentSource, /finishSquareJumpAdvanceForImmediateCharge/);
   assert.match(componentSource, /function updateSquareJumpAdvanceAnimation\(current: SquareJumpUnifiedRuntime\)/);
@@ -880,8 +917,8 @@ test("square jump lets charging start during camera advance without cancelling s
 });
 
 test("square jump base rendering keeps hot-path positions on transforms", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
   const updateDomSource = componentSource.slice(
     componentSource.indexOf("const updateSquareJumpDom = useCallback"),
     componentSource.indexOf("const fail = useCallback", componentSource.indexOf("const updateSquareJumpDom = useCallback")),
@@ -906,8 +943,8 @@ test("square jump base rendering keeps hot-path positions on transforms", () => 
 });
 
 test("square jump runtime supports double jump hover charging and 90 degree turns", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
 
   assert.match(componentSource, /runSeed:\s*string/);
   assert.match(componentSource, /<SquareJumpPrototype[\s\S]*runSeed=\{runSeed\}/);
@@ -947,8 +984,8 @@ test("square jump double level defers miss resolution until after the second jum
 });
 
 test("square jump base advance keeps two platforms visible and advances by camera only", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
   const backgroundStyleSource = componentSource.slice(
     componentSource.indexOf("function squareProgressBackgroundStyle"),
     componentSource.indexOf("type SquareJumpUnifiedState"),
@@ -976,7 +1013,7 @@ test("square jump base advance keeps two platforms visible and advances by camer
 });
 
 test("square jump and fall down paint animation frames without per-frame React state sync", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
@@ -997,7 +1034,8 @@ test("square jump and fall down paint animation frames without per-frame React s
 });
 
 test("mini game common runtime utilities are extracted from embedded stage file", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
+  const appFacadeSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
   const commonModuleUrl = new URL("../features/mini-games/common.tsx", import.meta.url);
 
   assert.equal(existsSync(commonModuleUrl), true);
@@ -1005,9 +1043,9 @@ test("mini game common runtime utilities are extracted from embedded stage file"
 
   assert.match(componentSource, /from "@\/features\/mini-games\/common"/);
   assert.match(componentSource, /export function MiniGameEmbeddedStage/);
-  assert.doesNotMatch(componentSource, /function useMiniGamePerfMonitor\(label: string\)/);
-  assert.doesNotMatch(componentSource, /function MiniGamePerfPanel/);
-  assert.doesNotMatch(componentSource, /function PrototypeEndOverlay/);
+  assert.doesNotMatch(appFacadeSource, /function useMiniGamePerfMonitor\(label: string\)/);
+  assert.doesNotMatch(appFacadeSource, /function MiniGamePerfPanel/);
+  assert.doesNotMatch(appFacadeSource, /function PrototypeEndOverlay/);
   assert.match(commonSource, /export type PrototypeStatus = "playing" \| "passed" \| "failed";/);
   assert.match(commonSource, /export type MiniGameRunMode = "prototype" \| "base" \| "advanced";/);
   assert.match(commonSource, /export type MiniGameCompletion =/);
@@ -1030,8 +1068,101 @@ test("mini game common runtime utilities are extracted from embedded stage file"
   assert.match(commonSource, /export function PrototypeEndOverlay/);
 });
 
+test("mini game embedded runtime is split into feature modules with a stable app facade", () => {
+  const appFacadeSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const modules = [
+    ["embedded-stage", /export function MiniGameEmbeddedStage/],
+    ["square-jump", /export function SquareJumpPrototype/],
+    ["fall-down", /export function FallDownPrototype/],
+    ["doodle", /export function DoodleJumpPrototype/],
+    ["flappy", /export function FlappyPrototype/],
+    ["knife", /export function KnifeHitPrototype/],
+  ] as const;
+
+  assert.match(appFacadeSource, /export \{ MiniGameEmbeddedStage \} from "@\/features\/mini-games\/embedded-stage";/);
+  assert.match(appFacadeSource, /export type \{ MiniGameCompletion \} from "@\/features\/mini-games\/common";/);
+  assert.doesNotMatch(appFacadeSource, /function (SquareJumpPrototype|FallDownPrototype|DoodleJumpPrototype|FlappyPrototype|KnifeHitPrototype)/);
+
+  for (const [moduleName, exportPattern] of modules) {
+    const source = readFileSync(new URL(`../features/mini-games/${moduleName}.tsx`, import.meta.url), "utf8");
+    assert.match(source, exportPattern);
+  }
+});
+
+test("mini game pure logic is split into lib modules with a stable public facade", () => {
+  const facadeSource = readFileSync(new URL("./mini-game-prototypes.ts", import.meta.url), "utf8");
+  const modules = [
+    ["shared", /export type MiniGameId/],
+    ["doodle", /export function generateDoodleWorldLayout/],
+    ["flappy", /export function generateFlappyGateLayout/],
+    ["knife", /export function resolveKnifeShotOutcome/],
+    ["square-jump", /export function generateSquareJumpPlatformSequence/],
+    ["fall-down", /export function resolveFallDownCameraBounds/],
+  ] as const;
+
+  assert.match(facadeSource, /from "\.\/mini-games\/shared(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/doodle(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/flappy(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/knife(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/square-jump(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/fall-down(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/mini-games\/catalog(?:\.ts)?"/);
+  assert.doesNotMatch(facadeSource, /export function generateDoodleWorldLayout/);
+  assert.doesNotMatch(facadeSource, /export function generateSquareJumpPlatformSequence/);
+
+  for (const [moduleName, exportPattern] of modules) {
+    const source = readFileSync(new URL(`./mini-games/${moduleName}.ts`, import.meta.url), "utf8");
+    assert.match(source, exportPattern);
+  }
+});
+
+test("app page delegates mini-game rounds and result helpers to feature modules", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
+  const roundConfigSource = readFileSync(new URL("../features/game-flow/round-config.ts", import.meta.url), "utf8");
+  const shareImageSource = readFileSync(new URL("../features/results/share-image.ts", import.meta.url), "utf8");
+  const radarChartSource = readFileSync(new URL("../features/results/radar-chart.tsx", import.meta.url), "utf8");
+
+  assert.match(appPageSource, /from "@\/features\/game-flow\/round-config"/);
+  assert.match(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
+  assert.match(appPageSource, /from "@\/features\/results\/share-image"/);
+  assert.match(appPageSource, /from "@\/features\/results\/radar-chart"/);
+  assert.doesNotMatch(appPageSource, /const rounds: RoundConfig\[\] = \[/);
+  assert.doesNotMatch(appPageSource, /function MiniGameBaseRound/);
+  assert.doesNotMatch(appPageSource, /function MiniGameAdvancedRound/);
+  assert.doesNotMatch(appPageSource, /async function createShareImage/);
+  assert.doesNotMatch(appPageSource, /function RadarChart/);
+
+  assert.match(roundConfigSource, /export const rounds: RoundConfig\[\] = \[/);
+  assert.match(miniGameRoundsSource, /export function MiniGameBaseRound/);
+  assert.match(miniGameRoundsSource, /export function MiniGameAdvancedRound/);
+  assert.match(miniGameRoundsSource, /export function miniGameIdForBaseRound/);
+  assert.match(shareImageSource, /export const SHARE_IMAGE_WIDTH = 900;/);
+  assert.match(shareImageSource, /export async function createShareImage/);
+  assert.match(shareImageSource, /export async function copyTextToClipboard/);
+  assert.match(radarChartSource, /export function RadarChart/);
+});
+
+test("global CSS is split by app flow, mini-games, and overlays without renaming active selectors", () => {
+  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const baseFlowCss = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
+  const miniGamesCss = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
+  const overlaysCss = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
+
+  assert.match(globalCss, /@import "\.\/styles\/base-flow\.css";/);
+  assert.match(globalCss, /@import "\.\/styles\/mini-games\.css";/);
+  assert.match(globalCss, /@import "\.\/styles\/overlays-responsive\.css";/);
+  assert.match(baseFlowCss, /:root \{/);
+  assert.match(baseFlowCss, /\.advanced-aim-target \{/);
+  assert.match(miniGamesCss, /\.prototype-game-wrap \{/);
+  assert.match(miniGamesCss, /\.square-jump-stage \{/);
+  assert.match(miniGamesCss, /\.fall-down-stage \{/);
+  assert.match(overlaysCss, /\.restart-dialog-backdrop \{/);
+  assert.match(overlaysCss, /@media \(max-width: 768px\)/);
+});
+
 test("hidden mini game performance panel is URL-gated and ref-backed", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
   const perfSource = commonSource.slice(commonSource.indexOf("type MiniGamePerfMetrics"), commonSource.indexOf("export function PrototypeEndOverlay"));
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
@@ -1061,7 +1192,7 @@ test("hidden mini game performance panel is URL-gated and ref-backed", () => {
 });
 
 test("doodle and fall down hot paths avoid pointermove sync and repeated linear DOM lookups", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
   const fallDownPointerMoveSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDirection = useCallback"), fallDownSource.indexOf("const beginFallDownDirection"));
   const fallDownDomSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDom = useCallback"), fallDownSource.indexOf("const resumeFallDownInput"));
@@ -1088,7 +1219,7 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
 });
 
 test("performance-sensitive prototype ticks cache level params outside RAF loops", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
   const squareJumpTickSource = squareJumpSource.slice(squareJumpSource.indexOf("const tick = (time: number) =>"), squareJumpSource.indexOf("frameId = requestAnimationFrame(tick);", squareJumpSource.indexOf("const tick = (time: number) =>")));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
@@ -1112,7 +1243,7 @@ test("performance-sensitive prototype ticks cache level params outside RAF loops
 });
 
 test("square jump base misses respawn on the original next platform before forced advance", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = componentSource.slice(componentSource.indexOf("type SquareJumpUnifiedState"), componentSource.indexOf("function fallDownPlatformKindBag"));
 
   assert.match(squareJumpSource, /failures: number;/);
@@ -1131,10 +1262,10 @@ test("square jump base misses respawn on the original next platform before force
 });
 
 test("formal mini-game rounds create run seeds outside the removed prototype shell", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const baseRoundSource = appPageSource.slice(appPageSource.indexOf("function MiniGameBaseRound"), appPageSource.indexOf("function MiniGameAdvancedRound"));
-  const advancedRoundSource = appPageSource.slice(appPageSource.indexOf("function MiniGameAdvancedRound"), appPageSource.indexOf("function RoundRenderer"));
+  const componentSource = readMiniGameRuntimeSource();
+  const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
+  const baseRoundSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function MiniGameBaseRound"), miniGameRoundsSource.indexOf("function MiniGameAdvancedRound"));
+  const advancedRoundSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function MiniGameAdvancedRound"));
 
   assert.doesNotMatch(componentSource, /function MiniGamePlayScreen/);
   assert.doesNotMatch(componentSource, /setRunId\(Date\.now\(\)\)/);
@@ -1147,7 +1278,7 @@ test("formal mini-game rounds create run seeds outside the removed prototype she
 });
 
 test("square jump library removes obsolete physics landing helpers", () => {
-  const prototypeConfigSource = readFileSync(new URL("mini-game-prototypes.ts", import.meta.url), "utf8");
+  const prototypeConfigSource = readMiniGameConfigSource();
 
   assert.doesNotMatch(prototypeConfigSource, /export function createSquareJumpBaseLaunch/);
   assert.doesNotMatch(prototypeConfigSource, /export function resolveSquareJumpBaseLanding\(/);
@@ -1156,7 +1287,7 @@ test("square jump library removes obsolete physics landing helpers", () => {
 });
 
 test("fall down base camera moves at constant speed and only top pressure fails by default", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.equal(advanceFallDownCamera({ cameraY: 200, delta: 0.5, speed: 80 }), 240);
@@ -1188,9 +1319,9 @@ test("fall down base camera moves at constant speed and only top pressure fails 
 });
 
 test("fall down fragile platforms expire without directly failing the player", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const globalCss = readAppCssSource();
 
   assert.deepEqual(expireFallDownFragilePlatform({ kind: "fragile", steppedAt: 1, now: 2.4, fragileTime: 1.2 }), {
     broken: true,
@@ -1212,7 +1343,7 @@ test("fall down fragile platforms expire without directly failing the player", (
 });
 
 test("fall down moves only while pressing a side and skips landing animation", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.doesNotMatch(fallDownSource, /prototype-start-button/);
@@ -1257,7 +1388,7 @@ test("fall down moves only while pressing a side and skips landing animation", (
 });
 
 test("fall down base recovery keeps the animation loop alive after a recoverable failure", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
@@ -1267,7 +1398,7 @@ test("fall down base recovery keeps the animation loop alive after a recoverable
 });
 
 test("doodle jump moves only while pressing the left or right half of the screen", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function movingGateY"));
 
   assert.match(componentSource, /const DOODLE_PLAYER_SPEED = 315;/);
@@ -1293,7 +1424,7 @@ test("doodle jump moves only while pressing the left or right half of the screen
 });
 
 test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(fallDownSource, /failures: number;/);
@@ -1315,7 +1446,7 @@ test("fall down base failures respawn on a safe platform at the current camera m
 });
 
 test("fall down platform layout varies by run seed", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(componentSource, /createSeededRandom/);
@@ -1341,7 +1472,7 @@ test("fall down platform layout varies by run seed", () => {
 });
 
 test("fall down adds falling hazards and L platforms without triple danger layers", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(componentSource, /type FallDownPlatformShape = "flat" \| "l-left" \| "l-right"/);
@@ -1374,7 +1505,7 @@ test("fall down adds falling hazards and L platforms without triple danger layer
 });
 
 test("prototype embedded stage keeps JSX buttons well formed", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const componentSource = readMiniGameRuntimeSource();
   const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
   const overlaySource = commonSource.slice(commonSource.indexOf("export function PrototypeEndOverlay"), commonSource.length);
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("function fallDownPlatformKindBag"));
@@ -1407,7 +1538,7 @@ test("new prototype test levels keep required public fields populated", () => {
 
 test("prototype test route and result-page entry are removed after formal replacement", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const prototypeConfigSource = readFileSync(new URL("./mini-game-prototypes.ts", import.meta.url), "utf8");
+  const prototypeConfigSource = readMiniGameConfigSource();
 
   assert.doesNotMatch(appPageSource, /小游戏原型测试|测试方块跃迁与一路向下原型|href="\/mini-game-prototypes"|prototype-test-entry/);
   assert.match(prototypeConfigSource, /方块跃迁/);
@@ -1608,7 +1739,7 @@ test("doodle generated layout is stable for a seed and changes across seeds", ()
 });
 
 test("doodle generated platforms use smooth lane noise to stay horizontally distributed", () => {
-  const source = readFileSync(new URL("mini-game-prototypes.ts", import.meta.url), "utf8");
+  const source = readMiniGameConfigSource();
   const layout = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-base"), "spread-seed-40");
   const platforms = layout.platforms.slice(1);
   const xs = platforms.map((platform) => platform.x);

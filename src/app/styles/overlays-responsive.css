@@ -1,0 +1,326 @@
+.restart-dialog-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(24, 24, 24, 0.28);
+}
+
+.restart-dialog {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(24, 24, 24, 0.2);
+}
+
+.restart-dialog h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.restart-dialog p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
+.restart-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.restart-dialog-actions .primary-button,
+.restart-dialog-actions .secondary-button {
+  width: 100%;
+}
+
+.share-image-screen {
+  gap: 14px;
+  padding-block: 8px;
+}
+
+.share-image-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-image-header > div {
+  max-width: min(100%, 340px);
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.share-image-header h1 {
+  margin-top: 0;
+  font-size: clamp(24px, 4.2vw, 32px);
+  line-height: 1.05;
+}
+
+.share-image-stage {
+  min-height: 0;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.share-image-preview {
+  width: min(100%, 430px);
+  max-height: calc(100svh - 190px);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(24, 24, 24, 0.16);
+  -webkit-touch-callout: default;
+  user-select: auto;
+}
+
+.share-image-placeholder {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.share-image-placeholder strong {
+  color: var(--ink);
+  font-size: 28px;
+}
+
+.share-copy-toast {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: rgba(24, 24, 24, 0.9);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 850;
+  box-shadow: 0 16px 42px rgba(24, 24, 24, 0.22);
+  pointer-events: none;
+  animation: toast-fade 1.8s ease forwards;
+}
+
+@keyframes toast-fade {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  15%,
+  78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@media (max-width: 768px) {
+  .prototype-stage {
+    box-shadow: 0 8px 18px rgba(24, 24, 24, 0.1);
+  }
+
+  .prototype-start-hint,
+  .prototype-end-overlay {
+    box-shadow: none;
+  }
+
+  .doodle-player,
+  .flappy-player,
+  .doodle-platform,
+  .doodle-platform.moving,
+  .doodle-platform.start,
+  .flappy-start-platform,
+  .knife-arrow {
+    box-shadow: 0 4px 10px rgba(24, 24, 24, 0.1);
+  }
+
+  .doodle-platform.risk,
+  .doodle-hazard,
+  .doodle-hazard.moving,
+  .flappy-collectible,
+  .knife-stuck.failed,
+  .knife-stage.final-shot-ready .knife-launcher {
+    box-shadow: 0 0 0 4px rgba(24, 24, 24, 0.08);
+  }
+
+  .flappy-background span {
+    opacity: 0.28;
+  }
+
+  .knife-wheel-svg path {
+    stroke-width: 0;
+  }
+
+  .prototype-stage.low-power .doodle-platform,
+  .prototype-stage.low-power .doodle-hazard,
+  .prototype-stage.low-power .flappy-gate,
+  .prototype-stage.low-power .knife-arrow {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .home-screen,
+  .intro-screen,
+  .play-screen,
+  .result-screen,
+  .share-image-screen,
+  .advanced-screen,
+  .luck-screen {
+    min-height: calc(100svh - 24px);
+  }
+
+  .home-screen,
+  .intro-screen {
+    gap: 18px;
+  }
+
+  .intro-card {
+    min-height: calc(100svh - 64px);
+    gap: 18px;
+  }
+
+  .intro-rule-card {
+    font-size: 16px;
+  }
+
+  .hero-copy.compact h1 {
+    font-size: 42px;
+  }
+
+  h1,
+  .result-card h1 {
+    font-size: 38px;
+  }
+
+  .round-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .round-header h1 {
+    font-size: 30px;
+  }
+
+  .progress-pill {
+    justify-self: start;
+  }
+
+  .test-pad,
+  .game-area,
+  .braking-panel {
+    min-height: 62svh;
+  }
+
+  .test-pad span {
+    font-size: 64px;
+  }
+  .score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .radar-card {
+    grid-template-columns: 1fr;
+  }
+
+  .luck-score-item {
+    grid-column: 1 / -1;
+  }
+
+}
+
+@media (max-width: 430px) {
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+  }
+
+  .score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .score-item {
+    min-height: 90px;
+    padding: 12px;
+  }
+
+  .score-item strong {
+    font-size: 28px;
+  }
+
+  .rank-card {
+    min-height: 118px;
+    padding: 22px 96px 22px 20px;
+  }
+
+  .result-card h1 {
+    font-size: 34px;
+  }
+
+  .radar-visual svg {
+    width: min(100%, 300px);
+  }
+
+  .advanced-level-grid {
+    gap: 6px;
+  }
+
+  .luck-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .luck-draw-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .slot-reel {
+    height: 92px;
+  }
+
+  .slot-strip span {
+    font-size: 52px;
+  }
+
+  .dino-track {
+    min-height: 210px;
+  }
+
+  .run-button {
+    margin-inline: 12px;
+    width: calc(100% - 24px);
+  }
+
+}
