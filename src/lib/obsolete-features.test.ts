@@ -48,9 +48,12 @@ test("obsolete prototype route and entry point are removed", () => {
 });
 
 test("obsolete mini-game prototype shell UI is removed while embedded runtime remains", () => {
-  const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const removedAppFacade = new URL("../app/mini-game-prototypes.tsx", import.meta.url);
+  const componentSource = readFileSync(new URL("../features/mini-games/embedded-stage.tsx", import.meta.url), "utf8");
   const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
   const cssSource = readAppCssSource();
+
+  assert.equal(existsSync(removedAppFacade), false);
 
   for (const term of [
     "MiniGameEntryPanel",
@@ -91,6 +94,17 @@ test("obsolete mini-game prototype shell UI is removed while embedded runtime re
     ".prototype-end-overlay",
   ]) {
     assert.equal(cssSource.includes(selector), true, selector);
+  }
+});
+
+test("obsolete search and memory pure helpers are removed after formal mini-game replacement", () => {
+  for (const url of [
+    new URL("search-scenes.ts", import.meta.url),
+    new URL("search-scenes.test.ts", import.meta.url),
+    new URL("advanced-memory.ts", import.meta.url),
+    new URL("advanced-memory.test.ts", import.meta.url),
+  ]) {
+    assert.equal(existsSync(url), false, url.pathname);
   }
 });
 

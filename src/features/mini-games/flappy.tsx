@@ -34,7 +34,7 @@ import {
   type GeneratedFlappyGate,
   type MiniGameLevelConfig,
   type MiniGameParams,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 const FLAPPY_GATE_WIDTH = 54;
 const FLAPPY_START_PLATFORM_Y = STAGE_HEIGHT * 0.66;

@@ -6,7 +6,7 @@ import {
   getMiniGameLevel,
   selectVisibleDoodleHazards,
   selectVisibleDoodlePlatforms,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 import {
   readMiniGameRuntimeSource,
   readMiniGameConfigSource,

@@ -15,7 +15,7 @@ import {
   shouldShowPerfectClearShortcut,
   type AdvancedDifficulty,
 } from "./advanced-challenges.ts";
-import { getMiniGameLevels, type MiniGameId } from "./mini-game-prototypes.ts";
+import { getMiniGameLevels, type MiniGameId } from "./mini-games/index.ts";
 import type { RoundId, TrialEvent } from "./scoring.ts";
 
 const viewport = { width: 390, height: 844, dpr: 3 };

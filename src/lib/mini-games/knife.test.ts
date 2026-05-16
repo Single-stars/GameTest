@@ -12,7 +12,7 @@ import {
   isAngleWithinArc,
   normalizeDegrees,
   resolveKnifeShotOutcome,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 import {
   integrateSineSweep,
 } from "./test-utils.ts";

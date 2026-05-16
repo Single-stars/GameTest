@@ -25,7 +25,7 @@ import {
   sampleSquareJumpBaseJump,
   sampleSquareJumpBaseRiseIn,
   type MiniGameId,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 import {
   SQUARE_JUMP_LEVEL_IDS,
   FALL_DOWN_LEVEL_IDS,
@@ -33,7 +33,7 @@ import {
   readAppCssSource,
 } from "./test-utils.ts";
 
-test("square jump and fall down expose all required prototype test levels", () => {
+test("square jump and fall down expose all required formal levels", () => {
   const squareLevels = getMiniGameLevels("square-jump" as MiniGameId);
   const fallLevels = getMiniGameLevels("fall-down" as MiniGameId);
 

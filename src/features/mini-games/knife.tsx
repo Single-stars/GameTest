@@ -34,7 +34,7 @@ import {
   resolveKnifeShotOutcome,
   type AngleArc,
   type MiniGameLevelConfig,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 const DEBUG_MINI_GAME_HITBOX = false;
 const KNIFE_WHEEL_SIZE = 190;

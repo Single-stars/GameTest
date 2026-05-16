@@ -4,7 +4,6 @@ import test from "node:test";
 
 
 const MINI_GAME_RUNTIME_SOURCE_URLS = [
-  new URL("../app/mini-game-prototypes.tsx", import.meta.url),
   new URL("../features/mini-games/embedded-stage.tsx", import.meta.url),
   new URL("../features/mini-games/square-jump.tsx", import.meta.url),
   new URL("../features/mini-games/fall-down.tsx", import.meta.url),
@@ -13,7 +12,7 @@ const MINI_GAME_RUNTIME_SOURCE_URLS = [
   new URL("../features/mini-games/knife.tsx", import.meta.url),
 ];
 const MINI_GAME_CONFIG_SOURCE_URLS = [
-  new URL("./mini-game-prototypes.ts", import.meta.url),
+  new URL("./mini-games/index.ts", import.meta.url),
   new URL("./mini-games/shared.ts", import.meta.url),
   new URL("./mini-games/doodle.ts", import.meta.url),
   new URL("./mini-games/flappy.ts", import.meta.url),
@@ -53,17 +52,15 @@ test("square jump and fall down paint animation frames without per-frame React s
 
 test("mini game common runtime utilities are extracted from embedded stage file", () => {
   const componentSource = readMiniGameRuntimeSource();
-  const appFacadeSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+  const appFacadeUrl = new URL("../app/mini-game-prototypes.tsx", import.meta.url);
   const commonModuleUrl = new URL("../features/mini-games/common.tsx", import.meta.url);
 
+  assert.equal(existsSync(appFacadeUrl), false);
   assert.equal(existsSync(commonModuleUrl), true);
   const commonSource = readFileSync(commonModuleUrl, "utf8");
 
   assert.match(componentSource, /from "@\/features\/mini-games\/common"/);
   assert.match(componentSource, /export function MiniGameEmbeddedStage/);
-  assert.doesNotMatch(appFacadeSource, /function useMiniGamePerfMonitor\(label: string\)/);
-  assert.doesNotMatch(appFacadeSource, /function MiniGamePerfPanel/);
-  assert.doesNotMatch(appFacadeSource, /function PrototypeEndOverlay/);
   assert.match(commonSource, /export type PrototypeStatus = "playing" \| "passed" \| "failed";/);
   assert.match(commonSource, /export type MiniGameRunMode = "prototype" \| "base" \| "advanced";/);
   assert.match(commonSource, /export type MiniGameCompletion =/);
@@ -86,8 +83,9 @@ test("mini game common runtime utilities are extracted from embedded stage file"
   assert.match(commonSource, /export function PrototypeEndOverlay/);
 });
 
-test("mini game embedded runtime is split into feature modules with a stable app facade", () => {
-  const appFacadeSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
+test("mini game embedded runtime is split into feature modules without the legacy app facade", () => {
+  const appFacadeUrl = new URL("../app/mini-game-prototypes.tsx", import.meta.url);
+  const embeddedStageSource = readFileSync(new URL("../features/mini-games/embedded-stage.tsx", import.meta.url), "utf8");
   const modules = [
     ["embedded-stage", /export function MiniGameEmbeddedStage/],
     ["square-jump", /export function SquareJumpPrototype/],
@@ -97,9 +95,8 @@ test("mini game embedded runtime is split into feature modules with a stable app
     ["knife", /export function KnifeHitPrototype/],
   ] as const;
 
-  assert.match(appFacadeSource, /export \{ MiniGameEmbeddedStage \} from "@\/features\/mini-games\/embedded-stage";/);
-  assert.match(appFacadeSource, /export type \{ MiniGameCompletion \} from "@\/features\/mini-games\/common";/);
-  assert.doesNotMatch(appFacadeSource, /function (SquareJumpPrototype|FallDownPrototype|DoodleJumpPrototype|FlappyPrototype|KnifeHitPrototype)/);
+  assert.equal(existsSync(appFacadeUrl), false);
+  assert.match(embeddedStageSource, /export function MiniGameEmbeddedStage/);
 
   for (const [moduleName, exportPattern] of modules) {
     const source = readFileSync(new URL(`../features/mini-games/${moduleName}.tsx`, import.meta.url), "utf8");
@@ -107,8 +104,9 @@ test("mini game embedded runtime is split into feature modules with a stable app
   }
 });
 
-test("mini game pure logic is split into lib modules with a stable public facade", () => {
-  const facadeSource = readFileSync(new URL("./mini-game-prototypes.ts", import.meta.url), "utf8");
+test("mini game pure logic is split into lib modules with a focused public facade", () => {
+  const legacyFacadeUrl = new URL("./mini-game-prototypes.ts", import.meta.url);
+  const facadeSource = readFileSync(new URL("./mini-games/index.ts", import.meta.url), "utf8");
   const modules = [
     ["shared", /export type MiniGameId/],
     ["doodle", /export function generateDoodleWorldLayout/],
@@ -118,13 +116,14 @@ test("mini game pure logic is split into lib modules with a stable public facade
     ["fall-down", /export function resolveFallDownCameraBounds/],
   ] as const;
 
-  assert.match(facadeSource, /from "\.\/mini-games\/shared(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/doodle(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/flappy(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/knife(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/square-jump(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/fall-down(?:\.ts)?"/);
-  assert.match(facadeSource, /from "\.\/mini-games\/catalog(?:\.ts)?"/);
+  assert.equal(existsSync(legacyFacadeUrl), false);
+  assert.match(facadeSource, /from "\.\/shared(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/doodle(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/flappy(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/knife(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/square-jump(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/fall-down(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/catalog(?:\.ts)?"/);
   assert.doesNotMatch(facadeSource, /export function generateDoodleWorldLayout/);
   assert.doesNotMatch(facadeSource, /export function generateSquareJumpPlatformSequence/);
 
@@ -178,7 +177,7 @@ test("app page delegates result, advanced, and native round UI to feature module
   const luckDrawScreenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
   const restartDialogSource = readFileSync(new URL("../features/results/restart-confirm-dialog.tsx", import.meta.url), "utf8");
   const advancedScreenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
-  const nativeRoundsSource = readFileSync(new URL("../features/rounds/native-rounds.tsx", import.meta.url), "utf8");
+  const nativeRoundsFacadeUrl = new URL("../features/rounds/native-rounds.tsx", import.meta.url);
   const nativeSource = [
     readFileSync(new URL("../features/rounds/native/reaction.tsx", import.meta.url), "utf8"),
     readFileSync(new URL("../features/rounds/native/aim.tsx", import.meta.url), "utf8"),
@@ -213,7 +212,7 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(restartDialogSource, /export function RestartConfirmDialog/);
   assert.match(advancedScreenSource, /export type AdvancedChallengeState/);
   assert.match(advancedScreenSource, /export function AdvancedChallengeScreen/);
-  assert.match(nativeRoundsSource, /export \* from "@\/features\/rounds\/native"/);
+  assert.equal(existsSync(nativeRoundsFacadeUrl), false);
   assert.match(nativeSource, /export function AdvancedReactionRound/);
   assert.match(nativeSource, /export function AdvancedAimRound/);
   assert.match(nativeSource, /export function AdvancedBrakingRound/);
@@ -281,7 +280,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(shareImageScreenSource, /export function ShareImageScreen/);
 });
 
-test("native rounds are split by gameplay with stable facades", () => {
+test("native rounds are split by gameplay without the legacy native-rounds facade", () => {
   const legacyFacadeUrl = new URL("../features/rounds/native-rounds.tsx", import.meta.url);
   const sharedUrl = new URL("../features/rounds/native/shared.ts", import.meta.url);
   const reactionUrl = new URL("../features/rounds/native/reaction.tsx", import.meta.url);
@@ -290,11 +289,11 @@ test("native rounds are split by gameplay with stable facades", () => {
   const indexUrl = new URL("../features/rounds/native/index.ts", import.meta.url);
   const perfectTrialsUrl = new URL("../features/rounds/perfect-trials.ts", import.meta.url);
 
-  for (const url of [legacyFacadeUrl, sharedUrl, reactionUrl, aimUrl, brakingUrl, indexUrl, perfectTrialsUrl]) {
+  assert.equal(existsSync(legacyFacadeUrl), false);
+  for (const url of [sharedUrl, reactionUrl, aimUrl, brakingUrl, indexUrl, perfectTrialsUrl]) {
     assert.equal(existsSync(url), true, url.pathname);
   }
 
-  const legacyFacadeSource = readFileSync(legacyFacadeUrl, "utf8");
   const sharedSource = readFileSync(sharedUrl, "utf8");
   const reactionSource = readFileSync(reactionUrl, "utf8");
   const aimSource = readFileSync(aimUrl, "utf8");
@@ -302,8 +301,6 @@ test("native rounds are split by gameplay with stable facades", () => {
   const indexSource = readFileSync(indexUrl, "utf8");
   const perfectTrialsSource = readFileSync(perfectTrialsUrl, "utf8");
 
-  assert.match(legacyFacadeSource, /export \* from "@\/features\/rounds\/native";/);
-  assert.doesNotMatch(legacyFacadeSource, /export function (AdvancedReactionRound|AdvancedAimRound|AdvancedBrakingRound|ReactionRound|AimRound|BrakingRound)/);
   assert.match(sharedSource, /export type RoundProps/);
   assert.match(sharedSource, /export function trial/);
   assert.match(perfectTrialsSource, /export function buildAdvancedPerfectTrials/);
@@ -356,6 +353,8 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
   assert.match(baseFlowCss, /@import "\.\/base-flow\/tokens\.css";/);
   assert.match(baseFlowChunks, /:root \{/);
   assert.match(baseFlowChunks, /\.advanced-aim-target \{/);
+  assert.equal((baseFlowChunks.match(/\.advanced-aim-target \{/g) ?? []).length, 1);
+  assert.doesNotMatch(readFileSync(new URL("../app/styles/base-flow/native-braking.css", import.meta.url), "utf8"), /\.advanced-aim-target \{/);
   assert.match(miniGamesCss, /@import "\.\/mini-games\/common\.css";/);
   assert.match(miniGameChunks, /\.prototype-game-wrap \{/);
   assert.match(miniGameChunks, /\.square-jump-stage \{/);
@@ -365,9 +364,9 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
 });
 
 test("mini game behavior tests are split by game with a stable catalog test", () => {
-  const prototypeTestSource = readFileSync(new URL("./mini-game-prototypes.test.ts", import.meta.url), "utf8");
+  const prototypeTestUrl = new URL("./mini-game-prototypes.test.ts", import.meta.url);
   const testModules = [
-    ["catalog", /mini-game prototypes expose the original games plus two prototype tests/],
+    ["catalog", /mini-game catalog exposes all formal games/],
     ["square-jump", /square jump tuning uses readable camera-scaled targets/],
     ["fall-down", /fall down levels encode downward platform variants/],
     ["doodle", /doodle levels encode moving platforms/],
@@ -381,12 +380,7 @@ test("mini game behavior tests are split by game with a stable catalog test", ()
     assert.match(readFileSync(moduleUrl, "utf8"), pattern);
   }
 
-  assert.match(prototypeTestSource, /mini-game behavior tests live under src\/lib\/mini-games/);
-  assert.doesNotMatch(prototypeTestSource, /square jump tuning uses readable camera-scaled targets/);
-  assert.doesNotMatch(prototypeTestSource, /fall down camera bounds/);
-  assert.doesNotMatch(prototypeTestSource, /doodle levels encode moving platforms/);
-  assert.doesNotMatch(prototypeTestSource, /flappy levels encode gates/);
-  assert.doesNotMatch(prototypeTestSource, /knife levels encode countdown/);
+  assert.equal(existsSync(prototypeTestUrl), false);
 });
 
 test("advanced challenge configs and completion logic are split behind a stable public facade", () => {
@@ -481,6 +475,7 @@ test("base flow CSS is split into ordered focused chunks", () => {
   assert.match(readFileSync(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url), "utf8"), /\.advanced-reaction-grid \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/native-aim.css", import.meta.url), "utf8"), /\.advanced-aim-target \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/native-braking.css", import.meta.url), "utf8"), /\.braking-panel \{/);
+  assert.doesNotMatch(readFileSync(new URL("../app/styles/base-flow/native-braking.css", import.meta.url), "utf8"), /\.advanced-aim-target \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/results.css", import.meta.url), "utf8"), /\.result-screen \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8"), /\.advanced-screen/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8"), /\.luck-draw-panel \{/);
@@ -603,10 +598,10 @@ test("formal mini-game rounds create run seeds outside the removed prototype she
 });
 
 test("square jump library removes obsolete physics landing helpers", () => {
-  const prototypeConfigSource = readMiniGameConfigSource();
+  const miniGameConfigSource = readMiniGameConfigSource();
 
-  assert.doesNotMatch(prototypeConfigSource, /export function createSquareJumpBaseLaunch/);
-  assert.doesNotMatch(prototypeConfigSource, /export function resolveSquareJumpBaseLanding\(/);
-  assert.doesNotMatch(prototypeConfigSource, /export function resolveSquareJumpBaseProgress/);
-  assert.doesNotMatch(prototypeConfigSource, /type SquareJumpBasePoint/);
+  assert.doesNotMatch(miniGameConfigSource, /export function createSquareJumpBaseLaunch/);
+  assert.doesNotMatch(miniGameConfigSource, /export function resolveSquareJumpBaseLanding\(/);
+  assert.doesNotMatch(miniGameConfigSource, /export function resolveSquareJumpBaseProgress/);
+  assert.doesNotMatch(miniGameConfigSource, /type SquareJumpBasePoint/);
 });

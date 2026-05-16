@@ -5,7 +5,7 @@ import {
   getMiniGameLevel,
   getSineAngularVelocity,
   type MiniGameId,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 
 export const GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife"];
 export const ALL_GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump" as MiniGameId, "fall-down" as MiniGameId];
@@ -37,7 +37,6 @@ export const FALL_DOWN_LEVEL_IDS = [
 ];
 
 const MINI_GAME_RUNTIME_SOURCE_URLS = [
-  new URL("../../app/mini-game-prototypes.tsx", import.meta.url),
   new URL("../../features/mini-games/embedded-stage.tsx", import.meta.url),
   new URL("../../features/mini-games/square-jump.tsx", import.meta.url),
   new URL("../../features/mini-games/fall-down.tsx", import.meta.url),
@@ -46,7 +45,7 @@ const MINI_GAME_RUNTIME_SOURCE_URLS = [
   new URL("../../features/mini-games/knife.tsx", import.meta.url),
 ];
 const MINI_GAME_CONFIG_SOURCE_URLS = [
-  new URL("../mini-game-prototypes.ts", import.meta.url),
+  new URL("./index.ts", import.meta.url),
   new URL("./shared.ts", import.meta.url),
   new URL("./doodle.ts", import.meta.url),
   new URL("./flappy.ts", import.meta.url),

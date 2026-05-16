@@ -51,7 +51,7 @@ import {
   type SquareJumpBaseAdvancePlan,
   type SquareJumpBaseJumpPlan,
   type SquareJumpBasePlatform,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;

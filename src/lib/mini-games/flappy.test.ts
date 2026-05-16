@@ -6,7 +6,7 @@ import {
   getFlappyInitialPlacement,
   getMiniGameLevel,
   selectVisibleFlappyGates,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 
 test("flappy levels encode gates, collectibles, reversed gravity, and final rules", () => {
   assert.equal(getMiniGameLevel("flappy", "flappy-base").params.gateCount, 6);

@@ -12,7 +12,7 @@ import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import {
   createMiniGameRunSeed,
   type MiniGameId,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 import { type RoundId, type TrialEvent } from "@/lib/scoring";
 import { getRoundDefinition } from "@/features/rounds/registry";
 

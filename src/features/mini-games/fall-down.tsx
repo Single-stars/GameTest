@@ -35,7 +35,7 @@ import {
   expireFallDownFragilePlatform,
   resolveFallDownCameraBounds,
   type MiniGameLevelConfig,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {

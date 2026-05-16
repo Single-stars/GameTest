@@ -12,7 +12,7 @@ import { SquareJumpPrototype } from "@/features/mini-games/square-jump";
 import {
   getMiniGameLevel,
   type MiniGameId,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 export function MiniGameEmbeddedStage({
   gameId,

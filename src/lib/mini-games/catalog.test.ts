@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  MINI_GAME_PROTOTYPES,
+  MINI_GAME_DEFINITIONS,
   getMiniGameLowPowerMode,
   getMiniGame,
   getMiniGameLevels,
   isLowPowerMiniGameDevice,
   type MiniGameId,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 import {
   GAME_IDS,
   ALL_GAME_IDS,
@@ -17,9 +17,9 @@ import {
   readMiniGameConfigSource,
 } from "./test-utils.ts";
 
-test("mini-game prototypes expose the original games plus two prototype tests", () => {
+test("mini-game catalog exposes all formal games", () => {
   assert.deepEqual(
-    MINI_GAME_PROTOTYPES.map((game) => game.id),
+    MINI_GAME_DEFINITIONS.map((game) => game.id),
     ALL_GAME_IDS,
   );
 
@@ -45,8 +45,8 @@ test("each mini-game has 10 advanced levels followed by one base level", () => {
   }
 });
 
-test("planet leap copy and levels are removed from prototype tests", () => {
-  const joinedCopy = MINI_GAME_PROTOTYPES
+test("planet leap copy and levels are absent from the formal catalog", () => {
+  const joinedCopy = MINI_GAME_DEFINITIONS
     .map((game) => `${game.id} ${game.title} ${game.shortTitle} ${game.summary} ${game.instruction} ${game.levels.map((level) => `${level.levelId} ${level.title} ${level.variant} ${level.description} ${level.goalText}`).join(" ")}`)
     .join("\n");
 
@@ -54,7 +54,7 @@ test("planet leap copy and levels are removed from prototype tests", () => {
   assert.match(joinedCopy, /一路向下|移动层板|脆弱层板|危险层板|百层试炼/);
 });
 
-test("prototype embedded stage keeps JSX buttons well formed", () => {
+test("embedded mini-game stage keeps JSX buttons well formed", () => {
   const componentSource = readMiniGameRuntimeSource();
   const commonSource = readFileSync(new URL("../../features/mini-games/common.tsx", import.meta.url), "utf8");
   const overlaySource = commonSource.slice(commonSource.indexOf("export function PrototypeEndOverlay"), commonSource.length);
@@ -65,7 +65,7 @@ test("prototype embedded stage keeps JSX buttons well formed", () => {
   assert.doesNotMatch(squareJumpSource, /<span>[\s\S]*?<\/span>\s*<\/button>\s*\{view\.timer/);
 });
 
-test("new prototype test levels keep required public fields populated", () => {
+test("square jump and fall down levels keep required public fields populated", () => {
   const levels = [
     ...getMiniGameLevels("square-jump" as MiniGameId),
     ...getMiniGameLevels("fall-down" as MiniGameId),
@@ -86,15 +86,15 @@ test("new prototype test levels keep required public fields populated", () => {
   }
 });
 
-test("prototype test route and result-page entry are removed after formal replacement", () => {
+test("obsolete mini-game route and result-page entry stay removed", () => {
   const appPageSource = readFileSync(new URL("../../app/page.tsx", import.meta.url), "utf8");
-  const prototypeConfigSource = readMiniGameConfigSource();
+  const miniGameConfigSource = readMiniGameConfigSource();
 
   assert.doesNotMatch(appPageSource, /小游戏原型测试|测试方块跃迁与一路向下原型|href="\/mini-game-prototypes"|prototype-test-entry/);
-  assert.match(prototypeConfigSource, /方块跃迁/);
-  assert.match(prototypeConfigSource, /一路向下/);
+  assert.match(miniGameConfigSource, /方块跃迁/);
+  assert.match(miniGameConfigSource, /一路向下/);
   assert.doesNotMatch(appPageSource, /星球跃迁|反向星球|高速星球|星链终点/);
-  assert.doesNotMatch(prototypeConfigSource, /planet-leap|星球跃迁|反向星球|高速星球|星链终点/);
+  assert.doesNotMatch(miniGameConfigSource, /planet-leap|星球跃迁|反向星球|高速星球|星链终点/);
 });
 
 test("mini-game low power helper is SSR safe and follows mobile or low-core hints", () => {

@@ -13,7 +13,7 @@ import {
   isLowPowerMiniGameDevice,
   type MiniGameId,
   type MiniGameParams,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 export const STAGE_WIDTH = 360;
 export const STAGE_HEIGHT = 640;

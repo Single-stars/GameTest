@@ -1,5 +1,5 @@
-import { type MiniGameId } from "../../lib/mini-game-prototypes.ts";
 import { type RoundId } from "../../lib/scoring.ts";
+import { type MiniGameId } from "../../lib/mini-games/shared.ts";
 
 export type NativeRoundComponentId = "reaction" | "aim" | "braking";
 export type NativeAdvancedRoundComponentId = "advanced-reaction" | "advanced-aim" | "advanced-braking";

@@ -9,7 +9,7 @@ import {
   getMiniGameLevels,
   resolveFallDownCameraBounds,
   type MiniGameId,
-} from "../mini-game-prototypes.ts";
+} from "./index.ts";
 import {
   readMiniGameRuntimeSource,
   readAppCssSource,
@@ -30,7 +30,7 @@ test("fall down levels encode downward platform variants and pressure rules", ()
   const final = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-final");
 
   for (const level of fallLevels) {
-    assert.equal(level.params.prototype, "fall-down");
+    assert.equal(level.params.implementation, "fall-down");
     assert.ok(Number(level.params.layersRequired) >= 10);
     assert.ok(Number(level.params.platformGapMin) > 0);
     assert.ok(Number(level.params.platformGapMax) >= Number(level.params.platformGapMin));

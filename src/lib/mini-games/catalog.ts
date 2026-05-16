@@ -56,7 +56,7 @@ function baseLevel(
   };
 }
 
-function prototypeLevel(
+function configuredLevel(
   gameId: MiniGameId,
   levelId: string,
   order: number,
@@ -412,7 +412,7 @@ const knifeLevels: MiniGameLevelConfig[] = [
 ];
 
 const squareJumpBaseParams = {
-  prototype: "square-jump",
+  implementation: "square-jump",
   jumpsRequired: 8,
   platformWidth: 110,
   basePlatformWidthMin: 92,
@@ -454,8 +454,8 @@ const squareJumpVariantParams = {
 };
 
 const squareJumpLevels: MiniGameLevelConfig[] = [
-  prototypeLevel("square-jump", "square-jump-base", 0, "基础关", "基础关", "base", "基础", "基础关", "长按蓄力，松手让小方块跳到下一个平台，连续成功 5 次通关。", "连续跳到 5 个平台", squareJumpBaseParams),
-  prototypeLevel("square-jump", "square-jump-moving-easy", 1, "1-1", "移动落点", "advanced", "简单", "移动落点", "1 个慢速移动平台，平台较宽，距离变化小。", "预判移动平台并完成 4 次跳跃", {
+  configuredLevel("square-jump", "square-jump-base", 0, "基础关", "基础关", "base", "基础", "基础关", "长按蓄力，松手让小方块跳到下一个平台，连续成功 5 次通关。", "连续跳到 5 个平台", squareJumpBaseParams),
+  configuredLevel("square-jump", "square-jump-moving-easy", 1, "1-1", "移动落点", "advanced", "简单", "移动落点", "1 个慢速移动平台，平台较宽，距离变化小。", "预判移动平台并完成 4 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 7,
     platformWidth: 100,
@@ -465,7 +465,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     movingSpeed: 1.35,
     movingRange: 34,
   }),
-  prototypeLevel("square-jump", "square-jump-moving-normal", 2, "1-2", "移动落点", "advanced", "普通", "移动落点", "连续 3 个中速移动平台，宽度正常，距离略随机。", "预判移动平台并完成 5 次跳跃", {
+  configuredLevel("square-jump", "square-jump-moving-normal", 2, "1-2", "移动落点", "advanced", "普通", "移动落点", "连续 3 个中速移动平台，宽度正常，距离略随机。", "预判移动平台并完成 5 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 8,
     platformWidth: 82,
@@ -475,7 +475,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     movingSpeed: 1.9,
     movingRange: 48,
   }),
-  prototypeLevel("square-jump", "square-jump-moving-hard", 3, "1-3", "移动落点", "advanced", "困难", "移动落点", "多个快速窄平台会反向移动，需要提前预判落点。", "预判快速移动平台并完成 6 次跳跃", {
+  configuredLevel("square-jump", "square-jump-moving-hard", 3, "1-3", "移动落点", "advanced", "困难", "移动落点", "多个快速窄平台会反向移动，需要提前预判落点。", "预判快速移动平台并完成 6 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 9,
     platformWidth: 68,
@@ -487,7 +487,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     movingRange: 58,
     reverseMoving: true,
   }),
-  prototypeLevel("square-jump", "square-jump-double-easy", 4, "2-1", "二段跳跃", "advanced", "简单", "二段跳跃", "跳起后可在空中再次蓄力，悬停后释放完成二段跳。", "用二段跳完成 4 次跳跃", {
+  configuredLevel("square-jump", "square-jump-double-easy", 4, "2-1", "二段跳跃", "advanced", "简单", "二段跳跃", "跳起后可在空中再次蓄力，悬停后释放完成二段跳。", "用二段跳完成 4 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 5,
     platformWidth: 96,
@@ -500,7 +500,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     timedWindow: null,
     timedFinalWindow: null,
   }),
-  prototypeLevel("square-jump", "square-jump-double-normal", 5, "2-2", "二段跳跃", "advanced", "普通", "二段跳跃", "平台距离更远，空中二段蓄力会悬停，释放后继续前进。", "用二段跳完成 5 次跳跃", {
+  configuredLevel("square-jump", "square-jump-double-normal", 5, "2-2", "二段跳跃", "advanced", "普通", "二段跳跃", "平台距离更远，空中二段蓄力会悬停，释放后继续前进。", "用二段跳完成 5 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 6,
     platformWidth: 82,
@@ -513,7 +513,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     timedWindow: null,
     timedFinalWindow: null,
   }),
-  prototypeLevel("square-jump", "square-jump-double-hard", 6, "2-3", "二段跳跃", "advanced", "困难", "二段跳跃", "窄平台和远距离同时出现，需要在空中把握二段蓄力时机。", "用二段跳完成 6 次跳跃", {
+  configuredLevel("square-jump", "square-jump-double-hard", 6, "2-3", "二段跳跃", "advanced", "困难", "二段跳跃", "窄平台和远距离同时出现，需要在空中把握二段蓄力时机。", "用二段跳完成 6 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 7,
     platformWidth: 70,
@@ -526,7 +526,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     timedWindow: null,
     timedFinalWindow: null,
   }),
-  prototypeLevel("square-jump", "square-jump-gravity-easy", 7, "3-1", "重力平台", "advanced", "简单", "重力平台", "只出现正常和变轻平台，变轻后会跳得更远。", "根据重力状态完成 4 次跳跃", {
+  configuredLevel("square-jump", "square-jump-gravity-easy", 7, "3-1", "重力平台", "advanced", "简单", "重力平台", "只出现正常和变轻平台，变轻后会跳得更远。", "根据重力状态完成 4 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 7,
     platformWidth: 96,
@@ -535,7 +535,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     gravityPattern: "normal|light|normal|light",
     gravityChallenge: true,
   }),
-  prototypeLevel("square-jump", "square-jump-gravity-normal", 8, "3-2", "重力平台", "advanced", "普通", "重力平台", "正常、变轻、加重平台都会出现，需要连续判断当前状态。", "根据三种重力完成 5 次跳跃", {
+  configuredLevel("square-jump", "square-jump-gravity-normal", 8, "3-2", "重力平台", "advanced", "普通", "重力平台", "正常、变轻、加重平台都会出现，需要连续判断当前状态。", "根据三种重力完成 5 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 8,
     platformWidth: 82,
@@ -544,7 +544,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     gravityPattern: "normal|light|heavy|normal|light",
     gravityChallenge: true,
   }),
-  prototypeLevel("square-jump", "square-jump-gravity-hard", 9, "3-3", "重力平台", "advanced", "困难", "重力平台", "反向考验更多：变轻接近平台、加重接远平台，容错更低。", "根据重力反向考验完成 6 次跳跃", {
+  configuredLevel("square-jump", "square-jump-gravity-hard", 9, "3-3", "重力平台", "advanced", "困难", "重力平台", "反向考验更多：变轻接近平台、加重接远平台，容错更低。", "根据重力反向考验完成 6 次跳跃", {
     ...squareJumpVariantParams,
     jumpsRequired: 12,
     platformWidth: 68,
@@ -553,7 +553,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
     gravityPattern: "light|normal|heavy|light|heavy|normal",
     gravityChallenge: true,
   }),
-  prototypeLevel("square-jump", "square-jump-final", 10, "最终关", "方块终跃", "advanced", "最终", "综合最终关", "综合移动落点、二段跳和重力切换平台，一路跳到终点。", "连续跳到终点平台", {
+  configuredLevel("square-jump", "square-jump-final", 10, "最终关", "方块终跃", "advanced", "最终", "综合最终关", "综合移动落点、二段跳和重力切换平台，一路跳到终点。", "连续跳到终点平台", {
     ...squareJumpVariantParams,
     jumpsRequired: 15,
     platformWidth: 70,
@@ -586,7 +586,7 @@ const squareJumpLevels: MiniGameLevelConfig[] = [
 }));
 
 const fallDownBaseParams = {
-  prototype: "fall-down",
+  implementation: "fall-down",
   layersRequired: 10,
   platformWidth: 112,
   platformGapMin: 96,
@@ -607,8 +607,8 @@ const fallDownBaseParams = {
 };
 
 const fallDownLevels: MiniGameLevelConfig[] = [
-  prototypeLevel("fall-down", "fall-down-base", 0, "基础关", "一路向下基础关", "base", "基础", "基础关", "左右半屏控制小方块横向移动，落到更低的平台并下降到终点层。", "下降 10 层到终点", fallDownBaseParams),
-  prototypeLevel("fall-down", "fall-down-moving-easy", 1, "1-1", "移动层板", "advanced", "简单", "移动层板", "少量移动平台，宽度较大，练习预判下落位置。", "通过慢速移动层板", {
+  configuredLevel("fall-down", "fall-down-base", 0, "基础关", "一路向下基础关", "base", "基础", "基础关", "左右半屏控制小方块横向移动，落到更低的平台并下降到终点层。", "下降 10 层到终点", fallDownBaseParams),
+  configuredLevel("fall-down", "fall-down-moving-easy", 1, "1-1", "移动层板", "advanced", "简单", "移动层板", "少量移动平台，宽度较大，练习预判下落位置。", "通过慢速移动层板", {
     ...fallDownBaseParams,
     layersRequired: 14,
     platformWidth: 104,
@@ -619,7 +619,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     movingRange: 52,
     topPressureSpeed: 44,
   }),
-  prototypeLevel("fall-down", "fall-down-moving-normal", 2, "1-2", "移动层板", "advanced", "普通", "移动层板", "移动平台数量增加，间距变大，需要提前调整左右位置。", "通过连续移动层板", {
+  configuredLevel("fall-down", "fall-down-moving-normal", 2, "1-2", "移动层板", "advanced", "普通", "移动层板", "移动平台数量增加，间距变大，需要提前调整左右位置。", "通过连续移动层板", {
     ...fallDownBaseParams,
     layersRequired: 18,
     platformWidth: 84,
@@ -633,7 +633,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fallingHazardSpeed: 132,
     fallingHazardSize: 22,
   }),
-  prototypeLevel("fall-down", "fall-down-moving-hard", 3, "1-3", "移动层板", "advanced", "困难", "移动层板", "连续移动窄平台，部分方向相反，顶部压线更快。", "通过高压移动层板", {
+  configuredLevel("fall-down", "fall-down-moving-hard", 3, "1-3", "移动层板", "advanced", "困难", "移动层板", "连续移动窄平台，部分方向相反，顶部压线更快。", "通过高压移动层板", {
     ...fallDownBaseParams,
     layersRequired: 22,
     platformWidth: 68,
@@ -649,7 +649,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     ledgePlatformCount: 5,
     reverseMoving: true,
   }),
-  prototypeLevel("fall-down", "fall-down-fragile-easy", 4, "2-1", "脆弱层板", "advanced", "简单", "脆弱层板", "少量脆弱平台，踩上后约 1.8 秒碎裂。", "避开碎裂压力下降", {
+  configuredLevel("fall-down", "fall-down-fragile-easy", 4, "2-1", "脆弱层板", "advanced", "简单", "脆弱层板", "少量脆弱平台，踩上后约 1.8 秒碎裂。", "避开碎裂压力下降", {
     ...fallDownBaseParams,
     layersRequired: 14,
     platformWidth: 104,
@@ -657,7 +657,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fragilePlatformCount: 7,
     fragileTime: 1.8,
   }),
-  prototypeLevel("fall-down", "fall-down-fragile-normal", 5, "2-2", "脆弱层板", "advanced", "普通", "脆弱层板", "脆弱平台数量增加，碎裂时间更短，不能停留太久。", "连续通过脆弱层板", {
+  configuredLevel("fall-down", "fall-down-fragile-normal", 5, "2-2", "脆弱层板", "advanced", "普通", "脆弱层板", "脆弱平台数量增加，碎裂时间更短，不能停留太久。", "连续通过脆弱层板", {
     ...fallDownBaseParams,
     layersRequired: 18,
     platformWidth: 84,
@@ -670,7 +670,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fallingHazardSpeed: 132,
     fallingHazardSize: 22,
   }),
-  prototypeLevel("fall-down", "fall-down-fragile-hard", 6, "2-3", "脆弱层板", "advanced", "困难", "脆弱层板", "连续脆弱窄平台，最后几层几乎不能停留。", "在碎裂前连续下降", {
+  configuredLevel("fall-down", "fall-down-fragile-hard", 6, "2-3", "脆弱层板", "advanced", "困难", "脆弱层板", "连续脆弱窄平台，最后几层几乎不能停留。", "在碎裂前连续下降", {
     ...fallDownBaseParams,
     layersRequired: 22,
     platformWidth: 66,
@@ -684,14 +684,14 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fallingHazardSize: 23,
     ledgePlatformCount: 5,
   }),
-  prototypeLevel("fall-down", "fall-down-danger-easy", 7, "3-1", "危险层板", "advanced", "简单", "危险层板", "少量红色危险平台，安全路线明显。", "避开危险平台下降", {
+  configuredLevel("fall-down", "fall-down-danger-easy", 7, "3-1", "危险层板", "advanced", "简单", "危险层板", "少量红色危险平台，安全路线明显。", "避开危险平台下降", {
     ...fallDownBaseParams,
     layersRequired: 14,
     platformWidth: 104,
     topPressureSpeed: 46,
     dangerPlatformCount: 5,
   }),
-  prototypeLevel("fall-down", "fall-down-danger-normal", 8, "3-2", "危险层板", "advanced", "普通", "危险层板", "危险平台数量增加，部分安全平台更窄。", "选择安全层板下降", {
+  configuredLevel("fall-down", "fall-down-danger-normal", 8, "3-2", "危险层板", "advanced", "普通", "危险层板", "危险平台数量增加，部分安全平台更窄。", "选择安全层板下降", {
     ...fallDownBaseParams,
     layersRequired: 18,
     platformWidth: 82,
@@ -703,7 +703,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fallingHazardSpeed: 146,
     fallingHazardSize: 22,
   }),
-  prototypeLevel("fall-down", "fall-down-danger-hard", 9, "3-3", "危险层板", "advanced", "困难", "危险层板", "危险平台和窄安全平台交错，需要连续选择路线。", "连续避开危险层板", {
+  configuredLevel("fall-down", "fall-down-danger-hard", 9, "3-3", "危险层板", "advanced", "困难", "危险层板", "危险平台和窄安全平台交错，需要连续选择路线。", "连续避开危险层板", {
     ...fallDownBaseParams,
     layersRequired: 22,
     platformWidth: 66,
@@ -716,7 +716,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
     fallingHazardSize: 24,
     ledgePlatformCount: 5,
   }),
-  prototypeLevel("fall-down", "fall-down-final", 10, "最终关", "百层试炼", "advanced", "最终", "综合最终关", "综合移动、脆弱和危险层板，下降到终点平台。", "完成百层试炼", {
+  configuredLevel("fall-down", "fall-down-final", 10, "最终关", "百层试炼", "advanced", "最终", "综合最终关", "综合移动、脆弱和危险层板，下降到终点平台。", "完成百层试炼", {
     ...fallDownBaseParams,
     layersRequired: 30,
     platformWidth: 72,
@@ -738,7 +738,7 @@ const fallDownLevels: MiniGameLevelConfig[] = [
   }),
 ];
 
-export const MINI_GAME_PROTOTYPES: MiniGameDefinition[] = [
+export const MINI_GAME_DEFINITIONS: MiniGameDefinition[] = [
   {
     id: "doodle",
     title: "Doodle Jump 型",
@@ -782,7 +782,7 @@ export const MINI_GAME_PROTOTYPES: MiniGameDefinition[] = [
 ];
 
 export function getMiniGame(gameId: MiniGameId): MiniGameDefinition {
-  const game = MINI_GAME_PROTOTYPES.find((item) => item.id === gameId);
+  const game = MINI_GAME_DEFINITIONS.find((item) => item.id === gameId);
   if (!game) throw new Error(`Unknown mini game: ${gameId}`);
   return game;
 }

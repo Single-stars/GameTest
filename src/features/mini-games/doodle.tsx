@@ -37,7 +37,7 @@ import {
   type GeneratedDoodleHazard,
   type GeneratedDoodlePlatform,
   type MiniGameLevelConfig,
-} from "@/lib/mini-game-prototypes";
+} from "@/lib/mini-games";
 
 const DOODLE_PLAYER_SPEED = 315;
 const DEBUG_MINI_GAME_HITBOX = false;

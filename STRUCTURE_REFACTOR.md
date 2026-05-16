@@ -1,943 +1,112 @@
-# Structure Refactor Status
-
-Last updated: 2026-05-16
-
-This document is the handoff file for the code-structure refactor. Read it before making future refactor changes. The goal is to make the project clearer, easier to extend, and easier to maintain without changing gameplay, visual behavior, scoring, routes, or persisted data contracts.
-
-## Current Git Baseline
-
-- Branch: `main`
-- Refactor start baseline after Round 1 push: `8bb2172 refactor: extract mini game common runtime`
-- Earlier performance baseline: `a2147f7 perf: add mini game performance monitor`
-- Current formal routes:
-  - `/`
-  - `/_not-found`
-- The standalone `/mini-game-prototypes` route has been removed and must not be restored.
-- `src/app/mini-game-prototypes.tsx` is still a formal embedded mini-game runtime and must not be deleted wholesale.
-
-## Primary Rule
-
-Refactor structure only. Do not change:
-
-- game rules
-- level order
-- speeds
-- gravity
-- platform counts
-- platform widths
-- jump distances
-- failure thresholds
-- pass conditions
-- score calculation
-- advanced challenge configuration
-- localStorage schema
-- formal route mapping
-- visible UI style
-
-When a future change needs any of those, it is not part of this structure refactor and should be handled as a separate gameplay/design task.
-
-## Work Already Completed
-
-### Prototype Route And Obsolete UI Cleanup
-
-- Removed the standalone prototype route.
-- Removed old prototype selection/play shell UI that no longer had a formal entry.
-- Kept `src/app/mini-game-prototypes.tsx` because it is now the embedded formal runtime.
-- Kept `prototype-*` runtime CSS because the formal mini-games still use those selectors.
-- Added/kept tests that protect against restoring `/mini-game-prototypes`.
-
-### Old Fallback Round Cleanup
-
-- Removed replaced legacy base fallback rounds:
-  - `SearchRound`
-  - `MemoryRound`
-  - `PatienceRound`
-- Removed replaced legacy advanced fallback rounds:
-  - `AdvancedSearchRound`
-  - `AdvancedMemoryRound`
-  - `AdvancedPatienceRound`
-- Formal base mappings now route through mini-games:
-  - search -> doodle base
-  - memory -> flappy base
-  - patience -> knife base
-  - rhythm -> square-jump base
-  - stroop -> fall-down base
-- Formal advanced mappings for those dimensions route through advanced mini-game configs.
-- Scoring now treats replaced dimensions through mini-game payloads instead of old trial fallbacks.
-
-### Gameplay Regression Repairs
-
-- Restored active moving-target, arrow shot, and run-button CSS after old UI cleanup removed too much.
-- Limited the doubled moving-target speed to base aim after the user clarified advanced aim must stay original.
-- Fixed Fall Down base recovery in multiple rounds:
-  - recoverable failure pauses/clears the respawn flash path
-  - held input is re-applied after recovery
-  - recovery spawn position is placed so the player remains movable
-- Moved base aim target higher on screen.
-- Changed braking feedback:
-  - early release uses square flashing
-  - danger collision uses red glow plus slight tilt instead of full red recolor
-- Tuned Doodle platform generation toward more horizontal spread using deterministic noise.
-- Improved mobile controls for Doodle/Fall Down/Square Jump, including touch continuity on alternating/held presses.
-- Increased square speed for upward/downward movement levels where requested, including advanced variants.
-
-### Performance Phase 0 + 1
-
-- Added hidden mini-game performance panel gated by `?perf=1`.
-- Panel is default-off and tracks:
-  - FPS
-  - average frame time
-  - p95 frame time
-  - worst frame time
-  - dropped frames
-  - update time
-  - render/DOM write time
-  - React sync count
-- Metrics live in refs and panel UI updates at most every 500 ms.
-- Reduced high-frequency React sync in Doodle, Fall Down, and Square Jump.
-- Moved hot-path position writes toward `transform: translate3d(...)`.
-- Replaced repeated `find(...)` DOM lookup paths with runtime maps/caches in hot painters where already completed.
-- Commit pushed: `a2147f7 perf: add mini game performance monitor`.
-
-### Structure Refactor Full Pass
-
-Completed in the 2026-05-16 full structure pass:
-
-- Kept `src/app/mini-game-prototypes.tsx` as a tiny public facade.
-- Split the embedded mini-game runtime into feature modules:
-  - `src/features/mini-games/common.tsx`
-  - `src/features/mini-games/embedded-stage.tsx`
-  - `src/features/mini-games/doodle.tsx`
-  - `src/features/mini-games/flappy.tsx`
-  - `src/features/mini-games/knife.tsx`
-  - `src/features/mini-games/square-jump.tsx`
-  - `src/features/mini-games/fall-down.tsx`
-- Split pure mini-game config and logic while preserving the public facade `src/lib/mini-game-prototypes.ts`:
-  - `src/lib/mini-games/shared.ts`
-  - `src/lib/mini-games/doodle.ts`
-  - `src/lib/mini-games/flappy.ts`
-  - `src/lib/mini-games/knife.ts`
-  - `src/lib/mini-games/square-jump.ts`
-  - `src/lib/mini-games/fall-down.ts`
-  - `src/lib/mini-games/catalog.ts`
-- Split page-level responsibilities out of `src/app/page.tsx`:
-  - `src/features/game-flow/round-config.ts`
-  - `src/features/game-flow/mini-game-rounds.tsx`
-  - `src/features/results/share-image.ts`
-  - `src/features/results/radar-chart.tsx`
-- Split global CSS by responsibility while preserving selector names and order:
-  - `src/app/styles/base-flow.css`
-  - `src/app/styles/mini-games.css`
-  - `src/app/styles/overlays-responsive.css`
-  - `src/app/globals.css` now imports those files in order.
-- Added `allowImportingTsExtensions` to `tsconfig.json` so Node's native TypeScript test runner and Next's type checker agree on split `.ts` module imports.
-- Updated source-level tests so they read the new feature modules and CSS chunks instead of assuming everything still lives in `page.tsx`, `mini-game-prototypes.tsx`, or `globals.css`.
-
-Verification for the full pass:
-
-- `npm.cmd test`: 174/174 passed.
-- `npm.cmd run lint`: passed.
-- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
-- Local HTTP check: `http://localhost:3000/` returned 200 after starting the dev server.
-
-### Formal Round Registry Round 1
-
-Completed after the full structure pass:
-
-- Added `src/features/rounds/registry.ts` as the single declaration point for the 8 formal base round implementations.
-- Preserved the formal round order:
-  - reaction
-  - aim
-  - search
-  - stroop
-  - rhythm
-  - memory
-  - braking
-  - patience
-- Preserved the existing internal IDs, visible titles, dimension labels, rule copy, and action copy.
-- Centralized the base implementation mapping:
-  - reaction -> native reaction
-  - aim -> native aim
-  - search -> mini-game doodle
-  - stroop -> mini-game fall-down
-  - rhythm -> mini-game square-jump
-  - memory -> mini-game flappy
-  - braking -> native braking
-  - patience -> mini-game knife
-- Kept `src/features/game-flow/round-config.ts` as the compatibility adapter for the existing `rounds` shape used by the page.
-- Kept `miniGameIdForBaseRound` exported for compatibility, but it now reads the registry instead of owning a separate hard-coded mapping.
-- Updated the base `RoundRenderer` path to read `getRoundDefinition(round).base` before deciding whether to render a native round or `MiniGameBaseRound`.
-- Left advanced challenges, scoring, storage, CSS, mini-game configs, and native component placement unchanged.
-
-Verification added:
-
-- Registry order and implementation mapping protection.
-- `round-config` derives from `ROUND_DEFINITIONS`.
-- `RoundRenderer` base path reads the registry instead of `miniGameIdForBaseRound`.
-- Old `/mini-game-prototypes` and legacy fallback protections remain active.
-
-Verification for this round:
-
-- `npm.cmd test`: 176/176 passed.
-- `npm.cmd run lint`: passed.
-- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
-- `git diff --check`: passed.
-
-### Formal Round Registry Round 2
-
-Completed after Round 1 was committed and pushed:
-
-- Added advanced implementation declarations to `src/features/rounds/registry.ts`.
-- Preserved the formal round order, internal IDs, visible titles, dimension labels, rule copy, and action copy.
-- Centralized the advanced implementation mapping:
-  - reaction -> native advanced-reaction
-  - aim -> native advanced-aim
-  - search -> mini-game doodle
-  - stroop -> mini-game fall-down
-  - rhythm -> mini-game square-jump
-  - memory -> mini-game flappy
-  - braking -> native advanced-braking
-  - patience -> mini-game knife
-- Updated the advanced `RoundRenderer` path to read `getRoundDefinition(round).advanced` before deciding whether to render a native advanced round or `MiniGameAdvancedRound`.
-- Kept `isMiniGameAdvancedConfig` as the runtime/type guard for mini-game advanced configs.
-- Left advanced challenge config generation, scoring, storage, CSS, mini-game configs, and native advanced component behavior unchanged.
-
-Verification added:
-
-- Registry advanced mapping protection.
-- `RoundRenderer` advanced path reads the registry instead of switching on `round`.
-- Old `/mini-game-prototypes` and legacy fallback protections remain active.
-
-Verification for this round:
-
-- `node --test --experimental-strip-types src\lib\mini-game-prototypes.test.ts src\lib\obsolete-features.test.ts`: 88/88 passed.
-- `npm.cmd test`: 177/177 passed.
-- `npm.cmd run lint`: passed.
-- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
-- `git diff --check`: passed.
-
-### Page UI And Native Round Extraction
-
-Completed after Formal Round Registry Round 2:
-
-- Extracted result-related page UI from `src/app/page.tsx` into `src/features/results/`:
-  - `src/features/results/result-screen.tsx`
-  - `src/features/results/luck-draw-screen.tsx`
-  - `src/features/results/restart-confirm-dialog.tsx`
-  - `src/features/results/result-icons.tsx`
-- Kept existing result copy, class names, selector usage, share-image behavior, radar chart usage, luck draw behavior, and restart-confirm behavior unchanged.
-- Extracted advanced challenge page shell into `src/features/advanced/advanced-challenge-screen.tsx`.
-- Kept `page.tsx` as the owner of app state, navigation state, `RoundRenderer`, advanced config evaluation, and callbacks.
-- Extracted native round implementations into `src/features/rounds/native-rounds.tsx`:
-  - `ReactionRound`
-  - `AimRound`
-  - `BrakingRound`
-  - `AdvancedReactionRound`
-  - `AdvancedAimRound`
-  - `AdvancedBrakingRound`
-  - `buildAdvancedPerfectTrials`
-- Kept the registry mappings, native round behavior, mini-game round behavior, scoring, persistence, CSS, and formal route shape unchanged.
-- Split architecture/source-slice guardrails into `src/lib/mini-game-architecture.test.ts` so `src/lib/mini-game-prototypes.test.ts` can focus on gameplay config/runtime expectations.
-
-Verification for this round:
-
-- `npm.cmd test`: 178/178 passed.
-- `npm.cmd run lint`: passed.
-- `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
-- `git diff --check`: passed.
-
-### RoundPlayer And Final Boundary Pass
-
-Completed in the current uncommitted Round 14-18 pass:
-
-- Added `src/features/rounds/round-player.tsx` as the single gameplay rendering adapter used by `src/app/page.tsx`.
-- Moved native-versus-mini-game dispatch out of `page.tsx`; the page now renders `RoundPlayer` for both base and advanced rounds.
-- Moved advanced perfect-clear trial generation into `src/features/rounds/perfect-trials.ts`.
-- Split native round implementation by gameplay:
-  - `src/features/rounds/native/shared.ts`
-  - `src/features/rounds/native/reaction.tsx`
-  - `src/features/rounds/native/aim.tsx`
-  - `src/features/rounds/native/braking.tsx`
-  - `src/features/rounds/native/index.ts`
-- Kept `src/features/rounds/native-rounds.tsx` as a compatibility facade.
-- Extracted the remaining page shell components:
-  - `src/features/game-flow/home-screen.tsx`
-  - `src/features/game-flow/round-intro.tsx`
-  - `src/features/game-flow/play-frame.tsx`
-  - `src/features/results/share-image-screen.tsx`
-- Split formal round registry tests into `src/lib/round-registry.test.ts`.
-- Updated architecture, obsolete-feature, and scoring source tests so they protect the new module boundaries instead of assuming old file locations.
-- Kept gameplay logic, CSS selectors, scoring, persistence, registry mappings, formal route shape, and visible text unchanged.
-
-Verification for this pass:
-
-- Targeted structural verification passed:
-  - `node --test --experimental-strip-types src\lib\mini-game-architecture.test.ts src\lib\round-registry.test.ts src\lib\obsolete-features.test.ts src\lib\scoring.test.ts`
-- Full final verification passed:
-  - `npm.cmd test`: 180/180 passed.
-  - `npm.cmd run lint`: passed.
-  - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
-  - `git diff --check`: passed.
-
-### Per-Game Test, Advanced Config, And CSS Chunk Split
-
-Completed in the current uncommitted Round 19-22 pass:
-
-- Split the large mini-game behavior test file into per-game test modules:
-  - `src/lib/mini-games/catalog.test.ts`
-  - `src/lib/mini-games/square-jump.test.ts`
-  - `src/lib/mini-games/fall-down.test.ts`
-  - `src/lib/mini-games/doodle.test.ts`
-  - `src/lib/mini-games/flappy.test.ts`
-  - `src/lib/mini-games/knife.test.ts`
-  - `src/lib/mini-games/test-utils.ts`
-- Kept `src/lib/mini-game-prototypes.test.ts` as a tiny marker file so future readers know the tests moved.
-- Split `src/lib/advanced-challenges.ts` into focused modules behind the same public facade:
-  - `src/lib/advanced-challenges/types.ts`
-  - `src/lib/advanced-challenges/shared.ts`
-  - `src/lib/advanced-challenges/reaction-config.ts`
-  - `src/lib/advanced-challenges/aim-config.ts`
-  - `src/lib/advanced-challenges/braking-config.ts`
-  - `src/lib/advanced-challenges/mini-game-config.ts`
-  - `src/lib/advanced-challenges/braking.ts`
-  - `src/lib/advanced-challenges/stage-configs.ts`
-  - `src/lib/advanced-challenges/debug.ts`
-  - `src/lib/advanced-challenges/completion.ts`
-- Preserved the old `src/lib/advanced-challenges.ts` import path as the only public facade for app/runtime callers.
-- Split `src/app/styles/mini-games.css` into ordered CSS chunks:
-  - `src/app/styles/mini-games/common.css`
-  - `src/app/styles/mini-games/doodle.css`
-  - `src/app/styles/mini-games/flappy.css`
-  - `src/app/styles/mini-games/knife.css`
-  - `src/app/styles/mini-games/square-jump.css`
-  - `src/app/styles/mini-games/fall-down.css`
-- Split `src/app/styles/base-flow.css` into ordered CSS chunks:
-  - `src/app/styles/base-flow/tokens.css`
-  - `src/app/styles/base-flow/shell.css`
-  - `src/app/styles/base-flow/home-intro.css`
-  - `src/app/styles/base-flow/shared-controls.css`
-  - `src/app/styles/base-flow/play-frame.css`
-  - `src/app/styles/base-flow/native-reaction.css`
-  - `src/app/styles/base-flow/native-aim.css`
-  - `src/app/styles/base-flow/native-braking.css`
-  - `src/app/styles/base-flow/results.css`
-  - `src/app/styles/base-flow/advanced.css`
-  - `src/app/styles/base-flow/luck.css`
-- Kept the original CSS facade files as ordered import lists.
-- Did not split Square Jump or Fall Down runtime state machines.
-- Did not rename CSS selectors, change class names, alter gameplay params, alter scoring, or change storage contracts.
-
-Verification for this pass:
-
-- Targeted structural/gameplay verification passed:
-  - `node --test --experimental-strip-types src\lib\mini-game-architecture.test.ts src\lib\mini-games\catalog.test.ts src\lib\mini-games\square-jump.test.ts src\lib\mini-games\fall-down.test.ts src\lib\mini-games\doodle.test.ts src\lib\mini-games\flappy.test.ts src\lib\mini-games\knife.test.ts src\lib\advanced-challenges.test.ts`
-- Full final verification should still be run before reporting or committing:
-  - `npm.cmd test`
-  - `npm.cmd run lint`
-  - `npm.cmd run build`
-  - `git diff --check`
-
-## Current Architecture Inventory
-
-### `src/app/page.tsx`
-
-Approximate role:
-
-- Main application screen, formal route content, and top-level game state machine.
-- Owns current stage, base round progression, advanced challenge state, result persistence, share flow, restart flow, and app back-navigation behavior.
-- Delegates extracted UI/runtime blocks to feature modules:
-  - home, intro, and play frame shells under `src/features/game-flow/`
-  - result screens under `src/features/results/`
-  - advanced challenge shell under `src/features/advanced/`
-  - round rendering through `src/features/rounds/round-player.tsx`
-- Important boundaries:
-  - Do not change `RoundPlayer` dispatch casually.
-  - Do not change `src/features/rounds/registry.ts` mappings during structure refactor.
-  - Do not change 8-round formal test order unless doing a separate product/gameplay task.
-
-Current issue:
-
-- Still owns the main app state machine, navigation, persistence, and top-level callback wiring.
-- Future splits should keep navigation, persistence, and result/share behavior stable unless a separate product task explicitly changes them.
-
-### `src/features/rounds/round-player.tsx`
-
-Approximate role:
-
-- Single adapter that turns a formal round ID plus a phase into the correct runtime component.
-- Reads `src/features/rounds/registry.ts` and hides native-versus-mini-game implementation details from `src/app/page.tsx`.
-- Renders `MiniGameBaseRound` / `MiniGameAdvancedRound` for mini-game implementations.
-- Renders native reaction, aim, and braking components for native implementations.
-
-Current issue:
-
-- This is now the main dispatch boundary for gameplay rendering.
-- Future gameplay-engine changes should happen behind this adapter unless the top-level flow really needs to change.
-
-### `src/features/results/*`
-
-Approximate role:
-
-- Result-page presentation modules.
-- Owns `ResultScreen`, `LuckDrawScreen`, `RestartConfirmDialog`, and small result action icons.
-- Uses the existing `share-image.ts` and `radar-chart.tsx` helpers without changing their responsibilities.
-
-Current issue:
-
-- Should stay presentation-focused.
-- Do not move top-level app stage transitions, persistence, or scoring ownership into these components during structure-only work.
-
-### `src/features/advanced/advanced-challenge-screen.tsx`
-
-Approximate role:
-
-- Presentation shell for the advanced challenge screen.
-- Receives challenge state, progress, callbacks, and a `renderRound` function from `page.tsx`.
-- Does not own `RoundPlayer` or advanced challenge config generation.
-
-Current issue:
-
-- Keep it as a shell until there is a deliberate plan to move advanced state orchestration out of `page.tsx`.
-
-### `src/features/rounds/native/*`
-
-Approximate role:
-
-- Owns the native React implementations for base and advanced native rounds, split by gameplay:
-  - reaction
-  - aim
-  - braking
-- Owns native-round-local helpers in `src/features/rounds/native/shared.ts`.
-- Keeps `src/features/rounds/native-rounds.tsx` as a compatibility facade.
-
-Current issue:
-
-- Treat these files as gameplay-sensitive.
-- Any future movement inside them should be tested carefully because they contain timer, pointer, hit-detection, and native-round completion payload logic.
-
-### `src/app/mini-game-prototypes.tsx`
-
-Approximate role:
-
-- Public facade for the formal embedded mini-game runtime.
-- Re-exports `MiniGameEmbeddedStage` from `src/features/mini-games/embedded-stage.tsx`.
-- Re-exports `MiniGameCompletion` from `src/features/mini-games/common.tsx`.
-- The actual per-game React runtimes now live under `src/features/mini-games/`.
-
-Current issue:
-
-- No longer a large runtime file.
-- Keep it as a compatibility facade unless all imports have been migrated intentionally.
-
-### `src/lib/mini-game-prototypes.ts`
-
-Approximate role:
-
-- Public facade for mini-game config and pure logic.
-- Re-exports per-game logic from `src/lib/mini-games/*`.
-- Used heavily by tests and app runtime.
-
-Current issue:
-
-- No longer owns all per-game code directly.
-- Keep public exports stable unless a separate compatibility cleanup is planned.
-
-### `src/app/globals.css`
-
-Approximate role:
-
-- Ordered CSS facade.
-- Imports:
-  - `src/app/styles/base-flow.css`
-  - `src/app/styles/mini-games.css`
-  - `src/app/styles/overlays-responsive.css`
-
-Current issue:
-
-- Keep import order stable.
-- Active selectors should not be renamed during structure work.
-
-### `src/app/styles/base-flow.css` And `src/app/styles/mini-games.css`
-
-Approximate role:
-
-- Ordered CSS facade files.
-- `base-flow.css` imports the app-flow, native-round, result, advanced, and luck chunks.
-- `mini-games.css` imports common mini-game runtime CSS plus per-game CSS chunks.
-
-Current issue:
-
-- Future UI unification should happen inside the relevant chunk first.
-- Do not remove `prototype-*` selectors unless every active embedded mini-game usage is proven gone.
-- Shared selectors may intentionally live in `common.css` or in the earliest chunk that needs them; avoid renaming selectors during structure-only work.
-
-### `src/features/rounds/registry.ts`
-
-Approximate role:
-
-- Single registry for formal round definitions.
-- Declares the 8 formal round IDs, titles, dimension labels, rules, actions, base implementation type, and advanced implementation type.
-- Separates formal round identity from implementation type:
-  - native component
-  - embedded mini-game
-
-Current issue:
-
-- Result labels still read through the existing `rounds` compatibility adapter.
-- Advanced challenge config generation remains in `src/lib/advanced-challenges.ts`; the registry only declares the render implementation path.
-
-### Tests
-
-Important test files:
-
-- `src/lib/mini-game-prototypes.test.ts`
-- `src/lib/mini-games/*.test.ts`
-- `src/lib/mini-game-architecture.test.ts`
-- `src/lib/round-registry.test.ts`
-- `src/lib/advanced-challenges.test.ts`
-- `src/lib/scoring.test.ts`
-- `src/lib/obsolete-features.test.ts`
-
-Current issue:
-
-- `src/lib/mini-game-architecture.test.ts` owns most source-slice architecture guardrails.
-- `src/lib/round-registry.test.ts` owns formal registry and `RoundPlayer` mapping guardrails.
-- `src/lib/mini-games/*.test.ts` owns per-game config/runtime expectations.
-- `src/lib/mini-game-prototypes.test.ts` is now only a marker for the moved tests.
-- Source-slice tests are useful as guardrails during refactor, but every extraction must update them carefully so they protect architecture rather than block harmless movement.
-
-## Formal Boundaries To Preserve
-
-These are considered stable public/internal contracts during structure refactor:
-
-- `MiniGameEmbeddedStage`
-- `MiniGameBaseRound`
-- `MiniGameAdvancedRound`
-- `RoundPlayer`
-- `miniGameIdForBaseRound`
-- `src/lib/scoring.ts`
-- `src/lib/advanced-progress.ts`
-- `src/lib/advanced-challenges.ts`
-- `src/lib/mini-game-prototypes.ts` config and generation behavior
-- current dimension IDs, score axes, result labels, and persisted keys
-- `prototype-*` CSS used by active embedded mini-games
-
-## Refactor Roadmap
-
-### Round 0: Documentation And Baseline
-
-Status: complete.
-
-Purpose:
-
-- Create this handoff document.
-- Append current context to `task_plan.md`, `findings.md`, and `progress.md`.
-- Confirm current baseline is readable for future sessions.
-
-### Round 1: Extract Mini-Game Common Module
-
-Status: complete.
-
-Target:
-
-- Create `src/features/mini-games/common.tsx`.
-- Move shared types, dimensions, helper functions, low-power/FPS hooks, perf monitor, and `PrototypeEndOverlay`.
-- Keep game implementations in `src/app/mini-game-prototypes.tsx` for now.
-
-Expected code files:
-
-- `src/features/mini-games/common.tsx`
-- `src/app/mini-game-prototypes.tsx`
-- `src/lib/mini-game-prototypes.test.ts`
-
-Completed result:
-
-- `src/features/mini-games/common.tsx` now owns shared dimensions, status/completion types, param helpers, transform helpers, low-power/FPS hooks, perf monitor code, perf panel UI, and `PrototypeEndOverlay`.
-- `src/app/mini-game-prototypes.tsx` imports those shared utilities and still exports `MiniGameEmbeddedStage`.
-- Existing `MiniGameCompletion` imports are preserved through a type re-export from `src/app/mini-game-prototypes.tsx`.
-- Game components and gameplay state machines stayed in place.
-
-Rules:
-
-- No gameplay changes.
-- No CSS changes unless a compile error proves it is required.
-- No visual text/style changes.
-- Add/update source-level proof tests before moving code.
-
-### Round 2: Extract Embedded Stage Dispatcher
-
-Status: complete.
-
-Target:
-
-- Move `MiniGameEmbeddedStage` and dispatch-only glue to a small module.
-- Keep per-game components unchanged.
-
-Risk:
-
-- Formal flow imports depend on this export, so tests must prove the public import still works.
-
-### Round 3: Extract Knife Runtime
-
-Status: complete.
-
-Reason to do early:
-
-- Knife runtime is mostly self-contained and lower risk than the vertical-scroller games.
-
-Target:
-
-- Move Knife component, Knife-specific types/constants/helpers into a feature file.
-- Keep shared helpers in common module.
-
-### Round 4: Extract Flappy Runtime
-
-Status: complete.
-
-Reason:
-
-- Flappy is also relatively contained.
-- It uses generated gates and simple RAF/input behavior.
-
-### Round 5: Extract Doodle Runtime
-
-Status: complete.
-
-Risk:
-
-- Doodle has performance-sensitive RAF and DOM-painting paths.
-- Must keep `?perf=1` behavior and mobile input behavior unchanged.
-
-### Round 6: Extract Fall Down Runtime
-
-Status: complete.
-
-Risk:
-
-- Fall Down has the most recent recovery/control bug history.
-- Must preserve held-input recovery and pointer handling.
-
-### Round 7: Extract Square Jump Runtime
-
-Status: complete.
-
-Risk:
-
-- Square Jump has the most complex base-state machine, DOM painter, jump planning, and failure recovery.
-- It should move after common patterns are proven by smaller game extractions.
-
-### Round 8: Split Pure Mini-Game Logic By Game
-
-Status: complete.
-
-Target:
-
-- Split `src/lib/mini-game-prototypes.ts` into per-game pure modules or internal helpers.
-- Preserve existing public exports first.
-- Only remove compatibility exports after tests and imports are clean.
-
-### Round 9: Split `page.tsx`
-
-Status: complete.
-
-Target areas:
-
-- App shell
-- base round renderer
-- advanced challenge flow
-- result screen
-- scoring/result glue
-
-Risk:
-
-- This touches formal flow and route behavior. Do after mini-game runtime is less tangled.
-
-### Round 10: CSS Organization
-
-Status: complete.
-
-Target:
-
-- Split CSS into coherent groups only after component files are split.
-- Keep class names stable unless a separate visual cleanup is approved.
-
-### Round 11: Formal Round Registry
-
-Status: complete.
-
-Target:
-
-- Move the declaration of all 8 formal base round implementations into `src/features/rounds/registry.ts`.
-- Keep the existing public `rounds` adapter and mini-game helper exports stable.
-- Let the base `RoundRenderer` consult the registry for native versus mini-game implementation.
-
-Risk:
-
-- Formal round order, internal IDs, score dimensions, and display copy must not drift.
-- Advanced challenge flow remains out of scope for this round.
-
-### Round 12: Formal Round Registry Advanced Implementations
-
-Status: complete.
-
-Target:
-
-- Add `advanced` implementation declarations to `src/features/rounds/registry.ts`.
-- Keep native advanced components and mini-game advanced runtime behavior unchanged.
-- Let the advanced `RoundRenderer` path consult the registry for native versus mini-game implementation.
-
-Risk:
-
-- Advanced config generation must remain unchanged.
-- `MiniGameAdvancedRound` must still receive only configs validated by `isMiniGameAdvancedConfig`.
-
-### Round 13: Page UI And Native Round Extraction
-
-Status: complete.
-
-Target:
-
-- Move result-related UI out of `src/app/page.tsx`.
-- Move the advanced challenge UI shell out of `src/app/page.tsx`.
-- Move native round implementations out of `src/app/page.tsx`.
-- Split architecture/source-slice tests away from gameplay config tests.
-
-Risk:
-
-- These components contain visible UI and gameplay-sensitive native rounds.
-- Preserve class names, copy, callbacks, scoring payloads, registry mappings, CSS, and persistence contracts exactly.
-
-### Round 14: Unified RoundPlayer Adapter
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Add `src/features/rounds/round-player.tsx`.
-- Make `page.tsx` render base and advanced gameplay through `RoundPlayer`.
-- Hide native-versus-mini-game implementation details from `page.tsx`.
-
-Risk:
-
-- Dispatch errors would affect every playable round, so source-level tests must protect base and advanced mappings.
-
-### Round 15: Native Round Split
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Split native reaction, aim, and braking implementations into separate files.
-- Keep shared native helpers in `src/features/rounds/native/shared.ts`.
-- Keep `src/features/rounds/native-rounds.tsx` as a compatibility facade.
-
-Risk:
-
-- These files contain pointer, timer, hit-detection, and scoring payload logic; movement must remain mechanical.
-
-### Round 16: Remaining Page Shell Extraction
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Move `HomeScreen`, `RoundIntro`, `PlayFrame`, and `ShareImageScreen` out of `page.tsx`.
-- Keep page ownership of app state, navigation, persistence, and callbacks.
-
-Risk:
-
-- These are visible UI shells; preserve JSX, class names, and copy.
-
-### Round 17: Advanced Boundary Tightening
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Keep advanced challenge UI as a shell.
-- Use `RoundPlayer` as the advanced gameplay renderer.
-- Keep advanced config generation and progress logic in existing lib modules.
-
-Risk:
-
-- Do not move advanced persistence or challenge-result recording into UI components.
-
-### Round 18: Test Responsibility Split
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Move registry and round-player mapping guardrails into `src/lib/round-registry.test.ts`.
-- Keep architecture tests focused on module boundaries and obsolete feature protection.
-- Keep mini-game prototype tests focused on mini-game runtime/config behavior.
-
-Risk:
-
-- Source-slice tests must remain strong enough to prevent old routes, old fallbacks, and old dispatch paths from returning.
-
-### Round 19: Per-Game Mini-Game Tests
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Split `src/lib/mini-game-prototypes.test.ts` into per-game test files so future per-game tuning can happen with targeted tests.
-- Keep every existing assertion, only move test ownership.
-
-Risk:
-
-- Do not weaken obsolete route, formal replacement, or gameplay tuning assertions while moving them.
-
-### Round 20: Advanced Challenge Module Split
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Split config generation, braking helpers, debug helpers, stage config lookup, and completion evaluation out of `src/lib/advanced-challenges.ts`.
-- Preserve `src/lib/advanced-challenges.ts` as the public facade.
-
-Risk:
-
-- Do not change `ADVANCED_STAGE_CONFIGS`, completion reasons, pass/fail thresholds, or helper return shapes.
-
-### Round 21: Per-Game Mini-Game CSS Split
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Split `src/app/styles/mini-games.css` into common and per-game chunks while keeping the facade import path.
-
-Risk:
-
-- Do not rename selectors or change declarations; these selectors are active gameplay UI dependencies.
-
-### Round 22: Base Flow CSS Split
-
-Status: complete in current uncommitted pass.
-
-Target:
-
-- Split `src/app/styles/base-flow.css` into tokens, shell, play-frame, native-round, result, advanced, and luck chunks.
-
-Risk:
-
-- UI cascade order matters. Keep the facade import order stable and avoid component-level CSS churn unless a later UI-unification task explicitly requires it.
-
-## Per-Round Checklist
-
-For every structure refactor round:
-
-1. State the intended approach before editing code.
-2. Keep the round small; if more than 3 code files are needed, split or ask for approval.
-3. Add or update a proof test first when practical.
-4. Run the targeted test and confirm red when adding a new structural expectation.
-5. Implement the smallest movement needed.
-6. Run:
-   - `npm.cmd test`
-   - `npm.cmd run lint`
-   - `npm.cmd run build`
-7. Report:
-   - files changed
-   - what moved
-   - what did not move
-   - whether gameplay changed
-   - whether visuals changed
-   - test/lint/build results
-   - `git status`
-
-## Current Round Status
-
-| Round | Status | Notes |
-| --- | --- | --- |
-| 0 | Complete | Handoff document and planning context created. |
-| 1 | Complete | Common/perf utilities extracted to `src/features/mini-games/common.tsx`. |
-| 2 | Complete | Embedded stage dispatcher moved to `src/features/mini-games/embedded-stage.tsx`; app facade preserved. |
-| 3 | Complete | Knife runtime moved to `src/features/mini-games/knife.tsx`. |
-| 4 | Complete | Flappy runtime moved to `src/features/mini-games/flappy.tsx`. |
-| 5 | Complete | Doodle runtime moved to `src/features/mini-games/doodle.tsx`. |
-| 6 | Complete | Fall Down runtime moved to `src/features/mini-games/fall-down.tsx`. |
-| 7 | Complete | Square Jump runtime moved to `src/features/mini-games/square-jump.tsx`. |
-| 8 | Complete | Pure mini-game lib logic split by game under `src/lib/mini-games/`; public facade preserved. |
-| 9 | Complete | Page-level round config, mini-game round glue, share image generation, and radar chart extracted. |
-| 10 | Complete | Global CSS split into imported responsibility chunks with selectors and order preserved. |
-| 11 | Complete | Formal base round implementations declared in `src/features/rounds/registry.ts`; base rendering reads registry. |
-| 12 | Complete | Formal advanced round implementations declared in `src/features/rounds/registry.ts`; advanced rendering reads registry. |
-| 13 | Complete | Result UI, advanced challenge shell, native rounds, and architecture tests extracted from `page.tsx` / mini-game test file. |
-| 14 | Complete | `RoundPlayer` added; `page.tsx` no longer knows native versus mini-game dispatch. |
-| 15 | Complete | Native reaction, aim, and braking implementations split under `src/features/rounds/native/`. |
-| 16 | Complete | Home, intro, play frame, and share-image screen shells extracted from `page.tsx`. |
-| 17 | Complete | Advanced gameplay rendering flows through `RoundPlayer`; advanced UI remains a shell. |
-| 18 | Complete | Registry and round-player tests split into `src/lib/round-registry.test.ts`. |
-| 19 | Complete | Mini-game behavior tests split into per-game files under `src/lib/mini-games/`. |
-| 20 | Complete | Advanced challenge config/completion logic split under `src/lib/advanced-challenges/`; public facade preserved. |
-| 21 | Complete | Mini-game CSS split into common and per-game chunks; facade preserved. |
-| 22 | Complete | Base-flow CSS split into focused chunks; facade preserved. |
-
-## Moved In Round 1
-
-- `STAGE_WIDTH`
-- `STAGE_HEIGHT`
-- `PLAYER_SIZE`
-- `DEBUG_MINI_GAME_FPS`
-- `BASE_FAILURE_LIMIT`
-- `MINI_GAME_UI_SYNC_MS`
-- `MINI_GAME_TIMER_SYNC_MS`
-- perf panel constants
-- `PrototypeStatus`
-- `MiniGameRunMode`
-- `MiniGameCompletion`
-- `clamp`
-- `numberParam`
-- `booleanParam`
-- `transformPoint3d`
-- `stagePointStyle`
-- `useMiniGameLowPowerMode`
-- `useMiniGameFpsCounter`
-- `MiniGameFpsBadge`
-- perf metric types/helpers
-- `useMiniGamePerfMonitor`
-- `MiniGamePerfPanel`
-- `PrototypeEndOverlay`
-
-## Kept In Place After Round 1
-
-- all five game components
-- all game-specific constants such as Knife/Flappy/Doodle movement constants
-- all RAF/game state machines
-- all DOM painters
-- `MiniGameEmbeddedStage`
-- `getMiniGameLevel` dispatch usage
-- CSS
-- pure config/generation logic in `src/lib/mini-game-prototypes.ts`
-
-## Things That May Affect Gameplay And Should Not Move Yet
-
-- Square Jump advance/miss/fly-away resolution
-- Fall Down respawn and held-input recovery logic
-- Doodle platform/hazard generation and runtime collision logic
-- Knife shot geometry/outcome logic
-- Flappy gate collision and gravity logic
-- base/advanced completion payload shapes
-- score payload construction
-- any level param fallback values
-
-## Resume Instructions For Future Sessions
-
-Start by reading:
-
-1. `STRUCTURE_REFACTOR.md`
-2. `task_plan.md`
-3. `findings.md`
-4. `progress.md`
-
-Then run:
-
-```powershell
-git status --short --branch
-git diff --stat
+# 结构重构记录
+
+更新时间：2026-05-16
+项目路径：`D:\GameTest`
+
+本文档只记录当前结构状态和后续维护边界，不再保留已经过期的阶段性计划文本。当前目标是让项目文件专注服务于正式功能，避免旧入口、旧 fallback、旧 facade 和重复样式继续误导后续维护。
+
+## 已完成
+
+| 方向 | 当前状态 |
+|---|---|
+| 旧独立原型入口 | `/mini-game-prototypes` 已删除，并由测试保护不恢复 |
+| 旧原型选择/试玩 UI | `MiniGameEntryPanel`、`MiniGameLevelSelectScreen`、`MiniGamePlayScreen` 已删除 |
+| 旧 fallback round | `SearchRound`、`MemoryRound`、`PatienceRound` 及对应 advanced fallback 已删除 |
+| 旧 Stroop/Rhythm | 旧文字干扰和节奏圈实现已删除，正式走 Fall Down / Square Jump |
+| Round Registry | 8 个正式 round 的基础和进阶实现统一在 `src/features/rounds/registry.ts` 声明 |
+| Round 渲染 | `src/features/rounds/round-player.tsx` 负责 native / mini-game 分发，`page.tsx` 不再关心实现类型 |
+| 页面 UI | 首页、轮次说明、播放框、结果页、分享页、运气页、进阶页已下沉到 `src/features/` |
+| Native round | 反应力、精准度、控制力拆到 `src/features/rounds/native/` |
+| Mini-game runtime | Doodle、Fall Down、Square Jump、Flappy、Knife 拆到 `src/features/mini-games/` |
+| Mini-game 纯逻辑 | 关卡配置、生成、判定逻辑拆到 `src/lib/mini-games/` |
+| 进阶配置 | 进阶类型、配置、刹车逻辑、通关判定拆到 `src/lib/advanced-challenges/` |
+| 测试 | mini-game 行为测试拆到 `src/lib/mini-games/*.test.ts` |
+| CSS | 基础流程和小游戏样式拆到 `src/app/styles/` |
+| 收尾清理 | 删除 `search-scenes.ts`、`advanced-memory.ts`、`native-rounds.tsx`、`mini-game-prototypes.ts(x)` 等旧 facade/旧纯函数 |
+| 重复 CSS | 删除 `native-braking.css` 中重复的 `.advanced-aim-target` / `.advanced-arrow-shot` 样式 |
+
+## 当前核心结构
+
+```text
+src/app/page.tsx
+  只负责主状态机、进度持久化、返回行为和顶层页面切换。
+
+src/features/rounds/registry.ts
+  8 个正式 round 的唯一实现声明。
+
+src/features/rounds/round-player.tsx
+  根据 registry 渲染 native round 或 mini-game round。
+
+src/features/game-flow/
+  首页、轮次说明、播放框、mini-game round 适配。
+
+src/features/mini-games/
+  嵌入式小游戏 React runtime。
+
+src/lib/mini-games/
+  小游戏关卡配置、随机生成、碰撞/相机/判定纯逻辑。
+
+src/lib/advanced-challenges/
+  进阶关卡配置、刹车规则、通关判定、调试入口控制。
 ```
 
-If the working tree has unrelated changes, do not revert them. Work around them or ask before touching the same files.
+## 当前正式映射
+
+| roundId | 基础实现 | 进阶实现 |
+|---|---|---|
+| `reaction` | native reaction | native advanced-reaction |
+| `aim` | native aim | native advanced-aim |
+| `search` | mini-game doodle | mini-game doodle |
+| `stroop` | mini-game fall-down | mini-game fall-down |
+| `rhythm` | mini-game square-jump | mini-game square-jump |
+| `memory` | mini-game flappy | mini-game flappy |
+| `braking` | native braking | native advanced-braking |
+| `patience` | mini-game knife | mini-game knife |
+
+## 已删除且不应恢复
+
+```text
+src/app/mini-game-prototypes.tsx
+src/lib/mini-game-prototypes.ts
+src/lib/mini-game-prototypes.test.ts
+src/features/rounds/native-rounds.tsx
+src/lib/search-scenes.ts
+src/lib/search-scenes.test.ts
+src/lib/advanced-memory.ts
+src/lib/advanced-memory.test.ts
+```
+
+这些删除由 `obsolete-features.test.ts` 和 `mini-game-architecture.test.ts` 保护。
+
+## 保留但需要理解的命名
+
+`prototype-*` CSS 选择器和 `MiniGameRunMode = "prototype" | "base" | "advanced"` 仍存在。它们现在是嵌入式小游戏 runtime 的通用舞台、覆盖层和试玩模式命名，不代表独立原型页面仍然存在。后续若要进一步改名，应作为单独视觉/选择器迁移任务处理，并逐项验证所有小游戏运行状态。
+
+内部 roundId 仍保留：
+
+```text
+search / stroop / rhythm / memory / patience
+```
+
+这些是评分、存储、TrialEvent 和测试数据的稳定内部 ID。展示名已经通过 registry 管理，后续改维度名应优先改 registry 文案，不应轻易改内部 ID。
+
+## 后续维护原则
+
+1. 新增或调整正式 round 时，先改 `src/features/rounds/registry.ts`。
+2. 不在 `page.tsx` 里新增 native/mini-game 分支判断。
+3. mini-game runtime 改 UI/交互时，优先在 `src/features/mini-games/<game>.tsx` 内小步修改。
+4. mini-game 配置和纯逻辑改动应落在 `src/lib/mini-games/<game>.ts`，并补对应 `src/lib/mini-games/<game>.test.ts`。
+5. 进阶规则改动应落在 `src/lib/advanced-challenges/`，不要把配置塞回 `page.tsx`。
+6. CSS 新增时放到当前职责 chunk，避免把无关选择器重复放入其他 chunk。
+7. 删除旧内容前先加或更新结构保护测试，确保不会恢复旧入口或旧 fallback。
+
+## 验证命令
+
+每轮结构收尾至少运行：
+
+```powershell
+npm.cmd test
+npm.cmd run lint
+npm.cmd run build
+git diff --check
+```
