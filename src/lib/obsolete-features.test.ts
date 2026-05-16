@@ -32,7 +32,7 @@ test("obsolete prototype route and entry point are removed", () => {
 
 test("obsolete mini-game prototype shell UI is removed while embedded runtime remains", () => {
   const componentSource = readFileSync(new URL("../app/mini-game-prototypes.tsx", import.meta.url), "utf8");
-  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
   const cssSource = readAppCssSource();
 
   for (const term of [
@@ -52,7 +52,7 @@ test("obsolete mini-game prototype shell UI is removed while embedded runtime re
     "MiniGameBaseRound",
     "MiniGameAdvancedRound",
   ]) {
-    assert.equal(appPageSource.includes(term), true, term);
+    assert.equal(roundPlayerSource.includes(term), true, term);
   }
 
   for (const selector of [
@@ -80,18 +80,18 @@ test("obsolete mini-game prototype shell UI is removed while embedded runtime re
 test("legacy search memory and patience fallback rounds are removed after mini-game replacement", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
+  const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
   const cssSource = readAppCssSource();
   const baseMappingSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function miniGameIdForBaseRound"), miniGameRoundsSource.indexOf("type MiniAdvancedStageConfig"));
-  const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
 
   assert.match(baseMappingSource, /const implementation = getRoundDefinition\(round\)\.base;/);
   assert.match(baseMappingSource, /implementation\.type === "mini-game" \? implementation\.gameId : null/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "search"\) return "doodle";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
-  assert.match(roundRendererSource, /const advancedImplementation = getRoundDefinition\(round\)\.advanced;/);
-  assert.match(roundRendererSource, /advancedImplementation\.type === "mini-game"[\s\S]*return <MiniGameAdvancedRound/);
-  assert.match(roundRendererSource, /const baseImplementation = getRoundDefinition\(round\)\.base;[\s\S]*return <MiniGameBaseRound/);
+  assert.match(roundPlayerSource, /const implementation = getRoundDefinition\(roundId\)\[phase\];/);
+  assert.match(roundPlayerSource, /implementation\.type === "mini-game"[\s\S]*return <MiniGameAdvancedRound/);
+  assert.match(roundPlayerSource, /implementation\.type === "mini-game"[\s\S]*return <MiniGameBaseRound/);
 
   for (const [roundId, miniGameId] of [
     ["search", "doodle"],

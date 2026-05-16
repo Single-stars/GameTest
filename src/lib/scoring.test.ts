@@ -23,7 +23,11 @@ import {
 const viewport = { width: 390, height: 844, dpr: 3 };
 
 function nativeRoundsSource() {
-  return readFileSync(new URL("../features/rounds/native-rounds.tsx", import.meta.url), "utf8");
+  return [
+    "../features/rounds/native/aim.tsx",
+    "../features/rounds/native/braking.tsx",
+    "../features/rounds/native/reaction.tsx",
+  ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 }
 
 const APP_CSS_SOURCE_URLS = [

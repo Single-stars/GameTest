@@ -2,7 +2,6 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import NextImage from "next/image";
 import {
   useCallback,
   useEffect,
@@ -51,35 +50,18 @@ import {
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
-import { rounds, type RoundConfig } from "@/features/game-flow/round-config";
-import {
-  MiniGameAdvancedRound,
-  MiniGameBaseRound,
-  isMiniGameAdvancedConfig,
-} from "@/features/game-flow/mini-game-rounds";
-import { getRoundDefinition } from "@/features/rounds/registry";
+import { rounds } from "@/features/game-flow/round-config";
 import { AdvancedChallengeScreen, type AdvancedChallengeState } from "@/features/advanced/advanced-challenge-screen";
-import {
-  AdvancedAimRound,
-  AdvancedBrakingRound,
-  AdvancedReactionRound,
-  AimRound,
-  BrakingRound,
-  ReactionRound,
-  buildAdvancedPerfectTrials,
-  type RoundProps,
-} from "@/features/rounds/native-rounds";
+import { HomeScreen } from "@/features/game-flow/home-screen";
+import { PlayFrame } from "@/features/game-flow/play-frame";
+import { RoundIntro } from "@/features/game-flow/round-intro";
+import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
+import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
-import { ShareIcon } from "@/features/results/result-icons";
-import {
-  SHARE_IMAGE_HEIGHT,
-  SHARE_IMAGE_WIDTH,
-  copyTextToClipboard,
-  createShareImage,
-  type ShareImageInput,
-} from "@/features/results/share-image";
+import { ShareImageScreen } from "@/features/results/share-image-screen";
+import { copyTextToClipboard, createShareImage, type ShareImageInput } from "@/features/results/share-image";
 
 type Stage = AppStage;
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
@@ -587,6 +569,7 @@ export default function Home() {
     <main className="app-shell">
       {stage === "share" ? (
         <ShareImageScreen
+          appTitle={APP_TITLE}
           dataUrl={shareImageDataUrl}
           imageShareState={imageShareState}
           onBack={requestAppBack}
@@ -613,11 +596,11 @@ export default function Home() {
           onPickLevel={pickAdvancedLevel}
           onStartLevel={startAdvancedLevel}
           renderRound={({ key, advancedConfig, round, onComplete }) => (
-            <RoundRenderer key={key} advancedConfig={advancedConfig} round={round} onComplete={onComplete} />
+            <RoundPlayer key={key} advancedConfig={advancedConfig} onComplete={onComplete} phase="advanced" roundId={round} />
           )}
         />
       ) : stage === "home" ? (
-        <HomeScreen onShareImage={openDefaultShareImage} onStart={beginTest} />
+        <HomeScreen onShareImage={openDefaultShareImage} onStart={beginTest} title={APP_TITLE} />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           advancedProgress={advancedProgress}
@@ -639,8 +622,9 @@ export default function Home() {
           index={roundIndex}
           onSkipPerfect={skipCurrentRoundWithPerfectScore}
           showPerfectClearShortcut={showPerfectClearShortcut}
+          totalRounds={rounds.length}
         >
-          <RoundRenderer key={`${currentRound.id}-${roundIndex}`} round={currentRound.id} onComplete={completeRound} />
+          <RoundPlayer key={`${currentRound.id}-${roundIndex}`} onComplete={completeRound} phase="base" roundId={currentRound.id} />
         </PlayFrame>
       ) : (
         <ResultScreen
@@ -663,182 +647,5 @@ export default function Home() {
         />
       ) : null}
     </main>
-  );
-}
-
-function HomeScreen({
-  onShareImage,
-  onStart,
-}: {
-  onShareImage: () => void;
-  onStart: () => void;
-}) {
-  return (
-    <section className="home-screen">
-      <button aria-label="生成默认分享图片" className="icon-button home-image-button" type="button" onPointerDown={onShareImage}>
-        <ShareIcon />
-      </button>
-      <div className="hero-copy compact">
-        <h1>{APP_TITLE}</h1>
-      </div>
-      <button className="primary-button hero-button" type="button" onPointerDown={onStart}>
-        开始
-      </button>
-    </section>
-  );
-}
-
-function RoundIntro({
-  round,
-  onStart,
-}: {
-  round: RoundConfig;
-  onStart: () => void;
-}) {
-  return (
-    <section className="intro-screen">
-      <div className="intro-card">
-        <div className="intro-copy">
-          <h1>{round.title}</h1>
-        </div>
-        <div className="intro-rule-card">
-          <p>{round.rule}</p>
-          {round.action ? <small>{round.action}</small> : null}
-        </div>
-        <button className="primary-button intro-start-button" type="button" onPointerDown={onStart}>
-          开始
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function PlayFrame({
-  round,
-  index,
-  onSkipPerfect,
-  showPerfectClearShortcut,
-  children,
-}: {
-  round: RoundConfig;
-  index: number;
-  onSkipPerfect: () => void;
-  showPerfectClearShortcut: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="play-screen" aria-live="polite">
-      <header className="round-header">
-        <div className="round-title-block">
-          <h1>{round.title}</h1>
-        </div>
-        <div className="round-header-actions">
-          <span className="round-measure-pill">{round.measure}</span>
-          {showPerfectClearShortcut ? (
-            <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
-              一键满分过关
-            </button>
-          ) : null}
-        </div>
-      </header>
-      <div className="progress-track" aria-hidden="true">
-        <span style={{ width: `${((index + 1) / rounds.length) * 100}%` }} />
-      </div>
-      {children}
-    </section>
-  );
-}
-
-
-
-function RoundRenderer({ round, onComplete, advancedConfig }: { round: RoundId } & RoundProps) {
-  if (advancedConfig) {
-    const advancedImplementation = getRoundDefinition(round).advanced;
-    if (advancedImplementation.type === "mini-game") {
-      if (isMiniGameAdvancedConfig(advancedConfig)) {
-        return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      }
-      return null;
-    }
-    switch (advancedImplementation.componentId) {
-      case "advanced-reaction":
-        return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "advanced-aim":
-        return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-      case "advanced-braking":
-        return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
-    }
-  }
-  const baseImplementation = getRoundDefinition(round).base;
-  if (baseImplementation.type === "mini-game") {
-    return <MiniGameBaseRound gameId={baseImplementation.gameId} onComplete={onComplete} round={round} />;
-  }
-  switch (baseImplementation.componentId) {
-    case "reaction":
-      return <ReactionRound onComplete={onComplete} />;
-    case "aim":
-      return <AimRound onComplete={onComplete} />;
-    case "braking":
-      return <BrakingRound onComplete={onComplete} />;
-  }
-}
-
-function ShareImageScreen({
-  dataUrl,
-  imageShareState,
-  onBack,
-  rankTitle,
-  result,
-  shareCopyNoticeId,
-}: {
-  dataUrl: string | null;
-  imageShareState: ImageShareState;
-  onBack: () => void;
-  rankTitle: string | null;
-  result: GameRankResult | null;
-  shareCopyNoticeId: number;
-}) {
-  return (
-    <section className="share-image-screen">
-      <div className="share-image-header">
-        <button className="secondary-button compact-button" type="button" onPointerDown={onBack}>
-          返回
-        </button>
-        <div>
-          <p className="eyebrow">长按保存图片</p>
-          <h1>{rankTitle ?? result?.name ?? APP_TITLE}</h1>
-        </div>
-      </div>
-
-      {shareCopyNoticeId > 0 ? (
-        <div className="share-copy-toast" key={shareCopyNoticeId}>
-          分享链接已复制
-        </div>
-      ) : null}
-
-      <div className="share-image-stage">
-        {dataUrl ? (
-          <NextImage
-            alt={`${APP_TITLE}结果分享图`}
-            className="share-image-preview"
-            height={SHARE_IMAGE_HEIGHT}
-            src={dataUrl}
-            unoptimized
-            width={SHARE_IMAGE_WIDTH}
-          />
-        ) : imageShareState === "failed" ? (
-          <div className="share-image-placeholder">
-            <strong>生成失败</strong>
-            <span>返回后重试</span>
-          </div>
-        ) : (
-          <div className="share-image-placeholder">
-            <strong>生成中</strong>
-            <span>正在绘制结果图</span>
-          </div>
-        )}
-      </div>
-
-    </section>
   );
 }

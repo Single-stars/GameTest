@@ -1,0 +1,785 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  createAdvancedAimArrow,
+  resolveAdvancedAimArrowStep,
+  type AdvancedAimArrow,
+  type AdvancedAimEntity,
+} from "@/lib/advanced-aim";
+import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
+import {
+  clamp,
+  getParamBoolean,
+  getParamNumber,
+  now,
+  pointerKind,
+  rand,
+  trial,
+  type PointerKind,
+  type RoundProps,
+  type TrialEvent,
+} from "@/features/rounds/native/shared";
+
+type AdvancedAimMode = "track" | "incoming" | "decoy" | "boss";
+type AdvancedAimRoute = "circle" | "ellipse" | "figure-eight" | "diagonal" | "horizontal" | "incoming";
+
+type AdvancedAimBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type AdvancedAimMovingEntity = {
+  id: string;
+  index: number;
+  kind: "target" | "distractor";
+  route: AdvancedAimRoute;
+  x: number;
+  y: number;
+  size: number;
+  active: boolean;
+  spawnedAt: number;
+  entered: boolean;
+  vx: number;
+  vy: number;
+  baseX: number;
+  baseY: number;
+  radiusX: number;
+  radiusY: number;
+  phase: number;
+  angularSpeed: number;
+};
+
+type AdvancedAimArrowView = AdvancedAimArrow & {
+  angleDeg: number;
+  pointerType: PointerKind;
+  launchedAt: number;
+  status: "flying" | "hit" | "miss" | "blocked";
+  settledAt?: number;
+};
+
+const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS = 0.84;
+const ADVANCED_AIM_ARROW_TOLERANCE_PX = 8;
+const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 28;
+const ADVANCED_AIM_ARROW_PRUNE_MS = 480;
+const ADVANCED_AIM_TARGET_MARGIN_PX = 36;
+
+function getAdvancedAimMode(config: AdvancedStageConfig): AdvancedAimMode {
+  const mode = String(config.params.aimMode ?? "");
+  if (mode === "track" || mode === "incoming" || mode === "decoy" || mode === "boss") return mode;
+  if (config.variant === "aim-incoming") return "incoming";
+  if (config.variant === "aim-decoy") return "decoy";
+  if (config.variant === "aim-boss") return "boss";
+  return "track";
+}
+
+function getAdvancedAimBounds(rect: Pick<DOMRect, "width" | "height">): AdvancedAimBounds {
+  const minX = Math.min(rect.width / 2, Math.max(ADVANCED_AIM_TARGET_MARGIN_PX, rect.width * 0.1));
+  const maxX = Math.max(minX, rect.width - minX);
+  const minY = Math.min(rect.height / 2, Math.max(92, rect.height * 0.18));
+  const maxY = Math.max(minY, rect.height - Math.max(92, rect.height * 0.18));
+  return { minX, maxX, minY, maxY };
+}
+
+function getAdvancedAimSpawnBounds(config: AdvancedStageConfig, rect: Pick<DOMRect, "width" | "height">) {
+  const bounds = getAdvancedAimBounds(rect);
+  const targetMinYRatio = getParamNumber(config, "targetMinYRatio", Number.NaN);
+  const targetMaxYRatio = getParamNumber(config, "targetMaxYRatio", Number.NaN);
+  if (!Number.isFinite(targetMinYRatio) && !Number.isFinite(targetMaxYRatio)) return bounds;
+
+  const rawMinY = Number.isFinite(targetMinYRatio) ? rect.height * targetMinYRatio : bounds.minY;
+  const rawMaxY = Number.isFinite(targetMaxYRatio) ? rect.height * targetMaxYRatio : bounds.maxY;
+  const minY = clamp(rawMinY, bounds.minY, bounds.maxY);
+  const maxY = clamp(Math.max(rawMaxY, minY), minY, bounds.maxY);
+  return { ...bounds, minY, maxY };
+}
+
+function advancedAimRouteFromConfig(config: AdvancedStageConfig): AdvancedAimRoute {
+  const route = String(config.params.route ?? "circle");
+  if (route === "ellipse" || route === "figure-eight" || route === "diagonal" || route === "horizontal" || route === "incoming") return route;
+  return "circle";
+}
+
+function advancedAimTargetSpeed(config: AdvancedStageConfig, mode: AdvancedAimMode, kind: "target" | "distractor") {
+  const base = kind === "distractor" ? 0.06 : 0.052;
+  let speed = base + config.level * 0.007;
+  if (mode === "incoming") speed = 0.19 + config.level * 0.018;
+  if (mode === "boss") speed = kind === "distractor" ? 0.1 : 0.18 + config.level * 0.012;
+  if (mode === "decoy") speed = base + config.level * 0.009;
+  return speed;
+}
+
+function makeAdvancedAimMovingEntity({
+  config,
+  index,
+  kind,
+  mode,
+  rect,
+  spawnedAt,
+}: {
+  config: AdvancedStageConfig;
+  index: number;
+  kind: "target" | "distractor";
+  mode: AdvancedAimMode;
+  rect: DOMRect;
+  spawnedAt: number;
+}): AdvancedAimMovingEntity {
+  const bounds = getAdvancedAimSpawnBounds(config, rect);
+  const targetSize = getParamNumber(config, "targetSize", 52);
+  const size = kind === "distractor" ? Math.max(34, targetSize - 5) : targetSize;
+  const targetSpeedMultiplier = getParamNumber(config, "targetSpeedMultiplier", 1);
+  const speed = advancedAimTargetSpeed(config, mode, kind) * targetSpeedMultiplier;
+  const baseX = rand(bounds.minX + size, bounds.maxX - size);
+  const baseY = rand(bounds.minY + size, bounds.maxY - size);
+  const phase = index * 0.86 + (kind === "distractor" ? 1.7 : 0);
+  const bossRoute =
+    kind === "target"
+      ? index % 3 === 0
+        ? "incoming"
+        : index % 3 === 1
+          ? "figure-eight"
+          : "diagonal"
+      : "diagonal";
+  const route: AdvancedAimRoute =
+    mode === "incoming"
+      ? "incoming"
+      : mode === "boss"
+        ? bossRoute
+        : kind === "distractor" || mode === "decoy"
+          ? "diagonal"
+          : advancedAimRouteFromConfig(config);
+
+  if (route === "incoming") {
+    const side = Math.floor(rand(0, 4));
+    const start =
+      side === 0
+        ? { x: -size, y: rand(bounds.minY, bounds.maxY) }
+        : side === 1
+          ? { x: rect.width + size, y: rand(bounds.minY, bounds.maxY) }
+          : side === 2
+            ? { x: rand(bounds.minX, bounds.maxX), y: -size }
+            : { x: rand(bounds.minX, bounds.maxX), y: rect.height + size };
+    const destination = {
+      x:
+        side === 0
+          ? rect.width + size
+          : side === 1
+            ? -size
+            : rand(bounds.minX, bounds.maxX),
+      y:
+        side === 2
+          ? rect.height + size
+          : side === 3
+            ? -size
+            : rand(bounds.minY, bounds.maxY),
+    };
+    const dx = destination.x - start.x;
+    const dy = destination.y - start.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    return {
+      id: `${kind}-${index}`,
+      index,
+      kind,
+      route,
+      x: start.x,
+      y: start.y,
+      size,
+      active: true,
+      spawnedAt,
+      entered: false,
+      vx: (dx / distance) * speed,
+      vy: (dy / distance) * speed,
+      baseX: start.x,
+      baseY: start.y,
+      radiusX: 0,
+      radiusY: 0,
+      phase,
+      angularSpeed: 0,
+    };
+  }
+
+  const vx = (Math.random() > 0.5 ? 1 : -1) * speed;
+  const vy = route === "horizontal" ? 0 : (Math.random() > 0.5 ? 1 : -1) * speed * 0.72;
+  const radiusX = Math.min((bounds.maxX - bounds.minX) * 0.28, 90);
+  const radiusY = Math.min((bounds.maxY - bounds.minY) * 0.24, 70);
+  return {
+    id: `${kind}-${index}`,
+    index,
+    kind,
+    route,
+    x: baseX,
+    y: baseY,
+    size,
+    active: true,
+    spawnedAt,
+    entered: true,
+    vx,
+    vy,
+    baseX,
+    baseY,
+    radiusX,
+    radiusY,
+    phase,
+    angularSpeed: ((mode === "track" ? 0.0018 : 0.0022) + config.level * 0.00012) * targetSpeedMultiplier,
+  };
+}
+
+function moveAdvancedAimEntity(
+  entity: AdvancedAimMovingEntity,
+  deltaMs: number,
+  frameNow: number,
+  rect: DOMRect,
+): AdvancedAimMovingEntity {
+  if (!entity.active) return entity;
+  const bounds = getAdvancedAimBounds(rect);
+
+  if (entity.route === "circle" || entity.route === "ellipse" || entity.route === "figure-eight") {
+    const elapsed = frameNow - entity.spawnedAt;
+    const angle = entity.phase + elapsed * entity.angularSpeed;
+    const radiusX = entity.route === "circle" ? Math.min(entity.radiusX, entity.radiusY) : entity.radiusX;
+    const radiusY = entity.route === "circle" ? Math.min(entity.radiusX, entity.radiusY) : entity.radiusY;
+    return {
+      ...entity,
+      x: clamp(entity.baseX + Math.cos(angle) * radiusX, bounds.minX, bounds.maxX),
+      y: clamp(
+        entity.baseY + (entity.route === "figure-eight" ? Math.sin(angle * 2) : Math.sin(angle)) * radiusY,
+        bounds.minY,
+        bounds.maxY,
+      ),
+      entered: true,
+    };
+  }
+
+  let x = entity.x + entity.vx * deltaMs;
+  let y = entity.y + entity.vy * deltaMs;
+  let vx = entity.vx;
+  let vy = entity.vy;
+  const entered = entity.entered || (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height);
+
+  if (entity.route !== "incoming") {
+    if (x < bounds.minX || x > bounds.maxX) {
+      x = clamp(x, bounds.minX, bounds.maxX);
+      vx *= -1;
+    }
+    if (y < bounds.minY || y > bounds.maxY) {
+      y = clamp(y, bounds.minY, bounds.maxY);
+      vy *= -1;
+    }
+  }
+
+  return { ...entity, x, y, vx, vy, entered };
+}
+
+function advancedAimEntityLeftField(entity: AdvancedAimMovingEntity, rect: DOMRect) {
+  const margin = entity.size / 2 + 8;
+  return (
+    entity.entered &&
+    (entity.x < -margin || entity.x > rect.width + margin || entity.y < -margin || entity.y > rect.height + margin)
+  );
+}
+
+function advancedAimCollisionEntity(entity: AdvancedAimMovingEntity): AdvancedAimEntity {
+  return {
+    id: entity.id,
+    kind: entity.kind,
+    x: entity.x,
+    y: entity.y,
+    radius: entity.size / 2,
+    active: entity.active,
+  };
+}
+
+function advancedAimTargetPayload(entity: AdvancedAimMovingEntity, rect: DOMRect, difficulty: number) {
+  return {
+    x: Math.round((entity.x / Math.max(1, rect.width)) * 100),
+    y: Math.round((entity.y / Math.max(1, rect.height)) * 100),
+    size: entity.size,
+    distance: Math.round(Math.hypot(entity.vx, entity.vy) * 1000),
+    difficulty,
+  };
+}
+
+function arrowAngleDeg(arrow: Pick<AdvancedAimArrow, "vx" | "vy">) {
+  return (Math.atan2(arrow.vx, -arrow.vy) * 180) / Math.PI;
+}
+
+function advancedArrowOutOfField(arrow: AdvancedAimArrow, rect: DOMRect) {
+  return arrow.x < -48 || arrow.x > rect.width + 48 || arrow.y < -72 || arrow.y > rect.height + 72;
+}
+
+function advancedAimEntityRenderSignature(entities: AdvancedAimMovingEntity[]) {
+  return entities
+    .filter((entity) => entity.active)
+    .map((entity) => `${entity.id}:${entity.size}`)
+    .join("|");
+}
+
+function advancedAimArrowRenderSignature(arrows: AdvancedAimArrowView[]) {
+  return arrows.map((arrow) => `${arrow.id}:${arrow.status}:${arrow.active ? "1" : "0"}`).join("|");
+}
+
+function placeAdvancedAimEntityElement(element: HTMLElement, entity: AdvancedAimMovingEntity) {
+  element.style.transform = `translate3d(${entity.x}px, ${entity.y}px, 0) translate(-50%, -50%)`;
+}
+
+function placeAdvancedAimArrowElement(element: HTMLElement, arrow: AdvancedAimArrowView) {
+  element.style.transform = `translate3d(${arrow.x}px, ${arrow.y}px, 0) translate(-50%, 0) rotate(${arrow.angleDeg}deg)`;
+}
+
+function paintAdvancedAimEntityElements(entities: AdvancedAimMovingEntity[], elements: Map<string, HTMLElement>) {
+  for (const entity of entities) {
+    const element = elements.get(entity.id);
+    if (entity.active && element) placeAdvancedAimEntityElement(element, entity);
+  }
+}
+
+function paintAdvancedAimArrowElements(arrows: AdvancedAimArrowView[], elements: Map<string, HTMLElement>) {
+  for (const arrow of arrows) {
+    const element = elements.get(arrow.id);
+    if (element) placeAdvancedAimArrowElement(element, arrow);
+  }
+}
+
+export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
+  const config = advancedConfig!;
+  const mode = getAdvancedAimMode(config);
+  const arrowCount = getParamNumber(config, "arrowCount", 8);
+  const targetCount = getParamNumber(config, "targetCount", arrowCount);
+  const requiredHits = getParamNumber(config, "requiredHits", targetCount);
+  const unlimitedArrows = getParamBoolean(config, "unlimitedArrows", false);
+  const replaceTargetOnHit = getParamBoolean(config, "replaceTargetOnHit", false);
+  const keepTargetOnHit = getParamBoolean(config, "keepTargetOnHit", false);
+  const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
+  const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
+  const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
+  const [distractors, setDistractors] = useState<AdvancedAimMovingEntity[]>([]);
+  const [arrows, setArrows] = useState<AdvancedAimArrowView[]>([]);
+  const [firedCount, setFiredCount] = useState(0);
+  const [hitCount, setHitCount] = useState(0);
+  const areaRef = useRef<HTMLDivElement | null>(null);
+  const rectRef = useRef<DOMRect | null>(null);
+  const targetsRef = useRef<AdvancedAimMovingEntity[]>([]);
+  const distractorsRef = useRef<AdvancedAimMovingEntity[]>([]);
+  const arrowsRef = useRef<AdvancedAimArrowView[]>([]);
+  const targetElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const distractorElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const arrowElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const trialsRef = useRef<TrialEvent[]>([]);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameAtRef = useRef(0);
+  const firedCountRef = useRef(0);
+  const hitCountRef = useRef(0);
+  const spawnedTargetsRef = useRef(0);
+  const lastSpawnAtRef = useRef(0);
+  const finishedRef = useRef(false);
+
+  const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
+    const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
+    targetsRef.current = next;
+    paintAdvancedAimEntityElements(next, targetElementsRef.current);
+    if (shouldRender) setTargets(next);
+  }, []);
+  const publishDistractors = useCallback((next: AdvancedAimMovingEntity[]) => {
+    const shouldRender = advancedAimEntityRenderSignature(distractorsRef.current) !== advancedAimEntityRenderSignature(next);
+    distractorsRef.current = next;
+    paintAdvancedAimEntityElements(next, distractorElementsRef.current);
+    if (shouldRender) setDistractors(next);
+  }, []);
+  const publishArrows = useCallback((next: AdvancedAimArrowView[]) => {
+    const shouldRender = advancedAimArrowRenderSignature(arrowsRef.current) !== advancedAimArrowRenderSignature(next);
+    arrowsRef.current = next;
+    paintAdvancedAimArrowElements(next, arrowElementsRef.current);
+    if (shouldRender) setArrows(next);
+  }, []);
+
+  const finish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    onComplete([...trialsRef.current]);
+  }, [onComplete]);
+
+  const recordAimTrial = useCallback((patch: Omit<Partial<TrialEvent>, "roundId" | "trialIndex" | "viewport">) => {
+    const item = trial("aim", trialsRef.current.length, patch);
+    trialsRef.current.push(item);
+    return item;
+  }, []);
+
+  const aimAttemptValue = useCallback(
+    () => ({
+      shotsFired: firedCountRef.current,
+      requiredHits,
+      hitCount: hitCountRef.current,
+      arrowsLeft: unlimitedArrows ? null : Math.max(0, arrowCount - firedCountRef.current),
+    }),
+    [arrowCount, requiredHits, unlimitedArrows],
+  );
+
+  useEffect(() => {
+    const rect = areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    rectRef.current = rect;
+    const startedAt = now();
+    finishedRef.current = false;
+    trialsRef.current = [];
+    firedCountRef.current = 0;
+    hitCountRef.current = 0;
+    spawnedTargetsRef.current = 0;
+    lastSpawnAtRef.current = startedAt - spawnIntervalMs;
+    lastFrameAtRef.current = startedAt;
+    setFiredCount(0);
+    setHitCount(0);
+    publishArrows([]);
+
+    const initialTargets =
+      mode === "track" || mode === "decoy"
+        ? Array.from({ length: targetCount }, (_, index) =>
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: startedAt }),
+          )
+        : [];
+    spawnedTargetsRef.current = initialTargets.length;
+    publishTargets(initialTargets);
+    publishDistractors(
+      Array.from({ length: getParamNumber(config, "decoyCount", 0) }, (_, index) =>
+        makeAdvancedAimMovingEntity({ config, index, kind: "distractor", mode, rect, spawnedAt: startedAt }),
+      ),
+    );
+
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      finishedRef.current = true;
+    };
+  }, [config, mode, publishArrows, publishDistractors, publishTargets, spawnIntervalMs, targetCount]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (finishedRef.current) return;
+      const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
+      if (!rect) {
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      rectRef.current = rect;
+      const frameNow = now();
+      const deltaMs = Math.min(34, frameNow - (lastFrameAtRef.current || frameNow));
+      lastFrameAtRef.current = frameNow;
+
+      let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      if ((mode === "incoming" || mode === "boss") && spawnedTargetsRef.current < targetCount) {
+        while (spawnedTargetsRef.current < targetCount && frameNow - lastSpawnAtRef.current >= spawnIntervalMs) {
+          const index = spawnedTargetsRef.current;
+          nextTargets = [
+            ...nextTargets,
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: frameNow }),
+          ];
+          spawnedTargetsRef.current += 1;
+          lastSpawnAtRef.current = frameNow;
+        }
+      }
+
+      const flyOutTarget = failOnFlyOut
+        ? nextTargets.find((entity) => entity.kind === "target" && entity.active && advancedAimEntityLeftField(entity, rect))
+        : undefined;
+      if (flyOutTarget) {
+        recordAimTrial({
+          shownAt: flyOutTarget.spawnedAt,
+          responseAt: null,
+          correct: false,
+          errorType: "timeout",
+          target: advancedAimTargetPayload(flyOutTarget, rect, config.level),
+          value: {
+            mode: "arrow",
+            shotHit: false,
+            flyOut: true,
+            targetId: flyOutTarget.id,
+            ...aimAttemptValue(),
+          },
+        });
+        finish();
+        return;
+      }
+
+      let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      let blocked = false;
+      const nextArrows = arrowsRef.current
+        .map((arrow) => {
+          if (!arrow.active) return arrow;
+          const result = resolveAdvancedAimArrowStep({
+            arrow,
+            deltaMs,
+            targets: nextTargets.filter((entity) => entity.active).map(advancedAimCollisionEntity),
+            distractors: nextDistractors.filter((entity) => entity.active).map(advancedAimCollisionEntity),
+            tolerancePx: ADVANCED_AIM_ARROW_TOLERANCE_PX,
+          });
+          const movedArrow = { ...arrow, ...result.arrow };
+          if (!result.collision) {
+            if (advancedArrowOutOfField(movedArrow, rect)) {
+              recordAimTrial({
+                shownAt: arrow.launchedAt,
+                responseAt: frameNow,
+                correct: false,
+                errorType: "miss",
+                pointerType: arrow.pointerType,
+                value: {
+                  mode: "arrow",
+                  shotHit: false,
+                  arrowId: arrow.id,
+                  ...aimAttemptValue(),
+                },
+              });
+              return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
+            }
+            return { ...movedArrow, status: "flying" as const };
+          }
+
+          if (result.collision.kind === "distractor") {
+            const hitDistractor = nextDistractors.find((entity) => entity.id === result.collision?.entityId);
+            recordAimTrial({
+              shownAt: hitDistractor?.spawnedAt ?? arrow.launchedAt,
+              responseAt: frameNow,
+              correct: false,
+              errorType: "collision",
+              pointerType: arrow.pointerType,
+              target: hitDistractor ? advancedAimTargetPayload(hitDistractor, rect, config.level) : undefined,
+              value: {
+                mode: "arrow",
+                shotHit: false,
+                hitDecoy: true,
+                arrowId: arrow.id,
+                distractorId: result.collision.entityId,
+                ...aimAttemptValue(),
+              },
+            });
+            nextDistractors = nextDistractors.map((entity) =>
+              entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
+            );
+            blocked = true;
+            return { ...movedArrow, active: false, status: "blocked" as const, settledAt: frameNow };
+          }
+
+          const hitTarget = nextTargets.find((entity) => entity.id === result.collision?.entityId);
+          if (hitTarget) {
+            hitCountRef.current += 1;
+            setHitCount(hitCountRef.current);
+            recordAimTrial({
+              shownAt: hitTarget.spawnedAt,
+              responseAt: frameNow,
+              correct: true,
+              pointerType: arrow.pointerType,
+              target: advancedAimTargetPayload(hitTarget, rect, config.level),
+              value: {
+                mode: "arrow",
+                shotHit: true,
+                trajectoryHit: true,
+                arrowId: arrow.id,
+                hitTargetId: hitTarget.id,
+                ...aimAttemptValue(),
+                targetSpeed: Math.round(Math.hypot(hitTarget.vx, hitTarget.vy) * 1000),
+                shotErrorPx: result.collision.errorPx,
+                normalizedError: result.collision.normalizedError,
+              },
+            });
+            nextTargets = keepTargetOnHit ? nextTargets : nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
+            if (replaceTargetOnHit && hitCountRef.current < requiredHits) {
+              const replacementIndex = spawnedTargetsRef.current;
+              spawnedTargetsRef.current += 1;
+              nextTargets = [
+                ...nextTargets,
+                makeAdvancedAimMovingEntity({
+                  config,
+                  index: replacementIndex,
+                  kind: "target",
+                  mode,
+                  rect,
+                  spawnedAt: frameNow,
+                }),
+              ];
+            }
+            return null;
+          }
+          return { ...movedArrow, active: false, status: "hit" as const, settledAt: frameNow };
+        })
+        .filter(
+          (arrow): arrow is AdvancedAimArrowView =>
+            arrow !== null && (arrow.active || frameNow - (arrow.settledAt ?? frameNow) < ADVANCED_AIM_ARROW_PRUNE_MS),
+        );
+
+      publishTargets(nextTargets);
+      publishDistractors(nextDistractors);
+      publishArrows(nextArrows);
+
+      if (blocked) {
+        finish();
+        return;
+      }
+      if (hitCountRef.current >= requiredHits) {
+        finish();
+        return;
+      }
+      if (!unlimitedArrows && firedCountRef.current >= arrowCount && nextArrows.every((arrow) => !arrow.active)) {
+        finish();
+        return;
+      }
+
+      frameRef.current = requestAnimationFrame(tick);
+    };
+
+    frameRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    };
+  }, [
+    aimAttemptValue,
+    arrowCount,
+    config,
+    failOnFlyOut,
+    finish,
+    keepTargetOnHit,
+    mode,
+    recordAimTrial,
+    spawnIntervalMs,
+    publishArrows,
+    publishDistractors,
+    publishTargets,
+    replaceTargetOnHit,
+    requiredHits,
+    targetCount,
+    unlimitedArrows,
+  ]);
+
+  const shoot = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (finishedRef.current || (!unlimitedArrows && firedCountRef.current >= arrowCount)) return;
+    const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    rectRef.current = rect;
+    const shotAt = now();
+    const pointerType = pointerKind(event.pointerType);
+    const shotX = clamp(event.clientX - rect.left, 18, rect.width - 18);
+    const from = { x: shotX, y: rect.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX };
+    const to = { x: shotX, y: 10 };
+    const baseArrow = createAdvancedAimArrow({
+      id: `arrow-${shotAt}-${firedCountRef.current}`,
+      from,
+      to,
+      createdAt: shotAt,
+      speedPxPerMs: ADVANCED_AIM_ARROW_SPEED_PX_PER_MS,
+    });
+    const nextArrow: AdvancedAimArrowView = {
+      ...baseArrow,
+      angleDeg: arrowAngleDeg(baseArrow),
+      pointerType,
+      launchedAt: shotAt,
+      status: "flying",
+    };
+
+    firedCountRef.current += 1;
+    setFiredCount(firedCountRef.current);
+    publishArrows([...arrowsRef.current, nextArrow]);
+  };
+
+  const arrowsLeft = unlimitedArrows ? null : Math.max(0, arrowCount - firedCount);
+  return (
+    <div className={`game-area advanced-aim ${config.variant} mode-${mode}`} ref={areaRef} onPointerDown={shoot}>
+      <div className="mini-score advanced-aim-score">
+        <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
+        <span>命中 {hitCount}/{requiredHits}</span>
+      </div>
+      {targets
+        .filter((target) => target.active)
+        .map((target) => (
+          <span
+            className="advanced-aim-target"
+            key={target.id}
+            ref={(element) => {
+              const elements = targetElementsRef.current;
+              if (element) {
+                elements.set(target.id, element);
+                placeAdvancedAimEntityElement(element, targetsRef.current.find((item) => item.id === target.id) ?? target);
+              } else {
+                elements.delete(target.id);
+              }
+            }}
+            style={{ width: `${target.size}px`, height: `${target.size}px` }}
+          />
+        ))}
+      {distractors
+        .filter((distractor) => distractor.active)
+        .map((distractor) => (
+          <span
+            className="advanced-aim-target decoy"
+            key={distractor.id}
+            ref={(element) => {
+              const elements = distractorElementsRef.current;
+              if (element) {
+                elements.set(distractor.id, element);
+                placeAdvancedAimEntityElement(element, distractorsRef.current.find((item) => item.id === distractor.id) ?? distractor);
+              } else {
+                elements.delete(distractor.id);
+              }
+            }}
+            style={{
+              width: `${distractor.size}px`,
+              height: `${distractor.size}px`,
+            }}
+          />
+        ))}
+      {arrows.map((arrow) => (
+        <span
+          className={`advanced-arrow-shot ${arrow.status}`}
+          key={arrow.id}
+          ref={(element) => {
+            const elements = arrowElementsRef.current;
+            if (element) {
+              elements.set(arrow.id, element);
+              placeAdvancedAimArrowElement(element, arrowsRef.current.find((item) => item.id === arrow.id) ?? arrow);
+            } else {
+              elements.delete(arrow.id);
+            }
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const AIM_REQUIRED_HITS = 8;
+
+const BASIC_AIM_CONFIG: AdvancedStageConfig = {
+  dimension: "aim",
+  level: 1,
+  variant: "aim-track",
+  variantIndex: 1,
+  difficulty: "easy",
+  passText: "",
+  params: {
+    aimMode: "track",
+    route: "horizontal",
+    arrowCount: AIM_REQUIRED_HITS,
+    targetCount: 1,
+    requiredHits: AIM_REQUIRED_HITS,
+    unlimitedArrows: true,
+    keepTargetOnHit: true,
+    replaceTargetOnHit: false,
+    failOnFlyOut: false,
+    decoyCount: 0,
+    targetSize: 58,
+    targetSpeedMultiplier: 2,
+    targetMinYRatio: 0.18,
+    targetMaxYRatio: 0.48,
+  },
+};
+
+export function AimRound({ onComplete }: RoundProps) {
+  return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} />;
+}

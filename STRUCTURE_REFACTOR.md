@@ -246,6 +246,39 @@ Verification for this round:
 - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
 - `git diff --check`: passed.
 
+### RoundPlayer And Final Boundary Pass
+
+Completed in the current uncommitted Round 14-18 pass:
+
+- Added `src/features/rounds/round-player.tsx` as the single gameplay rendering adapter used by `src/app/page.tsx`.
+- Moved native-versus-mini-game dispatch out of `page.tsx`; the page now renders `RoundPlayer` for both base and advanced rounds.
+- Moved advanced perfect-clear trial generation into `src/features/rounds/perfect-trials.ts`.
+- Split native round implementation by gameplay:
+  - `src/features/rounds/native/shared.ts`
+  - `src/features/rounds/native/reaction.tsx`
+  - `src/features/rounds/native/aim.tsx`
+  - `src/features/rounds/native/braking.tsx`
+  - `src/features/rounds/native/index.ts`
+- Kept `src/features/rounds/native-rounds.tsx` as a compatibility facade.
+- Extracted the remaining page shell components:
+  - `src/features/game-flow/home-screen.tsx`
+  - `src/features/game-flow/round-intro.tsx`
+  - `src/features/game-flow/play-frame.tsx`
+  - `src/features/results/share-image-screen.tsx`
+- Split formal round registry tests into `src/lib/round-registry.test.ts`.
+- Updated architecture, obsolete-feature, and scoring source tests so they protect the new module boundaries instead of assuming old file locations.
+- Kept gameplay logic, CSS selectors, scoring, persistence, registry mappings, formal route shape, and visible text unchanged.
+
+Verification for this pass:
+
+- Targeted structural verification passed:
+  - `node --test --experimental-strip-types src\lib\mini-game-architecture.test.ts src\lib\round-registry.test.ts src\lib\obsolete-features.test.ts src\lib\scoring.test.ts`
+- Full final verification passed:
+  - `npm.cmd test`: 180/180 passed.
+  - `npm.cmd run lint`: passed.
+  - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
+  - `git diff --check`: passed.
+
 ## Current Architecture Inventory
 
 ### `src/app/page.tsx`
@@ -254,20 +287,34 @@ Approximate role:
 
 - Main application screen, formal route content, and top-level game state machine.
 - Owns current stage, base round progression, advanced challenge state, result persistence, share flow, restart flow, and app back-navigation behavior.
-- Contains the formal `RoundRenderer` glue that chooses native versus mini-game implementations from `src/features/rounds/registry.ts`.
 - Delegates extracted UI/runtime blocks to feature modules:
+  - home, intro, and play frame shells under `src/features/game-flow/`
   - result screens under `src/features/results/`
   - advanced challenge shell under `src/features/advanced/`
-  - native round implementations under `src/features/rounds/native-rounds.tsx`
+  - round rendering through `src/features/rounds/round-player.tsx`
 - Important boundaries:
-  - Do not change `RoundRenderer` dispatch casually.
+  - Do not change `RoundPlayer` dispatch casually.
   - Do not change `src/features/rounds/registry.ts` mappings during structure refactor.
   - Do not change 8-round formal test order unless doing a separate product/gameplay task.
 
 Current issue:
 
-- Still owns the main app state machine and several page-level screens such as home, intro/play frame, and share-image screen.
+- Still owns the main app state machine, navigation, persistence, and top-level callback wiring.
 - Future splits should keep navigation, persistence, and result/share behavior stable unless a separate product task explicitly changes them.
+
+### `src/features/rounds/round-player.tsx`
+
+Approximate role:
+
+- Single adapter that turns a formal round ID plus a phase into the correct runtime component.
+- Reads `src/features/rounds/registry.ts` and hides native-versus-mini-game implementation details from `src/app/page.tsx`.
+- Renders `MiniGameBaseRound` / `MiniGameAdvancedRound` for mini-game implementations.
+- Renders native reaction, aim, and braking components for native implementations.
+
+Current issue:
+
+- This is now the main dispatch boundary for gameplay rendering.
+- Future gameplay-engine changes should happen behind this adapter unless the top-level flow really needs to change.
 
 ### `src/features/results/*`
 
@@ -288,27 +335,27 @@ Approximate role:
 
 - Presentation shell for the advanced challenge screen.
 - Receives challenge state, progress, callbacks, and a `renderRound` function from `page.tsx`.
-- Does not own `RoundRenderer` or advanced challenge config generation.
+- Does not own `RoundPlayer` or advanced challenge config generation.
 
 Current issue:
 
 - Keep it as a shell until there is a deliberate plan to move advanced state orchestration out of `page.tsx`.
 
-### `src/features/rounds/native-rounds.tsx`
+### `src/features/rounds/native/*`
 
 Approximate role:
 
-- Owns the native React implementations for base and advanced native rounds:
+- Owns the native React implementations for base and advanced native rounds, split by gameplay:
   - reaction
   - aim
   - braking
-- Owns native-round-local helpers needed by those components.
-- Exports `buildAdvancedPerfectTrials` for advanced perfect-clear shortcuts.
+- Owns native-round-local helpers in `src/features/rounds/native/shared.ts`.
+- Keeps `src/features/rounds/native-rounds.tsx` as a compatibility facade.
 
 Current issue:
 
-- Treat this file as gameplay-sensitive.
-- Any future split inside it should be tested carefully because it contains timer, pointer, hit-detection, and native-round completion payload logic.
+- Treat these files as gameplay-sensitive.
+- Any future movement inside them should be tested carefully because they contain timer, pointer, hit-detection, and native-round completion payload logic.
 
 ### `src/app/mini-game-prototypes.tsx`
 
@@ -373,6 +420,7 @@ Important test files:
 
 - `src/lib/mini-game-prototypes.test.ts`
 - `src/lib/mini-game-architecture.test.ts`
+- `src/lib/round-registry.test.ts`
 - `src/lib/advanced-challenges.test.ts`
 - `src/lib/scoring.test.ts`
 - `src/lib/obsolete-features.test.ts`
@@ -380,6 +428,7 @@ Important test files:
 Current issue:
 
 - `src/lib/mini-game-architecture.test.ts` owns most source-slice architecture guardrails.
+- `src/lib/round-registry.test.ts` owns formal registry and `RoundPlayer` mapping guardrails.
 - `src/lib/mini-game-prototypes.test.ts` should stay focused on mini-game config/runtime expectations.
 - Source-slice tests are useful as guardrails during refactor, but every extraction must update them carefully so they protect architecture rather than block harmless movement.
 
@@ -390,7 +439,7 @@ These are considered stable public/internal contracts during structure refactor:
 - `MiniGameEmbeddedStage`
 - `MiniGameBaseRound`
 - `MiniGameAdvancedRound`
-- `RoundRenderer`
+- `RoundPlayer`
 - `miniGameIdForBaseRound`
 - `src/lib/scoring.ts`
 - `src/lib/advanced-progress.ts`
@@ -584,6 +633,75 @@ Risk:
 - These components contain visible UI and gameplay-sensitive native rounds.
 - Preserve class names, copy, callbacks, scoring payloads, registry mappings, CSS, and persistence contracts exactly.
 
+### Round 14: Unified RoundPlayer Adapter
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Add `src/features/rounds/round-player.tsx`.
+- Make `page.tsx` render base and advanced gameplay through `RoundPlayer`.
+- Hide native-versus-mini-game implementation details from `page.tsx`.
+
+Risk:
+
+- Dispatch errors would affect every playable round, so source-level tests must protect base and advanced mappings.
+
+### Round 15: Native Round Split
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Split native reaction, aim, and braking implementations into separate files.
+- Keep shared native helpers in `src/features/rounds/native/shared.ts`.
+- Keep `src/features/rounds/native-rounds.tsx` as a compatibility facade.
+
+Risk:
+
+- These files contain pointer, timer, hit-detection, and scoring payload logic; movement must remain mechanical.
+
+### Round 16: Remaining Page Shell Extraction
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Move `HomeScreen`, `RoundIntro`, `PlayFrame`, and `ShareImageScreen` out of `page.tsx`.
+- Keep page ownership of app state, navigation, persistence, and callbacks.
+
+Risk:
+
+- These are visible UI shells; preserve JSX, class names, and copy.
+
+### Round 17: Advanced Boundary Tightening
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Keep advanced challenge UI as a shell.
+- Use `RoundPlayer` as the advanced gameplay renderer.
+- Keep advanced config generation and progress logic in existing lib modules.
+
+Risk:
+
+- Do not move advanced persistence or challenge-result recording into UI components.
+
+### Round 18: Test Responsibility Split
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Move registry and round-player mapping guardrails into `src/lib/round-registry.test.ts`.
+- Keep architecture tests focused on module boundaries and obsolete feature protection.
+- Keep mini-game prototype tests focused on mini-game runtime/config behavior.
+
+Risk:
+
+- Source-slice tests must remain strong enough to prevent old routes, old fallbacks, and old dispatch paths from returning.
+
 ## Per-Round Checklist
 
 For every structure refactor round:
@@ -624,6 +742,11 @@ For every structure refactor round:
 | 11 | Complete | Formal base round implementations declared in `src/features/rounds/registry.ts`; base rendering reads registry. |
 | 12 | Complete | Formal advanced round implementations declared in `src/features/rounds/registry.ts`; advanced rendering reads registry. |
 | 13 | Complete | Result UI, advanced challenge shell, native rounds, and architecture tests extracted from `page.tsx` / mini-game test file. |
+| 14 | Complete | `RoundPlayer` added; `page.tsx` no longer knows native versus mini-game dispatch. |
+| 15 | Complete | Native reaction, aim, and braking implementations split under `src/features/rounds/native/`. |
+| 16 | Complete | Home, intro, play frame, and share-image screen shells extracted from `page.tsx`. |
+| 17 | Complete | Advanced gameplay rendering flows through `RoundPlayer`; advanced UI remains a shell. |
+| 18 | Complete | Registry and round-player tests split into `src/lib/round-registry.test.ts`. |
 
 ## Moved In Round 1
 

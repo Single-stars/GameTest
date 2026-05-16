@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-import {
-  ROUND_DEFINITIONS,
-  getRoundDefinition,
-} from "../features/rounds/registry.ts";
 
 const MINI_GAME_RUNTIME_SOURCE_URLS = [
   new URL("../app/mini-game-prototypes.tsx", import.meta.url),
@@ -143,14 +139,16 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
   const roundConfigSource = readFileSync(new URL("../features/game-flow/round-config.ts", import.meta.url), "utf8");
   const roundRegistrySource = readFileSync(new URL("../features/rounds/registry.ts", import.meta.url), "utf8");
+  const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
   const resultScreenSource = readFileSync(new URL("../features/results/result-screen.tsx", import.meta.url), "utf8");
   const shareImageSource = readFileSync(new URL("../features/results/share-image.ts", import.meta.url), "utf8");
   const radarChartSource = readFileSync(new URL("../features/results/radar-chart.tsx", import.meta.url), "utf8");
 
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-config"/);
-  assert.match(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
-  assert.match(appPageSource, /from "@\/features\/rounds\/registry"/);
+  assert.match(appPageSource, /from "@\/features\/rounds\/round-player"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/registry"/);
   assert.doesNotMatch(appPageSource, /const rounds: RoundConfig\[\] = \[/);
   assert.doesNotMatch(appPageSource, /function MiniGameBaseRound/);
   assert.doesNotMatch(appPageSource, /function MiniGameAdvancedRound/);
@@ -165,6 +163,8 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   assert.match(miniGameRoundsSource, /export function MiniGameBaseRound/);
   assert.match(miniGameRoundsSource, /export function MiniGameAdvancedRound/);
   assert.match(miniGameRoundsSource, /export function miniGameIdForBaseRound/);
+  assert.match(roundPlayerSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
+  assert.match(roundPlayerSource, /from "@\/features\/rounds\/registry"/);
   assert.match(shareImageSource, /export const SHARE_IMAGE_WIDTH = 900;/);
   assert.match(shareImageSource, /export async function createShareImage/);
   assert.match(shareImageSource, /export async function copyTextToClipboard/);
@@ -179,12 +179,19 @@ test("app page delegates result, advanced, and native round UI to feature module
   const restartDialogSource = readFileSync(new URL("../features/results/restart-confirm-dialog.tsx", import.meta.url), "utf8");
   const advancedScreenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const nativeRoundsSource = readFileSync(new URL("../features/rounds/native-rounds.tsx", import.meta.url), "utf8");
+  const nativeSource = [
+    readFileSync(new URL("../features/rounds/native/reaction.tsx", import.meta.url), "utf8"),
+    readFileSync(new URL("../features/rounds/native/aim.tsx", import.meta.url), "utf8"),
+    readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8"),
+  ].join("\n");
+  const roundPlayerSource = readFileSync(new URL("../features/rounds/round-player.tsx", import.meta.url), "utf8");
 
   assert.match(appPageSource, /from "@\/features\/results\/result-screen"/);
   assert.match(appPageSource, /from "@\/features\/results\/luck-draw-screen"/);
   assert.match(appPageSource, /from "@\/features\/results\/restart-confirm-dialog"/);
   assert.match(appPageSource, /from "@\/features\/advanced\/advanced-challenge-screen"/);
-  assert.match(appPageSource, /from "@\/features\/rounds\/native-rounds"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/native-rounds"/);
+  assert.match(roundPlayerSource, /from "@\/features\/rounds\/native"/);
 
   for (const term of [
     "function ResultScreen",
@@ -206,91 +213,108 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(restartDialogSource, /export function RestartConfirmDialog/);
   assert.match(advancedScreenSource, /export type AdvancedChallengeState/);
   assert.match(advancedScreenSource, /export function AdvancedChallengeScreen/);
-  assert.match(nativeRoundsSource, /export function AdvancedReactionRound/);
-  assert.match(nativeRoundsSource, /export function AdvancedAimRound/);
-  assert.match(nativeRoundsSource, /export function AdvancedBrakingRound/);
-  assert.match(nativeRoundsSource, /export function ReactionRound/);
-  assert.match(nativeRoundsSource, /export function AimRound/);
-  assert.match(nativeRoundsSource, /export function BrakingRound/);
+  assert.match(nativeRoundsSource, /export \* from "@\/features\/rounds\/native"/);
+  assert.match(nativeSource, /export function AdvancedReactionRound/);
+  assert.match(nativeSource, /export function AdvancedAimRound/);
+  assert.match(nativeSource, /export function AdvancedBrakingRound/);
+  assert.match(nativeSource, /export function ReactionRound/);
+  assert.match(nativeSource, /export function AimRound/);
+  assert.match(nativeSource, /export function BrakingRound/);
 });
 
-test("formal round registry preserves official order and base implementations", () => {
-  assert.deepEqual(
-    ROUND_DEFINITIONS.map((round) => round.id),
-    ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"],
-  );
+test("app page delegates round rendering and remaining screen shells to feature modules", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const roundPlayerUrl = new URL("../features/rounds/round-player.tsx", import.meta.url);
+  const homeScreenUrl = new URL("../features/game-flow/home-screen.tsx", import.meta.url);
+  const roundIntroUrl = new URL("../features/game-flow/round-intro.tsx", import.meta.url);
+  const playFrameUrl = new URL("../features/game-flow/play-frame.tsx", import.meta.url);
+  const shareImageScreenUrl = new URL("../features/results/share-image-screen.tsx", import.meta.url);
 
-  assert.deepEqual(
-    ROUND_DEFINITIONS.map((round) => [round.id, round.base]),
-    [
-      ["reaction", { type: "native", componentId: "reaction" }],
-      ["aim", { type: "native", componentId: "aim" }],
-      ["search", { type: "mini-game", gameId: "doodle" }],
-      ["stroop", { type: "mini-game", gameId: "fall-down" }],
-      ["rhythm", { type: "mini-game", gameId: "square-jump" }],
-      ["memory", { type: "mini-game", gameId: "flappy" }],
-      ["braking", { type: "native", componentId: "braking" }],
-      ["patience", { type: "mini-game", gameId: "knife" }],
-    ],
-  );
+  assert.equal(existsSync(roundPlayerUrl), true);
+  assert.equal(existsSync(homeScreenUrl), true);
+  assert.equal(existsSync(roundIntroUrl), true);
+  assert.equal(existsSync(playFrameUrl), true);
+  assert.equal(existsSync(shareImageScreenUrl), true);
 
-  assert.deepEqual(
-    ROUND_DEFINITIONS.map((round) => [round.id, round.advanced]),
-    [
-      ["reaction", { type: "native", componentId: "advanced-reaction" }],
-      ["aim", { type: "native", componentId: "advanced-aim" }],
-      ["search", { type: "mini-game", gameId: "doodle" }],
-      ["stroop", { type: "mini-game", gameId: "fall-down" }],
-      ["rhythm", { type: "mini-game", gameId: "square-jump" }],
-      ["memory", { type: "mini-game", gameId: "flappy" }],
-      ["braking", { type: "native", componentId: "advanced-braking" }],
-      ["patience", { type: "mini-game", gameId: "knife" }],
-    ],
-  );
+  const roundPlayerSource = readFileSync(roundPlayerUrl, "utf8");
+  const homeScreenSource = readFileSync(homeScreenUrl, "utf8");
+  const roundIntroSource = readFileSync(roundIntroUrl, "utf8");
+  const playFrameSource = readFileSync(playFrameUrl, "utf8");
+  const shareImageScreenSource = readFileSync(shareImageScreenUrl, "utf8");
 
-  for (const round of ROUND_DEFINITIONS) {
-    assert.equal(getRoundDefinition(round.id), round);
-    assert.equal(typeof round.title, "string");
-    assert.equal(typeof round.label, "string");
-    assert.equal(typeof round.rule, "string");
-    assert.equal(typeof round.action, "string");
-    assert.notEqual(round.title.length, 0);
-    assert.notEqual(round.label.length, 0);
-    assert.notEqual(round.rule.length, 0);
-    assert.notEqual(round.action.length, 0);
+  assert.match(appPageSource, /from "@\/features\/rounds\/round-player"/);
+  assert.match(appPageSource, /from "@\/features\/game-flow\/home-screen"/);
+  assert.match(appPageSource, /from "@\/features\/game-flow\/round-intro"/);
+  assert.match(appPageSource, /from "@\/features\/game-flow\/play-frame"/);
+  assert.match(appPageSource, /from "@\/features\/results\/share-image-screen"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/registry"/);
+  assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/native-rounds"/);
+
+  for (const term of [
+    "function HomeScreen",
+    "function RoundIntro",
+    "function PlayFrame",
+    "function RoundRenderer",
+    "function ShareImageScreen",
+  ]) {
+    assert.equal(appPageSource.includes(term), false, term);
   }
+
+  assert.match(roundPlayerSource, /export function RoundPlayer/);
+  assert.match(roundPlayerSource, /const implementation = getRoundDefinition\(roundId\)\[phase\];/);
+  assert.match(roundPlayerSource, /implementation\.type === "mini-game"[\s\S]*MiniGameAdvancedRound/);
+  assert.match(roundPlayerSource, /implementation\.type === "mini-game"[\s\S]*MiniGameBaseRound/);
+  assert.match(roundPlayerSource, /switch \(implementation\.componentId\)/);
+  assert.match(homeScreenSource, /export function HomeScreen/);
+  assert.match(roundIntroSource, /export function RoundIntro/);
+  assert.match(playFrameSource, /export function PlayFrame/);
+  assert.match(shareImageScreenSource, /export function ShareImageScreen/);
 });
 
-test("base round rendering reads formal implementations from the round registry", () => {
-  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const miniGameRoundsSource = readFileSync(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url), "utf8");
-  const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
-  const baseMappingSource = miniGameRoundsSource.slice(miniGameRoundsSource.indexOf("function miniGameIdForBaseRound"), miniGameRoundsSource.indexOf("type MiniAdvancedStageConfig"));
+test("native rounds are split by gameplay with stable facades", () => {
+  const legacyFacadeUrl = new URL("../features/rounds/native-rounds.tsx", import.meta.url);
+  const sharedUrl = new URL("../features/rounds/native/shared.ts", import.meta.url);
+  const reactionUrl = new URL("../features/rounds/native/reaction.tsx", import.meta.url);
+  const aimUrl = new URL("../features/rounds/native/aim.tsx", import.meta.url);
+  const brakingUrl = new URL("../features/rounds/native/braking.tsx", import.meta.url);
+  const indexUrl = new URL("../features/rounds/native/index.ts", import.meta.url);
+  const perfectTrialsUrl = new URL("../features/rounds/perfect-trials.ts", import.meta.url);
 
-  assert.match(roundRendererSource, /const baseImplementation = getRoundDefinition\(round\)\.base;/);
-  assert.match(roundRendererSource, /baseImplementation\.type === "mini-game"[\s\S]*<MiniGameBaseRound gameId=\{baseImplementation\.gameId\}/);
-  assert.match(roundRendererSource, /switch \(baseImplementation\.componentId\)/);
-  assert.doesNotMatch(roundRendererSource, /miniGameIdForBaseRound\(round\)/);
-  assert.match(baseMappingSource, /const implementation = getRoundDefinition\(round\)\.base;/);
-  assert.match(baseMappingSource, /implementation\.type === "mini-game" \? implementation\.gameId : null/);
-  assert.doesNotMatch(baseMappingSource, /if \(round === "search"\) return "doodle";/);
-  assert.doesNotMatch(baseMappingSource, /if \(round === "stroop"\) return "fall-down";/);
-  assert.doesNotMatch(baseMappingSource, /if \(round === "rhythm"\) return "square-jump";/);
-  assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
-  assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
-});
+  for (const url of [legacyFacadeUrl, sharedUrl, reactionUrl, aimUrl, brakingUrl, indexUrl, perfectTrialsUrl]) {
+    assert.equal(existsSync(url), true, url.pathname);
+  }
 
-test("advanced round rendering reads formal implementations from the round registry", () => {
-  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const roundRendererSource = appPageSource.slice(appPageSource.indexOf("function RoundRenderer"), appPageSource.indexOf("function getParamNumber"));
+  const legacyFacadeSource = readFileSync(legacyFacadeUrl, "utf8");
+  const sharedSource = readFileSync(sharedUrl, "utf8");
+  const reactionSource = readFileSync(reactionUrl, "utf8");
+  const aimSource = readFileSync(aimUrl, "utf8");
+  const brakingSource = readFileSync(brakingUrl, "utf8");
+  const indexSource = readFileSync(indexUrl, "utf8");
+  const perfectTrialsSource = readFileSync(perfectTrialsUrl, "utf8");
 
-  assert.match(roundRendererSource, /const advancedImplementation = getRoundDefinition\(round\)\.advanced;/);
-  assert.match(roundRendererSource, /advancedImplementation\.type === "mini-game"[\s\S]*isMiniGameAdvancedConfig\(advancedConfig\)[\s\S]*<MiniGameAdvancedRound/);
-  assert.match(roundRendererSource, /switch \(advancedImplementation\.componentId\)/);
-  assert.match(roundRendererSource, /case "advanced-reaction":[\s\S]*<AdvancedReactionRound/);
-  assert.match(roundRendererSource, /case "advanced-aim":[\s\S]*<AdvancedAimRound/);
-  assert.match(roundRendererSource, /case "advanced-braking":[\s\S]*<AdvancedBrakingRound/);
-  assert.doesNotMatch(roundRendererSource, /switch \(round\)[\s\S]*case "reaction":[\s\S]*<AdvancedReactionRound/);
+  assert.match(legacyFacadeSource, /export \* from "@\/features\/rounds\/native";/);
+  assert.doesNotMatch(legacyFacadeSource, /export function (AdvancedReactionRound|AdvancedAimRound|AdvancedBrakingRound|ReactionRound|AimRound|BrakingRound)/);
+  assert.match(sharedSource, /export type RoundProps/);
+  assert.match(sharedSource, /export function trial/);
+  assert.match(perfectTrialsSource, /export function buildAdvancedPerfectTrials/);
+
+  assert.match(reactionSource, /export function AdvancedReactionRound/);
+  assert.match(reactionSource, /export function ReactionRound/);
+  assert.doesNotMatch(reactionSource, /export function (AdvancedAimRound|AdvancedBrakingRound|AimRound|BrakingRound)/);
+
+  assert.match(aimSource, /export function AdvancedAimRound/);
+  assert.match(aimSource, /export function AimRound/);
+  assert.doesNotMatch(aimSource, /export function (AdvancedReactionRound|AdvancedBrakingRound|ReactionRound|BrakingRound)/);
+
+  assert.match(brakingSource, /export function AdvancedBrakingRound/);
+  assert.match(brakingSource, /export function BrakingRound/);
+  assert.doesNotMatch(brakingSource, /export function (AdvancedReactionRound|AdvancedAimRound|ReactionRound|AimRound)/);
+
+  assert.match(indexSource, /from "\.\/reaction"/);
+  assert.match(indexSource, /from "\.\/aim"/);
+  assert.match(indexSource, /from "\.\/braking"/);
+  assert.match(indexSource, /from "\.\/shared"/);
 });
 
 test("global CSS is split by app flow, mini-games, and overlays without renaming active selectors", () => {
