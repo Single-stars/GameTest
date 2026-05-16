@@ -1,0 +1,231 @@
+.luck-draw-panel {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 22px 24px;
+  background: var(--surface);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.luck-draw-panel.advanced-tier-1:not(.spinning) {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.luck-draw-panel.advanced-tier-2:not(.spinning) {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.luck-draw-panel.advanced-tier-3:not(.spinning) {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.luck-draw-panel.advanced-gold:not(.spinning) {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.luck-draw-panel.spinning {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.slot-machine {
+  width: min(100%, 360px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.slot-reel {
+  position: relative;
+  height: 116px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8f4ed;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.56);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.luck-draw-panel.advanced-tier-1:not(.spinning) .slot-reel {
+  border-color: #2f7f59;
+  background: #ddf1e6;
+}
+
+.luck-draw-panel.advanced-tier-2:not(.spinning) .slot-reel {
+  border-color: #2a78a8;
+  background: #dceefa;
+}
+
+.luck-draw-panel.advanced-tier-3:not(.spinning) .slot-reel {
+  border-color: #b54872;
+  background: #f6dfe8;
+}
+
+.luck-draw-panel.advanced-gold:not(.spinning) .slot-reel {
+  border-color: #c98910;
+  background: linear-gradient(145deg, #fff1b8, #e4ad2b);
+  box-shadow: 0 10px 22px rgba(169, 112, 14, 0.18), inset 0 0 0 2px rgba(255, 255, 255, 0.58);
+}
+
+.slot-strip {
+  height: 1000%;
+  display: grid;
+  grid-template-rows: repeat(10, 10%);
+  transform: translateY(var(--slot-offset, 0%));
+  transition: transform 760ms cubic-bezier(0.12, 0.82, 0.18, 1);
+  will-change: transform;
+}
+
+.slot-strip span {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-size: 64px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.slot-reel.rolling .slot-strip {
+  animation: slot-roll 300ms linear infinite;
+  transition: none;
+}
+
+.luck-draw-panel.batch-spinning .slot-reel.rolling .slot-strip {
+  animation-duration: 150ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-strip {
+  transition: transform 180ms cubic-bezier(0.2, 0.86, 0.24, 1);
+}
+
+.slot-reel.rolling:nth-child(2) .slot-strip {
+  animation-duration: 250ms;
+}
+
+.slot-reel.rolling:nth-child(3) .slot-strip {
+  animation-duration: 220ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-reel.rolling:nth-child(2) .slot-strip {
+  animation-duration: 130ms;
+}
+
+.luck-draw-panel.batch-spinning .slot-reel.rolling:nth-child(3) .slot-strip {
+  animation-duration: 115ms;
+}
+
+.luck-draw-panel.settled:not(.advanced-empty) .slot-reel {
+  animation: slot-color-pop 620ms ease;
+}
+
+@keyframes slot-roll {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(-90%);
+  }
+}
+
+@keyframes slot-color-pop {
+  0% {
+    filter: saturate(0.72);
+    transform: scale(0.99);
+  }
+
+  55% {
+    filter: saturate(1.18);
+    transform: scale(1.015);
+  }
+
+  100% {
+    filter: saturate(1);
+    transform: scale(1);
+  }
+}
+
+.luck-stat-row {
+  width: min(100%, 380px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.luck-stat-row > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fffdf8;
+}
+
+.luck-stat-row span,
+.luck-rule-text {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.luck-stat-row strong {
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.luck-rule-text {
+  min-height: 22px;
+  margin: 0;
+  text-align: center;
+}
+
+.luck-draw-actions {
+  width: min(100%, 260px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+  justify-self: center;
+}
+
+.luck-draw-actions .luck-draw-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.luck-rule-details {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 4;
+}
+
+.luck-rule-details p {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  top: 30px;
+  width: min(280px, 72vw);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fffdf8;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 14px 34px rgba(24, 24, 24, 0.12);
+}

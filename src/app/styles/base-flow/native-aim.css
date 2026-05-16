@@ -1,0 +1,80 @@
+.advanced-aim-target {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 3px solid rgba(24, 24, 24, 0.2);
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 10px rgba(230, 83, 73, 0.16), 0 14px 32px rgba(230, 83, 73, 0.2);
+  will-change: transform;
+}
+
+.advanced-aim-target::after {
+  content: "";
+  width: 42%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.advanced-aim-target.decoy {
+  border-style: dashed;
+  background: #918a7e;
+  box-shadow: 0 0 0 8px rgba(24, 24, 24, 0.08);
+}
+
+.advanced-arrow-shot {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--ink);
+  pointer-events: none;
+  transform-origin: 50% 0;
+  will-change: transform;
+}
+
+.advanced-arrow-shot::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  width: 18px;
+  height: 18px;
+  translate: -50% 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: inherit;
+}
+
+.advanced-arrow-shot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 18px;
+  height: 12px;
+  translate: -50% 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, transparent 45%, currentColor 46% 54%, transparent 55%),
+    linear-gradient(45deg, transparent 45%, currentColor 46% 54%, transparent 55%);
+  color: rgba(24, 24, 24, 0.58);
+}
+
+.advanced-arrow-shot.hit {
+  background: var(--green);
+  box-shadow: 0 0 0 8px rgba(47, 155, 104, 0.16);
+}
+
+.advanced-arrow-shot.miss,
+.advanced-arrow-shot.blocked {
+  background: var(--red);
+  box-shadow: 0 0 0 8px rgba(230, 83, 73, 0.14);
+}

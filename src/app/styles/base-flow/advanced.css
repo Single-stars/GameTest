@@ -1,0 +1,220 @@
+.advanced-screen,
+.advanced-play-screen,
+.luck-screen {
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
+.advanced-screen,
+.luck-screen {
+  min-height: min(760px, 100svh);
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding-block: 8px;
+}
+
+.advanced-topbar,
+.advanced-round-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advanced-topbar span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.advanced-back-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.advanced-hero,
+.advanced-panel,
+.advanced-result-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.advanced-hero {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+}
+
+.luck-hero {
+  padding-right: 64px;
+}
+
+.advanced-hero h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.05;
+}
+
+.advanced-panel,
+.advanced-result-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.advanced-level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.advanced-level-button {
+  width: 100%;
+  max-width: 72px;
+  aspect-ratio: 1;
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f6f2eb;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 950;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    filter 140ms ease,
+    transform 140ms ease;
+}
+
+.advanced-level-button strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.advanced-level-button.completed {
+  border-width: 2px;
+}
+
+.advanced-level-button.locked {
+  cursor: default;
+  opacity: 0.34;
+  filter: grayscale(0.5);
+}
+
+.advanced-level-button.selected {
+  outline: 3px solid rgba(24, 24, 24, 0.78);
+  outline-offset: 3px;
+}
+
+.advanced-level-button:not(.locked):active,
+.advanced-entry-button:active {
+  transform: scale(0.96);
+}
+
+.advanced-entry-button.advanced-empty,
+.advanced-level-button.advanced-empty {
+  border-color: rgba(24, 24, 24, 0.14);
+  background: #f6f2eb;
+  color: var(--ink);
+}
+
+.advanced-entry-button.advanced-tier-1,
+.advanced-level-button.advanced-tier-1 {
+  border-color: #2f7f59;
+  background: #ddf1e6;
+  color: #174832;
+}
+
+.advanced-entry-button.advanced-tier-2,
+.advanced-level-button.advanced-tier-2 {
+  border-color: #2a78a8;
+  background: #dceefa;
+  color: #17445f;
+}
+
+.advanced-entry-button.advanced-tier-3,
+.advanced-level-button.advanced-tier-3 {
+  border-color: #b54872;
+  background: #f6dfe8;
+  color: #6e1d3b;
+}
+
+.advanced-entry-button.advanced-gold,
+.advanced-level-button.advanced-gold {
+  border-color: #c98910;
+  background: linear-gradient(145deg, #ffe49a, #d9a01d);
+  color: #3f2600;
+  box-shadow: 0 8px 18px rgba(169, 112, 14, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.48);
+}
+
+.advanced-brief {
+  min-height: 86px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.advanced-brief span,
+.advanced-brief small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.advanced-brief strong {
+  font-size: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.advanced-brief small {
+  grid-column: 1 / -1;
+}
+
+.advanced-result-card h2 {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.advanced-result-card.passed {
+  border-color: rgba(35, 107, 84, 0.38);
+  background: #f3fbf5;
+}
+
+.advanced-result-card.failed {
+  border-color: rgba(170, 72, 55, 0.28);
+  background: #fff8f2;
+}
+
+.advanced-actions {
+  width: min(100%, 380px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.advanced-actions-1 {
+  width: min(100%, 230px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.advanced-actions .primary-button,
+.advanced-actions .secondary-button {
+  width: 100%;
+}

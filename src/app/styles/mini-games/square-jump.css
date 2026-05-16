@@ -1,0 +1,466 @@
+.square-jump-stage {
+  background:
+    linear-gradient(180deg, rgba(47, 155, 104, 0.08), rgba(255, 253, 248, 0.94)),
+    var(--surface);
+  transition: background 220ms ease;
+}
+
+.square-jump-stage.failed {
+  animation: prototype-stage-shake 240ms ease;
+}
+
+.square-progress-background {
+  position: absolute;
+  z-index: 0;
+  inset: -24px -240px 0;
+  pointer-events: none;
+  opacity: 0.58;
+  background:
+    linear-gradient(180deg, transparent 0 58%, rgba(47, 155, 104, 0.08) 58% 59%, transparent 59%),
+    repeating-linear-gradient(90deg, transparent 0 72px, rgba(24, 24, 24, 0.08) 72px 76px, transparent 76px 180px),
+    repeating-linear-gradient(90deg, transparent 0 108px, rgba(47, 128, 237, 0.1) 108px 112px, transparent 112px 180px);
+  will-change: transform;
+}
+
+.square-jump-stage.gravity-light {
+  background:
+    radial-gradient(circle at 68% 18%, rgba(27, 154, 170, 0.18), transparent 28%),
+    linear-gradient(180deg, rgba(27, 154, 170, 0.16), rgba(255, 253, 248, 0.96)),
+    var(--surface);
+}
+
+.square-jump-stage.gravity-heavy {
+  background:
+    radial-gradient(circle at 38% 18%, rgba(123, 97, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(88, 67, 126, 0.2), rgba(255, 253, 248, 0.92)),
+    var(--surface);
+}
+
+.square-jump-stage.gravity-light::before,
+.square-jump-stage.gravity-heavy::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.square-jump-stage.gravity-light::before {
+  background:
+    radial-gradient(circle, rgba(27, 154, 170, 0.32) 0 3px, transparent 4px) 42px 410px / 88px 96px,
+    radial-gradient(circle, rgba(47, 128, 237, 0.2) 0 2px, transparent 3px) 18px 360px / 104px 118px;
+  animation: square-light-particles 1.8s linear infinite;
+}
+
+.square-jump-stage.gravity-heavy::before {
+  background:
+    radial-gradient(circle, rgba(88, 67, 126, 0.26) 0 3px, transparent 4px) 34px 100px / 92px 96px,
+    radial-gradient(circle, rgba(230, 83, 73, 0.16) 0 2px, transparent 3px) 74px 60px / 112px 120px;
+  animation: square-heavy-particles 1.4s linear infinite;
+}
+
+@keyframes square-light-particles {
+  from {
+    background-position: 42px 430px, 18px 386px;
+  }
+  to {
+    background-position: 42px 250px, 18px 210px;
+  }
+}
+
+@keyframes square-heavy-particles {
+  from {
+    background-position: 34px 80px, 74px 40px;
+  }
+  to {
+    background-position: 34px 270px, 74px 260px;
+  }
+}
+
+.square-jump-guide-line {
+  position: absolute;
+  left: 0;
+  top: 442px;
+  width: 100%;
+  border-top: 1px dashed rgba(24, 24, 24, 0.14);
+}
+
+.square-platform,
+.square-jump-player-shell,
+.fall-down-player-shell,
+.fall-platform,
+.fall-danger-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.square-jump-base-platform,
+.square-jump-base-player-shell,
+.square-jump-base-debug-platform-line,
+.square-jump-base-debug-player-line {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.square-jump-base-platform {
+  z-index: 5;
+  overflow: visible;
+}
+
+.square-jump-base-platform span {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 10px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(24, 24, 24, 0.72);
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 4px 10px rgba(24, 24, 24, 0.12);
+}
+
+.square-jump-base-platform.current .square-jump-base-platform-top {
+  box-shadow: 0 0 0 7px rgba(27, 154, 170, 0.16), 0 8px 18px rgba(47, 155, 104, 0.18);
+}
+
+.square-jump-base-platform.preview {
+  opacity: 0.72;
+}
+
+.square-jump-base-platform.exiting {
+  z-index: 4;
+  opacity: 0.78;
+}
+
+.square-jump-base-platform-top,
+.square-jump-base-platform-body {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+
+.square-jump-base-platform-top {
+  z-index: 3;
+  top: 0;
+  width: 100%;
+  height: 20px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 8px;
+  background: var(--green);
+  box-shadow: 0 8px 18px rgba(47, 155, 104, 0.18);
+}
+
+.square-jump-base-platform-body {
+  z-index: 2;
+  top: 16px;
+  bottom: -4px;
+  left: 8%;
+  width: 84%;
+  border-inline: 1px solid rgba(24, 24, 24, 0.08);
+  background: linear-gradient(180deg, rgba(47, 155, 104, 0.62), rgba(47, 155, 104, 0.12));
+}
+
+.square-jump-base-platform.gravity-light .square-jump-base-platform-top {
+  background: #8ee7da;
+  border-color: rgba(27, 154, 170, 0.35);
+  box-shadow: 0 8px 20px rgba(27, 154, 170, 0.22);
+}
+
+.square-jump-base-platform.gravity-light .square-jump-base-platform-body {
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.2) 0 6px, transparent 6px 14px),
+    linear-gradient(180deg, rgba(27, 154, 170, 0.46), rgba(27, 154, 170, 0.08));
+}
+
+.square-jump-base-platform.gravity-heavy .square-jump-base-platform-top {
+  background: #5c5668;
+  border-color: rgba(24, 24, 24, 0.32);
+  box-shadow: 0 10px 22px rgba(43, 38, 52, 0.24);
+}
+
+.square-jump-base-platform.gravity-heavy .square-jump-base-platform-body {
+  background:
+    repeating-linear-gradient(90deg, rgba(20, 18, 24, 0.26) 0 5px, transparent 5px 13px),
+    linear-gradient(180deg, rgba(71, 65, 82, 0.62), rgba(71, 65, 82, 0.12));
+}
+
+.square-jump-base-platform.gravity-heavy span {
+  background: rgba(24, 24, 24, 0.72);
+  color: #ffffff;
+}
+
+.square-jump-base-platform.moving::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -16px;
+  right: -16px;
+  top: 9px;
+  height: 2px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, rgba(47, 128, 237, 0.3) 0 9px, transparent 9px 15px);
+}
+
+.square-jump-base-platform.moving .square-jump-base-platform-top {
+  background: var(--blue);
+  border-color: rgba(47, 128, 237, 0.36);
+  box-shadow: 0 8px 20px rgba(47, 128, 237, 0.22);
+}
+
+.square-jump-base-platform.moving .square-jump-base-platform-body {
+  background: linear-gradient(180deg, rgba(47, 128, 237, 0.58), rgba(47, 128, 237, 0.1));
+}
+
+.square-jump-base-platform.moving.gravity-light .square-jump-base-platform-top {
+  background: #8ee7da;
+  border-color: rgba(27, 154, 170, 0.35);
+  box-shadow: 0 8px 20px rgba(27, 154, 170, 0.22);
+}
+
+.square-jump-base-platform.moving.gravity-light .square-jump-base-platform-body {
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.2) 0 6px, transparent 6px 14px),
+    linear-gradient(180deg, rgba(27, 154, 170, 0.46), rgba(27, 154, 170, 0.08));
+}
+
+.square-jump-base-platform.finish::after {
+  content: "⚑";
+  position: absolute;
+  z-index: 6;
+  right: -8px;
+  top: -30px;
+  color: #8a5a00;
+  font-size: 26px;
+  font-weight: 950;
+  text-shadow: 0 5px 12px rgba(211, 155, 42, 0.28);
+}
+
+.square-jump-base-platform.finish .square-jump-base-platform-top {
+  background: var(--gold);
+  border-color: rgba(211, 155, 42, 0.52);
+  box-shadow: 0 0 0 9px rgba(211, 155, 42, 0.16), 0 10px 22px rgba(211, 155, 42, 0.24);
+}
+
+.square-jump-base-platform.finish .square-jump-base-platform-body {
+  background: linear-gradient(180deg, rgba(211, 155, 42, 0.58), rgba(211, 155, 42, 0.1));
+}
+
+.square-jump-base-player-shell {
+  z-index: 12;
+  transition: none;
+  animation: none;
+  transform: none;
+  will-change: transform;
+}
+
+.square-jump-base-player-shell.jumping,
+.square-jump-base-player-shell.landed {
+  animation: none;
+  transform: none;
+}
+
+.square-jump-base-player-visual {
+  width: 100%;
+  height: 100%;
+  background: var(--cyan);
+  box-shadow: 0 10px 24px rgba(27, 154, 170, 0.2);
+  transform-origin: 50% 50%;
+  transition: transform 80ms linear, box-shadow 80ms linear;
+}
+
+.square-jump-base-player-shell.charging .square-jump-base-player-visual {
+  box-shadow: 0 4px 18px rgba(27, 154, 170, 0.28);
+}
+
+.square-jump-base-debug-platform-line {
+  z-index: 30;
+  height: 1px;
+  border-top: 1px solid rgba(47, 155, 104, 0.95);
+  pointer-events: none;
+}
+
+.square-jump-base-debug-player-line {
+  z-index: 31;
+  height: 1px;
+  border-top: 1px solid rgba(47, 128, 237, 0.95);
+  pointer-events: none;
+}
+
+.square-platform {
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+.square-platform span {
+  position: relative;
+  z-index: 4;
+  color: rgba(24, 24, 24, 0.68);
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.square-platform-top,
+.square-platform-body {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+
+.square-platform-top {
+  z-index: 3;
+  top: 0;
+  width: 100%;
+  height: 20px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 8px;
+  background: var(--green);
+  box-shadow: 0 8px 18px rgba(47, 155, 104, 0.18);
+}
+
+.square-platform-body {
+  z-index: 2;
+  top: 16px;
+  bottom: -4px;
+  left: 8%;
+  width: 84%;
+  border-inline: 1px solid rgba(24, 24, 24, 0.08);
+  background: linear-gradient(180deg, rgba(47, 155, 104, 0.62), rgba(47, 155, 104, 0.12));
+}
+
+.square-platform.current .square-platform-top {
+  box-shadow: 0 0 0 7px rgba(27, 154, 170, 0.16), 0 8px 18px rgba(47, 155, 104, 0.18);
+}
+
+.square-platform.preview {
+  opacity: 0.48;
+}
+
+.square-platform.moving .square-platform-top {
+  background: var(--blue);
+  box-shadow: 0 8px 18px rgba(47, 128, 237, 0.18);
+}
+
+.square-platform.moving .square-platform-body {
+  background: linear-gradient(180deg, rgba(47, 128, 237, 0.56), rgba(47, 128, 237, 0.1));
+}
+
+.square-platform.timed::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  top: 0;
+  bottom: auto;
+  height: 20px;
+  width: var(--danger-width, 0%);
+  border-radius: 8px;
+  background: rgba(230, 83, 73, 0.55);
+}
+
+.square-platform.gravity-light .square-platform-top {
+  background: #b9ecdc;
+}
+
+.square-platform.gravity-light .square-platform-body {
+  background: linear-gradient(180deg, rgba(27, 154, 170, 0.42), rgba(27, 154, 170, 0.08));
+}
+
+.square-platform.gravity-heavy .square-platform-top {
+  background: #77706a;
+}
+
+.square-platform.gravity-heavy span {
+  color: #ffffff;
+}
+
+.square-platform.gravity-heavy .square-platform-body {
+  background: linear-gradient(180deg, rgba(80, 72, 68, 0.58), rgba(80, 72, 68, 0.1));
+}
+
+.square-platform.finish .square-platform-top {
+  box-shadow: 0 0 0 8px rgba(211, 155, 42, 0.18), 0 10px 22px rgba(211, 155, 42, 0.18);
+}
+
+.square-jump-player-shell,
+.fall-down-player-shell {
+  z-index: 12;
+  width: 32px;
+  height: 32px;
+}
+
+.square-jump-player,
+.fall-down-player {
+  background: var(--cyan);
+  box-shadow: 0 10px 24px rgba(27, 154, 170, 0.2);
+}
+
+.square-jump-player-shell.landed,
+.fall-down-player-shell.landed {
+  animation: prototype-player-land 220ms ease;
+}
+
+.square-tutorial-landing-preview {
+  position: absolute;
+  z-index: 6;
+  width: 30px;
+  height: 10px;
+  border: 1px solid rgba(27, 154, 170, 0.48);
+  border-radius: 999px;
+  background: rgba(27, 154, 170, 0.16);
+  box-shadow: 0 0 0 6px rgba(27, 154, 170, 0.08);
+  opacity: 0.66;
+  pointer-events: none;
+}
+
+@keyframes square-charge-warning {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    filter: brightness(1.35);
+  }
+}
+
+.square-start-hint,
+.fall-start-hint {
+  top: calc(50% + 54px);
+}
+
+@keyframes prototype-player-land {
+  0% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.12;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes prototype-stage-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}

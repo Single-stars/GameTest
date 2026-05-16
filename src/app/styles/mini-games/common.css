@@ -1,0 +1,152 @@
+.prototype-game-wrap {
+  position: relative;
+  width: min(100%, 390px);
+  display: grid;
+  justify-self: center;
+  margin-inline: auto;
+}
+
+.prototype-game-wrap > .mini-score {
+  z-index: 12;
+  pointer-events: none;
+}
+
+.prototype-stage {
+  position: relative;
+  width: min(100%, 360px);
+  height: 640px;
+  justify-self: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  contain: layout paint;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.prototype-stage:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
+}
+
+.prototype-end-overlay {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 22px;
+  background: rgba(255, 253, 248, 0.92);
+  text-align: center;
+}
+
+.prototype-end-overlay h2 {
+  margin: 0;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.prototype-end-overlay small {
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.prototype-end-overlay.passed h2 {
+  color: var(--green);
+}
+
+.prototype-end-overlay.failed h2 {
+  color: var(--red);
+}
+
+.mini-game-fps-badge {
+  position: absolute;
+  z-index: 35;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: rgba(255, 253, 248, 0.82);
+  color: rgba(24, 24, 24, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.mini-game-perf-panel {
+  position: absolute;
+  z-index: 36;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 132px;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(255, 253, 248, 0.92);
+  color: rgba(24, 24, 24, 0.78);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+.mini-game-perf-panel strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.prototype-feedback {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  top: 34%;
+  translate: -50% -50%;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 16px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 950;
+  pointer-events: none;
+  animation: prototype-feedback-pop 620ms ease both;
+}
+
+.prototype-feedback.good {
+  background: var(--green);
+}
+
+.prototype-feedback.perfect {
+  background: var(--gold);
+  box-shadow: 0 0 0 12px rgba(211, 155, 42, 0.18);
+}
+
+@keyframes prototype-feedback-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+  18%,
+  78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}

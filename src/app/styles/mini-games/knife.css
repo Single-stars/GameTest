@@ -1,0 +1,121 @@
+.knife-stage {
+  display: block;
+  border: 1px solid var(--line);
+  padding: 0;
+  background:
+    linear-gradient(180deg, rgba(211, 155, 42, 0.08), rgba(255, 253, 248, 0.92)),
+    var(--surface);
+  cursor: pointer;
+}
+
+.knife-wheel-wrap {
+  z-index: 6;
+  left: 50%;
+  top: 82px;
+  width: 190px;
+  height: 190px;
+  translate: -50% 0;
+}
+
+.knife-wheel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.knife-wheel-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.knife-wheel-svg circle {
+  fill: #f8f0df;
+  stroke: rgba(24, 24, 24, 0.18);
+  stroke-width: 3px;
+}
+
+.knife-wheel-svg path {
+  fill: rgba(230, 83, 73, 0.62);
+  stroke: rgba(140, 40, 34, 0.28);
+  stroke-width: 1px;
+}
+
+.knife-arrow {
+  position: absolute;
+  width: 60px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink);
+  box-shadow: 0 4px 8px rgba(24, 24, 24, 0.16);
+}
+
+.knife-arrow::before {
+  content: none;
+}
+
+.knife-stuck {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  animation: none;
+  transition: none;
+  transform-origin: 0 50%;
+}
+
+.knife-stuck.initial {
+  background: #918a7e;
+}
+
+.knife-stuck.failed {
+  background: var(--red);
+  box-shadow: 0 0 0 7px rgba(230, 83, 73, 0.16), 0 6px 14px rgba(230, 83, 73, 0.22);
+}
+
+.knife-launcher {
+  z-index: 8;
+  left: 50%;
+  top: auto;
+  bottom: 92px;
+  width: 8px;
+  height: 62px;
+  translate: -50% 0;
+  rotate: 0deg;
+}
+
+.knife-launcher.flying {
+  animation: prototype-knife-fire 95ms linear forwards;
+}
+
+.knife-stage.final-shot-ready .knife-launcher {
+  box-shadow: 0 0 0 10px rgba(211, 155, 42, 0.18);
+}
+
+.knife-shot-stack {
+  z-index: 7;
+  left: 18px;
+  bottom: 18px;
+  top: auto;
+  display: flex;
+  gap: 5px;
+}
+
+.knife-shot-stack span {
+  width: 5px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(24, 24, 24, 0.72);
+}
+
+@keyframes prototype-knife-fire {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-276px);
+  }
+}

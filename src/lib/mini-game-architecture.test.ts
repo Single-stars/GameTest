@@ -222,6 +222,15 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(nativeSource, /export function BrakingRound/);
 });
 
+test("luck draw rule tooltip uses readable copy instead of placeholder question marks", () => {
+  const luckDrawScreenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(luckDrawScreenSource, /LUCK_RULE_TEXT\s*=\s*"[^"]*\?{4,}[^"]*"/);
+  assert.match(luckDrawScreenSource, /完成进阶挑战/);
+  assert.match(luckDrawScreenSource, /0-100/);
+  assert.match(luckDrawScreenSource, /历史最高/);
+});
+
 test("app page delegates round rendering and remaining screen shells to feature modules", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const roundPlayerUrl = new URL("../features/rounds/round-player.tsx", import.meta.url);
@@ -321,18 +330,160 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
   const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const baseFlowCss = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
   const miniGamesCss = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
+  const baseFlowChunks = [
+    "tokens",
+    "shell",
+    "home-intro",
+    "shared-controls",
+    "play-frame",
+    "native-reaction",
+    "native-aim",
+    "native-braking",
+    "results",
+    "advanced",
+    "luck",
+  ]
+    .map((name) => readFileSync(new URL(`../app/styles/base-flow/${name}.css`, import.meta.url), "utf8"))
+    .join("\n");
+  const miniGameChunks = ["common", "doodle", "flappy", "knife", "square-jump", "fall-down"]
+    .map((name) => readFileSync(new URL(`../app/styles/mini-games/${name}.css`, import.meta.url), "utf8"))
+    .join("\n");
   const overlaysCss = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
 
   assert.match(globalCss, /@import "\.\/styles\/base-flow\.css";/);
   assert.match(globalCss, /@import "\.\/styles\/mini-games\.css";/);
   assert.match(globalCss, /@import "\.\/styles\/overlays-responsive\.css";/);
-  assert.match(baseFlowCss, /:root \{/);
-  assert.match(baseFlowCss, /\.advanced-aim-target \{/);
-  assert.match(miniGamesCss, /\.prototype-game-wrap \{/);
-  assert.match(miniGamesCss, /\.square-jump-stage \{/);
-  assert.match(miniGamesCss, /\.fall-down-stage \{/);
+  assert.match(baseFlowCss, /@import "\.\/base-flow\/tokens\.css";/);
+  assert.match(baseFlowChunks, /:root \{/);
+  assert.match(baseFlowChunks, /\.advanced-aim-target \{/);
+  assert.match(miniGamesCss, /@import "\.\/mini-games\/common\.css";/);
+  assert.match(miniGameChunks, /\.prototype-game-wrap \{/);
+  assert.match(miniGameChunks, /\.square-jump-stage \{/);
+  assert.match(miniGameChunks, /\.fall-down-stage \{/);
   assert.match(overlaysCss, /\.restart-dialog-backdrop \{/);
   assert.match(overlaysCss, /@media \(max-width: 768px\)/);
+});
+
+test("mini game behavior tests are split by game with a stable catalog test", () => {
+  const prototypeTestSource = readFileSync(new URL("./mini-game-prototypes.test.ts", import.meta.url), "utf8");
+  const testModules = [
+    ["catalog", /mini-game prototypes expose the original games plus two prototype tests/],
+    ["square-jump", /square jump tuning uses readable camera-scaled targets/],
+    ["fall-down", /fall down levels encode downward platform variants/],
+    ["doodle", /doodle levels encode moving platforms/],
+    ["flappy", /flappy levels encode gates/],
+    ["knife", /knife levels encode countdown/],
+  ] as const;
+
+  for (const [moduleName, pattern] of testModules) {
+    const moduleUrl = new URL(`./mini-games/${moduleName}.test.ts`, import.meta.url);
+    assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
+    assert.match(readFileSync(moduleUrl, "utf8"), pattern);
+  }
+
+  assert.match(prototypeTestSource, /mini-game behavior tests live under src\/lib\/mini-games/);
+  assert.doesNotMatch(prototypeTestSource, /square jump tuning uses readable camera-scaled targets/);
+  assert.doesNotMatch(prototypeTestSource, /fall down camera bounds/);
+  assert.doesNotMatch(prototypeTestSource, /doodle levels encode moving platforms/);
+  assert.doesNotMatch(prototypeTestSource, /flappy levels encode gates/);
+  assert.doesNotMatch(prototypeTestSource, /knife levels encode countdown/);
+});
+
+test("advanced challenge configs and completion logic are split behind a stable public facade", () => {
+  const facadeSource = readFileSync(new URL("./advanced-challenges.ts", import.meta.url), "utf8");
+  const modules = [
+    ["types", /export type AdvancedStageConfig/],
+    ["shared", /export function createDimensionConfigs/],
+    ["reaction-config", /export function reactionConfigs/],
+    ["aim-config", /export function aimConfigs/],
+    ["braking-config", /export function brakingConfigs/],
+    ["mini-game-config", /export function miniGameConfigs/],
+    ["braking", /export function getAdvancedBrakeCorrectAction/],
+    ["stage-configs", /export const ADVANCED_STAGE_CONFIGS/],
+    ["debug", /export function getDebugToolsVisibility/],
+    ["completion", /export function evaluateAdvancedChallengeCompletion/],
+  ] as const;
+
+  for (const [moduleName, pattern] of modules) {
+    const moduleUrl = new URL(`./advanced-challenges/${moduleName}.ts`, import.meta.url);
+    assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
+    assert.match(readFileSync(moduleUrl, "utf8"), pattern);
+  }
+
+  assert.match(facadeSource, /export type \{/);
+  assert.match(facadeSource, /from "\.\/advanced-challenges\/types(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/advanced-challenges\/stage-configs(?:\.ts)?"/);
+  assert.match(facadeSource, /from "\.\/advanced-challenges\/completion(?:\.ts)?"/);
+  assert.doesNotMatch(facadeSource, /function reactionConfigs\(/);
+  assert.doesNotMatch(facadeSource, /function evaluateAdvancedChallengeCompletion\(/);
+});
+
+test("mini-game CSS is split into ordered common and per-game chunks", () => {
+  const facadeSource = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
+  const expectedImports = [
+    '@import "./mini-games/common.css";',
+    '@import "./mini-games/doodle.css";',
+    '@import "./mini-games/flappy.css";',
+    '@import "./mini-games/knife.css";',
+    '@import "./mini-games/square-jump.css";',
+    '@import "./mini-games/fall-down.css";',
+  ];
+
+  assert.deepEqual(
+    facadeSource.trim().split(/\r?\n/).filter(Boolean),
+    expectedImports,
+  );
+
+  for (const importLine of expectedImports) {
+    const path = importLine.match(/"(.+)"/)?.[1];
+    assert.ok(path);
+    assert.equal(existsSync(new URL(`../app/styles/${path}`, import.meta.url)), true, path);
+  }
+
+  assert.match(readFileSync(new URL("../app/styles/mini-games/common.css", import.meta.url), "utf8"), /\.prototype-game-wrap \{/);
+  assert.match(readFileSync(new URL("../app/styles/mini-games/doodle.css", import.meta.url), "utf8"), /\.doodle-stage \{/);
+  assert.match(readFileSync(new URL("../app/styles/mini-games/flappy.css", import.meta.url), "utf8"), /\.flappy-stage \{/);
+  assert.match(readFileSync(new URL("../app/styles/mini-games/knife.css", import.meta.url), "utf8"), /\.knife-stage \{/);
+  assert.match(readFileSync(new URL("../app/styles/mini-games/square-jump.css", import.meta.url), "utf8"), /\.square-jump-stage \{/);
+  assert.match(readFileSync(new URL("../app/styles/mini-games/fall-down.css", import.meta.url), "utf8"), /\.fall-down-stage \{/);
+});
+
+test("base flow CSS is split into ordered focused chunks", () => {
+  const facadeSource = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
+  const expectedImports = [
+    '@import "./base-flow/tokens.css";',
+    '@import "./base-flow/shell.css";',
+    '@import "./base-flow/home-intro.css";',
+    '@import "./base-flow/shared-controls.css";',
+    '@import "./base-flow/play-frame.css";',
+    '@import "./base-flow/native-reaction.css";',
+    '@import "./base-flow/native-aim.css";',
+    '@import "./base-flow/native-braking.css";',
+    '@import "./base-flow/results.css";',
+    '@import "./base-flow/advanced.css";',
+    '@import "./base-flow/luck.css";',
+  ];
+
+  assert.deepEqual(
+    facadeSource.trim().split(/\r?\n/).filter(Boolean),
+    expectedImports,
+  );
+
+  for (const importLine of expectedImports) {
+    const path = importLine.match(/"(.+)"/)?.[1];
+    assert.ok(path);
+    assert.equal(existsSync(new URL(`../app/styles/${path}`, import.meta.url)), true, path);
+  }
+
+  assert.match(readFileSync(new URL("../app/styles/base-flow/tokens.css", import.meta.url), "utf8"), /:root \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/home-intro.css", import.meta.url), "utf8"), /\.home-screen \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/play-frame.css", import.meta.url), "utf8"), /\.play-screen \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url), "utf8"), /\.advanced-reaction-grid \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/native-aim.css", import.meta.url), "utf8"), /\.advanced-aim-target \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/native-braking.css", import.meta.url), "utf8"), /\.braking-panel \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/results.css", import.meta.url), "utf8"), /\.result-screen \{/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8"), /\.advanced-screen/);
+  assert.match(readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8"), /\.luck-draw-panel \{/);
 });
 
 test("hidden mini game performance panel is URL-gated and ref-backed", () => {

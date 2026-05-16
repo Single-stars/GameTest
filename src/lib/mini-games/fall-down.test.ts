@@ -1,0 +1,297 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  advanceFallDownCamera,
+  expireFallDownFragilePlatform,
+  getMiniGame,
+  getMiniGameLevel,
+  getMiniGameLevels,
+  resolveFallDownCameraBounds,
+  type MiniGameId,
+} from "../mini-game-prototypes.ts";
+import {
+  readMiniGameRuntimeSource,
+  readAppCssSource,
+} from "./test-utils.ts";
+
+test("fall down levels encode downward platform variants and pressure rules", () => {
+  const fallLevels = getMiniGameLevels("fall-down" as MiniGameId);
+  const base = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-base");
+  const movingEasy = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-moving-easy");
+  const movingNormal = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-moving-normal");
+  const movingHard = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-moving-hard");
+  const fragileEasy = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-fragile-easy");
+  const fragileNormal = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-fragile-normal");
+  const fragileHard = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-fragile-hard");
+  const dangerEasy = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-danger-easy");
+  const dangerNormal = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-danger-normal");
+  const dangerHard = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-danger-hard");
+  const final = getMiniGameLevel("fall-down" as MiniGameId, "fall-down-final");
+
+  for (const level of fallLevels) {
+    assert.equal(level.params.prototype, "fall-down");
+    assert.ok(Number(level.params.layersRequired) >= 10);
+    assert.ok(Number(level.params.platformGapMin) > 0);
+    assert.ok(Number(level.params.platformGapMax) >= Number(level.params.platformGapMin));
+    assert.equal(level.params.playerSpeed, 288);
+    assert.ok(Number(level.params.topPressureSpeed) > 0);
+  }
+
+  assert.equal(base.params.layersRequired, 10);
+  assert.match(base.goalText, /10/);
+  assert.equal(base.params.movingPlatformCount, 0);
+  assert.equal(base.params.fragilePlatformCount, 0);
+  assert.equal(base.params.dangerPlatformCount, 0);
+  assert.equal(base.params.playerSpeed, 288);
+  assert.equal(base.params.topPressureSpeed, 42);
+  assert.equal(base.params.fallingHazardCount, 0);
+  assert.equal(movingEasy.params.layersRequired, 14);
+  assert.equal(movingEasy.params.topPressureSpeed, 44);
+  assert.equal(movingEasy.params.movingPlatformCount, 7);
+  assert.equal(movingEasy.params.movingRange, 52);
+  assert.equal(movingEasy.params.fallingHazardCount, 0);
+  assert.equal(movingEasy.params.ledgePlatformCount, 0);
+  assert.equal(movingNormal.params.layersRequired, 18);
+  assert.equal(movingNormal.params.topPressureSpeed, 54);
+  assert.equal(movingNormal.params.movingPlatformCount, 11);
+  assert.equal(movingNormal.params.movingRange, 68);
+  assert.equal(movingNormal.params.fallingHazardCount, 2);
+  assert.equal(movingHard.params.layersRequired, 22);
+  assert.equal(movingHard.params.movingPlatformCount, 16);
+  assert.ok(Number(movingHard.params.platformWidth) <= 72);
+  assert.equal(movingHard.params.topPressureSpeed, 66);
+  assert.equal(movingHard.params.movingRange, 88);
+  assert.equal(movingHard.params.fallingHazardCount, 2);
+  assert.ok(Number(movingHard.params.ledgePlatformCount) >= 5);
+  assert.equal(fragileEasy.params.layersRequired, 14);
+  assert.equal(fragileEasy.params.topPressureSpeed, 44);
+  assert.equal(fragileEasy.params.fragilePlatformCount, 7);
+  assert.equal(fragileEasy.params.fallingHazardCount, 0);
+  assert.equal(fragileNormal.params.layersRequired, 18);
+  assert.equal(fragileNormal.params.topPressureSpeed, 54);
+  assert.equal(fragileNormal.params.fragilePlatformCount, 11);
+  assert.equal(fragileNormal.params.fallingHazardCount, 2);
+  assert.equal(fragileHard.params.layersRequired, 22);
+  assert.equal(fragileHard.params.fragilePlatformCount, 16);
+  assert.ok(Number(fragileHard.params.fragileTime) <= 1.1);
+  assert.equal(fragileHard.params.topPressureSpeed, 68);
+  assert.equal(fragileHard.params.fallingHazardCount, 2);
+  assert.ok(Number(fragileHard.params.ledgePlatformCount) >= 5);
+  assert.equal(dangerEasy.params.layersRequired, 14);
+  assert.equal(dangerEasy.params.topPressureSpeed, 46);
+  assert.equal(dangerEasy.params.dangerPlatformCount, 5);
+  assert.equal(dangerEasy.params.fallingHazardCount, 0);
+  assert.equal(dangerNormal.params.layersRequired, 18);
+  assert.equal(dangerNormal.params.topPressureSpeed, 58);
+  assert.equal(dangerNormal.params.dangerPlatformCount, 8);
+  assert.equal(dangerNormal.params.fallingHazardCount, 2);
+  assert.equal(dangerHard.params.layersRequired, 22);
+  assert.equal(dangerHard.params.dangerPlatformCount, 11);
+  assert.equal(dangerHard.params.topPressureSpeed, 72);
+  assert.equal(dangerHard.params.fallingHazardCount, 2);
+  assert.ok(Number(dangerHard.params.ledgePlatformCount) >= 5);
+  assert.equal(final.params.finalMix, true);
+  assert.equal(final.params.layersRequired, 30);
+  assert.equal(final.params.topPressureSpeed, 74);
+  assert.equal(final.params.movingPlatformCount, 12);
+  assert.equal(final.params.fragilePlatformCount, 10);
+  assert.equal(final.params.dangerPlatformCount, 10);
+  assert.equal(final.params.movingRange, 86);
+  assert.equal(final.params.fallingHazardCount, 4);
+  assert.equal(final.params.ledgePlatformCount, 8);
+  const fallDownGame = getMiniGame("fall-down" as MiniGameId);
+  assert.doesNotMatch(`${fallDownGame.summary} ${fallDownGame.instruction} ${base.description}`, /按住/);
+});
+
+test("fall down base camera moves at constant speed and only top pressure fails by default", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.equal(advanceFallDownCamera({ cameraY: 200, delta: 0.5, speed: 80 }), 240);
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 187, cameraY: 220, stageHeight: 640, squareSize: 32 }), {
+    status: "failed",
+    reason: "too-slow",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 900, cameraY: 220, stageHeight: 640, squareSize: 32 }), {
+    status: "playing",
+    reason: "",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 900, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 660 }), {
+    status: "failed",
+    reason: "too-deep",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 891, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 672 }), {
+    status: "playing",
+    reason: "",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 900, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 672 }), {
+    status: "failed",
+    reason: "too-deep",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 480, cameraY: 220, stageHeight: 640, squareSize: 32 }), {
+    status: "playing",
+    reason: "",
+  });
+  assert.match(fallDownSource, /bottomFailLine: STAGE_HEIGHT \+ PLAYER_SIZE/);
+});
+
+test("fall down fragile platforms expire without directly failing the player", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const globalCss = readAppCssSource();
+
+  assert.deepEqual(expireFallDownFragilePlatform({ kind: "fragile", steppedAt: 1, now: 2.4, fragileTime: 1.2 }), {
+    broken: true,
+    directFailure: false,
+  });
+  assert.deepEqual(expireFallDownFragilePlatform({ kind: "normal", steppedAt: 1, now: 4, fragileTime: 1.2 }), {
+    broken: false,
+    directFailure: false,
+  });
+  assert.match(fallDownSource, /if \(screenY < -80 \|\| screenY > STAGE_HEIGHT \+ 80 \|\| platform\.broken\) return null;/);
+  assert.doesNotMatch(fallDownSource, /fragileRatio|fall-crack|--fragile-ratio|fragileRatio > 0\.72/);
+  assert.match(fallDownSource, /const fragileTime = numberParam\(level\.params, "fragileTime", 1\.2\);/);
+  assert.match(fallDownSource, /const fragileWarning = platform\.kind === "fragile" && platform\.steppedAt !== null && view\.time - platform\.steppedAt >= Math\.max\(0, fragileTime - 0\.45\);/);
+  assert.match(fallDownSource, /fragileWarning \? "fragile-warning" : ""/);
+  assert.doesNotMatch(globalCss, /\.fall-crack/);
+  assert.match(globalCss, /\.fall-platform\.kind-fragile \.fall-platform-top \{\s*background: #c7e1d1;\s*\}/);
+  assert.match(globalCss, /\.fall-platform\.fragile-warning \.fall-platform-top/);
+  assert.match(globalCss, /@keyframes fall-fragile-warning/);
+});
+
+test("fall down moves only while pressing a side and skips landing animation", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.doesNotMatch(fallDownSource, /prototype-start-button/);
+  assert.doesNotMatch(fallDownSource, /prototype-start-hint fall-start-hint/);
+  assert.doesNotMatch(fallDownSource, /按住左半屏|按住右半屏|按住左右半屏|按住屏幕/);
+  assert.doesNotMatch(fallDownSource, /current\.vx \+= current\.inputDirection \* 1120 \* delta/);
+  assert.doesNotMatch(fallDownSource, /if \(current\.inputDirection === 0\) current\.vx \*= 0\.84/);
+  assert.doesNotMatch(fallDownSource, /fall-down-player-shell \$\{view\.feedback \? "landed" : ""\}/);
+  assert.doesNotMatch(fallDownSource, /prototype-feedback/);
+  assert.doesNotMatch(fallDownSource, /current\.feedback = platform\.id === requiredLayers/);
+  assert.doesNotMatch(fallDownSource, /feedbackUntil/);
+  assert.match(fallDownSource, /const fallDownInputDirectionRef = useRef<FallDownRuntime\["inputDirection"\]>\(0\);/);
+  assert.match(fallDownSource, /const fallDownPointerIdRef = useRef<number \| null>\(null\);/);
+  assert.match(fallDownSource, /const resumeFallDownInput = useCallback/);
+  assert.match(fallDownSource, /current\.started = true;/);
+  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
+  assert.match(fallDownSource, /current\.inputDirection = direction;/);
+  assert.match(fallDownSource, /current\.vx = direction \* fallDownPlayerSpeed;/);
+  assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{\s*resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
+  assert.match(fallDownSource, /function chooseFallDownDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(fallDownSource, /fallDownInputDirectionRef\.current = direction;/);
+  assert.match(fallDownSource, /resumeFallDownInput\(current, direction\);/);
+  assert.match(fallDownSource, /if \(fallDownPointerIdRef\.current !== event\.pointerId\) return;/);
+  assert.match(fallDownSource, /fallDownPointerIdRef\.current = event\.pointerId;/);
+  assert.match(fallDownSource, /onPointerMove=\{updateFallDownDirection\}/);
+  assert.doesNotMatch(fallDownSource, /onPointerLeave=\{stopDirection\}/);
+  assert.match(fallDownSource, /onLostPointerCapture=\{stopDirection\}/);
+  assert.match(fallDownSource, /const stopDirection = useCallback/);
+  assert.match(fallDownSource, /fallDownInputDirectionRef\.current = 0;/);
+  assert.match(fallDownSource, /fallDownPointerIdRef\.current = null;/);
+  assert.match(fallDownSource, /current\.inputDirection = 0;/);
+  assert.match(fallDownSource, /current\.vx = 0;/);
+  assert.match(fallDownSource, /onPointerUp=\{stopDirection\}/);
+  assert.match(fallDownSource, /onPointerCancel=\{stopDirection\}/);
+  assert.match(fallDownSource, /current\.vy = 0;/);
+  assert.match(fallDownSource, /current\.respawnUntil = 0;/);
+  assert.match(fallDownSource, /const previousTime = current\.time;/);
+  assert.match(fallDownSource, /const platformById = new Map\(current\.platforms\.map/);
+  assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
+  assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time\) - previousPlatformX/);
+  assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
+});
+
+test("fall down base recovery keeps the animation loop alive after a recoverable failure", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
+  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason\)\) \{[\s\S]*?return true;/);
+  assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
+  assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
+});
+
+test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(fallDownSource, /failures: number;/);
+  assert.match(fallDownSource, /respawnUntil: number;/);
+  assert.match(fallDownSource, /function recoverFallDownBaseFailure\(current: FallDownRuntime, reason: string\)/);
+  assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
+  assert.match(fallDownSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
+  assert.match(fallDownSource, /const platformY = current\.cameraY \+ STAGE_HEIGHT \* 0\.5;/);
+  assert.match(fallDownSource, /id: -2000 - failures,/);
+  assert.match(fallDownSource, /kind: "normal",/);
+  assert.match(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
+  assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
+  assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
+  assert.match(fallDownSource, /current\.started = false;/);
+  assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason\)/);
+  assert.match(fallDownSource, /failures: latest\.failures,/);
+  assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
+});
+
+test("fall down platform layout varies by run seed", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(componentSource, /createSeededRandom/);
+  assert.match(componentSource, /<FallDownPrototype[\s\S]*runSeed=\{runSeed\}/);
+  assert.match(componentSource, /function FallDownPrototype\(\{[\s\S]*runSeed,/);
+  assert.match(componentSource, /runSeed:\s*string;/);
+  assert.match(fallDownSource, /createSeededRandom\(`\$\{level\.levelId\}:\$\{runSeed\}:fall-down-platforms`\)/);
+  assert.match(componentSource, /function makeFallDownNoisePoints\(rand: \(\) => number, count: number\)/);
+  assert.match(componentSource, /function fallDownSmoothNoise\(points: number\[\], position: number\)/);
+  assert.match(fallDownSource, /function makeFallDownPlatforms\(level: MiniGameLevelConfig, runSeed: string\): FallDownPlatform\[\]/);
+  assert.match(fallDownSource, /const kindBag = fallDownPlatformKindBag\(level, layersRequired, rand\);/);
+  assert.match(fallDownSource, /kindBag\.splice\(Math\.floor\(rand\(\) \* kindBag\.length\), 1\)\[0\]/);
+  assert.match(fallDownSource, /const gapNoise = fallDownSmoothNoise\(gapNoisePoints, index \* 0\.61\);/);
+  assert.match(fallDownSource, /const xNoise = fallDownSmoothNoise\(xNoisePoints, index \* 0\.47\);/);
+  assert.match(fallDownSource, /const widthNoise = fallDownSmoothNoise\(widthNoisePoints, index \* 0\.53\);/);
+  assert.match(fallDownSource, /const lanePattern = \[0\.16, 0\.84, 0\.5\];/);
+  assert.match(fallDownSource, /const lane = \(index \+ laneOffset\) % lanePattern\.length;/);
+  assert.match(fallDownSource, /const spreadTargetRatio = clamp\(lanePattern\[lane\] \+ \(xNoise - 0\.5\) \* 0\.3, 0\.1, 0\.9\);/);
+  assert.match(fallDownSource, /phase: rand\(\) \* Math\.PI \* 2/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string\)/);
+  assert.match(fallDownSource, /makeFallDownPlatforms\(level, runSeed\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed\)/);
+});
+
+test("fall down adds falling hazards and L platforms without triple danger layers", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(componentSource, /type FallDownPlatformShape = "flat" \| "l-left" \| "l-right"/);
+  assert.match(componentSource, /type FallDownFallingHazard = \{/);
+  assert.match(componentSource, /fallingHazards: FallDownFallingHazard\[\]/);
+  assert.match(componentSource, /function constrainFallDownDangerRuns\(kinds: FallDownPlatformKind\[\], rand: \(\) => number\)/);
+  assert.match(componentSource, /dangerRun >= 3/);
+  assert.match(fallDownSource, /function makeFallDownFallingHazards\(level: MiniGameLevelConfig, runSeed: string\): FallDownFallingHazard\[\]/);
+  assert.match(fallDownSource, /function fallDownFallingHazardScreenY\(hazard: FallDownFallingHazard, time: number\)/);
+  assert.match(fallDownSource, /function fallDownFallingHazardX\(hazard: FallDownFallingHazard, time: number\)/);
+  assert.match(fallDownSource, /fallingHazards: makeFallDownFallingHazards\(level, runSeed\)/);
+  assert.match(fallDownSource, /for \(const hazard of current\.fallingHazards\)/);
+  assert.match(fallDownSource, /fall-down-falling-hazard/);
+  assert.match(fallDownSource, /fall-platform-leg/);
+  assert.match(fallDownSource, /ledgePlatformCount/);
+  assert.doesNotMatch(fallDownSource, /leftGuard|rightGuard/);
+  assert.match(fallDownSource, /left: platformX - platform\.width \/ 2,/);
+  assert.match(fallDownSource, /right: platformX \+ platform\.width \/ 2,/);
+  assert.match(fallDownSource, /resolveFallDownLedgeCollision\(platform, platformX, current\.playerX, previousPlayerX, current\.playerY\)/);
+  assert.match(fallDownSource, /const isStandingOnPlatform = Math\.abs\(playerY \+ PLAYER_SIZE \/ 2 - platform\.y\) <= 0\.75;/);
+  assert.match(fallDownSource, /if \(!isStandingOnPlatform\) return playerX;/);
+  assert.match(fallDownSource, /platformX - platform\.width \/ 2 - \(FALL_DOWN_LEDGE_WIDTH - 2\)/);
+  assert.match(fallDownSource, /platformX \+ platform\.width \/ 2 - 2/);
+  assert.match(fallDownSource, /rand\(\) < 0\.5 \? "l-left" : "l-right"/);
+  assert.match(fallDownSource, /platform\.shape !== "flat" && platform\.id === view\.currentPlatformId/);
+  assert.match(fallDownSource, /left: platform\.shape === "l-left" \? `-\$\{FALL_DOWN_LEDGE_WIDTH - 2\}px` : undefined/);
+  assert.match(fallDownSource, /right: platform\.shape === "l-right" \? `-\$\{FALL_DOWN_LEDGE_WIDTH - 2\}px` : undefined/);
+  assert.match(fallDownSource, /top: `-\$\{FALL_DOWN_LEDGE_HEIGHT - 2\}px`/);
+  assert.doesNotMatch(fallDownSource, /top: "2px"/);
+});

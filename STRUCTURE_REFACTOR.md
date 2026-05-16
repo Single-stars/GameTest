@@ -279,6 +279,64 @@ Verification for this pass:
   - `npm.cmd run build`: passed; generated only `/` and `/_not-found`.
   - `git diff --check`: passed.
 
+### Per-Game Test, Advanced Config, And CSS Chunk Split
+
+Completed in the current uncommitted Round 19-22 pass:
+
+- Split the large mini-game behavior test file into per-game test modules:
+  - `src/lib/mini-games/catalog.test.ts`
+  - `src/lib/mini-games/square-jump.test.ts`
+  - `src/lib/mini-games/fall-down.test.ts`
+  - `src/lib/mini-games/doodle.test.ts`
+  - `src/lib/mini-games/flappy.test.ts`
+  - `src/lib/mini-games/knife.test.ts`
+  - `src/lib/mini-games/test-utils.ts`
+- Kept `src/lib/mini-game-prototypes.test.ts` as a tiny marker file so future readers know the tests moved.
+- Split `src/lib/advanced-challenges.ts` into focused modules behind the same public facade:
+  - `src/lib/advanced-challenges/types.ts`
+  - `src/lib/advanced-challenges/shared.ts`
+  - `src/lib/advanced-challenges/reaction-config.ts`
+  - `src/lib/advanced-challenges/aim-config.ts`
+  - `src/lib/advanced-challenges/braking-config.ts`
+  - `src/lib/advanced-challenges/mini-game-config.ts`
+  - `src/lib/advanced-challenges/braking.ts`
+  - `src/lib/advanced-challenges/stage-configs.ts`
+  - `src/lib/advanced-challenges/debug.ts`
+  - `src/lib/advanced-challenges/completion.ts`
+- Preserved the old `src/lib/advanced-challenges.ts` import path as the only public facade for app/runtime callers.
+- Split `src/app/styles/mini-games.css` into ordered CSS chunks:
+  - `src/app/styles/mini-games/common.css`
+  - `src/app/styles/mini-games/doodle.css`
+  - `src/app/styles/mini-games/flappy.css`
+  - `src/app/styles/mini-games/knife.css`
+  - `src/app/styles/mini-games/square-jump.css`
+  - `src/app/styles/mini-games/fall-down.css`
+- Split `src/app/styles/base-flow.css` into ordered CSS chunks:
+  - `src/app/styles/base-flow/tokens.css`
+  - `src/app/styles/base-flow/shell.css`
+  - `src/app/styles/base-flow/home-intro.css`
+  - `src/app/styles/base-flow/shared-controls.css`
+  - `src/app/styles/base-flow/play-frame.css`
+  - `src/app/styles/base-flow/native-reaction.css`
+  - `src/app/styles/base-flow/native-aim.css`
+  - `src/app/styles/base-flow/native-braking.css`
+  - `src/app/styles/base-flow/results.css`
+  - `src/app/styles/base-flow/advanced.css`
+  - `src/app/styles/base-flow/luck.css`
+- Kept the original CSS facade files as ordered import lists.
+- Did not split Square Jump or Fall Down runtime state machines.
+- Did not rename CSS selectors, change class names, alter gameplay params, alter scoring, or change storage contracts.
+
+Verification for this pass:
+
+- Targeted structural/gameplay verification passed:
+  - `node --test --experimental-strip-types src\lib\mini-game-architecture.test.ts src\lib\mini-games\catalog.test.ts src\lib\mini-games\square-jump.test.ts src\lib\mini-games\fall-down.test.ts src\lib\mini-games\doodle.test.ts src\lib\mini-games\flappy.test.ts src\lib\mini-games\knife.test.ts src\lib\advanced-challenges.test.ts`
+- Full final verification should still be run before reporting or committing:
+  - `npm.cmd test`
+  - `npm.cmd run lint`
+  - `npm.cmd run build`
+  - `git diff --check`
+
 ## Current Architecture Inventory
 
 ### `src/app/page.tsx`
@@ -399,6 +457,20 @@ Current issue:
 - Keep import order stable.
 - Active selectors should not be renamed during structure work.
 
+### `src/app/styles/base-flow.css` And `src/app/styles/mini-games.css`
+
+Approximate role:
+
+- Ordered CSS facade files.
+- `base-flow.css` imports the app-flow, native-round, result, advanced, and luck chunks.
+- `mini-games.css` imports common mini-game runtime CSS plus per-game CSS chunks.
+
+Current issue:
+
+- Future UI unification should happen inside the relevant chunk first.
+- Do not remove `prototype-*` selectors unless every active embedded mini-game usage is proven gone.
+- Shared selectors may intentionally live in `common.css` or in the earliest chunk that needs them; avoid renaming selectors during structure-only work.
+
 ### `src/features/rounds/registry.ts`
 
 Approximate role:
@@ -419,6 +491,7 @@ Current issue:
 Important test files:
 
 - `src/lib/mini-game-prototypes.test.ts`
+- `src/lib/mini-games/*.test.ts`
 - `src/lib/mini-game-architecture.test.ts`
 - `src/lib/round-registry.test.ts`
 - `src/lib/advanced-challenges.test.ts`
@@ -429,7 +502,8 @@ Current issue:
 
 - `src/lib/mini-game-architecture.test.ts` owns most source-slice architecture guardrails.
 - `src/lib/round-registry.test.ts` owns formal registry and `RoundPlayer` mapping guardrails.
-- `src/lib/mini-game-prototypes.test.ts` should stay focused on mini-game config/runtime expectations.
+- `src/lib/mini-games/*.test.ts` owns per-game config/runtime expectations.
+- `src/lib/mini-game-prototypes.test.ts` is now only a marker for the moved tests.
 - Source-slice tests are useful as guardrails during refactor, but every extraction must update them carefully so they protect architecture rather than block harmless movement.
 
 ## Formal Boundaries To Preserve
@@ -702,6 +776,56 @@ Risk:
 
 - Source-slice tests must remain strong enough to prevent old routes, old fallbacks, and old dispatch paths from returning.
 
+### Round 19: Per-Game Mini-Game Tests
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Split `src/lib/mini-game-prototypes.test.ts` into per-game test files so future per-game tuning can happen with targeted tests.
+- Keep every existing assertion, only move test ownership.
+
+Risk:
+
+- Do not weaken obsolete route, formal replacement, or gameplay tuning assertions while moving them.
+
+### Round 20: Advanced Challenge Module Split
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Split config generation, braking helpers, debug helpers, stage config lookup, and completion evaluation out of `src/lib/advanced-challenges.ts`.
+- Preserve `src/lib/advanced-challenges.ts` as the public facade.
+
+Risk:
+
+- Do not change `ADVANCED_STAGE_CONFIGS`, completion reasons, pass/fail thresholds, or helper return shapes.
+
+### Round 21: Per-Game Mini-Game CSS Split
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Split `src/app/styles/mini-games.css` into common and per-game chunks while keeping the facade import path.
+
+Risk:
+
+- Do not rename selectors or change declarations; these selectors are active gameplay UI dependencies.
+
+### Round 22: Base Flow CSS Split
+
+Status: complete in current uncommitted pass.
+
+Target:
+
+- Split `src/app/styles/base-flow.css` into tokens, shell, play-frame, native-round, result, advanced, and luck chunks.
+
+Risk:
+
+- UI cascade order matters. Keep the facade import order stable and avoid component-level CSS churn unless a later UI-unification task explicitly requires it.
+
 ## Per-Round Checklist
 
 For every structure refactor round:
@@ -747,6 +871,10 @@ For every structure refactor round:
 | 16 | Complete | Home, intro, play frame, and share-image screen shells extracted from `page.tsx`. |
 | 17 | Complete | Advanced gameplay rendering flows through `RoundPlayer`; advanced UI remains a shell. |
 | 18 | Complete | Registry and round-player tests split into `src/lib/round-registry.test.ts`. |
+| 19 | Complete | Mini-game behavior tests split into per-game files under `src/lib/mini-games/`. |
+| 20 | Complete | Advanced challenge config/completion logic split under `src/lib/advanced-challenges/`; public facade preserved. |
+| 21 | Complete | Mini-game CSS split into common and per-game chunks; facade preserved. |
+| 22 | Complete | Base-flow CSS split into focused chunks; facade preserved. |
 
 ## Moved In Round 1
 

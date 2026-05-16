@@ -1,0 +1,107 @@
+.fall-down-stage {
+  background:
+    linear-gradient(180deg, rgba(230, 83, 73, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(47, 155, 104, 0.06), rgba(255, 253, 248, 0.94)),
+    var(--surface);
+  cursor: pointer;
+}
+
+.fall-down-stage.failed {
+  animation: prototype-stage-shake 240ms ease;
+}
+
+.fall-danger-line {
+  z-index: 8;
+  width: 100%;
+  height: 3px;
+  background: var(--red);
+  box-shadow: 0 0 0 8px rgba(230, 83, 73, 0.12);
+}
+
+.fall-platform {
+  z-index: 5;
+  height: 16px;
+  overflow: visible;
+}
+
+.fall-platform-track {
+  position: absolute;
+  z-index: 0;
+  left: -32px;
+  right: -32px;
+  top: 50%;
+  border-top: 1px dashed rgba(47, 128, 237, 0.32);
+}
+
+.fall-platform-top {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 1px solid rgba(24, 24, 24, 0.14);
+  border-radius: 8px;
+  background: var(--green);
+  box-shadow: 0 8px 18px rgba(47, 155, 104, 0.16);
+}
+
+.fall-platform.kind-moving .fall-platform-top {
+  background: var(--blue);
+}
+
+.fall-platform.kind-fragile .fall-platform-top {
+  background: #c7e1d1;
+}
+
+.fall-platform.fragile-warning .fall-platform-top {
+  animation: fall-fragile-warning 90ms linear infinite;
+}
+
+.fall-platform.kind-danger .fall-platform-top {
+  background: var(--red);
+  box-shadow: 0 0 0 6px rgba(230, 83, 73, 0.13);
+}
+
+.fall-platform.kind-finish .fall-platform-top {
+  background: var(--gold);
+  box-shadow: 0 0 0 8px rgba(211, 155, 42, 0.16);
+}
+
+.fall-platform.current .fall-platform-top {
+  box-shadow: 0 0 0 7px rgba(27, 154, 170, 0.14), 0 8px 18px rgba(47, 155, 104, 0.16);
+}
+
+.fall-platform.danger {
+  animation: prototype-stage-shake 180ms ease-in-out infinite;
+}
+
+@keyframes fall-fragile-warning {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  25% {
+    transform: translate3d(-2px, 0, 0);
+  }
+
+  75% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+.fall-finish-flag {
+  position: absolute;
+  z-index: 4;
+  right: 8px;
+  bottom: 13px;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.fall-down-player-shell {
+  z-index: 12;
+}
+
+.fall-down-player {
+  background: var(--cyan);
+  box-shadow: 0 10px 24px rgba(27, 154, 170, 0.2);
+}

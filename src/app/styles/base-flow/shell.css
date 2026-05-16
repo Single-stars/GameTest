@@ -1,0 +1,17 @@
+.app-shell {
+  width: min(100%, 920px);
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.home-screen,
+.intro-screen,
+.play-screen,
+.result-screen,
+.share-image-screen {
+  min-height: calc(100svh - 36px);
+  display: flex;
+  flex-direction: column;
+}
