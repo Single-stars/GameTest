@@ -59,6 +59,53 @@ test("advanced lobby swipe has no default step cap but can still be capped expli
   assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 9, deltaX: 1200, maxStepCount: 2 }), 7);
 });
 
+test("advanced lobby swipe uses release velocity to settle like an inertial carousel", () => {
+  assert.equal(
+    resolveAdvancedLobbySwipeLevel({
+      currentLevel: 9,
+      selectedLevel: 2,
+      deltaX: -36,
+      velocityProjectionMs: 220,
+      velocityX: -2.4,
+      thresholdPx: 156,
+    }),
+    6,
+  );
+  assert.equal(
+    resolveAdvancedLobbySwipeLevel({
+      currentLevel: 9,
+      selectedLevel: 8,
+      deltaX: 34,
+      velocityProjectionMs: 220,
+      velocityX: 2.4,
+      thresholdPx: 156,
+    }),
+    4,
+  );
+  assert.equal(
+    resolveAdvancedLobbySwipeLevel({
+      currentLevel: 3,
+      selectedLevel: 4,
+      deltaX: -28,
+      velocityProjectionMs: 260,
+      velocityX: -4.2,
+      thresholdPx: 156,
+    }),
+    4,
+  );
+  assert.equal(
+    resolveAdvancedLobbySwipeLevel({
+      currentLevel: 9,
+      selectedLevel: 5,
+      deltaX: 18,
+      velocityProjectionMs: 220,
+      velocityX: 0.08,
+      thresholdPx: 156,
+    }),
+    5,
+  );
+});
+
 test("advanced lobby drag offset keeps only a small elastic overscroll at selectable boundaries", () => {
   assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: 140, stepPx: 100 }), 140);
   assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: -210, stepPx: 100 }), -210);
@@ -158,12 +205,16 @@ test("advanced lobby drag release is recovered when the pointer leaves the carou
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
 
   assert.match(screenSource, /activeLobbyPointerIdRef/);
+  assert.match(screenSource, /dragVelocityXRef/);
+  assert.match(screenSource, /updateLobbyPointerDrag/);
   assert.match(screenSource, /finishLobbyPointerGesture/);
   assert.match(screenSource, /cancelLobbyPointerGesture/);
+  assert.match(screenSource, /window\.addEventListener\("pointermove"/);
   assert.match(screenSource, /window\.addEventListener\("pointerup"/);
   assert.match(screenSource, /window\.addEventListener\("pointercancel"/);
   assert.match(screenSource, /window\.addEventListener\("blur"/);
-  assert.match(screenSource, /onLostPointerCapture=\{handleLobbyPointerCancel\}/);
+  assert.match(screenSource, /velocityX:\s*dragVelocityXRef\.current/);
+  assert.doesNotMatch(screenSource, /onLostPointerCapture=/);
   assert.match(screenSource, /try\s*{\s*event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
 });
 

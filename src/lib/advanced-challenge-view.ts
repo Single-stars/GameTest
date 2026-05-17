@@ -7,6 +7,7 @@ const ADVANCED_LEVEL_MAX = 10;
 const DEFAULT_SWIPE_THRESHOLD_PX = 48;
 const DEFAULT_DRAG_OVERSCROLL_PX = 24;
 const DEFAULT_DRAG_OVERSCROLL_RESISTANCE = 0.12;
+const DEFAULT_VELOCITY_PROJECTION_MS = 220;
 
 export type AdvancedLobbyLevelPosition = "previous" | "selected" | "next" | "distant";
 export type AdvancedGoalIcon = "target" | "ban" | "bolt" | "flag";
@@ -205,21 +206,26 @@ export function resolveAdvancedLobbySwipeLevel({
   deltaX,
   maxStepCount,
   thresholdPx = DEFAULT_SWIPE_THRESHOLD_PX,
+  velocityProjectionMs = DEFAULT_VELOCITY_PROJECTION_MS,
+  velocityX = 0,
 }: {
   currentLevel: number;
   selectedLevel: number;
   deltaX: number;
   maxStepCount?: number;
   thresholdPx?: number;
+  velocityProjectionMs?: number;
+  velocityX?: number;
 }) {
   const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
   const threshold = Math.max(1, thresholdPx);
-  if (Math.abs(deltaX) < threshold) return selected;
+  const projectedDeltaX = deltaX + velocityX * Math.max(0, velocityProjectionMs);
+  if (Math.abs(projectedDeltaX) < threshold) return selected;
 
-  const rawSteps = Math.max(1, Math.round(Math.abs(deltaX) / threshold));
+  const rawSteps = Math.max(1, Math.round(Math.abs(projectedDeltaX) / threshold));
   const steps =
     maxStepCount === undefined ? rawSteps : Math.min(clampInteger(maxStepCount, 1, ADVANCED_LEVEL_MAX), rawSteps);
-  const requestedLevel = selected + (deltaX < 0 ? steps : -steps);
+  const requestedLevel = selected + (projectedDeltaX < 0 ? steps : -steps);
   return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, maxSelectableLevel(currentLevel));
 }
 
