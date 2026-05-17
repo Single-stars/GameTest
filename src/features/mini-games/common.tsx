@@ -31,6 +31,8 @@ export const DEBUG_MINI_GAME_FPS = false;
 export const BASE_FAILURE_LIMIT = 3;
 export const MINI_GAME_UI_SYNC_MS = 120;
 export const MINI_GAME_TIMER_SYNC_MS = 100;
+export const MINI_GAME_COMPLETION_DELAY_MS = 700;
+export const MINI_GAME_SCREEN_SHAKE_MS = 180;
 const MINI_GAME_PERF_PANEL_SYNC_MS = 500;
 const MINI_GAME_PERF_SAMPLE_LIMIT = 240;
 const MINI_GAME_FRAME_BUDGET_MS = 1000 / 60;
@@ -179,6 +181,36 @@ export function useMiniGameFpsCounter(enabled: boolean) {
   );
 
   return { fps, recordFrame };
+}
+
+export function useMiniGameScreenShake() {
+  const [screenShakeActive, setScreenShakeActive] = useState(false);
+  const frameRef = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+
+  const triggerScreenShake = useCallback(() => {
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    setScreenShakeActive(false);
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null;
+      setScreenShakeActive(true);
+      timeoutRef.current = window.setTimeout(() => {
+        timeoutRef.current = null;
+        setScreenShakeActive(false);
+      }, MINI_GAME_SCREEN_SHAKE_MS);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const screenShakeClassName = screenShakeActive ? "screen-shake" : "";
+  return { screenShakeClassName, triggerScreenShake };
 }
 
 export function MiniGameFpsBadge({ fps }: { fps: number }) {

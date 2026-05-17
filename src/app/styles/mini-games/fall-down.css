@@ -6,10 +6,6 @@
   cursor: pointer;
 }
 
-.fall-down-stage.failed {
-  animation: prototype-stage-shake 240ms ease;
-}
-
 .fall-danger-line {
   z-index: 8;
   width: 100%;
@@ -71,7 +67,7 @@
 }
 
 .fall-platform.danger {
-  animation: prototype-stage-shake 180ms ease-in-out infinite;
+  animation: fall-danger-platform-shake 180ms ease-in-out infinite;
 }
 
 @keyframes fall-fragile-warning {
@@ -89,13 +85,36 @@
   }
 }
 
+@keyframes fall-danger-platform-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-2px);
+  }
+
+  75% {
+    transform: translateX(2px);
+  }
+}
+
 .fall-finish-flag {
+  content: "⚑";
   position: absolute;
   z-index: 4;
   right: 8px;
   bottom: 13px;
-  color: var(--ink);
-  font-size: 18px;
+  color: #8a5a00;
+  font-size: 21px;
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 4px 10px rgba(211, 155, 42, 0.26);
+}
+
+.fall-finish-flag::before {
+  content: "⚑";
 }
 
 .fall-down-player-shell {

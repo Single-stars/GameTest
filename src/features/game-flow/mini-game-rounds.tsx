@@ -2,12 +2,13 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { MiniGameEmbeddedStage } from "@/features/mini-games/embedded-stage";
-import { type MiniGameCompletion } from "@/features/mini-games/common";
+import { MINI_GAME_COMPLETION_DELAY_MS, type MiniGameCompletion } from "@/features/mini-games/common";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import {
   createMiniGameRunSeed,
@@ -118,19 +119,30 @@ export function MiniGameBaseRound({
   const levelId = `${gameId}-base`;
   const [runId] = useState(() => Date.now());
   const shownAtRef = useRef(now());
+  const completionTimerRef = useRef<number | null>(null);
   const runSeed = useMemo(() => createMiniGameRunSeed(levelId, runId), [levelId, runId]);
+  useEffect(() => {
+    return () => {
+      if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+    };
+  }, []);
   const handleComplete = useCallback(
     (outcome: MiniGameCompletion) => {
       const score = miniGameBaseScore(outcome);
-      onComplete([
-        trial(round, 0, {
-          shownAt: shownAtRef.current,
-          responseAt: shownAtRef.current + outcome.elapsedMs,
-          correct: outcome.status === "passed" && score >= 60,
-          errorType: miniGameFailureError(outcome),
-          value: miniGameValue(`mini-${gameId}-base`, outcome, score),
-        }),
-      ]);
+      if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+      const timer = window.setTimeout(() => {
+        completionTimerRef.current = null;
+        onComplete([
+          trial(round, 0, {
+            shownAt: shownAtRef.current,
+            responseAt: shownAtRef.current + outcome.elapsedMs,
+            correct: outcome.status === "passed" && score >= 60,
+            errorType: miniGameFailureError(outcome),
+            value: miniGameValue(`mini-${gameId}-base`, outcome, score),
+          }),
+        ]);
+      }, MINI_GAME_COMPLETION_DELAY_MS);
+      completionTimerRef.current = timer;
     },
     [gameId, onComplete, round],
   );
@@ -150,19 +162,30 @@ export function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advanced
   const config = advancedConfig;
   const [runId] = useState(() => Date.now());
   const shownAtRef = useRef(now());
+  const completionTimerRef = useRef<number | null>(null);
   const runSeed = useMemo(() => createMiniGameRunSeed(config.params.miniLevelId, runId), [config.params.miniLevelId, runId]);
+  useEffect(() => {
+    return () => {
+      if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+    };
+  }, []);
   const handleComplete = useCallback(
     (outcome: MiniGameCompletion) => {
       const passed = outcome.status === "passed";
-      onComplete([
-        trial(config.dimension, 0, {
-          shownAt: shownAtRef.current,
-          responseAt: shownAtRef.current + outcome.elapsedMs,
-          correct: passed,
-          errorType: passed ? undefined : miniGameFailureError(outcome),
-          value: miniGameValue("mini-game", outcome, passed ? 100 : 0),
-        }),
-      ]);
+      if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+      const timer = window.setTimeout(() => {
+        completionTimerRef.current = null;
+        onComplete([
+          trial(config.dimension, 0, {
+            shownAt: shownAtRef.current,
+            responseAt: shownAtRef.current + outcome.elapsedMs,
+            correct: passed,
+            errorType: passed ? undefined : miniGameFailureError(outcome),
+            value: miniGameValue("mini-game", outcome, passed ? 100 : 0),
+          }),
+        ]);
+      }, MINI_GAME_COMPLETION_DELAY_MS);
+      completionTimerRef.current = timer;
     },
     [config.dimension, onComplete],
   );

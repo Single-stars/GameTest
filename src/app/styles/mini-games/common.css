@@ -43,6 +43,11 @@
   outline-offset: 4px;
 }
 
+.prototype-stage.screen-shake,
+.prototype-stage.failed {
+  animation: mini-game-screen-shake 180ms ease-out both;
+}
+
 .prototype-end-overlay {
   position: absolute;
   z-index: 30;
@@ -171,5 +176,20 @@
   100% {
     opacity: 0;
     transform: scale(1.04);
+  }
+}
+
+@keyframes mini-game-screen-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-2px);
+  }
+
+  75% {
+    transform: translateX(2px);
   }
 }

@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 
+import { PlayerAvatar, type PlayerAvatarMood, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
 import {
   DEBUG_MINI_GAME_FPS,
   MINI_GAME_TIMER_SYNC_MS,
@@ -44,6 +45,8 @@ const KNIFE_BASE_WHEEL_TOP = 82;
 const KNIFE_BASE_LAUNCHER_BOTTOM = 92;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
+const KNIFE_FEEDBACK_MS = 420;
+type KnifeFeedbackTone = "idle" | "good" | "bad";
 type KnifeForbiddenZone = {
   id: number;
   localStart: number;
@@ -129,6 +132,18 @@ function makeKnifeView(frame: KnifeFrame, launcherVisible: boolean): KnifeViewFr
   };
 }
 
+function resolveKnifeWheelAvatarState(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarState {
+  if (feedbackTone === "bad" || view.status === "failed") return "fail";
+  if (view.status === "passed") return "success";
+  return "idle";
+}
+
+function resolveKnifeWheelAvatarMood(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarMood {
+  if (view.status === "passed") return "happy";
+  if (feedbackTone === "bad" || view.status === "failed") return "scared";
+  return "scared";
+}
+
 export function KnifeHitPrototype({
   level,
   mode,
@@ -161,6 +176,7 @@ export function KnifeHitPrototype({
   const initialAngles = useMemo(() => generateKnifeInitialAngles(level, runSeed, forbiddenArcs), [forbiddenArcs, level, runSeed]);
   const timeoutRef = useRef<number | null>(null);
   const launcherReadyTimeoutRef = useRef<number | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
   const initialRuntime = useMemo(() => createKnifeRuntime(initialAngles, hasCountdown, countdown), [countdown, hasCountdown, initialAngles]);
   const runtimeRef = useRef<KnifeFrame>(initialRuntime);
@@ -169,10 +185,26 @@ export function KnifeHitPrototype({
   const completedRef = useRef(false);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
   const [view, setView] = useState<KnifeViewFrame>(() => makeKnifeView(initialRuntime, true));
 
   const syncKnifeView = useCallback(() => {
     setView(makeKnifeView(runtimeRef.current, launcherVisibleRef.current));
+  }, []);
+
+  const showKnifeFeedback = useCallback((tone: Exclude<KnifeFeedbackTone, "idle">) => {
+    if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
+    setFeedbackTone(tone);
+    feedbackTimeoutRef.current = window.setTimeout(() => {
+      feedbackTimeoutRef.current = null;
+      setFeedbackTone("idle");
+    }, KNIFE_FEEDBACK_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
+    };
   }, []);
 
   const scheduleLauncherReady = useCallback(() => {
@@ -201,6 +233,7 @@ export function KnifeHitPrototype({
     });
 
     if (outcome.kind === "collision") {
+      showKnifeFeedback("bad");
       if (mode === "base") {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
@@ -218,6 +251,7 @@ export function KnifeHitPrototype({
         syncKnifeView();
         return;
       }
+      current.failedAngles.push(outcome.impactAngle);
       current.failedAngle = outcome.impactAngle;
       current.flying = false;
       current.status = "failed";
@@ -227,6 +261,7 @@ export function KnifeHitPrototype({
       return;
     }
     if (outcome.kind === "forbidden") {
+      showKnifeFeedback("bad");
       if (mode === "base") {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
@@ -244,6 +279,7 @@ export function KnifeHitPrototype({
         syncKnifeView();
         return;
       }
+      current.failedAngles.push(outcome.impactAngle);
       current.failedAngle = outcome.impactAngle;
       current.flying = false;
       current.status = "failed";
@@ -261,15 +297,17 @@ export function KnifeHitPrototype({
       current.status = current.failures > 0 && mode === "base" ? "failed" : "passed";
       current.reason = `全部 ${shotCount} 发命中`;
       launcherVisibleRef.current = false;
+      showKnifeFeedback(current.status === "passed" ? "good" : "bad");
       syncKnifeView();
       return;
     }
 
+    showKnifeFeedback("good");
     current.launcherReadyAt = current.time + 0.06;
     current.timer = hasCountdown ? countdown : null;
     scheduleLauncherReady();
     syncKnifeView();
-  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, scheduleLauncherReady, shotCount, syncKnifeView]);
+  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, scheduleLauncherReady, shotCount, showKnifeFeedback, syncKnifeView]);
 
   const launch = useCallback(() => {
     const current = runtimeRef.current;
@@ -310,6 +348,7 @@ export function KnifeHitPrototype({
       if (current.timer !== null && !current.flying) {
         current.timer -= delta;
         if (current.timer <= 0) {
+          showKnifeFeedback("bad");
           if (mode === "base") {
             const nextShotIndex = current.shotIndex + 1;
             current.failures += 1;
@@ -345,7 +384,7 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, sineRotationEnabled, sweepPerPhase, syncKnifeView]);
+  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeView]);
 
   const remaining = shotCount - view.shotIndex;
   const wheelRotation = `rotate(${view.rotation}deg)`;
@@ -386,7 +425,7 @@ export function KnifeHitPrototype({
         {sineRotationEnabled ? <span>正弦转速</span> : null}
       </div>
       <div
-        className={`prototype-stage knife-stage ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage knife-stage feedback-${feedbackTone} ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="button"
         style={stageStyle}
@@ -412,6 +451,14 @@ export function KnifeHitPrototype({
                 <path d={knifeSectorPath(zone)} key={zone.id} />
               ))}
             </svg>
+            <div className="knife-wheel-avatar" aria-hidden="true">
+              <PlayerAvatar
+                mood={resolveKnifeWheelAvatarMood(view, feedbackTone)}
+                size={42}
+                state={resolveKnifeWheelAvatarState(view, feedbackTone)}
+                visualScale={0.88}
+              />
+            </div>
             {view.initialAngles.map((angle) => (
               <span className="knife-arrow knife-stuck initial" key={`initial-${angle}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
@@ -421,9 +468,6 @@ export function KnifeHitPrototype({
             {view.failedAngles.map((angle, index) => (
               <span className="knife-arrow knife-stuck failed" key={`failed-${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
             ))}
-            {view.failedAngle !== null ? (
-              mode === "prototype" ? <span className="knife-arrow knife-stuck failed" style={{ transform: `rotate(${view.failedAngle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} /> : null
-            ) : null}
           </div>
         </div>
         {showLauncher ? <div className={`knife-arrow knife-launcher ${view.flying ? "flying" : ""}`} /> : null}

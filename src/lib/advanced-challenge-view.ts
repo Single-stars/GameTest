@@ -1,5 +1,6 @@
 import type { AdvancedStageConfig } from "./advanced-challenges.ts";
 import { getAdvancedLevelState, type AdvancedLevelState } from "./advanced-progress.ts";
+import { getMiniGameLevel, type MiniGameId } from "./mini-games/index.ts";
 
 const ADVANCED_LEVEL_MIN = 1;
 const ADVANCED_LEVEL_MAX = 10;
@@ -126,6 +127,43 @@ function getPatienceGoals(config: AdvancedStageConfig): AdvancedChallengeGoalIte
   ];
 }
 
+function isMiniGameId(value: unknown): value is MiniGameId {
+  return value === "doodle" || value === "flappy" || value === "knife" || value === "square-jump" || value === "fall-down";
+}
+
+function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
+  const miniGameId = config.params.miniGameId;
+  const miniLevelId = config.params.miniLevelId;
+  if (!isMiniGameId(miniGameId) || typeof miniLevelId !== "string") return [];
+
+  const level = getMiniGameLevel(miniGameId, miniLevelId);
+  if (miniGameId === "square-jump") {
+    const jumpsRequired = Number(level.params.jumpsRequired);
+    return compactGoals([
+      Number.isFinite(jumpsRequired) ? { icon: "target", text: `完成 ${jumpsRequired} 次跳跃` } : null,
+      { icon: "flag", text: "站上终点平台" },
+    ]);
+  }
+  if (miniGameId === "doodle") {
+    const requiredRiskPlatforms = Number(level.params.requiredRiskPlatforms ?? 0);
+    const movingObstacleCount = Number(level.params.movingObstacleCount ?? 0);
+    return compactGoals([
+      { icon: "flag", text: "站上最高终点平台" },
+      requiredRiskPlatforms > 0 ? { icon: "target", text: `踩中 ${requiredRiskPlatforms}/${requiredRiskPlatforms} 个高风险平台` } : null,
+      movingObstacleCount > 0 ? { icon: "ban", text: `躲开 ${movingObstacleCount} 个移动障碍` } : null,
+    ]);
+  }
+  if (miniGameId === "fall-down") {
+    const layersRequired = Number(level.params.layersRequired);
+    return compactGoals([
+      Number.isFinite(layersRequired) ? { icon: "target", text: `下降 ${layersRequired} 层` } : null,
+      { icon: "flag", text: "站上终点平台" },
+    ]);
+  }
+
+  return fallbackGoal(config);
+}
+
 export function getAdvancedLobbyLevelItems({
   currentLevel,
   selectedLevel,
@@ -165,18 +203,22 @@ export function resolveAdvancedLobbySwipeLevel({
   currentLevel,
   selectedLevel,
   deltaX,
+  maxStepCount,
   thresholdPx = DEFAULT_SWIPE_THRESHOLD_PX,
 }: {
   currentLevel: number;
   selectedLevel: number;
   deltaX: number;
+  maxStepCount?: number;
   thresholdPx?: number;
 }) {
   const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
   const threshold = Math.max(1, thresholdPx);
   if (Math.abs(deltaX) < threshold) return selected;
 
-  const steps = Math.max(1, Math.round(Math.abs(deltaX) / threshold));
+  const rawSteps = Math.max(1, Math.round(Math.abs(deltaX) / threshold));
+  const steps =
+    maxStepCount === undefined ? rawSteps : Math.min(clampInteger(maxStepCount, 1, ADVANCED_LEVEL_MAX), rawSteps);
   const requestedLevel = selected + (deltaX < 0 ? steps : -steps);
   return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, maxSelectableLevel(currentLevel));
 }
@@ -212,7 +254,10 @@ export function resolveAdvancedLobbyDragOffset({
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
-  if (typeof config.params.miniGameId === "string") return fallbackGoal(config);
+  if (typeof config.params.miniGameId === "string") {
+    const goals = getMiniGameGoals(config);
+    return goals.length > 0 ? goals : fallbackGoal(config);
+  }
 
   const goals =
     config.dimension === "reaction"

@@ -46,9 +46,17 @@ test("advanced lobby click and swipe switch only to unlocked levels", () => {
 
 test("advanced lobby swipe can move across multiple unlocked levels in one gesture", () => {
   assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 5, selectedLevel: 1, deltaX: -160 }), 4);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 5, selectedLevel: 1, deltaX: -900 }), 6);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 5, selectedLevel: 6, deltaX: 260 }), 1);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 1, deltaX: -900 }), 9);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 8, deltaX: 900 }), 1);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 6, deltaX: 260 }), 1);
   assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 2, deltaX: -220 }), 2);
+});
+
+test("advanced lobby swipe has no default step cap but can still be capped explicitly", () => {
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 2, deltaX: -1200 }), 10);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 9, deltaX: 1200 }), 1);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 2, deltaX: -1200, maxStepCount: 2 }), 4);
+  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 9, deltaX: 1200, maxStepCount: 2 }), 7);
 });
 
 test("advanced lobby drag offset keeps only a small elastic overscroll at selectable boundaries", () => {
@@ -77,8 +85,17 @@ test("advanced challenge goal items are derived from challenge config instead of
 
   const miniGame = getAdvancedStageConfig("search", 3);
   assert.deepEqual(getAdvancedChallengeGoalItems(miniGame), [
-    { icon: "target", text: miniGame.passText.replace(/^过关要求：/, "").replace(/。$/, "") },
+    { icon: "flag", text: "站上最高终点平台" },
+    { icon: "ban", text: "躲开 5 个移动障碍" },
   ]);
+});
+
+test("doodle finish platform goal copy is derived from the landing rule", () => {
+  const miniGame = getAdvancedStageConfig("search", 3);
+  const goals = getAdvancedChallengeGoalItems(miniGame);
+
+  assert.equal(goals[0]?.text, "站上最高终点平台");
+  assert.ok(goals.every((goal) => !goal.text.includes("到达 5 屏高度")));
 });
 
 test("advanced challenge screen uses the focused lobby with base replay and swipe support", () => {
@@ -137,6 +154,19 @@ test("advanced lobby drag hot path updates the track CSS variable outside React 
   assert.doesNotMatch(screenSource, /"--advanced-lobby-drag": `\$\{dragOffsetPx\}px`/);
 });
 
+test("advanced lobby drag release is recovered when the pointer leaves the carousel", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+
+  assert.match(screenSource, /activeLobbyPointerIdRef/);
+  assert.match(screenSource, /finishLobbyPointerGesture/);
+  assert.match(screenSource, /cancelLobbyPointerGesture/);
+  assert.match(screenSource, /window\.addEventListener\("pointerup"/);
+  assert.match(screenSource, /window\.addEventListener\("pointercancel"/);
+  assert.match(screenSource, /window\.addEventListener\("blur"/);
+  assert.match(screenSource, /onLostPointerCapture=\{handleLobbyPointerCancel\}/);
+  assert.match(screenSource, /try\s*{\s*event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
+});
+
 test("advanced base replay uses a two-row play layout so the round is playable", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
@@ -160,4 +190,12 @@ test("advanced lobby visual structure removes text badges and keeps boundary lev
   assert.doesNotMatch(cssSource, /\.advanced-lobby-level\.next\s*{[\s\S]*grid-column:/);
   assert.match(cssSource, /\.advanced-lobby-level\s*{[\s\S]*place-items:\s*center;/);
   assert.match(cssSource, /\.advanced-lobby-badge\s*{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16px;[\s\S]*bottom:\s*16px;/);
+});
+
+test("advanced completed badge has a mobile-specific size and inset", () => {
+  const cssSource = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
+
+  assert.match(cssSource, /@media \(max-width: 430px\)[\s\S]*\.advanced-lobby-badge\s*{/);
+  assert.match(cssSource, /\.advanced-lobby-badge\s*{[\s\S]*min-width:\s*28px;[\s\S]*min-height:\s*28px;/);
+  assert.match(cssSource, /\.advanced-lobby-badge\s*{[\s\S]*right:\s*10px;[\s\S]*bottom:\s*10px;/);
 });

@@ -5,10 +5,6 @@
   transition: background 220ms ease;
 }
 
-.square-jump-stage.failed {
-  animation: prototype-stage-shake 240ms ease;
-}
-
 .square-progress-background {
   position: absolute;
   z-index: 0;
@@ -436,18 +432,5 @@
   }
   100% {
     scale: 1;
-  }
-}
-
-@keyframes prototype-stage-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-5px);
-  }
-  75% {
-    transform: translateX(5px);
   }
 }

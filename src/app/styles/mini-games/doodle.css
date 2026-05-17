@@ -29,7 +29,6 @@
 .flappy-player-shell,
 .doodle-platform,
 .doodle-hazard,
-.doodle-progress-line,
 .flappy-background,
 .flappy-start-platform,
 .flappy-gate,
@@ -121,6 +120,25 @@
   line-height: 1;
 }
 
+.doodle-platform.finish {
+  height: 14px;
+  background: var(--gold);
+  border-color: rgba(85, 55, 0, 0.32);
+  box-shadow: var(--glow-warning);
+}
+
+.doodle-platform.finish::after {
+  content: "⚑";
+  position: absolute;
+  right: -4px;
+  bottom: 10px;
+  color: #8a5a00;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 4px 10px rgba(211, 155, 42, 0.26);
+}
+
 .doodle-platform.start {
   height: 13px;
   background: #37a96f;
@@ -164,13 +182,4 @@
 .doodle-hazard.motion-slowCross {
   border-radius: 10px 3px 10px 3px;
   background: #e65349;
-}
-
-.doodle-progress-line {
-  z-index: 3;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 2px;
-  border-top: 2px dashed rgba(24, 24, 24, 0.22);
 }

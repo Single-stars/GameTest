@@ -102,9 +102,9 @@
 .eye {
   position: absolute;
   z-index: 2;
-  top: 36%;
-  width: 12%;
-  height: 28%;
+  top: var(--player-avatar-eye-y, 36%);
+  width: var(--player-avatar-eye-w, 12%);
+  height: var(--player-avatar-eye-h, 28%);
   border-radius: 999px;
   background: var(--player-avatar-ink);
   transform-origin: 50% 50%;
@@ -112,19 +112,21 @@
 }
 
 .leftEye {
-  left: 32%;
+  left: var(--player-avatar-eye-side, 32%);
 }
 
 .rightEye {
-  right: 32%;
+  right: var(--player-avatar-eye-side, 32%);
 }
 
 .eye::before,
 .eye::after {
   content: "";
   position: absolute;
-  inset: 45% -26% auto;
-  height: 20%;
+  left: var(--player-avatar-eye-stroke-x, 0);
+  top: var(--player-avatar-eye-stroke-y, 50%);
+  width: var(--player-avatar-eye-stroke-w, 100%);
+  height: max(2px, calc(var(--player-avatar-size-resolved) * 0.058));
   border-radius: 999px;
   background: transparent;
   transform-origin: 50% 50%;
@@ -308,44 +310,59 @@
   transform: translateY(120%) scaleY(0.18);
 }
 
-.root[data-mood="happy"] .eye {
-  background: transparent;
-  border-block-start: max(3px, calc(var(--player-avatar-size-resolved) * 0.09)) solid var(--player-avatar-ink);
-  border-radius: 999px 999px 0 0;
-  transform: translateY(6%) scaleX(1.85) scaleY(0.92);
+.root[data-mood="happy"],
+.root[data-state="success"],
+.root[data-state="win"] {
+  --player-avatar-eye-y: 35%;
+  --player-avatar-eye-w: 18%;
+  --player-avatar-eye-h: 24%;
+  --player-avatar-eye-side: 25%;
 }
 
+.root[data-mood="happy"] .eye,
 .root[data-state="success"] .eye,
 .root[data-state="win"] .eye {
   background: transparent;
+  border: 0;
+  border-radius: 0;
+  transform: none;
 }
 
-.root[data-state="success"] .leftEye,
-.root[data-state="win"] .leftEye {
-  transform: translate(-46%, -2%) scale(1.18);
-}
-
-.root[data-state="success"] .rightEye,
-.root[data-state="win"] .rightEye {
-  transform: translate(46%, -2%) scale(1.18);
-}
-
+.root[data-mood="happy"] .eye::before,
+.root[data-mood="happy"] .eye::after,
 .root[data-state="success"] .eye::before,
 .root[data-state="success"] .eye::after,
 .root[data-state="win"] .eye::before,
 .root[data-state="win"] .eye::after {
   background: var(--player-avatar-ink);
-  box-shadow: 0 0 0 0.45px var(--player-avatar-ink);
 }
 
-.root[data-state="success"] .eye::before,
-.root[data-state="win"] .eye::before {
-  transform: translateX(-30%) rotate(-56deg);
+.root[data-mood="happy"] .leftEye::before,
+.root[data-state="success"] .leftEye::before,
+.root[data-state="win"] .leftEye::before {
+  transform: translateY(-50%) rotate(38deg);
+  transform-origin: 100% 50%;
 }
 
-.root[data-state="success"] .eye::after,
-.root[data-state="win"] .eye::after {
-  transform: translateX(30%) rotate(56deg);
+.root[data-mood="happy"] .leftEye::after,
+.root[data-state="success"] .leftEye::after,
+.root[data-state="win"] .leftEye::after {
+  transform: translateY(-50%) rotate(-38deg);
+  transform-origin: 100% 50%;
+}
+
+.root[data-mood="happy"] .rightEye::before,
+.root[data-state="success"] .rightEye::before,
+.root[data-state="win"] .rightEye::before {
+  transform: translateY(-50%) rotate(-38deg);
+  transform-origin: 0 50%;
+}
+
+.root[data-mood="happy"] .rightEye::after,
+.root[data-state="success"] .rightEye::after,
+.root[data-state="win"] .rightEye::after {
+  transform: translateY(-50%) rotate(38deg);
+  transform-origin: 0 50%;
 }
 
 .root[data-mood="focused"] .eye {
@@ -370,6 +387,13 @@
 .root[data-state="fail"] .eye {
   background: transparent;
   transform: scale(1.45);
+}
+
+.root[data-state="hit"],
+.root[data-state="fail"] {
+  --player-avatar-eye-stroke-x: -26%;
+  --player-avatar-eye-stroke-y: 45%;
+  --player-avatar-eye-stroke-w: 152%;
 }
 
 .root[data-state="hit"] .eye::before,

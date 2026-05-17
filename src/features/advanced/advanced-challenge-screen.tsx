@@ -107,6 +107,7 @@ export function AdvancedChallengeScreen({
   const trackRef = React.useRef<HTMLDivElement | null>(null);
   const dragStartXRef = React.useRef<number | null>(null);
   const pointerDownLevelRef = React.useRef<number | null>(null);
+  const activeLobbyPointerIdRef = React.useRef<number | null>(null);
   const dragOffsetRef = React.useRef(0);
   const dragAnimationFrameRef = React.useRef<number | null>(null);
   const [trackStepPx, setTrackStepPx] = React.useState(DEFAULT_LOBBY_TRACK_STEP_PX);
@@ -164,6 +165,70 @@ export function AdvancedChallengeScreen({
       }
     };
   }, []);
+
+  const cancelLobbyPointerGesture = React.useCallback(() => {
+    activeLobbyPointerIdRef.current = null;
+    dragStartXRef.current = null;
+    pointerDownLevelRef.current = null;
+    setIsDragging(false);
+    resetTrackDragOffset();
+  }, [resetTrackDragOffset]);
+
+  const finishLobbyPointerGesture = React.useCallback(
+    (clientX: number) => {
+      const startX = dragStartXRef.current;
+      activeLobbyPointerIdRef.current = null;
+      dragStartXRef.current = null;
+      setIsDragging(false);
+      resetTrackDragOffset();
+      if (startX === null) return;
+
+      const deltaX = clientX - startX;
+      if (Math.abs(deltaX) < TAP_THRESHOLD_PX) {
+        const clickedLevel =
+          pointerDownLevelRef.current === null
+            ? null
+            : resolveAdvancedLobbyClickLevel({ currentLevel, requestedLevel: pointerDownLevelRef.current });
+        pointerDownLevelRef.current = null;
+        if (clickedLevel !== null) onPickLevel(clickedLevel);
+        return;
+      }
+      pointerDownLevelRef.current = null;
+
+      const nextSelectedLevel = resolveAdvancedLobbySwipeLevel({
+        currentLevel,
+        selectedLevel,
+        deltaX,
+        thresholdPx: trackStepPx,
+      });
+      if (nextSelectedLevel !== selectedLevel) {
+        onPickLevel(nextSelectedLevel);
+      }
+    },
+    [currentLevel, onPickLevel, resetTrackDragOffset, selectedLevel, trackStepPx],
+  );
+
+  React.useEffect(() => {
+    if (!isDragging) return undefined;
+
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+      finishLobbyPointerGesture(event.clientX);
+    };
+    const handleWindowPointerCancel = (event: PointerEvent) => {
+      if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+      cancelLobbyPointerGesture();
+    };
+
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerCancel);
+    window.addEventListener("blur", cancelLobbyPointerGesture);
+    return () => {
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerCancel);
+      window.removeEventListener("blur", cancelLobbyPointerGesture);
+    };
+  }, [cancelLobbyPointerGesture, finishLobbyPointerGesture, isDragging]);
 
   if (challenge.mode === "playing") {
     const playingConfig = getAdvancedStageConfig(challenge.roundId, challenge.level);
@@ -236,12 +301,18 @@ export function AdvancedChallengeScreen({
   const handleLobbyPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     dragStartXRef.current = event.clientX;
     pointerDownLevelRef.current = getPointerLevel(event.target);
+    activeLobbyPointerIdRef.current = event.pointerId;
     scheduleTrackDragOffset(0);
     setIsDragging(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can fail if the pointer is already gone.
+    }
   };
 
   const handleLobbyPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeLobbyPointerIdRef.current !== event.pointerId) return;
     const startX = dragStartXRef.current;
     if (startX === null) return;
     const deltaX = event.clientX - startX;
@@ -249,40 +320,13 @@ export function AdvancedChallengeScreen({
   };
 
   const handleLobbyPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    const startX = dragStartXRef.current;
-    dragStartXRef.current = null;
-    setIsDragging(false);
-    resetTrackDragOffset();
-    if (startX === null) return;
-
-    const deltaX = event.clientX - startX;
-    if (Math.abs(deltaX) < TAP_THRESHOLD_PX) {
-      const clickedLevel =
-        pointerDownLevelRef.current === null
-          ? null
-          : resolveAdvancedLobbyClickLevel({ currentLevel, requestedLevel: pointerDownLevelRef.current });
-      pointerDownLevelRef.current = null;
-      if (clickedLevel !== null) onPickLevel(clickedLevel);
-      return;
-    }
-    pointerDownLevelRef.current = null;
-
-    const nextSelectedLevel = resolveAdvancedLobbySwipeLevel({
-      currentLevel,
-      selectedLevel,
-      deltaX,
-      thresholdPx: trackStepPx,
-    });
-    if (nextSelectedLevel !== selectedLevel) {
-      onPickLevel(nextSelectedLevel);
-    }
+    if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+    finishLobbyPointerGesture(event.clientX);
   };
 
-  const handleLobbyPointerCancel = () => {
-    dragStartXRef.current = null;
-    pointerDownLevelRef.current = null;
-    setIsDragging(false);
-    resetTrackDragOffset();
+  const handleLobbyPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeLobbyPointerIdRef.current !== null && activeLobbyPointerIdRef.current !== event.pointerId) return;
+    cancelLobbyPointerGesture();
   };
 
   const handleLevelKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, level: number) => {
@@ -336,6 +380,7 @@ export function AdvancedChallengeScreen({
           <div
             className={`advanced-lobby-carousel ${isDragging ? "dragging" : ""}`}
             ref={carouselRef}
+            onLostPointerCapture={handleLobbyPointerCancel}
             onPointerCancel={handleLobbyPointerCancel}
             onPointerDown={handleLobbyPointerDown}
             onPointerMove={handleLobbyPointerMove}

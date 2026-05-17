@@ -13,6 +13,7 @@ import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
+  MINI_GAME_COMPLETION_DELAY_MS,
   MINI_GAME_UI_SYNC_MS,
   MiniGameFpsBadge,
   MiniGamePerfPanel,
@@ -26,6 +27,7 @@ import {
   useMiniGameStageSize,
   useMiniGameLowPowerMode,
   useMiniGamePerfMonitor,
+  useMiniGameScreenShake,
   type MiniGameCompletion,
   type MiniGameRunMode,
   type MiniGameStageSize,
@@ -220,7 +222,6 @@ export function DoodleJumpPrototype({
   const inputDirectionRef = useRef(0);
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
-  const progressLineRef = useRef<HTMLDivElement | null>(null);
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
@@ -229,6 +230,7 @@ export function DoodleJumpPrototype({
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Doodle");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
+  const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, stageHeight));
 
   const syncDoodleView = useCallback(
@@ -305,10 +307,6 @@ export function DoodleJumpPrototype({
           stageHeight - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
         );
       }
-      if (progressLineRef.current) {
-        const targetY = clamp(stageHeight - (world.targetHeight - current.cameraY), 0, stageHeight);
-        progressLineRef.current.style.transform = transformPoint3d(0, targetY);
-      }
 
       for (const [id, node] of platformRefs.current) {
         const platform = platformById.get(id);
@@ -368,6 +366,7 @@ export function DoodleJumpPrototype({
       let playerTurns = current.playerTurns;
       let jumpTurnAvailable = current.jumpTurnAvailable;
       let eventChanged = false;
+      let landedFinishPlatform = false;
       let reason = "";
       let status: PrototypeStatus = "playing";
 
@@ -390,6 +389,7 @@ export function DoodleJumpPrototype({
             nextY = platform.y + PLAYER_SIZE / 2;
             nextVy = 760 * (platform.risk ? riskJumpMultiplier : 1);
             platform.used = true;
+            landedFinishPlatform = platform.finish === true;
             if (platform.risk) riskHit += 1;
             jumpTurnAvailable = true;
             eventChanged = true;
@@ -435,10 +435,10 @@ export function DoodleJumpPrototype({
         reason = "掉出屏幕底部";
       }
 
-      if (status === "playing" && nextY >= world.targetHeight) {
+      if (status === "playing" && landedFinishPlatform) {
         if (riskHit >= riskTotal) {
           status = "passed";
-          reason = `高度达成，必踩平台 ${riskHit}/${riskTotal}`;
+          reason = `站上最高终点平台，必踩平台 ${riskHit}/${riskTotal}`;
         } else {
           status = "failed";
           reason = `漏踩高风险平台 ${riskHit}/${riskTotal}`;
@@ -457,6 +457,7 @@ export function DoodleJumpPrototype({
       if (mode === "base" && status === "failed") {
         const failures = current.failures + 1;
         if (failures <= BASE_FAILURE_LIMIT) {
+          triggerScreenShake();
           const respawnY = cameraY + stageHeight * 0.34;
           const respawnX = clamp(nextX, 70, stageWidth - 70);
           const respawnPlatform: DoodlePlatform = {
@@ -490,6 +491,7 @@ export function DoodleJumpPrototype({
         reason = "失败超过 3 次，进入下一关";
       }
 
+      if (status === "failed") triggerScreenShake();
       current.status = status;
       current.reason = reason;
       paintDoodleFrame(current);
@@ -502,29 +504,34 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, stageHeight, stageWidth, syncDoodleView, world.targetHeight]);
+  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, stageHeight, stageWidth, syncDoodleView, triggerScreenShake, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || view.status === "playing") return;
+    if (!onComplete || completedRef.current) return;
+    const completedStatus = view.status;
+    if (completedStatus === "playing") return;
     completedRef.current = true;
     const latest = runtimeRef.current;
     const progress = clamp((latest.playerY / world.targetHeight) * 100, 0, 100);
-    onComplete({
-      gameId: "doodle",
-      levelId: level.levelId,
-      status: view.status,
-      reason: latest.reason,
-      elapsedMs: Math.round(latest.time * 1000),
-      stats: {
-        failures: latest.failures,
-        progressPercent: Math.round(progress),
-        riskHit: latest.riskHit,
-        riskTotal,
-        forcedAdvance: mode === "base" && view.status === "failed",
-      },
-    });
+    const timer = window.setTimeout(() => {
+      onComplete({
+        gameId: "doodle",
+        levelId: level.levelId,
+        status: completedStatus,
+        reason: latest.reason,
+        elapsedMs: Math.round(latest.time * 1000),
+        stats: {
+          failures: latest.failures,
+          progressPercent: Math.round(progress),
+          riskHit: latest.riskHit,
+          riskTotal,
+          forcedAdvance: mode === "base" && completedStatus === "failed",
+        },
+      });
+    }, mode === "prototype" ? MINI_GAME_COMPLETION_DELAY_MS : 0);
+    return () => window.clearTimeout(timer);
   }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
   return (
@@ -535,7 +542,7 @@ export function DoodleJumpPrototype({
         {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
-        className={`prototype-stage doodle-stage ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage doodle-stage ${screenShakeClassName} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Doodle Jump 型小游戏"
@@ -547,17 +554,12 @@ export function DoodleJumpPrototype({
       >
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
-        <div
-          className="doodle-progress-line"
-          ref={progressLineRef}
-          style={{ transform: transformPoint3d(0, clamp(stageHeight - (world.targetHeight - view.cameraY), 0, stageHeight)) }}
-        />
         {view.visiblePlatforms.map((platform) => {
           const x = movingPlatformX(platform, view.time, stageWidth);
           const y = stageHeight - (platform.y - view.cameraY);
           return (
             <div
-              className={`doodle-platform ${platform.start ? "start" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
+              className={`doodle-platform ${platform.start ? "start" : ""} ${platform.finish ? "finish" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
               key={platform.id}
               ref={(node) => {
                 if (node) platformRefs.current.set(platform.id, node);

@@ -13,6 +13,7 @@ import {
   type AdvancedAimArrow,
   type AdvancedAimEntity,
 } from "@/lib/advanced-aim";
+import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import {
   clamp,
@@ -21,6 +22,7 @@ import {
   now,
   pointerKind,
   rand,
+  ROUND_SETTLEMENT_DELAY_MS,
   trial,
   type PointerKind,
   type RoundProps,
@@ -68,7 +70,24 @@ type AdvancedAimArrowView = AdvancedAimArrow & {
 
 const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS = 0.84;
 const ADVANCED_AIM_ARROW_TOLERANCE_PX = 8;
-const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 28;
+const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 38;
+function getAdvancedAimShooterPoint(rect: DOMRect) {
+  return { x: rect.width / 2, y: rect.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX };
+}
+
+function getAdvancedAimShotTargetPoint(rect: DOMRect, shotX: number, shotY: number) {
+  const from = getAdvancedAimShooterPoint(rect);
+  const dx = shotX - from.x;
+  const dy = shotY - from.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 1) return { x: from.x, y: from.y - 1 };
+
+  const reach = Math.max(rect.width, rect.height) * 1.35;
+  return {
+    x: from.x + (dx / distance) * reach,
+    y: from.y + (dy / distance) * reach,
+  };
+}
 const ADVANCED_AIM_ARROW_PRUNE_MS = 480;
 const ADVANCED_AIM_TARGET_MARGIN_PX = 36;
 
@@ -379,7 +398,12 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
   const hitCountRef = useRef(0);
   const spawnedTargetsRef = useRef(0);
   const lastSpawnAtRef = useRef(0);
-  const finishedRef = useRef(false);
+  const finishedRef = useRef(false);
+  const completionTimerRef = useRef<number | null>(null);
+  const shooterResetTimerRef = useRef<number | null>(null);
+  const [shooterFiring, setShooterFiring] = useState(false);
+  const feedbackResetTimerRef = useRef<number | null>(null);
+  const [feedbackTone, setFeedbackTone] = useState<"idle" | "good" | "bad">("idle");
 
   const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
     const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
@@ -393,19 +417,35 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     paintAdvancedAimEntityElements(next, distractorElementsRef.current);
     if (shouldRender) setDistractors(next);
   }, []);
-  const publishArrows = useCallback((next: AdvancedAimArrowView[]) => {
-    const shouldRender = advancedAimArrowRenderSignature(arrowsRef.current) !== advancedAimArrowRenderSignature(next);
-    arrowsRef.current = next;
-    paintAdvancedAimArrowElements(next, arrowElementsRef.current);
-    if (shouldRender) setArrows(next);
-  }, []);
-
-  const finish = useCallback(() => {
+  const publishArrows = useCallback((next: AdvancedAimArrowView[]) => {
+    const shouldRender = advancedAimArrowRenderSignature(arrowsRef.current) !== advancedAimArrowRenderSignature(next);
+    arrowsRef.current = next;
+    paintAdvancedAimArrowElements(next, arrowElementsRef.current);
+    if (shouldRender) setArrows(next);
+  }, []);
+
+  const showAimFeedback = useCallback((tone: "good" | "bad", persist = false) => {
+    if (feedbackResetTimerRef.current !== null) window.clearTimeout(feedbackResetTimerRef.current);
+    feedbackResetTimerRef.current = null;
+    setFeedbackTone(tone);
+    if (!persist) {
+      feedbackResetTimerRef.current = window.setTimeout(() => {
+        feedbackResetTimerRef.current = null;
+        setFeedbackTone("idle");
+      }, 360);
+    }
+  }, []);
+
+  const finish = useCallback(() => {
     if (finishedRef.current) return;
     finishedRef.current = true;
     if (frameRef.current) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
-    onComplete([...trialsRef.current]);
+    const finalTrials = [...trialsRef.current];
+    completionTimerRef.current = window.setTimeout(() => {
+      completionTimerRef.current = null;
+      onComplete(finalTrials);
+    }, ROUND_SETTLEMENT_DELAY_MS);
   }, [onComplete]);
 
   const recordAimTrial = useCallback((patch: Omit<Partial<TrialEvent>, "roundId" | "trialIndex" | "viewport">) => {
@@ -435,9 +475,10 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     hitCountRef.current = 0;
     spawnedTargetsRef.current = 0;
     lastSpawnAtRef.current = startedAt - spawnIntervalMs;
-    lastFrameAtRef.current = startedAt;
-    setFiredCount(0);
-    setHitCount(0);
+    lastFrameAtRef.current = startedAt;
+    setFiredCount(0);
+    setHitCount(0);
+    setFeedbackTone("idle");
     publishArrows([]);
 
     const initialTargets =
@@ -456,9 +497,15 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
 
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-      finishedRef.current = true;
-    };
+      frameRef.current = null;
+      if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+      completionTimerRef.current = null;
+      if (shooterResetTimerRef.current !== null) window.clearTimeout(shooterResetTimerRef.current);
+      shooterResetTimerRef.current = null;
+      if (feedbackResetTimerRef.current !== null) window.clearTimeout(feedbackResetTimerRef.current);
+      feedbackResetTimerRef.current = null;
+      finishedRef.current = true;
+    };
   }, [config, mode, publishArrows, publishDistractors, publishTargets, spawnIntervalMs, targetCount]);
 
   useEffect(() => {
@@ -505,9 +552,10 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
             ...aimAttemptValue(),
           },
         });
+        showAimFeedback("bad", true);
         finish();
         return;
-      }
+      }
 
       let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
       let blocked = false;
@@ -524,7 +572,7 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
           const movedArrow = { ...arrow, ...result.arrow };
           if (!result.collision) {
             if (advancedArrowOutOfField(movedArrow, rect)) {
-              recordAimTrial({
+              recordAimTrial({
                 shownAt: arrow.launchedAt,
                 responseAt: frameNow,
                 correct: false,
@@ -537,14 +585,15 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                   ...aimAttemptValue(),
                 },
               });
+              showAimFeedback("bad");
               return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
-            }
+            }
             return { ...movedArrow, status: "flying" as const };
           }
 
           if (result.collision.kind === "distractor") {
             const hitDistractor = nextDistractors.find((entity) => entity.id === result.collision?.entityId);
-            recordAimTrial({
+            recordAimTrial({
               shownAt: hitDistractor?.spawnedAt ?? arrow.launchedAt,
               responseAt: frameNow,
               correct: false,
@@ -560,7 +609,8 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 ...aimAttemptValue(),
               },
             });
-            nextDistractors = nextDistractors.map((entity) =>
+            showAimFeedback("bad", true);
+            nextDistractors = nextDistractors.map((entity) =>
               entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
             );
             blocked = true;
@@ -571,7 +621,7 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
           if (hitTarget) {
             hitCountRef.current += 1;
             setHitCount(hitCountRef.current);
-            recordAimTrial({
+            recordAimTrial({
               shownAt: hitTarget.spawnedAt,
               responseAt: frameNow,
               correct: true,
@@ -587,8 +637,9 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                 targetSpeed: Math.round(Math.hypot(hitTarget.vx, hitTarget.vy) * 1000),
                 shotErrorPx: result.collision.errorPx,
                 normalizedError: result.collision.normalizedError,
-              },
+              },
             });
+            showAimFeedback("good");
             nextTargets = keepTargetOnHit ? nextTargets : nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
             if (replaceTargetOnHit && hitCountRef.current < requiredHits) {
               const replacementIndex = spawnedTargetsRef.current;
@@ -618,15 +669,17 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
       publishDistractors(nextDistractors);
       publishArrows(nextArrows);
 
-      if (blocked) {
-        finish();
-        return;
-      }
+      if (blocked) {
+        finish();
+        return;
+      }
       if (hitCountRef.current >= requiredHits) {
+        showAimFeedback("good", true);
         finish();
         return;
       }
       if (!unlimitedArrows && firedCountRef.current >= arrowCount && nextArrows.every((arrow) => !arrow.active)) {
+        showAimFeedback("bad", true);
         finish();
         return;
       }
@@ -654,6 +707,7 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     publishTargets,
     replaceTargetOnHit,
     requiredHits,
+    showAimFeedback,
     targetCount,
     unlimitedArrows,
   ]);
@@ -663,11 +717,12 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
     if (!rect) return;
     rectRef.current = rect;
-    const shotAt = now();
-    const pointerType = pointerKind(event.pointerType);
-    const shotX = clamp(event.clientX - rect.left, 18, rect.width - 18);
-    const from = { x: shotX, y: rect.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX };
-    const to = { x: shotX, y: 10 };
+    const shotAt = now();
+    const pointerType = pointerKind(event.pointerType);
+    const shotX = clamp(event.clientX - rect.left, 18, rect.width - 18);
+    const shotY = clamp(event.clientY - rect.top, 18, rect.height - 18);
+    const from = getAdvancedAimShooterPoint(rect);
+    const to = getAdvancedAimShotTargetPoint(rect, shotX, shotY);
     const baseArrow = createAdvancedAimArrow({
       id: `arrow-${shotAt}-${firedCountRef.current}`,
       from,
@@ -684,18 +739,37 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     };
 
     firedCountRef.current += 1;
-    setFiredCount(firedCountRef.current);
+    setFiredCount(firedCountRef.current);
+    if (shooterResetTimerRef.current !== null) window.clearTimeout(shooterResetTimerRef.current);
+    setShooterFiring(true);
+    shooterResetTimerRef.current = window.setTimeout(() => {
+      shooterResetTimerRef.current = null;
+      setShooterFiring(false);
+    }, 180);
     publishArrows([...arrowsRef.current, nextArrow]);
   };
-
+
   const arrowsLeft = unlimitedArrows ? null : Math.max(0, arrowCount - firedCount);
-  return (
-    <div className={`game-area advanced-aim ${config.variant} mode-${mode}`} ref={areaRef} onPointerDown={shoot}>
+  const shooterAvatarState =
+    feedbackTone === "good" ? "success" : feedbackTone === "bad" ? "fail" : shooterFiring ? "charge" : "idle";
+  const shooterAvatarMood =
+    feedbackTone === "good" ? "happy" : feedbackTone === "bad" ? "scared" : shooterFiring ? "focused" : "normal";
+  return (
+    <div className={`game-area advanced-aim ${config.variant} mode-${mode} feedback-${feedbackTone}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score advanced-aim-score">
         <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
         <span>命中 {hitCount}/{requiredHits}</span>
       </div>
-      {targets
+      <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""}`} aria-hidden="true">
+        <PlayerAvatar
+          charge={shooterFiring ? 0.7 : 0}
+          mood={shooterAvatarMood}
+          size={64}
+          state={shooterAvatarState}
+        />
+      </div>
+
+      {targets
         .filter((target) => target.active)
         .map((target) => (
           <span

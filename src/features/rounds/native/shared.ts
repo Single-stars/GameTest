@@ -11,6 +11,7 @@ export type RoundProps = {
 export const now = () => performance.now();
 export const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+export const ROUND_SETTLEMENT_DELAY_MS = 700;
 
 export function shuffle<T>(items: T[]) {
   const copy = [...items];

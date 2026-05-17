@@ -14,6 +14,7 @@ import { PlayerAvatar, type PlayerAvatarGravity, type PlayerAvatarState } from "
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
+  MINI_GAME_COMPLETION_DELAY_MS,
   MINI_GAME_UI_SYNC_MS,
   MiniGameFpsBadge,
   MiniGamePerfPanel,
@@ -25,6 +26,7 @@ import {
   transformPoint3d,
   useMiniGameFpsCounter,
   useMiniGameStageSize,
+  useMiniGameScreenShake,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
   type MiniGameRunMode,
@@ -391,6 +393,7 @@ export function SquareJumpPrototype({
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Square Jump");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
+  const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<SquareJumpUnifiedRuntime>(() => makeSquareJumpUnifiedView(initialRuntime));
 
   const syncView = useCallback((time = performance.now()) => {
@@ -664,6 +667,7 @@ export function SquareJumpPrototype({
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
+              triggerScreenShake();
               paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
@@ -699,6 +703,7 @@ export function SquareJumpPrototype({
           const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
             if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
+              triggerScreenShake();
               paintSquareFrame();
               syncView(time);
               if (current.status === "playing") frameId = requestAnimationFrame(tick);
@@ -719,26 +724,31 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncView, targetLandingPadding, updateSquareJumpDom]);
+  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncView, targetLandingPadding, triggerScreenShake, updateSquareJumpDom]);
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || view.status === "playing") return;
+    if (!onComplete || completedRef.current) return;
+    const completedStatus = view.status;
+    if (completedStatus === "playing") return;
     completedRef.current = true;
     const latest = runtimeRef.current;
-    onComplete({
-      gameId: "square-jump",
-      levelId: level.levelId,
-      status: view.status,
-      reason: latest.reason,
-      elapsedMs: Math.round(latest.time * 1000),
-      stats: {
-        failures: latest.failures,
-        progressPercent: Math.round((latest.jumps / requiredJumps) * 100),
-        jumps: latest.jumps,
-        requiredJumps,
-      },
-    });
-  }, [level.levelId, onComplete, requiredJumps, view.status]);
+    const timer = window.setTimeout(() => {
+      onComplete({
+        gameId: "square-jump",
+        levelId: level.levelId,
+        status: completedStatus,
+        reason: latest.reason,
+        elapsedMs: Math.round(latest.time * 1000),
+        stats: {
+          failures: latest.failures,
+          progressPercent: Math.round((latest.jumps / requiredJumps) * 100),
+          jumps: latest.jumps,
+          requiredJumps,
+        },
+      });
+    }, mode === "prototype" ? MINI_GAME_COMPLETION_DELAY_MS : 0);
+    return () => window.clearTimeout(timer);
+  }, [level.levelId, mode, onComplete, requiredJumps, view.status]);
 
   const showOverlay = mode === "prototype";
   const gravity = view.activeGravity;
@@ -762,7 +772,7 @@ export function SquareJumpPrototype({
         {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
       </div>
       <div
-        className={`prototype-stage square-jump-stage gravity-${gravity} ${view.status === "failed" ? "failed" : ""}`}
+        className={`prototype-stage square-jump-stage gravity-${gravity} ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="方块跃迁，长按蓄力，松手跳跃"

@@ -542,7 +542,7 @@ test("base aim does not render miss text feedback inside the play field", () => 
   const advancedAimSource = sourceBetween(source, "export function AdvancedAimRound", "type AdvancedBrakeHazard");
 
   assert.doesNotMatch(advancedAimSource, /aim-feedback/);
-  assert.doesNotMatch(advancedAimSource, /setFeedback/);
+  assert.doesNotMatch(advancedAimSource, /setFeedback\(/);
 });
 
 test("arrow shot resolution uses the impact target as the visible stuck position on hits", () => {
@@ -693,7 +693,7 @@ test("braking runners use the shared avatar without warning or a separate hold b
   const advancedSource = source.slice(advancedStart, baseStart);
   const baseSource = source.slice(baseStart);
   const advancedStateSource = source.slice(
-    source.indexOf("function resolveAdvancedBrakingAvatarState"),
+    source.indexOf("type AdvancedBrakingFeedback"),
     source.indexOf("export function AdvancedBrakingRound"),
   );
   const baseStateSource = source.slice(
@@ -703,6 +703,10 @@ test("braking runners use the shared avatar without warning or a separate hold b
 
   assert.match(source, /from "@\/features\/player-avatar\/player-avatar"/);
   assert.match(source, /type PlayerAvatarState/);
+  assert.match(advancedStateSource, /type AdvancedBrakingFeedback = "idle" \| "success" \| "early" \| "crashed";/);
+  assert.match(advancedStateSource, /if \(feedback === "success"\) return "success";/);
+  assert.match(advancedStateSource, /if \(feedback === "crashed"\) return "fail";/);
+  assert.match(advancedStateSource, /if \(feedback === "early"\) return "hit";/);
   assert.match(advancedStateSource, /if \(holding\) return "move";/);
   assert.match(advancedStateSource, /return "idle";/);
   assert.doesNotMatch(advancedStateSource, /"warning"/);
@@ -712,7 +716,7 @@ test("braking runners use the shared avatar without warning or a separate hold b
   assert.match(baseStateSource, /case "crashed":[\s\S]*return "fail";/);
   assert.match(baseStateSource, /case "early":[\s\S]*return "hit";/);
   assert.doesNotMatch(baseStateSource, /return "warning";/);
-  assert.match(advancedSource, /<PlayerAvatar[\s\S]*state=\{resolveAdvancedBrakingAvatarState\(holding\)\}/);
+  assert.match(advancedSource, /<PlayerAvatar[\s\S]*state=\{resolveAdvancedBrakingAvatarState\(holding, advancedFeedback\)\}/);
   assert.match(baseSource, /<PlayerAvatar[\s\S]*state=\{resolveDinoAvatarState\(status\)\}/);
   assert.match(baseSource, /direction=\{holding \? "right" : "none"\}/);
   assert.match(advancedSource, /onPointerDown=\{begin\}/);

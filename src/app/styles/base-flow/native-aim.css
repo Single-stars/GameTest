@@ -13,6 +13,32 @@
   will-change: transform;
 }
 
+.advanced-aim::after {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.advanced-aim.feedback-good::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(49, 183, 117, 0.72),
+    var(--glow-success);
+  animation: advanced-aim-feedback 420ms ease;
+}
+
+.advanced-aim.feedback-bad::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(230, 83, 73, 0.72),
+    var(--glow-danger);
+  animation: advanced-aim-feedback 420ms ease;
+}
+
 .advanced-aim-target::after {
   content: "";
   width: 42%;
@@ -25,6 +51,26 @@
   border-style: dashed;
   background: #918a7e;
   box-shadow: 0 0 0 8px rgba(24, 24, 24, 0.08);
+}
+
+.advanced-aim-shooter {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: 8px;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  translate: -50% 0;
+  pointer-events: none;
+  transform-origin: 50% 80%;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.advanced-aim-shooter.firing {
+  transform: translateY(-4px) scale(1.08);
+  filter: drop-shadow(0 8px 14px rgba(27, 154, 170, 0.22));
 }
 
 .advanced-arrow-shot {
@@ -77,4 +123,17 @@
 .advanced-arrow-shot.blocked {
   background: var(--red);
   box-shadow: var(--glow-danger);
+}
+
+@keyframes advanced-aim-feedback {
+  0% {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+
+  28%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

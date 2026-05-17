@@ -28,6 +28,7 @@ import {
   now,
   pointerKind,
   rand,
+  ROUND_SETTLEMENT_DELAY_MS,
   trial,
   type RoundProps,
   type TrialEvent,
@@ -44,7 +45,12 @@ type AdvancedBrakeHazard = {
 
 };
 
-function resolveAdvancedBrakingAvatarState(holding: boolean): PlayerAvatarState {
+type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
+
+function resolveAdvancedBrakingAvatarState(holding: boolean, feedback: AdvancedBrakingFeedback): PlayerAvatarState {
+  if (feedback === "success") return "success";
+  if (feedback === "crashed") return "fail";
+  if (feedback === "early") return "hit";
   if (holding) return "move";
   return "idle";
 }
@@ -113,9 +119,14 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
   const holdSuccessTimerRef = useRef<number | null>(null);
 
+  const feedbackTimerRef = useRef<number | null>(null);
+
   const finishedRef = useRef(false);
+  const completionTimerRef = useRef<number | null>(null);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
+
+  const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
 
   const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
@@ -127,10 +138,27 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
     if (holdSuccessTimerRef.current) window.clearTimeout(holdSuccessTimerRef.current);
 
+    if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
+
     collisionTimerRef.current = null;
 
     holdSuccessTimerRef.current = null;
+    feedbackTimerRef.current = null;
+    if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+    completionTimerRef.current = null;
 
+  }, []);
+
+  const showAdvancedFeedback = useCallback((feedback: AdvancedBrakingFeedback, persist = false) => {
+    if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = null;
+    setAdvancedFeedback(feedback);
+    if (!persist) {
+      feedbackTimerRef.current = window.setTimeout(() => {
+        feedbackTimerRef.current = null;
+        setAdvancedFeedback("idle");
+      }, 360);
+    }
   }, []);
 
 
@@ -157,7 +185,11 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
       holdingRef.current = false;
 
-      onComplete(extra ? [...trialsRef.current, extra] : trialsRef.current);
+      const finalTrials = extra ? [...trialsRef.current, extra] : [...trialsRef.current];
+      completionTimerRef.current = window.setTimeout(() => {
+        completionTimerRef.current = null;
+        onComplete(finalTrials);
+      }, ROUND_SETTLEMENT_DELAY_MS);
 
     },
 
@@ -257,11 +289,13 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
       );
 
+      showAdvancedFeedback("success");
+
       clearHazardAfterSuccess();
 
     },
 
-    [clearHazardAfterSuccess],
+    [clearHazardAfterSuccess, showAdvancedFeedback],
 
   );
 
@@ -333,6 +367,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
         if (!hazardRef.current || hazardRef.current.correctAction !== "release") return;
 
+        showAdvancedFeedback("crashed", true);
+
         finish(
 
           trial("braking", hazardIndexRef.current, {
@@ -393,6 +429,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
     resetEventTimer,
 
+    showAdvancedFeedback,
+
     speedPerSecond,
 
     trackMetrics.hazardWidthPercent,
@@ -423,6 +461,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
         setProgress(next);
 
         if (getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: next, runnerWidthPercent })) {
+
+          showAdvancedFeedback("success", true);
 
           finish(
 
@@ -512,6 +552,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
     reactionWindowMs,
 
+    showAdvancedFeedback,
+
     speedPerSecond,
 
     startHazard,
@@ -526,6 +568,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
     if (finishedRef.current || holdingRef.current) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
+
+    setAdvancedFeedback("idle");
 
     setHolding(true);
 
@@ -551,6 +595,8 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
     if (releaseOutcome.outcome === "failure") {
 
       clearTimers();
+
+      showAdvancedFeedback("early", true);
 
       finish(
 
@@ -616,9 +662,15 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
     );
 
-    if (!correct) finish();
+    if (!correct) {
+      showAdvancedFeedback("crashed", true);
+      finish();
+    }
 
-    else clearHazardAfterSuccess();
+    else {
+      showAdvancedFeedback("success");
+      clearHazardAfterSuccess();
+    }
 
   };
 
@@ -627,7 +679,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
   return (
 
     <div
-      className={`braking-panel advanced-braking lanes-${lanes} ${holding ? "holding" : ""}`}
+      className={`braking-panel advanced-braking lanes-${lanes} ${holding ? "holding" : ""} ${advancedFeedback}`}
       role="application"
       aria-label="长按游戏区域前进，松手急停"
       onPointerCancel={release}
@@ -662,7 +714,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
               <PlayerAvatar
                 direction={holding ? "right" : "none"}
                 size={46}
-                state={resolveAdvancedBrakingAvatarState(holding)}
+                state={resolveAdvancedBrakingAvatarState(holding, advancedFeedback)}
                 visualScale={1.02}
               />
             </span>

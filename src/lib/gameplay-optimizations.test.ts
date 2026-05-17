@@ -1,0 +1,332 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+function read(url: URL) {
+  return readFileSync(url, "utf8");
+}
+
+function sourceBetween(source: string, start: string, end: string) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
+  assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cssBlock(source: string, selector: string) {
+  const markerPattern = new RegExp(`(^|\\n)${escapeRegExp(selector)} \\{`);
+  const markerMatch = markerPattern.exec(source);
+  const startIndex = markerMatch ? markerMatch.index + markerMatch[1].length : -1;
+  assert.notEqual(startIndex, -1, `missing CSS block: ${selector}`);
+  const endIndex = source.indexOf("\n}", startIndex + selector.length + 2);
+  assert.notEqual(endIndex, -1, `unterminated CSS block: ${selector}`);
+  return source.slice(startIndex, endIndex + 2);
+}
+
+test("mini-game completion is deferred so success or failure animation can finish first", () => {
+  const commonSource = read(new URL("../features/mini-games/common.tsx", import.meta.url));
+  const miniGameRoundsSource = read(new URL("../features/game-flow/mini-game-rounds.tsx", import.meta.url));
+  const squareJumpSource = read(new URL("../features/mini-games/square-jump.tsx", import.meta.url));
+  const doodleSource = read(new URL("../features/mini-games/doodle.tsx", import.meta.url));
+  const fallDownSource = read(new URL("../features/mini-games/fall-down.tsx", import.meta.url));
+
+  assert.match(commonSource, /export const MINI_GAME_COMPLETION_DELAY_MS = 700;/);
+  for (const source of [squareJumpSource, doodleSource, fallDownSource]) {
+    assert.match(source, /MINI_GAME_COMPLETION_DELAY_MS/);
+    assert.match(source, /window\.setTimeout\(\(\) => \{/);
+    assert.match(source, /return \(\) => window\.clearTimeout\(timer\);/);
+  }
+  assert.match(miniGameRoundsSource, /MINI_GAME_COMPLETION_DELAY_MS/);
+  assert.match(miniGameRoundsSource, /const timer = window\.setTimeout\(\(\) => \{/);
+});
+
+test("native advanced rounds defer final completion after visual feedback", () => {
+  const sharedSource = read(new URL("../features/rounds/native/shared.ts", import.meta.url));
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+
+  assert.match(sharedSource, /export const ROUND_SETTLEMENT_DELAY_MS = 700;/);
+  for (const source of [reactionSource, aimSource, brakingSource]) {
+    assert.match(source, /ROUND_SETTLEMENT_DELAY_MS/);
+    assert.match(source, /completionTimerRef/);
+    assert.match(source, /window\.setTimeout\(\(\) =>/);
+  }
+});
+
+test("reaction rounds show the shared player avatar with red closed eyes and green open eyes", () => {
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
+
+  assert.match(reactionSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(reactionSource, /function reactionAvatarState/);
+  assert.match(reactionSource, /return cell\.color === "green" \? "idle" : "sleep";/);
+  assert.match(reactionSource, /return cell\.color === "green" \? "focused" : "sleepy";/);
+  assert.match(reactionSource, /<PlayerAvatar/);
+  assert.match(reactionSource, /className="reaction-cell-avatar"/);
+  assert.match(cssSource, /\.reaction-cell-avatar/);
+  assert.match(cssSource, /\.reaction-pad-avatar/);
+});
+
+test("base reaction skips practice and hides all prompt copy before the result time", () => {
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const baseReactionSource = reactionSource.slice(reactionSource.indexOf("export function ReactionRound"));
+  const baseReactionSetupSource = sourceBetween(reactionSource, "export function ReactionRound", "const tap =");
+  const baseReactionRenderSource = baseReactionSource.slice(baseReactionSource.indexOf("return ("));
+
+  assert.match(baseReactionSetupSource, /const stepRef = useRef\(1\);/);
+  assert.match(baseReactionSource, /startStep\(1\);/);
+  assert.match(baseReactionSetupSource, /const \[message, setMessage\] = useState\(""\);/);
+  assert.match(baseReactionSource, /setMessage\(""\);/);
+  assert.match(baseReactionSource, /setMessage\(`\$\{Math\.round\(responseAt - shownAtRef\.current\)\} ms`\);/);
+  assert.doesNotMatch(baseReactionSource, /startStep\(0\)/);
+  assert.doesNotMatch(baseReactionSource, /nextStep === 0/);
+  assert.doesNotMatch(baseReactionSource, /practice:\s*(?:nextStep|stepRef\.current) === 0/);
+  assert.doesNotMatch(baseReactionSource, /setMessage\("[^"]+"\);/);
+  assert.doesNotMatch(baseReactionRenderSource, /<small>/);
+  assert.doesNotMatch(baseReactionRenderSource, /\$\{step\}\/3/);
+  assert.doesNotMatch(baseReactionRenderSource, /<span>\{message\}<\/span>/);
+  assert.match(baseReactionRenderSource, /\{message \? <span className="reaction-result-text">\{message\}<\/span> : null\}/);
+});
+
+test("reaction rounds use full-area shared-avatar eyes and only render ms after clicks", () => {
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
+  const advancedReactionSource = sourceBetween(reactionSource, "type AdvancedReactionCell", "export function ReactionRound");
+
+  assert.match(advancedReactionSource, /resultText\?: string;/);
+  assert.match(advancedReactionSource, /resultText:\s*`\$\{ms\} ms`/);
+  assert.match(advancedReactionSource, /const \[feedbackTone, setFeedbackTone\] = useState<"idle" \| "good" \| "early">\("idle"\);/);
+  assert.match(advancedReactionSource, /setFeedbackTone\("good"\)/);
+  assert.match(advancedReactionSource, /setFeedbackTone\("early"\)/);
+  assert.match(advancedReactionSource, /advanced-reaction-grid cells-\$\{lanes\} \$\{feedbackTone\}/);
+  assert.match(advancedReactionSource, /\{cell\.clicked && cell\.resultText \? <span className="reaction-result-text">\{cell\.resultText\}<\/span> : null\}/);
+  assert.doesNotMatch(advancedReactionSource, /text:\s*"/);
+  assert.doesNotMatch(advancedReactionSource, /cell\.text/);
+  assert.doesNotMatch(advancedReactionSource, /countText|setCountText/);
+  assert.doesNotMatch(advancedReactionSource, /className="mini-score"/);
+  assert.doesNotMatch(advancedReactionSource, /warning/);
+  assert.match(cssBlock(cssSource, ".reaction-pad-avatar"), /width:\s*clamp\(112px, 34vw, 180px\);/);
+  assert.match(cssBlock(cssSource, ".reaction-pad-avatar"), /height:\s*clamp\(112px, 34vw, 180px\);/);
+  assert.match(cssBlock(cssSource, ".reaction-cell-avatar"), /width:\s*clamp\(96px, 24vw, 156px\);/);
+  assert.match(cssBlock(cssSource, ".reaction-cell-avatar"), /height:\s*clamp\(96px, 24vw, 156px\);/);
+  assert.match(cssBlock(cssSource, ".advanced-reaction-cell"), /border:\s*0;/);
+  assert.match(cssBlock(cssSource, ".advanced-reaction-cell"), /background:\s*#fbf7ef;/);
+  assert.match(cssSource, /\.advanced-reaction-grid\.good::after/);
+  assert.match(cssSource, /\.advanced-reaction-grid\.early::after/);
+  assert.match(cssSource, /@keyframes advanced-reaction-feedback/);
+});
+
+test("aim rounds fire arrows in the clicked direction from a visible charge launcher", () => {
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+
+  assert.match(aimSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(aimSource, /function getAdvancedAimShooterPoint/);
+  assert.match(aimSource, /function getAdvancedAimShotTargetPoint/);
+  assert.match(aimSource, /const from = getAdvancedAimShooterPoint\(rect\);/);
+  assert.match(aimSource, /const shotY = clamp\(event\.clientY - rect\.top/);
+  assert.match(aimSource, /const to = getAdvancedAimShotTargetPoint\(rect, shotX, shotY\);/);
+  assert.match(aimSource, /className=\{`advanced-aim-shooter/);
+  assert.match(aimSource, /<PlayerAvatar/);
+  assert.match(aimSource, /state=\{shooterAvatarState\}/);
+  assert.match(aimSource, /charge=\{shooterFiring \? 0\.7 : 0\}/);
+  assert.doesNotMatch(aimSource, /const from = \{ x: shotX, y: rect\.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX \};/);
+  assert.doesNotMatch(aimSource, /const to = \{ x: shotX, y: 10 \};/);
+  assert.doesNotMatch(aimSource, /state=\{shooterFiring \? "boost" : "idle"\}/);
+  assert.match(cssSource, /\.advanced-aim-shooter/);
+  assert.match(cssSource, /\.advanced-aim-shooter\.firing/);
+});
+
+test("advanced aim flashes success and failure feedback around the play field", () => {
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+  const advancedAimSource = sourceBetween(aimSource, "export function AdvancedAimRound", "const AIM_REQUIRED_HITS");
+
+  assert.match(advancedAimSource, /const \[feedbackTone, setFeedbackTone\] = useState<"idle" \| "good" \| "bad">\("idle"\);/);
+  assert.match(advancedAimSource, /showAimFeedback\("good"\)/);
+  assert.match(advancedAimSource, /showAimFeedback\("bad"\)/);
+  assert.match(advancedAimSource, /advanced-aim \$\{config\.variant\} mode-\$\{mode\} feedback-\$\{feedbackTone\}/);
+  assert.match(cssSource, /\.advanced-aim\.feedback-good::after/);
+  assert.match(cssSource, /\.advanced-aim\.feedback-bad::after/);
+  assert.match(cssSource, /@keyframes advanced-aim-feedback/);
+});
+
+test("base aim keeps the target size but enlarges only the bottom shooter visual", () => {
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+  const baseAimSource = sourceBetween(aimSource, "const BASIC_AIM_CONFIG", "export function AimRound");
+  const shooterBlock = cssBlock(cssSource, ".advanced-aim-shooter");
+
+  assert.match(baseAimSource, /targetSize:\s*58,/);
+  assert.match(aimSource, /<PlayerAvatar[\s\S]*size=\{64\}[\s\S]*state=\{shooterAvatarState\}/);
+  assert.match(shooterBlock, /width:\s*72px;/);
+  assert.match(shooterBlock, /height:\s*72px;/);
+  assert.match(aimSource, /const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 38;/);
+});
+
+test("advanced braking mirrors base stop feedback for early release, crash, and success", () => {
+  const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-braking.css", import.meta.url));
+  const advancedBrakingSource = sourceBetween(brakingSource, "type AdvancedBrakingFeedback", "const DINO_TRIAL_COUNT");
+
+  assert.match(advancedBrakingSource, /type AdvancedBrakingFeedback = "idle" \| "success" \| "early" \| "crashed";/);
+  assert.match(advancedBrakingSource, /function resolveAdvancedBrakingAvatarState\(holding: boolean, feedback: AdvancedBrakingFeedback\): PlayerAvatarState/);
+  assert.match(advancedBrakingSource, /if \(feedback === "success"\) return "success";/);
+  assert.match(advancedBrakingSource, /if \(feedback === "crashed"\) return "fail";/);
+  assert.match(advancedBrakingSource, /if \(feedback === "early"\) return "hit";/);
+  assert.match(advancedBrakingSource, /const \[advancedFeedback, setAdvancedFeedback\] = useState<AdvancedBrakingFeedback>\("idle"\);/);
+  assert.match(advancedBrakingSource, /showAdvancedFeedback\("early"/);
+  assert.match(advancedBrakingSource, /showAdvancedFeedback\("crashed"/);
+  assert.match(advancedBrakingSource, /showAdvancedFeedback\("success"/);
+  assert.match(advancedBrakingSource, /advanced-braking lanes-\$\{lanes\} \$\{holding \? "holding" : ""\} \$\{advancedFeedback\}/);
+  assert.match(advancedBrakingSource, /state=\{resolveAdvancedBrakingAvatarState\(holding, advancedFeedback\)\}/);
+  assert.match(cssSource, /\.advanced-braking\.early::after/);
+  assert.match(cssSource, /\.advanced-braking\.crashed::after/);
+  assert.match(cssSource, /\.advanced-braking\.success::after/);
+  assert.match(cssSource, /\.advanced-braking\.early \.advanced-runner/);
+  assert.match(cssSource, /\.advanced-braking\.crashed \.advanced-runner/);
+  assert.match(cssSource, /\.advanced-braking\.success \.advanced-runner/);
+});
+
+test("finish platforms use the same gold flag language across square jump, doodle, and fall down", () => {
+  const squareCss = read(new URL("../app/styles/mini-games/square-jump.css", import.meta.url));
+  const doodleCss = read(new URL("../app/styles/mini-games/doodle.css", import.meta.url));
+  const fallCss = read(new URL("../app/styles/mini-games/fall-down.css", import.meta.url));
+  const fallDownSource = read(new URL("../features/mini-games/fall-down.tsx", import.meta.url));
+
+  assert.match(squareCss, /\.square-jump-base-platform\.finish::after\s*{[\s\S]*content:\s*"⚑"/);
+  assert.match(doodleCss, /\.doodle-platform\.finish\s*{[\s\S]*background:\s*var\(--gold\)/);
+  assert.match(doodleCss, /\.doodle-platform\.finish::after\s*{[\s\S]*content:\s*"⚑"/);
+  assert.match(fallCss, /\.fall-platform\.kind-finish \.fall-platform-top\s*{[\s\S]*background:\s*var\(--gold\)/);
+  assert.match(fallCss, /\.fall-finish-flag\s*{[\s\S]*content:\s*"⚑"/);
+  assert.match(fallDownSource, /<span className="fall-finish-flag" aria-hidden="true" \/>/);
+});
+
+test("advanced goal copy is derived from the actual completion rules for mini-game challenges", () => {
+  const viewSource = read(new URL("./advanced-challenge-view.ts", import.meta.url));
+  const viewTestSource = read(new URL("./advanced-challenge-view.test.ts", import.meta.url));
+
+  assert.match(viewSource, /function getMiniGameGoals/);
+  assert.match(viewSource, /getMiniGameLevel\(miniGameId, miniLevelId\)/);
+  assert.match(viewSource, /站上最高终点平台/);
+  assert.match(viewSource, /站上终点平台/);
+  assert.match(viewSource, /完成 \${jumpsRequired} 次跳跃/);
+  assert.match(viewTestSource, /doodle finish platform goal/);
+});
+
+test("mini-game stages share a reusable screen shake hook and CSS feedback class", () => {
+  const commonSource = read(new URL("../features/mini-games/common.tsx", import.meta.url));
+  const commonCss = read(new URL("../app/styles/mini-games/common.css", import.meta.url));
+
+  assert.match(commonSource, /export const MINI_GAME_SCREEN_SHAKE_MS = 180;/);
+  assert.match(commonSource, /export function useMiniGameScreenShake\(\)/);
+  assert.match(commonSource, /triggerScreenShake/);
+  assert.match(commonSource, /screenShakeClassName/);
+  assert.match(commonCss, /\.prototype-stage\.screen-shake/);
+  assert.match(commonCss, /\.prototype-stage\.failed/);
+  assert.match(commonCss, /animation: mini-game-screen-shake 180ms ease-out both;/);
+  assert.match(commonCss, /@keyframes mini-game-screen-shake/);
+});
+
+test("screen shake has one global implementation and old stage-shake styles are gone", () => {
+  const commonCss = read(new URL("../app/styles/mini-games/common.css", import.meta.url));
+  const fallCss = read(new URL("../app/styles/mini-games/fall-down.css", import.meta.url));
+  const squareCss = read(new URL("../app/styles/mini-games/square-jump.css", import.meta.url));
+  const miniGameCss = [commonCss, fallCss, squareCss].join("\n");
+
+  assert.match(commonCss, /\.prototype-stage\.screen-shake,\n\.prototype-stage\.failed\s*{\n\s*animation: mini-game-screen-shake 180ms ease-out both;/);
+  assert.doesNotMatch(miniGameCss, /prototype-stage-shake/);
+  assert.doesNotMatch(fallCss, /\.fall-down-stage\.failed/);
+  assert.doesNotMatch(squareCss, /\.square-jump-stage\.failed/);
+  assert.match(fallCss, /\.fall-platform\.danger\s*{\n\s*animation: fall-danger-platform-shake 180ms ease-in-out infinite;/);
+  assert.match(fallCss, /@keyframes fall-danger-platform-shake/);
+});
+
+test("requested base and advanced mini-games trigger screen shake only on discrete failure or respawn events", () => {
+  const doodleSource = read(new URL("../features/mini-games/doodle.tsx", import.meta.url));
+  const fallDownSource = read(new URL("../features/mini-games/fall-down.tsx", import.meta.url));
+  const squareJumpSource = read(new URL("../features/mini-games/square-jump.tsx", import.meta.url));
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+
+  for (const source of [doodleSource, fallDownSource, squareJumpSource, flappySource]) {
+    assert.match(source, /useMiniGameScreenShake/);
+    assert.match(source, /const \{ screenShakeClassName, triggerScreenShake \} = useMiniGameScreenShake\(\);/);
+    assert.match(source, /prototype-stage [^`]*\$\{screenShakeClassName\}/);
+  }
+
+  assert.match(doodleSource, /if \(mode === "base" && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
+  assert.match(doodleSource, /if \(status === "failed"\) triggerScreenShake\(\);/);
+  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)\) \{[\s\S]*?triggerScreenShake\(\);/);
+  assert.match(fallDownSource, /if \(mode === "base"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return false;/);
+  assert.match(squareJumpSource, /if \(mode === "base" && recoverSquareJumpBaseMiss\(current, ".*?", stageSize\)\) \{[\s\S]*?triggerScreenShake\(\);/);
+  assert.match(flappySource, /if \(mode === "base" && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
+  assert.match(flappySource, /if \(status === "failed"\) triggerScreenShake\(\);/);
+});
+
+test("flappy base respawn separates gameplay progress from smoothed display progress", () => {
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+
+  assert.match(flappySource, /displayProgress: number;/);
+  assert.match(flappySource, /respawnProgressStart: number;/);
+  assert.match(flappySource, /respawnProgressUntil: number;/);
+  assert.match(flappySource, /function resolveFlappyDisplayProgress\(frame: FlappyFrame\)/);
+  assert.match(flappySource, /visibleGates: selectVisibleFlappyGates\(frame\.gates, \{[\s\S]*?progress: frame\.displayProgress,/);
+  assert.match(flappySource, /const renderProgress = current\.displayProgress;/);
+  assert.match(flappySource, /progress: renderProgress,/);
+  assert.match(flappySource, /const respawnProgressEnd = Math\.max\(0, nextProgress - 92\);/);
+  assert.match(flappySource, /current\.progress = respawnProgressEnd;/);
+  assert.match(flappySource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
+  assert.match(flappySource, /const drift = reverseDirection \? view\.displayProgress : -view\.displayProgress;/);
+  assert.doesNotMatch(flappySource, /current\.progress = Math\.max\(0, nextProgress - 92\);/);
+});
+
+test("flappy gate painting avoids repeated linear gate lookups in the animation frame", () => {
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+  const updateDomSource = sourceBetween(flappySource, "const updateDom = (current: FlappyFrame) => {", "const tick = (time: number) => {");
+
+  assert.match(updateDomSource, /const gateById = new Map\(current\.gates\.map\(\(gate\) => \[gate\.id, gate\]\)\);/);
+  assert.match(updateDomSource, /const gate = gateById\.get\(id\);/);
+  assert.doesNotMatch(updateDomSource, /current\.gates\.find/);
+});
+
+test("knife has a wheel-mounted avatar, stage feedback, and advanced failure impact markers", () => {
+  const knifeSource = read(new URL("../features/mini-games/knife.tsx", import.meta.url));
+  const knifeCss = read(new URL("../app/styles/mini-games/knife.css", import.meta.url));
+
+  assert.match(knifeSource, /from "@\/features\/player-avatar\/player-avatar"/);
+  assert.match(knifeSource, /type KnifeFeedbackTone = "idle" \| "good" \| "bad";/);
+  assert.match(knifeSource, /function resolveKnifeWheelAvatarState\(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone\): PlayerAvatarState/);
+  assert.match(knifeSource, /function resolveKnifeWheelAvatarMood\(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone\): PlayerAvatarMood/);
+  assert.match(knifeSource, /if \(feedbackTone === "bad" \|\| view\.status === "failed"\) return "fail";/);
+  assert.match(knifeSource, /if \(view\.status === "passed"\) return "success";/);
+  assert.match(knifeSource, /return "idle";/);
+  assert.match(knifeSource, /if \(view\.status === "passed"\) return "happy";/);
+  assert.match(knifeSource, /return "scared";/);
+  assert.doesNotMatch(knifeSource, /feedbackTone === "good"[\s\S]*return "success"/);
+  assert.match(knifeSource, /const \[feedbackTone, setFeedbackTone\] = useState<KnifeFeedbackTone>\("idle"\);/);
+  assert.match(knifeSource, /const showKnifeFeedback = useCallback/);
+  assert.match(knifeSource, /showKnifeFeedback\("good"\)/);
+  assert.match(knifeSource, /showKnifeFeedback\("bad"\)/);
+  assert.match(knifeSource, /current\.failedAngles\.push\(outcome\.impactAngle\);[\s\S]*?current\.failedAngle = outcome\.impactAngle;[\s\S]*?current\.status = "failed";/);
+  assert.match(knifeSource, /className=\{`prototype-stage knife-stage[\s\S]*feedback-\$\{feedbackTone\}/);
+  assert.match(knifeSource, /className="knife-wheel-avatar"/);
+  assert.match(knifeSource, /<PlayerAvatar[\s\S]*mood=\{resolveKnifeWheelAvatarMood\(view, feedbackTone\)\}[\s\S]*state=\{resolveKnifeWheelAvatarState\(view, feedbackTone\)\}/);
+  assert.match(knifeSource, /size=\{42\}/);
+  assert.doesNotMatch(knifeSource, /className="knife-launcher-avatar"/);
+  assert.doesNotMatch(knifeSource, /resolveKnifeLauncherAvatarState/);
+  assert.doesNotMatch(knifeSource, /mode === "prototype" \? <span className="knife-arrow knife-stuck failed"/);
+  assert.match(knifeCss, /\.knife-wheel-avatar/);
+  assert.match(cssBlock(knifeCss, ".knife-wheel-avatar"), /width:\s*clamp\(34px, 24%, 46px\);/);
+  assert.match(cssBlock(knifeCss, ".knife-wheel-avatar"), /height:\s*clamp\(34px, 24%, 46px\);/);
+  assert.doesNotMatch(knifeCss, /\.knife-launcher-avatar/);
+  assert.doesNotMatch(knifeCss, /knife-launcher-feedback/);
+  assert.match(knifeCss, /\.knife-stage\.feedback-good::after/);
+  assert.match(knifeCss, /\.knife-stage\.feedback-bad::after/);
+  assert.match(knifeCss, /@keyframes knife-stage-feedback/);
+});

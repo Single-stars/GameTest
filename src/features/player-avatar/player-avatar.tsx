@@ -110,7 +110,8 @@ export function PlayerAvatar({
   const resolvedState = resolvePlayerAvatarState(state, active);
   const normalizedCharge = clampAvatarUnit(charge);
   const normalizedVisualScale = clampAvatarScale(visualScale);
-  const rotation = rotationDeg ?? rotationTurns * 90;
+  const shouldRecenterForDisplay = resolvedState === "success" || resolvedState === "win";
+  const rotation = shouldRecenterForDisplay ? 0 : rotationDeg ?? rotationTurns * 90;
   const customSize = typeof size === "number" ? `${size}px` : undefined;
   const rootClassName = [styles.root, resolveSizeClass(size), className].filter(Boolean).join(" ");
   const style = {

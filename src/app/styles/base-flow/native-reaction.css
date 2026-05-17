@@ -1,3 +1,23 @@
+.reaction-pad {
+  position: relative;
+  overflow: hidden;
+  color: var(--ink);
+  background: #fbf7ef;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.reaction-pad::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .reaction-pad.ready,
 .reaction-pad.good {
   color: #ffffff;
@@ -5,8 +25,50 @@
   box-shadow: var(--glow-success);
 }
 
+.reaction-pad.good::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(49, 183, 117, 0.72),
+    var(--glow-success);
+  animation: advanced-reaction-feedback 360ms ease;
+}
+
 .reaction-pad.early {
+  color: #ffffff;
+  background: var(--red);
   box-shadow: var(--glow-danger);
+}
+
+.reaction-pad.early::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(230, 83, 73, 0.78),
+    var(--glow-danger);
+  animation: advanced-reaction-feedback 360ms ease;
+}
+
+.reaction-pad.early .reaction-pad-avatar {
+  animation: advanced-reaction-fail 260ms ease;
+}
+
+.reaction-pad-avatar {
+  position: relative;
+  z-index: 1;
+  width: clamp(112px, 34vw, 180px);
+  height: clamp(112px, 34vw, 180px);
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+
+.reaction-result-text {
+  position: relative;
+  z-index: 2;
+  color: inherit;
+  font-size: clamp(42px, 4rem, 72px);
+  font-weight: 950;
+  line-height: 0.95;
+  text-align: center;
 }
 
 .advanced-reaction-grid {
@@ -14,7 +76,42 @@
   position: relative;
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
-  gap: 10px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbf7ef;
+  box-shadow: var(--shadow);
+}
+
+.advanced-reaction-grid::after {
+  content: "";
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.advanced-reaction-grid.good::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(49, 183, 117, 0.72),
+    var(--glow-success);
+  animation: advanced-reaction-feedback 360ms ease;
+}
+
+.advanced-reaction-grid.early::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(230, 83, 73, 0.72),
+    var(--glow-danger);
+  animation: advanced-reaction-feedback 360ms ease;
+}
+
+.advanced-reaction-grid.early .advanced-reaction-cell {
+  animation: advanced-reaction-fail 260ms ease;
 }
 
 .advanced-reaction-grid.cells-1 {
@@ -30,15 +127,39 @@
 }
 
 .advanced-reaction-cell {
+  min-width: 0;
   min-height: 0;
   height: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: #fbf7ef;
   color: var(--muted);
-  font-size: clamp(34px, 10vw, 72px);
+  font-size: clamp(42px, 4rem, 72px);
   font-weight: 950;
   cursor: pointer;
+  transition:
+    background 90ms ease,
+    color 90ms ease,
+    filter 120ms ease;
+}
+
+.advanced-reaction-cell + .advanced-reaction-cell {
+  box-shadow: inset 1px 0 0 rgba(24, 24, 24, 0.08);
+}
+
+.advanced-reaction-grid.cells-4 .advanced-reaction-cell:nth-child(n + 3) {
+  box-shadow: inset 0 1px 0 rgba(24, 24, 24, 0.08);
+}
+
+.advanced-reaction-grid.cells-4 .advanced-reaction-cell:nth-child(2n) {
+  box-shadow:
+    inset 1px 0 0 rgba(24, 24, 24, 0.08),
+    inset 0 1px 0 rgba(24, 24, 24, 0.08);
 }
 
 .advanced-reaction-cell.green {
@@ -54,6 +175,55 @@
 }
 
 .advanced-reaction-cell.clicked {
-  background: #fbf7ef;
+  background: #e9f6ee;
   color: var(--ink);
+}
+
+.reaction-cell-avatar {
+  width: clamp(96px, 24vw, 156px);
+  height: clamp(96px, 24vw, 156px);
+  display: grid;
+  place-items: center;
+}
+
+.advanced-reaction-cell.clicked .reaction-cell-avatar {
+  filter: drop-shadow(0 10px 18px rgba(47, 155, 104, 0.18));
+}
+
+@keyframes advanced-reaction-feedback {
+  0% {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+
+  30%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes advanced-reaction-fail {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  28% {
+    transform: translateX(-4px);
+  }
+
+  64% {
+    transform: translateX(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reaction-pad,
+  .reaction-pad-avatar,
+  .advanced-reaction-grid,
+  .advanced-reaction-cell {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
 }

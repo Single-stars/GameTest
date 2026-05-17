@@ -14,6 +14,7 @@ export type GeneratedDoodlePlatform = {
   y: number;
   width: number;
   start: boolean;
+  finish?: boolean;
   moving: boolean;
   risk: boolean;
   phase: number;
@@ -148,6 +149,25 @@ export function generateDoodleWorldLayout(
     });
   }
 
+  const safePlatforms = platforms.filter((platform) => platform.start || platform.y < targetHeight - playerSize * 2);
+  const lastPlatform = safePlatforms[safePlatforms.length - 1] ?? platforms[0];
+  const finishWidth = hardLayout ? 118 : 128;
+  const finishX = clamp(lastPlatform.x + clamp(stageWidth / 2 - lastPlatform.x, -150, 150), finishWidth / 2 + 18, stageWidth - finishWidth / 2 - 18);
+  const finishPlatform: GeneratedDoodlePlatform = {
+    id: safePlatforms.length,
+    x: finishX,
+    y: targetHeight,
+    width: finishWidth,
+    start: false,
+    finish: true,
+    moving: false,
+    risk: false,
+    phase: 0,
+    range: 0,
+    speed: 0,
+  };
+  const playablePlatforms = [...safePlatforms, finishPlatform];
+
   const staticHazardCount = Math.ceil(targetScreens * hazardDensity * 1.25);
   const hazardCount = Math.max(movingObstacleCount, staticHazardCount);
   const finalObstacleStartScreen = numberParam(level.params, "finalObstacleStartScreen", 0);
@@ -158,7 +178,7 @@ export function generateDoodleWorldLayout(
     const movementPattern: DoodleMovementPattern = movementEnabled ? patterns[index % patterns.length] : "static";
     const screenBand = index / Math.max(1, hazardCount);
     const y = clamp(hazardMinY + screenBand * (hazardMaxY - hazardMinY) + rand() * stageHeight * 0.62, hazardMinY, hazardMaxY);
-    const routePlatform = platforms.reduce((nearest, platform) => Math.abs(platform.y - y) < Math.abs(nearest.y - y) ? platform : nearest, platforms[0]);
+    const routePlatform = playablePlatforms.reduce((nearest, platform) => Math.abs(platform.y - y) < Math.abs(nearest.y - y) ? platform : nearest, playablePlatforms[0]);
     const direction = index % 2 === 0 ? 1 : -1;
     const nearRoute = movementEnabled && movementPattern === "slowCross";
     const pressureOffset = nearRoute ? 54 : movementEnabled ? 76 + rand() * 42 : 64 + rand() * 62;
@@ -177,5 +197,5 @@ export function generateDoodleWorldLayout(
     };
   });
 
-  return { hazards, platforms, startPlayerY, targetHeight };
+  return { hazards, platforms: playablePlatforms, startPlayerY, targetHeight };
 }

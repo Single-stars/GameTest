@@ -338,6 +338,14 @@
     font-size: 26px;
   }
 
+  .advanced-lobby-badge {
+    right: 10px;
+    bottom: 10px;
+    min-width: 28px;
+    min-height: 28px;
+    font-size: 14px;
+  }
+
   .advanced-lobby-actions {
     gap: 8px;
   }

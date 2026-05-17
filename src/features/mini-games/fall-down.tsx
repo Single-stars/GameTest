@@ -13,6 +13,7 @@ import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
+  MINI_GAME_COMPLETION_DELAY_MS,
   MINI_GAME_UI_SYNC_MS,
   MiniGameFpsBadge,
   MiniGamePerfPanel,
@@ -24,6 +25,7 @@ import {
   transformPoint3d,
   useMiniGameFpsCounter,
   useMiniGameStageSize,
+  useMiniGameScreenShake,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
   type MiniGameRunMode,
@@ -386,6 +388,7 @@ export function FallDownPrototype({
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Fall Down");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
+  const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
 
   const syncView = useCallback((time = performance.now()) => {
@@ -468,6 +471,7 @@ export function FallDownPrototype({
     (reason: string): boolean => {
       const current = runtimeRef.current;
       if (mode === "base" && recoverFallDownBaseFailure(current, reason, stageSize)) {
+        triggerScreenShake();
         if (fallDownInputDirectionRef.current !== 0) {
           resumeFallDownInput(current, fallDownInputDirectionRef.current);
         }
@@ -475,6 +479,7 @@ export function FallDownPrototype({
         return true;
       }
       if (mode === "base") {
+        triggerScreenShake();
         syncView();
         return false;
       }
@@ -485,7 +490,7 @@ export function FallDownPrototype({
       syncView();
       return false;
     },
-    [mode, resumeFallDownInput, stageSize, syncView],
+    [mode, resumeFallDownInput, stageSize, syncView, triggerScreenShake],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -667,23 +672,28 @@ export function FallDownPrototype({
   }, [fail, fallDownPlayerSpeed, fragileTime, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncView, topPressureSpeed, updateFallDownDom]);
 
   useEffect(() => {
-    if (!onComplete || completedRef.current || view.status === "playing") return;
+    if (!onComplete || completedRef.current) return;
+    const completedStatus = view.status;
+    if (completedStatus === "playing") return;
     completedRef.current = true;
     const latest = runtimeRef.current;
-    onComplete({
-      gameId: "fall-down",
-      levelId: level.levelId,
-      status: view.status,
-      reason: latest.reason,
-      elapsedMs: Math.round(latest.time * 1000),
-      stats: {
-        failures: latest.failures,
-        progressPercent: Math.round((latest.layersReached / Math.max(1, requiredLayers)) * 100),
-        layersReached: latest.layersReached,
-        requiredLayers,
-        forcedAdvance: mode === "base" && view.status === "failed",
-      },
-    });
+    const timer = window.setTimeout(() => {
+      onComplete({
+        gameId: "fall-down",
+        levelId: level.levelId,
+        status: completedStatus,
+        reason: latest.reason,
+        elapsedMs: Math.round(latest.time * 1000),
+        stats: {
+          failures: latest.failures,
+          progressPercent: Math.round((latest.layersReached / Math.max(1, requiredLayers)) * 100),
+          layersReached: latest.layersReached,
+          requiredLayers,
+          forcedAdvance: mode === "base" && completedStatus === "failed",
+        },
+      });
+    }, mode === "prototype" ? MINI_GAME_COMPLETION_DELAY_MS : 0);
+    return () => window.clearTimeout(timer);
   }, [level.levelId, mode, onComplete, requiredLayers, view.status]);
 
   const showOverlay = mode === "prototype";
@@ -697,7 +707,7 @@ export function FallDownPrototype({
         {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
-        className={`prototype-stage fall-down-stage ${view.status === "failed" ? "failed" : ""}`}
+        className={`prototype-stage fall-down-stage ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="一路向下"
@@ -747,7 +757,7 @@ export function FallDownPrototype({
                   }}
                 />
               ) : null}
-              {platform.kind === "finish" ? <span className="fall-finish-flag">终</span> : null}
+              {platform.kind === "finish" ? <span className="fall-finish-flag" aria-hidden="true" /> : null}
             </div>
           );
         })}

@@ -8,6 +8,31 @@
   cursor: pointer;
 }
 
+.knife-stage::after {
+  content: "";
+  position: absolute;
+  z-index: 24;
+  inset: 0;
+  border: 0 solid transparent;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.knife-stage.feedback-good::after {
+  border-width: 6px;
+  border-color: rgba(47, 155, 104, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(47, 155, 104, 0.18), 0 0 0 8px rgba(47, 155, 104, 0.08);
+  animation: knife-stage-feedback 420ms ease both;
+}
+
+.knife-stage.feedback-bad::after {
+  border-width: 6px;
+  border-color: rgba(230, 83, 73, 0.76);
+  box-shadow: inset 0 0 0 2px rgba(230, 83, 73, 0.18), 0 0 0 8px rgba(230, 83, 73, 0.09);
+  animation: knife-stage-feedback 420ms ease both;
+}
+
 .knife-wheel-wrap {
   z-index: 6;
   left: 50%;
@@ -23,6 +48,19 @@
   height: 100%;
   backface-visibility: hidden;
   will-change: transform;
+}
+
+.knife-wheel-avatar {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  width: clamp(34px, 24%, 46px);
+  height: clamp(34px, 24%, 46px);
+  place-items: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .knife-wheel-svg {
@@ -117,5 +155,20 @@
 
   to {
     transform: translateY(calc(-1 * var(--knife-flight-distance, 276px)));
+  }
+}
+
+@keyframes knife-stage-feedback {
+  0% {
+    opacity: 0;
+  }
+
+  18%,
+  72% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
   }
 }

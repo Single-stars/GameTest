@@ -10,6 +10,7 @@ import {
 import {
   readMiniGameRuntimeSource,
   readMiniGameConfigSource,
+  readAppCssSource,
   movementPatterns,
 } from "./test-utils.ts";
 
@@ -153,6 +154,29 @@ test("doodle visible selectors cull used and off-screen world objects", () => {
   });
   assert.ok(visibleHazards.length < layout.hazards.length);
   assert.ok(visibleHazards.every((hazard) => hazard.y + hazard.size >= 560 && hazard.y - hazard.size <= 1360));
+});
+
+test("doodle completion uses a highest finish platform instead of a height line", () => {
+  const level = getMiniGameLevel("doodle", "doodle-base");
+  const layout = generateDoodleWorldLayout(level, "finish-platform");
+  const finishPlatforms = layout.platforms.filter((platform) => platform.finish);
+  const finish = finishPlatforms[0];
+  const highestY = Math.max(...layout.platforms.map((platform) => platform.y));
+  const runtimeSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+
+  assert.equal(finishPlatforms.length, 1);
+  assert.equal(finish.y, layout.targetHeight);
+  assert.equal(finish.y, highestY);
+  assert.equal(finish.risk, false);
+  assert.equal(finish.moving, false);
+  assert.match(runtimeSource, /let landedFinishPlatform = false;/);
+  assert.match(runtimeSource, /landedFinishPlatform = platform\.finish === true;/);
+  assert.match(runtimeSource, /if \(status === "playing" && landedFinishPlatform\)/);
+  assert.doesNotMatch(runtimeSource, /nextY >= world\.targetHeight/);
+  assert.doesNotMatch(runtimeSource, /className="doodle-progress-line"/);
+  assert.match(cssSource, /\.doodle-platform\.finish/);
+  assert.match(cssSource, /\.doodle-platform\.finish::after/);
 });
 
 test("doodle only moving obstacle variants enable moving hazards", () => {

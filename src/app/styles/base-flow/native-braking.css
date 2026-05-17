@@ -14,7 +14,35 @@
 }
 
 .advanced-braking {
+  overflow: hidden;
   grid-template-rows: 1fr auto;
+}
+
+.advanced-braking::after {
+  content: "";
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.advanced-braking.success::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(49, 183, 117, 0.72),
+    var(--glow-success);
+  animation: brake-panel-feedback 420ms ease;
+}
+
+.advanced-braking.early::after,
+.advanced-braking.crashed::after {
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 4px rgba(230, 83, 73, 0.72),
+    var(--glow-danger);
+  animation: brake-panel-feedback 420ms ease;
 }
 
 .advanced-brake-track {
@@ -68,7 +96,19 @@
   transform: rotate(-7deg) translateY(2px);
 }
 
+.advanced-braking.crashed .advanced-runner {
+  box-shadow: var(--glow-danger);
+  filter: drop-shadow(0 0 0.65rem rgba(230, 83, 73, 0.58));
+  transform: rotate(-7deg) translateY(2px);
+}
+
 .dino-panel.early .advanced-runner {
+  animation: brake-early-flash 420ms ease-in-out 2;
+  filter: drop-shadow(0 0 0.55rem rgba(24, 24, 24, 0.22));
+  transform: translateY(2px);
+}
+
+.advanced-braking.early .advanced-runner {
   animation: brake-early-flash 420ms ease-in-out 2;
   filter: drop-shadow(0 0 0.55rem rgba(24, 24, 24, 0.22));
   transform: translateY(2px);
@@ -78,9 +118,31 @@
   filter: drop-shadow(0 0 0.55rem rgba(47, 155, 104, 0.55));
 }
 
+.advanced-braking.success .advanced-runner {
+  filter: drop-shadow(0 0 0.55rem rgba(47, 155, 104, 0.55));
+}
+
 .dino-panel.crashed .advanced-hazard {
   animation: brake-danger-hit 340ms ease-in-out 2;
   box-shadow: var(--glow-danger);
+}
+
+.advanced-braking.crashed .advanced-hazard {
+  animation: brake-danger-hit 340ms ease-in-out 2;
+  box-shadow: var(--glow-danger);
+}
+
+@keyframes brake-panel-feedback {
+  0% {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+
+  30%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes brake-danger-hit {
