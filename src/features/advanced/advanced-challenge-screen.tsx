@@ -6,7 +6,8 @@ import {
   getAdvancedLobbyLevelItems,
   resolveAdvancedLobbyClickLevel,
   resolveAdvancedLobbyDragOffset,
-  resolveAdvancedLobbySwipeLevel,
+  resolveAdvancedLobbyMomentumFrame,
+  resolveAdvancedLobbyMomentumLevel,
 } from "@/lib/advanced-challenge-view";
 import { getAdvancedStageConfig, shouldShowPerfectClearShortcut, type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import {
@@ -60,6 +61,7 @@ const GOAL_ICON_LABELS = {
 } as const;
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const TAP_THRESHOLD_PX = 12;
+const MOMENTUM_START_VELOCITY_PX_PER_MS = 0.12;
 type LobbyDragSample = {
   time: number;
   x: number;
@@ -105,17 +107,20 @@ export function AdvancedChallengeScreen({
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
   const nextLevel = Math.min(10, currentLevel + 1);
   const activeLevel = challenge.mode === "select" ? nextLevel : challenge.level;
-  const activeConfig = getAdvancedStageConfig(challenge.roundId, activeLevel);
   const selectedLevel = activeLevel;
+  const activeConfig = getAdvancedStageConfig(challenge.roundId, selectedLevel);
   const carouselRef = React.useRef<HTMLDivElement | null>(null);
   const trackRef = React.useRef<HTMLDivElement | null>(null);
   const dragStartXRef = React.useRef<number | null>(null);
   const dragLastSampleRef = React.useRef<LobbyDragSample | null>(null);
   const dragVelocityXRef = React.useRef(0);
+  const dragTotalDeltaXRef = React.useRef(0);
   const pointerDownLevelRef = React.useRef<number | null>(null);
   const activeLobbyPointerIdRef = React.useRef<number | null>(null);
   const dragOffsetRef = React.useRef(0);
   const dragAnimationFrameRef = React.useRef<number | null>(null);
+  const lobbyMomentumFrameRef = React.useRef<number | null>(null);
+  const lobbyMomentumLastTimeRef = React.useRef<number | null>(null);
   const [trackStepPx, setTrackStepPx] = React.useState(DEFAULT_LOBBY_TRACK_STEP_PX);
   const [isDragging, setIsDragging] = React.useState(false);
 
@@ -169,18 +174,84 @@ export function AdvancedChallengeScreen({
       if (dragAnimationFrameRef.current !== null) {
         window.cancelAnimationFrame(dragAnimationFrameRef.current);
       }
+      if (lobbyMomentumFrameRef.current !== null) {
+        window.cancelAnimationFrame(lobbyMomentumFrameRef.current);
+      }
     };
   }, []);
 
-  const cancelLobbyPointerGesture = React.useCallback(() => {
+  const cancelLobbyMomentum = React.useCallback(() => {
+    if (lobbyMomentumFrameRef.current !== null) {
+      window.cancelAnimationFrame(lobbyMomentumFrameRef.current);
+      lobbyMomentumFrameRef.current = null;
+    }
+    lobbyMomentumLastTimeRef.current = null;
+  }, []);
+
+  const finishLobbyMomentum = React.useCallback(() => {
+    cancelLobbyMomentum();
+    const nextSelectedLevel = resolveAdvancedLobbyMomentumLevel({
+      currentLevel,
+      selectedLevel,
+      offsetPx: dragOffsetRef.current,
+      stepPx: trackStepPx,
+    });
+
+    pointerDownLevelRef.current = null;
     activeLobbyPointerIdRef.current = null;
     dragStartXRef.current = null;
     dragLastSampleRef.current = null;
     dragVelocityXRef.current = 0;
+    dragTotalDeltaXRef.current = 0;
+    setIsDragging(false);
+    resetTrackDragOffset();
+    if (nextSelectedLevel !== selectedLevel) {
+      onPickLevel(nextSelectedLevel);
+    }
+  }, [cancelLobbyMomentum, currentLevel, onPickLevel, resetTrackDragOffset, selectedLevel, trackStepPx]);
+
+  const startLobbyMomentum = React.useCallback(() => {
+    if (lobbyMomentumFrameRef.current !== null) return;
+    setIsDragging(true);
+    lobbyMomentumLastTimeRef.current = null;
+
+    const tick = (time: number) => {
+      const lastTime = lobbyMomentumLastTimeRef.current ?? time;
+      lobbyMomentumLastTimeRef.current = time;
+      const frame = resolveAdvancedLobbyMomentumFrame({
+        currentLevel,
+        selectedLevel,
+        offsetPx: dragOffsetRef.current,
+        velocityX: dragVelocityXRef.current,
+        elapsedMs: time - lastTime,
+        stepPx: trackStepPx,
+      });
+
+      dragVelocityXRef.current = frame.velocityX;
+      scheduleTrackDragOffset(frame.offsetPx);
+      if (frame.done) {
+        lobbyMomentumFrameRef.current = null;
+        lobbyMomentumLastTimeRef.current = null;
+        finishLobbyMomentum();
+        return;
+      }
+      lobbyMomentumFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    lobbyMomentumFrameRef.current = window.requestAnimationFrame(tick);
+  }, [currentLevel, finishLobbyMomentum, scheduleTrackDragOffset, selectedLevel, trackStepPx]);
+
+  const cancelLobbyPointerGesture = React.useCallback(() => {
+    cancelLobbyMomentum();
+    activeLobbyPointerIdRef.current = null;
+    dragStartXRef.current = null;
+    dragLastSampleRef.current = null;
+    dragVelocityXRef.current = 0;
+    dragTotalDeltaXRef.current = 0;
     pointerDownLevelRef.current = null;
     setIsDragging(false);
     resetTrackDragOffset();
-  }, [resetTrackDragOffset]);
+  }, [cancelLobbyMomentum, resetTrackDragOffset]);
 
   const updateLobbyPointerDrag = React.useCallback(
     (clientX: number, timeStamp: number) => {
@@ -192,15 +263,26 @@ export function AdvancedChallengeScreen({
       if (lastSample && lastSample.x === clientX && lastSample.time === time) return;
       if (lastSample) {
         const elapsedMs = Math.max(1, time - lastSample.time);
-        const velocityX = (clientX - lastSample.x) / elapsedMs;
+        const deltaX = clientX - lastSample.x;
+        const velocityX = deltaX / elapsedMs;
         dragVelocityXRef.current = Math.abs(velocityX) < 0.02 ? 0 : velocityX;
+        dragTotalDeltaXRef.current += deltaX;
+        scheduleTrackDragOffset(
+          resolveAdvancedLobbyDragOffset({
+            currentLevel,
+            selectedLevel,
+            deltaX: dragOffsetRef.current + deltaX,
+            stepPx: trackStepPx,
+          }),
+        );
+        if (Math.abs(dragVelocityXRef.current) >= MOMENTUM_START_VELOCITY_PX_PER_MS) {
+          pointerDownLevelRef.current = null;
+          startLobbyMomentum();
+        }
       }
       dragLastSampleRef.current = { time, x: clientX };
-
-      const deltaX = clientX - startX;
-      scheduleTrackDragOffset(resolveAdvancedLobbyDragOffset({ currentLevel, selectedLevel, deltaX, stepPx: trackStepPx }));
     },
-    [currentLevel, scheduleTrackDragOffset, selectedLevel, trackStepPx],
+    [currentLevel, scheduleTrackDragOffset, selectedLevel, startLobbyMomentum, trackStepPx],
   );
 
   const finishLobbyPointerGesture = React.useCallback(
@@ -210,39 +292,38 @@ export function AdvancedChallengeScreen({
       activeLobbyPointerIdRef.current = null;
       dragStartXRef.current = null;
       dragLastSampleRef.current = null;
-      setIsDragging(false);
-      resetTrackDragOffset();
       if (startX === null) {
-        dragVelocityXRef.current = 0;
+        finishLobbyMomentum();
         return;
       }
 
-      const deltaX = clientX - startX;
-      if (Math.abs(deltaX) < TAP_THRESHOLD_PX) {
+      const isTap = Math.abs(dragTotalDeltaXRef.current) < TAP_THRESHOLD_PX && lobbyMomentumFrameRef.current === null;
+      if (isTap) {
         const clickedLevel =
           pointerDownLevelRef.current === null
             ? null
             : resolveAdvancedLobbyClickLevel({ currentLevel, requestedLevel: pointerDownLevelRef.current });
         pointerDownLevelRef.current = null;
         dragVelocityXRef.current = 0;
-        if (clickedLevel !== null) onPickLevel(clickedLevel);
+        dragTotalDeltaXRef.current = 0;
+        setIsDragging(false);
+        resetTrackDragOffset();
+        if (clickedLevel !== null) {
+          onPickLevel(clickedLevel);
+        }
         return;
       }
-      pointerDownLevelRef.current = null;
 
-      const nextSelectedLevel = resolveAdvancedLobbySwipeLevel({
-        currentLevel,
-        selectedLevel,
-        deltaX,
-        thresholdPx: trackStepPx,
-        velocityX: dragVelocityXRef.current,
-      });
-      dragVelocityXRef.current = 0;
-      if (nextSelectedLevel !== selectedLevel) {
-        onPickLevel(nextSelectedLevel);
+      pointerDownLevelRef.current = null;
+      if (Math.abs(dragVelocityXRef.current) >= MOMENTUM_START_VELOCITY_PX_PER_MS) {
+        startLobbyMomentum();
+        return;
+      }
+      if (lobbyMomentumFrameRef.current === null) {
+        finishLobbyMomentum();
       }
     },
-    [currentLevel, onPickLevel, resetTrackDragOffset, selectedLevel, trackStepPx, updateLobbyPointerDrag],
+    [currentLevel, finishLobbyMomentum, onPickLevel, resetTrackDragOffset, startLobbyMomentum, updateLobbyPointerDrag],
   );
 
   React.useEffect(() => {
@@ -343,12 +424,13 @@ export function AdvancedChallengeScreen({
   } as React.CSSProperties;
 
   const handleLobbyPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    cancelLobbyMomentum();
     dragStartXRef.current = event.clientX;
     dragLastSampleRef.current = { time: event.timeStamp, x: event.clientX };
     dragVelocityXRef.current = 0;
+    dragTotalDeltaXRef.current = 0;
     pointerDownLevelRef.current = getPointerLevel(event.target);
     activeLobbyPointerIdRef.current = event.pointerId;
-    scheduleTrackDragOffset(0);
     setIsDragging(true);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);

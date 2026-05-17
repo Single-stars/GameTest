@@ -8,6 +8,9 @@ const DEFAULT_SWIPE_THRESHOLD_PX = 48;
 const DEFAULT_DRAG_OVERSCROLL_PX = 24;
 const DEFAULT_DRAG_OVERSCROLL_RESISTANCE = 0.12;
 const DEFAULT_VELOCITY_PROJECTION_MS = 220;
+const DEFAULT_MOMENTUM_FRICTION_PER_FRAME = 0.92;
+const DEFAULT_MOMENTUM_STOP_VELOCITY = 0.035;
+const DEFAULT_MOMENTUM_MAX_ELAPSED_MS = 48;
 
 export type AdvancedLobbyLevelPosition = "previous" | "selected" | "next" | "distant";
 export type AdvancedGoalIcon = "target" | "ban" | "bolt" | "flag";
@@ -257,6 +260,76 @@ export function resolveAdvancedLobbyDragOffset({
     return maxDrag + Math.min(maxOverscroll, (deltaX - maxDrag) * resistance);
   }
   return minDrag - Math.min(maxOverscroll, (minDrag - deltaX) * resistance);
+}
+
+function getAdvancedLobbyDragBounds({
+  currentLevel,
+  selectedLevel,
+  stepPx,
+}: {
+  currentLevel: number;
+  selectedLevel: number;
+  stepPx: number;
+}) {
+  const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
+  const step = Math.max(1, stepPx);
+  const maxLevel = maxSelectableLevel(currentLevel);
+  return {
+    maxOffsetPx: (selected - ADVANCED_LEVEL_MIN) * step,
+    minOffsetPx: 0 - (maxLevel - selected) * step,
+    selected,
+    step,
+  };
+}
+
+export function resolveAdvancedLobbyMomentumLevel({
+  currentLevel,
+  selectedLevel,
+  offsetPx,
+  stepPx,
+}: {
+  currentLevel: number;
+  selectedLevel: number;
+  offsetPx: number;
+  stepPx: number;
+}) {
+  const { selected, step } = getAdvancedLobbyDragBounds({ currentLevel, selectedLevel, stepPx });
+  const requestedLevel = selected - Math.round(offsetPx / step);
+  return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, maxSelectableLevel(currentLevel));
+}
+
+export function resolveAdvancedLobbyMomentumFrame({
+  currentLevel,
+  selectedLevel,
+  offsetPx,
+  velocityX,
+  elapsedMs,
+  stepPx,
+  frictionPerFrame = DEFAULT_MOMENTUM_FRICTION_PER_FRAME,
+  stopVelocity = DEFAULT_MOMENTUM_STOP_VELOCITY,
+}: {
+  currentLevel: number;
+  selectedLevel: number;
+  offsetPx: number;
+  velocityX: number;
+  elapsedMs: number;
+  stepPx: number;
+  frictionPerFrame?: number;
+  stopVelocity?: number;
+}) {
+  const { minOffsetPx, maxOffsetPx } = getAdvancedLobbyDragBounds({ currentLevel, selectedLevel, stepPx });
+  const elapsed = Math.max(0, Math.min(DEFAULT_MOMENTUM_MAX_ELAPSED_MS, Number.isFinite(elapsedMs) ? elapsedMs : 0));
+  const nextOffsetPx = offsetPx + velocityX * elapsed;
+  if (nextOffsetPx <= minOffsetPx) return { offsetPx: minOffsetPx, velocityX: 0, done: true };
+  if (nextOffsetPx >= maxOffsetPx) return { offsetPx: maxOffsetPx, velocityX: 0, done: true };
+
+  const friction = Math.max(0, Math.min(1, frictionPerFrame));
+  const nextVelocityX = velocityX * Math.pow(friction, elapsed / (1000 / 60));
+  return {
+    offsetPx: nextOffsetPx,
+    velocityX: Math.abs(nextVelocityX) < Math.max(0, stopVelocity) ? 0 : nextVelocityX,
+    done: Math.abs(nextVelocityX) < Math.max(0, stopVelocity),
+  };
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
