@@ -5,13 +5,7 @@ import test from "node:test";
 import {
   getAdvancedChallengeGoalItems,
   getAdvancedLobbyLevelItems,
-  resolveAdvancedLobbyDragOffset,
   resolveAdvancedLobbyClickLevel,
-  resolveAdvancedLobbyMomentumFrame,
-  resolveAdvancedLobbyMomentumLevel,
-  resolveAdvancedLobbySwipeLevel,
-  normalizeAdvancedLobbyReleaseVelocity,
-  shouldAdvancedLobbyUseReleaseMomentum,
 } from "./advanced-challenge-view.ts";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
@@ -37,170 +31,13 @@ test("advanced lobby renders every level on one continuous track", () => {
   );
 });
 
-test("advanced lobby click and swipe switch only to unlocked levels", () => {
+test("advanced lobby click switches only to unlocked levels", () => {
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 1 }), 1);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 2 }), 2);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 3 }), null);
-
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 2, deltaX: 92 }), 1);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 2, deltaX: -92 }), 2);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 1, deltaX: -92 }), 2);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 2, deltaX: 16 }), 2);
-});
-
-test("advanced lobby swipe can move across multiple unlocked levels in one gesture", () => {
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 5, selectedLevel: 1, deltaX: -160 }), 4);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 1, deltaX: -900 }), 9);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 8, deltaX: 900 }), 1);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 8, selectedLevel: 6, deltaX: 260 }), 1);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 1, selectedLevel: 2, deltaX: -220 }), 2);
-});
-
-test("advanced lobby swipe has no default step cap but can still be capped explicitly", () => {
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 2, deltaX: -1200 }), 10);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 9, deltaX: 1200 }), 1);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 2, deltaX: -1200, maxStepCount: 2 }), 4);
-  assert.equal(resolveAdvancedLobbySwipeLevel({ currentLevel: 9, selectedLevel: 9, deltaX: 1200, maxStepCount: 2 }), 7);
-});
-
-test("advanced lobby swipe uses release velocity to settle like an inertial carousel", () => {
-  assert.equal(
-    resolveAdvancedLobbySwipeLevel({
-      currentLevel: 9,
-      selectedLevel: 2,
-      deltaX: -36,
-      velocityProjectionMs: 220,
-      velocityX: -2.4,
-      thresholdPx: 156,
-    }),
-    6,
-  );
-  assert.equal(
-    resolveAdvancedLobbySwipeLevel({
-      currentLevel: 9,
-      selectedLevel: 8,
-      deltaX: 34,
-      velocityProjectionMs: 220,
-      velocityX: 2.4,
-      thresholdPx: 156,
-    }),
-    4,
-  );
-  assert.equal(
-    resolveAdvancedLobbySwipeLevel({
-      currentLevel: 3,
-      selectedLevel: 4,
-      deltaX: -28,
-      velocityProjectionMs: 260,
-      velocityX: -4.2,
-      thresholdPx: 156,
-    }),
-    4,
-  );
-  assert.equal(
-    resolveAdvancedLobbySwipeLevel({
-      currentLevel: 9,
-      selectedLevel: 5,
-      deltaX: 18,
-      velocityProjectionMs: 220,
-      velocityX: 0.08,
-      thresholdPx: 156,
-    }),
-    5,
-  );
-});
-
-test("advanced lobby drag offset keeps only a small elastic overscroll at selectable boundaries", () => {
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: 140, stepPx: 100 }), 140);
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: -210, stepPx: 100 }), -210);
-
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 1, deltaX: 260, stepPx: 100 }), 24);
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 6, deltaX: -260, stepPx: 100 }), -24);
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: 520, stepPx: 100 }), 224);
-  assert.equal(resolveAdvancedLobbyDragOffset({ currentLevel: 5, selectedLevel: 3, deltaX: -520, stepPx: 100 }), -324);
-});
-
-test("advanced lobby momentum keeps rolling from velocity and snaps to the nearest selectable level", () => {
-  const frame = resolveAdvancedLobbyMomentumFrame({
-    currentLevel: 9,
-    selectedLevel: 5,
-    offsetPx: 0,
-    velocityX: -2,
-    elapsedMs: 16,
-    stepPx: 156,
-  });
-
-  assert.equal(frame.done, false);
-  assert.ok(frame.offsetPx < -30);
-  assert.ok(frame.velocityX < -1.5);
-  assert.ok(frame.velocityX > -2);
-
-  assert.equal(
-    resolveAdvancedLobbyMomentumLevel({
-      currentLevel: 9,
-      selectedLevel: 5,
-      offsetPx: -314,
-      stepPx: 156,
-    }),
-    7,
-  );
-  assert.equal(
-    resolveAdvancedLobbyMomentumLevel({
-      currentLevel: 9,
-      selectedLevel: 5,
-      offsetPx: 88,
-      stepPx: 156,
-    }),
-    4,
-  );
-  assert.deepEqual(
-    resolveAdvancedLobbyMomentumFrame({
-      currentLevel: 9,
-      selectedLevel: 10,
-      offsetPx: 0,
-      velocityX: -3,
-      elapsedMs: 16,
-      stepPx: 156,
-    }),
-    { offsetPx: 0, velocityX: 0, done: true },
-  );
-});
-
-test("advanced lobby release momentum requires deliberate drag distance and velocity", () => {
-  assert.equal(
-    shouldAdvancedLobbyUseReleaseMomentum({
-      totalDragX: 18,
-      velocityX: 2.4,
-      stepPx: 156,
-      tapThresholdPx: 12,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldAdvancedLobbyUseReleaseMomentum({
-      totalDragX: 48,
-      velocityX: 0.42,
-      stepPx: 156,
-      tapThresholdPx: 12,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldAdvancedLobbyUseReleaseMomentum({
-      totalDragX: 48,
-      velocityX: 0.9,
-      stepPx: 156,
-      tapThresholdPx: 12,
-    }),
-    true,
-  );
-});
-
-test("advanced lobby release velocity is capped so edge swipes do not jump across the whole track", () => {
-  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: 0.9 }), 0.9);
-  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: 4.8 }), 1.2);
-  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: -4.8 }), -1.2);
-  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: Number.NaN }), 0);
+  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 10 }), 10);
+  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 11 }), 10);
+  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 0, requestedLevel: 0 }), 1);
 });
 
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
@@ -232,12 +69,13 @@ test("doodle finish platform goal copy is derived from the landing rule", () => 
   assert.ok(goals.every((goal) => !goal.text.includes("到达 5 屏高度")));
 });
 
-test("advanced challenge screen uses the focused lobby with base replay and swipe support", () => {
+test("advanced challenge screen uses the focused lobby with base replay and click-only support", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(screenSource, /getAdvancedLobbyLevelItems/);
-  assert.match(screenSource, /resolveAdvancedLobbyMomentumLevel/);
+  assert.match(screenSource, /resolveAdvancedLobbyClickLevel/);
+  assert.doesNotMatch(screenSource, /resolveAdvancedLobbyMomentumLevel/);
   assert.match(screenSource, /getAdvancedChallengeGoalItems/);
   assert.match(screenSource, /onRestartBaseRound/);
   assert.match(screenSource, /重新挑战基础关/);
@@ -259,69 +97,40 @@ test("advanced base replay completion carries its own round and level instead of
   assert.match(pageSource, /setAdvancedChallenge\(\{\s*mode:\s*"intro",\s*roundId:\s*record\.roundId,\s*level:\s*record\.level\s*}\)/);
 });
 
-test("advanced lobby pointer handling keeps tap-to-select separate from drag gestures", () => {
+test("advanced lobby level selection is click-only without carousel drag handlers", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
 
-  assert.match(screenSource, /pointerDownLevelRef/);
-  assert.match(screenSource, /data-level=\{item\.level\}/);
-  assert.match(screenSource, /onPointerMove=\{handleLobbyPointerMove\}/);
+  assert.match(screenSource, /handleLevelClick/);
+  assert.match(screenSource, /onClick=\{\(\) => handleLevelClick\(item\.level\)\}/);
+  assert.match(screenSource, /disabled=\{!item\.selectable\}/);
   assert.match(screenSource, /advanced-lobby-track/);
   assert.match(screenSource, /lobbyTrackStyle/);
-  assert.match(screenSource, /Math\.abs\(dragTotalDeltaXRef\.current\)[\s\S]*pointerDownLevelRef\.current[\s\S]*onPickLevel\(clickedLevel\)/);
-  assert.doesNotMatch(screenSource, /onClick=\{\(\) => handleLevelClick\(item\.level\)\}/);
 
-  assert.match(cssSource, /--advanced-lobby-drag/);
+  assert.doesNotMatch(screenSource, /pointerDownLevelRef/);
+  assert.doesNotMatch(screenSource, /activeLobbyPointerIdRef/);
+  assert.doesNotMatch(screenSource, /dragStartXRef|dragVelocityXRef|dragTotalDeltaXRef|dragAnimationFrameRef|lobbyMomentumFrameRef/);
+  assert.doesNotMatch(screenSource, /handleLobbyPointerDown|handleLobbyPointerMove|handleLobbyPointerUp|handleLobbyPointerCancel/);
+  assert.doesNotMatch(screenSource, /onLostPointerCapture|onPointerCancel|onPointerDown=\{handleLobbyPointerDown\}|onPointerMove=\{handleLobbyPointerMove\}|onPointerUp=\{handleLobbyPointerUp\}/);
+  assert.doesNotMatch(screenSource, /setPointerCapture|releasePointerCapture|requestAnimationFrame/);
+  assert.doesNotMatch(screenSource, /resolveAdvancedLobbyDragOffset|resolveAdvancedLobbyMomentumFrame|shouldAdvancedLobbyUseReleaseMomentum/);
+
+  assert.doesNotMatch(cssSource, /--advanced-lobby-drag/);
+  assert.doesNotMatch(cssSource, /\.advanced-lobby-carousel\.dragging/);
+  assert.doesNotMatch(cssSource, /cursor:\s*grab|cursor:\s*grabbing|touch-action:\s*pan-y/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transform:/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transition:\s*transform/);
-  assert.match(cssSource, /\.advanced-lobby-carousel\.dragging\s+\.advanced-lobby-track/);
 });
 
-test("advanced lobby drag hot path updates the track CSS variable outside React renders", () => {
-  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+test("advanced lobby view helpers no longer expose drag or momentum selection APIs", () => {
+  const viewSource = readFileSync(new URL("./advanced-challenge-view.ts", import.meta.url), "utf8");
 
-  assert.match(screenSource, /trackRef/);
-  assert.match(screenSource, /dragAnimationFrameRef/);
-  assert.match(screenSource, /requestAnimationFrame/);
-  assert.match(screenSource, /style\.setProperty\("--advanced-lobby-drag"/);
-  assert.doesNotMatch(screenSource, /setDragOffsetPx\(resolveAdvancedLobbyDragOffset/);
-  assert.doesNotMatch(screenSource, /"--advanced-lobby-drag": `\$\{dragOffsetPx\}px`/);
-});
-
-test("advanced lobby drag release is recovered when the pointer leaves the carousel", () => {
-  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
-
-  assert.match(screenSource, /activeLobbyPointerIdRef/);
-  assert.match(screenSource, /dragVelocityXRef/);
-  assert.match(screenSource, /updateLobbyPointerDrag/);
-  assert.match(screenSource, /finishLobbyPointerGesture/);
-  assert.match(screenSource, /clearLobbyPointerContact/);
-  assert.match(screenSource, /window\.addEventListener\("pointermove"/);
-  assert.match(screenSource, /window\.addEventListener\("pointerup"/);
-  assert.match(screenSource, /window\.addEventListener\("pointercancel"/);
-  assert.match(screenSource, /window\.addEventListener\("blur"/);
-  assert.match(screenSource, /window\.addEventListener\("pagehide"/);
-  assert.match(screenSource, /document\.addEventListener\("visibilitychange"/);
-  assert.match(screenSource, /handleLobbyLostPointerCapture/);
-  assert.match(screenSource, /onLostPointerCapture=\{handleLobbyLostPointerCapture\}/);
-  assert.match(screenSource, /releaseLobbyPointerContact/);
-  assert.match(screenSource, /finishLobbyMomentum/);
-  assert.match(screenSource, /try\s*{\s*event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
-  assert.match(screenSource, /releasePointerCapture/);
-});
-
-test("advanced lobby drag follows the finger and starts momentum only on release", () => {
-  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
-
-  assert.match(screenSource, /lobbyMomentumFrameRef/);
-  assert.match(screenSource, /startLobbyMomentum/);
-  assert.match(screenSource, /resolveAdvancedLobbyMomentumFrame/);
-  assert.match(screenSource, /resolveAdvancedLobbyMomentumLevel/);
-  assert.match(screenSource, /shouldAdvancedLobbyUseReleaseMomentum/);
-  assert.match(screenSource, /normalizeAdvancedLobbyReleaseVelocity/);
-  assert.doesNotMatch(screenSource, /updateLobbyPointerDrag[\s\S]{0,1200}startLobbyMomentum/);
-  assert.match(screenSource, /releaseLobbyPointerContact[\s\S]*startLobbyMomentum/);
-  assert.match(screenSource, /handleWindowPointerMove[\s\S]*updateLobbyPointerDrag/);
+  assert.doesNotMatch(viewSource, /resolveAdvancedLobbySwipeLevel/);
+  assert.doesNotMatch(viewSource, /resolveAdvancedLobbyDragOffset/);
+  assert.doesNotMatch(viewSource, /resolveAdvancedLobbyMomentumFrame/);
+  assert.doesNotMatch(viewSource, /resolveAdvancedLobbyMomentumLevel/);
+  assert.doesNotMatch(viewSource, /shouldAdvancedLobbyUseReleaseMomentum/);
+  assert.doesNotMatch(viewSource, /normalizeAdvancedLobbyReleaseVelocity/);
 });
 
 test("advanced base replay uses a two-row play layout so the round is playable", () => {

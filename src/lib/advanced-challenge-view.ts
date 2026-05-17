@@ -4,16 +4,6 @@ import { getMiniGameLevel, type MiniGameId } from "./mini-games/index.ts";
 
 const ADVANCED_LEVEL_MIN = 1;
 const ADVANCED_LEVEL_MAX = 10;
-const DEFAULT_SWIPE_THRESHOLD_PX = 48;
-const DEFAULT_DRAG_OVERSCROLL_PX = 24;
-const DEFAULT_DRAG_OVERSCROLL_RESISTANCE = 0.12;
-const DEFAULT_VELOCITY_PROJECTION_MS = 220;
-const DEFAULT_MOMENTUM_FRICTION_PER_FRAME = 0.82;
-const DEFAULT_MOMENTUM_STOP_VELOCITY = 0.06;
-const DEFAULT_MOMENTUM_MAX_ELAPSED_MS = 48;
-const DEFAULT_RELEASE_DRAG_RATIO = 0.18;
-const DEFAULT_RELEASE_VELOCITY_PX_PER_MS = 0.7;
-const DEFAULT_MAX_RELEASE_VELOCITY_PX_PER_MS = 1.2;
 
 export type AdvancedLobbyLevelPosition = "previous" | "selected" | "next" | "distant";
 export type AdvancedGoalIcon = "target" | "ban" | "bolt" | "flag";
@@ -45,10 +35,6 @@ function clampDisplayLevel(level: number) {
 }
 
 function defaultSelectableLevel(currentLevel: number) {
-  return Math.min(ADVANCED_LEVEL_MAX, clampCurrentLevel(currentLevel) + 1);
-}
-
-function maxSelectableLevel(currentLevel: number) {
   return Math.min(ADVANCED_LEVEL_MAX, clampCurrentLevel(currentLevel) + 1);
 }
 
@@ -204,167 +190,6 @@ export function resolveAdvancedLobbyClickLevel({
 }) {
   const level = clampDisplayLevel(requestedLevel);
   return getAdvancedLevelState(currentLevel, level) === "locked" ? null : level;
-}
-
-export function resolveAdvancedLobbySwipeLevel({
-  currentLevel,
-  selectedLevel,
-  deltaX,
-  maxStepCount,
-  thresholdPx = DEFAULT_SWIPE_THRESHOLD_PX,
-  velocityProjectionMs = DEFAULT_VELOCITY_PROJECTION_MS,
-  velocityX = 0,
-}: {
-  currentLevel: number;
-  selectedLevel: number;
-  deltaX: number;
-  maxStepCount?: number;
-  thresholdPx?: number;
-  velocityProjectionMs?: number;
-  velocityX?: number;
-}) {
-  const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
-  const threshold = Math.max(1, thresholdPx);
-  const projectedDeltaX = deltaX + velocityX * Math.max(0, velocityProjectionMs);
-  if (Math.abs(projectedDeltaX) < threshold) return selected;
-
-  const rawSteps = Math.max(1, Math.round(Math.abs(projectedDeltaX) / threshold));
-  const steps =
-    maxStepCount === undefined ? rawSteps : Math.min(clampInteger(maxStepCount, 1, ADVANCED_LEVEL_MAX), rawSteps);
-  const requestedLevel = selected + (projectedDeltaX < 0 ? steps : -steps);
-  return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, maxSelectableLevel(currentLevel));
-}
-
-export function resolveAdvancedLobbyDragOffset({
-  currentLevel,
-  selectedLevel,
-  deltaX,
-  stepPx,
-  maxOverscrollPx = DEFAULT_DRAG_OVERSCROLL_PX,
-  overscrollResistance = DEFAULT_DRAG_OVERSCROLL_RESISTANCE,
-}: {
-  currentLevel: number;
-  selectedLevel: number;
-  deltaX: number;
-  stepPx: number;
-  maxOverscrollPx?: number;
-  overscrollResistance?: number;
-}) {
-  const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
-  const step = Math.max(1, stepPx);
-  const maxLevel = maxSelectableLevel(currentLevel);
-  const minDrag = 0 - (maxLevel - selected) * step;
-  const maxDrag = (selected - ADVANCED_LEVEL_MIN) * step;
-  if (deltaX >= minDrag && deltaX <= maxDrag) return deltaX;
-
-  const maxOverscroll = Math.max(0, maxOverscrollPx);
-  const resistance = Math.max(0, Math.min(1, overscrollResistance));
-  if (deltaX > maxDrag) {
-    return maxDrag + Math.min(maxOverscroll, (deltaX - maxDrag) * resistance);
-  }
-  return minDrag - Math.min(maxOverscroll, (minDrag - deltaX) * resistance);
-}
-
-function getAdvancedLobbyDragBounds({
-  currentLevel,
-  selectedLevel,
-  stepPx,
-}: {
-  currentLevel: number;
-  selectedLevel: number;
-  stepPx: number;
-}) {
-  const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
-  const step = Math.max(1, stepPx);
-  const maxLevel = maxSelectableLevel(currentLevel);
-  return {
-    maxOffsetPx: (selected - ADVANCED_LEVEL_MIN) * step,
-    minOffsetPx: 0 - (maxLevel - selected) * step,
-    selected,
-    step,
-  };
-}
-
-export function resolveAdvancedLobbyMomentumLevel({
-  currentLevel,
-  selectedLevel,
-  offsetPx,
-  stepPx,
-}: {
-  currentLevel: number;
-  selectedLevel: number;
-  offsetPx: number;
-  stepPx: number;
-}) {
-  const { selected, step } = getAdvancedLobbyDragBounds({ currentLevel, selectedLevel, stepPx });
-  const requestedLevel = selected - Math.round(offsetPx / step);
-  return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, maxSelectableLevel(currentLevel));
-}
-
-export function resolveAdvancedLobbyMomentumFrame({
-  currentLevel,
-  selectedLevel,
-  offsetPx,
-  velocityX,
-  elapsedMs,
-  stepPx,
-  frictionPerFrame = DEFAULT_MOMENTUM_FRICTION_PER_FRAME,
-  stopVelocity = DEFAULT_MOMENTUM_STOP_VELOCITY,
-}: {
-  currentLevel: number;
-  selectedLevel: number;
-  offsetPx: number;
-  velocityX: number;
-  elapsedMs: number;
-  stepPx: number;
-  frictionPerFrame?: number;
-  stopVelocity?: number;
-}) {
-  const { minOffsetPx, maxOffsetPx } = getAdvancedLobbyDragBounds({ currentLevel, selectedLevel, stepPx });
-  const elapsed = Math.max(0, Math.min(DEFAULT_MOMENTUM_MAX_ELAPSED_MS, Number.isFinite(elapsedMs) ? elapsedMs : 0));
-  const nextOffsetPx = offsetPx + velocityX * elapsed;
-  if (nextOffsetPx <= minOffsetPx) return { offsetPx: minOffsetPx, velocityX: 0, done: true };
-  if (nextOffsetPx >= maxOffsetPx) return { offsetPx: maxOffsetPx, velocityX: 0, done: true };
-
-  const friction = Math.max(0, Math.min(1, frictionPerFrame));
-  const nextVelocityX = velocityX * Math.pow(friction, elapsed / (1000 / 60));
-  return {
-    offsetPx: nextOffsetPx,
-    velocityX: Math.abs(nextVelocityX) < Math.max(0, stopVelocity) ? 0 : nextVelocityX,
-    done: Math.abs(nextVelocityX) < Math.max(0, stopVelocity),
-  };
-}
-
-export function shouldAdvancedLobbyUseReleaseMomentum({
-  totalDragX,
-  velocityX,
-  stepPx,
-  tapThresholdPx = DEFAULT_SWIPE_THRESHOLD_PX,
-  minimumDragRatio = DEFAULT_RELEASE_DRAG_RATIO,
-  minimumVelocityX = DEFAULT_RELEASE_VELOCITY_PX_PER_MS,
-}: {
-  totalDragX: number;
-  velocityX: number;
-  stepPx: number;
-  tapThresholdPx?: number;
-  minimumDragRatio?: number;
-  minimumVelocityX?: number;
-}) {
-  const step = Math.max(1, stepPx);
-  const deliberateDragPx = Math.max(Math.max(0, tapThresholdPx), step * Math.max(0, minimumDragRatio));
-  return Math.abs(totalDragX) >= deliberateDragPx && Math.abs(velocityX) >= Math.max(0, minimumVelocityX);
-}
-
-export function normalizeAdvancedLobbyReleaseVelocity({
-  velocityX,
-  maxVelocityX = DEFAULT_MAX_RELEASE_VELOCITY_PX_PER_MS,
-}: {
-  velocityX: number;
-  maxVelocityX?: number;
-}) {
-  if (!Number.isFinite(velocityX)) return 0;
-  const maxVelocity = Math.max(0, maxVelocityX);
-  return Math.sign(velocityX) * Math.min(Math.abs(velocityX), maxVelocity);
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
