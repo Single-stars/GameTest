@@ -8,9 +8,12 @@ const DEFAULT_SWIPE_THRESHOLD_PX = 48;
 const DEFAULT_DRAG_OVERSCROLL_PX = 24;
 const DEFAULT_DRAG_OVERSCROLL_RESISTANCE = 0.12;
 const DEFAULT_VELOCITY_PROJECTION_MS = 220;
-const DEFAULT_MOMENTUM_FRICTION_PER_FRAME = 0.92;
-const DEFAULT_MOMENTUM_STOP_VELOCITY = 0.035;
+const DEFAULT_MOMENTUM_FRICTION_PER_FRAME = 0.82;
+const DEFAULT_MOMENTUM_STOP_VELOCITY = 0.06;
 const DEFAULT_MOMENTUM_MAX_ELAPSED_MS = 48;
+const DEFAULT_RELEASE_DRAG_RATIO = 0.18;
+const DEFAULT_RELEASE_VELOCITY_PX_PER_MS = 0.7;
+const DEFAULT_MAX_RELEASE_VELOCITY_PX_PER_MS = 1.2;
 
 export type AdvancedLobbyLevelPosition = "previous" | "selected" | "next" | "distant";
 export type AdvancedGoalIcon = "target" | "ban" | "bolt" | "flag";
@@ -330,6 +333,38 @@ export function resolveAdvancedLobbyMomentumFrame({
     velocityX: Math.abs(nextVelocityX) < Math.max(0, stopVelocity) ? 0 : nextVelocityX,
     done: Math.abs(nextVelocityX) < Math.max(0, stopVelocity),
   };
+}
+
+export function shouldAdvancedLobbyUseReleaseMomentum({
+  totalDragX,
+  velocityX,
+  stepPx,
+  tapThresholdPx = DEFAULT_SWIPE_THRESHOLD_PX,
+  minimumDragRatio = DEFAULT_RELEASE_DRAG_RATIO,
+  minimumVelocityX = DEFAULT_RELEASE_VELOCITY_PX_PER_MS,
+}: {
+  totalDragX: number;
+  velocityX: number;
+  stepPx: number;
+  tapThresholdPx?: number;
+  minimumDragRatio?: number;
+  minimumVelocityX?: number;
+}) {
+  const step = Math.max(1, stepPx);
+  const deliberateDragPx = Math.max(Math.max(0, tapThresholdPx), step * Math.max(0, minimumDragRatio));
+  return Math.abs(totalDragX) >= deliberateDragPx && Math.abs(velocityX) >= Math.max(0, minimumVelocityX);
+}
+
+export function normalizeAdvancedLobbyReleaseVelocity({
+  velocityX,
+  maxVelocityX = DEFAULT_MAX_RELEASE_VELOCITY_PX_PER_MS,
+}: {
+  velocityX: number;
+  maxVelocityX?: number;
+}) {
+  if (!Number.isFinite(velocityX)) return 0;
+  const maxVelocity = Math.max(0, maxVelocityX);
+  return Math.sign(velocityX) * Math.min(Math.abs(velocityX), maxVelocity);
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {

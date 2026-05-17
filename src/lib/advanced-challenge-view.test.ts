@@ -10,6 +10,8 @@ import {
   resolveAdvancedLobbyMomentumFrame,
   resolveAdvancedLobbyMomentumLevel,
   resolveAdvancedLobbySwipeLevel,
+  normalizeAdvancedLobbyReleaseVelocity,
+  shouldAdvancedLobbyUseReleaseMomentum,
 } from "./advanced-challenge-view.ts";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
@@ -164,6 +166,43 @@ test("advanced lobby momentum keeps rolling from velocity and snaps to the neare
   );
 });
 
+test("advanced lobby release momentum requires deliberate drag distance and velocity", () => {
+  assert.equal(
+    shouldAdvancedLobbyUseReleaseMomentum({
+      totalDragX: 18,
+      velocityX: 2.4,
+      stepPx: 156,
+      tapThresholdPx: 12,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAdvancedLobbyUseReleaseMomentum({
+      totalDragX: 48,
+      velocityX: 0.42,
+      stepPx: 156,
+      tapThresholdPx: 12,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAdvancedLobbyUseReleaseMomentum({
+      totalDragX: 48,
+      velocityX: 0.9,
+      stepPx: 156,
+      tapThresholdPx: 12,
+    }),
+    true,
+  );
+});
+
+test("advanced lobby release velocity is capped so edge swipes do not jump across the whole track", () => {
+  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: 0.9 }), 0.9);
+  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: 4.8 }), 1.2);
+  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: -4.8 }), -1.2);
+  assert.equal(normalizeAdvancedLobbyReleaseVelocity({ velocityX: Number.NaN }), 0);
+});
+
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
   const reaction = getAdvancedStageConfig("reaction", 2);
   assert.deepEqual(getAdvancedChallengeGoalItems(reaction), [
@@ -256,24 +295,32 @@ test("advanced lobby drag release is recovered when the pointer leaves the carou
   assert.match(screenSource, /dragVelocityXRef/);
   assert.match(screenSource, /updateLobbyPointerDrag/);
   assert.match(screenSource, /finishLobbyPointerGesture/);
-  assert.match(screenSource, /cancelLobbyPointerGesture/);
+  assert.match(screenSource, /clearLobbyPointerContact/);
   assert.match(screenSource, /window\.addEventListener\("pointermove"/);
   assert.match(screenSource, /window\.addEventListener\("pointerup"/);
   assert.match(screenSource, /window\.addEventListener\("pointercancel"/);
   assert.match(screenSource, /window\.addEventListener\("blur"/);
+  assert.match(screenSource, /window\.addEventListener\("pagehide"/);
+  assert.match(screenSource, /document\.addEventListener\("visibilitychange"/);
+  assert.match(screenSource, /handleLobbyLostPointerCapture/);
+  assert.match(screenSource, /onLostPointerCapture=\{handleLobbyLostPointerCapture\}/);
+  assert.match(screenSource, /releaseLobbyPointerContact/);
   assert.match(screenSource, /finishLobbyMomentum/);
-  assert.doesNotMatch(screenSource, /onLostPointerCapture=/);
   assert.match(screenSource, /try\s*{\s*event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
+  assert.match(screenSource, /releasePointerCapture/);
 });
 
-test("advanced lobby drag starts momentum while the pointer is still moving", () => {
+test("advanced lobby drag follows the finger and starts momentum only on release", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
 
   assert.match(screenSource, /lobbyMomentumFrameRef/);
   assert.match(screenSource, /startLobbyMomentum/);
   assert.match(screenSource, /resolveAdvancedLobbyMomentumFrame/);
   assert.match(screenSource, /resolveAdvancedLobbyMomentumLevel/);
-  assert.match(screenSource, /updateLobbyPointerDrag[\s\S]*startLobbyMomentum/);
+  assert.match(screenSource, /shouldAdvancedLobbyUseReleaseMomentum/);
+  assert.match(screenSource, /normalizeAdvancedLobbyReleaseVelocity/);
+  assert.doesNotMatch(screenSource, /updateLobbyPointerDrag[\s\S]{0,1200}startLobbyMomentum/);
+  assert.match(screenSource, /releaseLobbyPointerContact[\s\S]*startLobbyMomentum/);
   assert.match(screenSource, /handleWindowPointerMove[\s\S]*updateLobbyPointerDrag/);
 });
 
