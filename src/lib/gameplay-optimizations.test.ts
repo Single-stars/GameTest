@@ -269,6 +269,33 @@ test("requested base and advanced mini-games trigger screen shake only on discre
   assert.match(flappySource, /if \(status === "failed"\) triggerScreenShake\(\);/);
 });
 
+test("play HUD keeps only pass-condition counters and removes helper status labels", () => {
+  const doodleSource = read(new URL("../features/mini-games/doodle.tsx", import.meta.url));
+  const fallDownSource = read(new URL("../features/mini-games/fall-down.tsx", import.meta.url));
+  const squareJumpSource = read(new URL("../features/mini-games/square-jump.tsx", import.meta.url));
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+  const knifeSource = read(new URL("../features/mini-games/knife.tsx", import.meta.url));
+  const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+  const cssSource = [
+    read(new URL("../app/styles/mini-games/doodle.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/flappy.css", import.meta.url)),
+    read(new URL("../app/styles/overlays-responsive.css", import.meta.url)),
+  ].join("\n");
+
+  for (const source of [doodleSource, flappySource]) {
+    assert.doesNotMatch(source, /prototype-start-hint/);
+  }
+  assert.doesNotMatch(cssSource, /prototype-start-hint|flappy-start-hint/);
+  assert.doesNotMatch([doodleSource, fallDownSource, squareJumpSource, flappySource].join("\n"), /Math\.min\(view\.failures, BASE_FAILURE_LIMIT\)/);
+  assert.match(doodleSource, /\{riskTotal > 0 \? <span>.*?view\.riskHit.*?riskTotal.*?<\/span> : null\}/s);
+  assert.doesNotMatch(fallDownSource, /Math\.max\(0, pressureScreenY\)\.toFixed\(0\)/);
+  assert.match(squareJumpSource, /const showGravityStatus = booleanParam\(level\.params, "gravityChallenge"\);/);
+  assert.match(squareJumpSource, /\{showGravityStatus \? <span>.*?squareGravityLabel\(gravity\).*?<\/span> : null\}/s);
+  assert.doesNotMatch(knifeSource, /sineRotationEnabled \? <span>/);
+  assert.doesNotMatch(brakingSource, /statusLabel/);
+}
+);
+
 test("flappy base respawn separates gameplay progress from smoothed display progress", () => {
   const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
 
@@ -284,6 +311,16 @@ test("flappy base respawn separates gameplay progress from smoothed display prog
   assert.match(flappySource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
   assert.match(flappySource, /const drift = reverseDirection \? view\.displayProgress : -view\.displayProgress;/);
   assert.doesNotMatch(flappySource, /current\.progress = Math\.max\(0, nextProgress - 92\);/);
+});
+
+test("flappy base respawns onto the middle safe platform and waits for the next input", () => {
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+
+  assert.match(flappySource, /function flappyStartPlatformY\(stageHeight: number\) \{\s*return stageHeight \* 0\.52;\s*\}/);
+  assert.match(flappySource, /current\.started = false;/);
+  assert.match(flappySource, /current\.playerY = initialPlayerY;/);
+  assert.match(flappySource, /current\.playerVy = 0;/);
+  assert.match(flappySource, /className=\{`flappy-start-platform \$\{view\.started \? "started" : ""\}`\}/);
 });
 
 test("flappy gate painting avoids repeated linear gate lookups in the animation frame", () => {

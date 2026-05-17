@@ -93,7 +93,7 @@ function resolveFlappyPlayerAvatarState(view: FlappyViewFrame): PlayerAvatarStat
 }
 
 function flappyStartPlatformY(stageHeight: number) {
-  return stageHeight * 0.66;
+  return stageHeight * 0.52;
 }
 
 function makeFlappyLayout(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize) {
@@ -395,6 +395,7 @@ export function FlappyPrototype({
           current.respawnProgressStart = nextTime;
           current.respawnProgressUntil = nextTime + 0.38;
           current.displayProgress = resolveFlappyDisplayProgress(current);
+          current.started = false;
           current.playerY = initialPlayerY;
           current.playerVy = 0;
           current.failures = failures;
@@ -454,8 +455,7 @@ export function FlappyPrototype({
     <div className="prototype-game-wrap">
       <div className="mini-score">
         <span>进度 {view.passed}/{gateCount}</span>
-        <span>收集 {view.collected}/{collectibleCount}</span>
-        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+        {collectibleCount > 0 ? <span>收集 {view.collected}/{collectibleCount}</span> : null}
       </div>
       <div
         className={`prototype-stage flappy-stage ${screenShakeClassName} ${reverseDirection ? "reverse" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
@@ -549,7 +549,6 @@ export function FlappyPrototype({
             visualScale={1.18}
           />
         </div>
-        {!view.started ? <div className="prototype-start-hint flappy-start-hint">点击开始</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>

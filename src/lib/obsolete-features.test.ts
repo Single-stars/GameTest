@@ -33,7 +33,7 @@ function readAppCssSource() {
 
 test("obsolete prototype route and entry point are removed", () => {
   const obsoleteSegment = ["control", "maze", "prototype"].join("-");
-  const obsoleteEntryText = ["控制力", "原型"].join("");
+  const obsoleteEntryText = ["控制", "原型"].join("");
   const miniPrototypeRoute = new URL("../app/mini-game-prototypes/page.tsx", import.meta.url);
   const obsoleteRoute = new URL(`../app/${obsoleteSegment}/page.tsx`, import.meta.url);
   const resultPage = new URL("../app/page.tsx", import.meta.url);

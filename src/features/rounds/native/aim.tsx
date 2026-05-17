@@ -832,6 +832,7 @@ const AIM_REQUIRED_HITS = 8;
 const BASIC_AIM_CONFIG: AdvancedStageConfig = {
   dimension: "aim",
   level: 1,
+  stageTitle: "移动靶",
   variant: "aim-track",
   variantIndex: 1,
   difficulty: "easy",

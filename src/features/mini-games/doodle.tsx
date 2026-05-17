@@ -538,8 +538,7 @@ export function DoodleJumpPrototype({
     <div className="prototype-game-wrap">
       <div className="mini-score">
         <span>进度 {Math.round(view.progressPercent)}%</span>
-        <span>高风险 {view.riskHit}/{riskTotal}</span>
-        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+        {riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}
       </div>
       <div
         className={`prototype-stage doodle-stage ${screenShakeClassName} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
@@ -607,7 +606,6 @@ export function DoodleJumpPrototype({
             visualScale={1.22}
           />
         </div>
-        {!view.started ? <div className="prototype-start-hint">按住开始</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>

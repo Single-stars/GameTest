@@ -4,27 +4,6 @@
     var(--surface);
 }
 
-.prototype-start-hint {
-  position: absolute;
-  z-index: 20;
-  left: 50%;
-  top: 50%;
-  translate: -50% -50%;
-  min-height: 42px;
-  display: grid;
-  place-items: center;
-  border: var(--hud-border);
-  border-radius: 999px;
-  padding: 0 18px;
-  background: var(--hud-bg);
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 950;
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(12px);
-  pointer-events: none;
-}
-
 .doodle-player-shell,
 .flappy-player-shell,
 .doodle-platform,

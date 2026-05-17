@@ -703,8 +703,6 @@ export function FallDownPrototype({
     <div className="prototype-game-wrap">
       <div className="mini-score">
         <span>进度 {view.layersReached}/{requiredLayers}</span>
-        <span>压线 {Math.max(0, pressureScreenY).toFixed(0)}px</span>
-        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
       </div>
       <div
         className={`prototype-stage fall-down-stage ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}

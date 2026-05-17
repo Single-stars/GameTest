@@ -1,3 +1,5 @@
+import { ROUND_DISPLAY_BY_ID } from "./round-display.ts";
+
 export type RoundId =
   | "reaction"
   | "aim"
@@ -638,14 +640,14 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
 
 export function buildScoreAxis(scores: ScoreSummary): ScoreAxis[] {
   return [
-    { key: "reaction", label: "反应力", score: scores.reaction },
-    { key: "targeting", label: "精准度", score: scores.targeting },
-    { key: "search", label: "连续反应", score: scores.search },
-    { key: "interference", label: "专注力", score: scores.interference },
-    { key: "rhythm", label: "节奏感", score: scores.rhythm },
-    { key: "memory", label: "手眼协调", score: scores.memory },
-    { key: "braking", label: "控制力", score: scores.braking },
-    { key: "waiting", label: "时机判断", score: scores.waiting },
+    { key: "reaction", label: ROUND_DISPLAY_BY_ID.reaction.label, score: scores.reaction },
+    { key: "targeting", label: ROUND_DISPLAY_BY_ID.aim.label, score: scores.targeting },
+    { key: "search", label: ROUND_DISPLAY_BY_ID.search.label, score: scores.search },
+    { key: "interference", label: ROUND_DISPLAY_BY_ID.stroop.label, score: scores.interference },
+    { key: "rhythm", label: ROUND_DISPLAY_BY_ID.rhythm.label, score: scores.rhythm },
+    { key: "memory", label: ROUND_DISPLAY_BY_ID.memory.label, score: scores.memory },
+    { key: "braking", label: ROUND_DISPLAY_BY_ID.braking.label, score: scores.braking },
+    { key: "waiting", label: ROUND_DISPLAY_BY_ID.patience.label, score: scores.waiting },
   ];
 }
 

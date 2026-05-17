@@ -880,7 +880,7 @@ test("buildScoreAxis uses the public eight-dimension names", () => {
 
   assert.deepEqual(
     axis.map((item) => item.label),
-    ["反应力", "精准度", "连续反应", "专注力", "节奏感", "手眼协调", "控制力", "时机判断"],
+    ["反应", "精准", "走位", "专注", "手感", "协调", "控制", "时机"],
   );
 });
 

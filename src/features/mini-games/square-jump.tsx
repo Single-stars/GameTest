@@ -317,8 +317,6 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   const leavingPlatform = { ...current.currentPlatform };
   const landedPlatform = { ...current.nextPlatform };
   const landedPlatformX = getSquareJumpBasePlatformX(landedPlatform, current.time);
-  current.feedback = "提醒";
-  current.feedbackUntil = current.time + 0.75;
   current.respawnUntil = current.time + 1.1;
   current.jumps = nextJumps;
   current.playerX = getSquareJumpBasePlatformX(landedPlatform, current.time);
@@ -752,6 +750,7 @@ export function SquareJumpPrototype({
 
   const showOverlay = mode === "prototype";
   const gravity = view.activeGravity;
+  const showGravityStatus = booleanParam(level.params, "gravityChallenge");
   const worldLayerStyle: CSSProperties = {
     inset: 0,
     position: "absolute",
@@ -767,8 +766,7 @@ export function SquareJumpPrototype({
     <div className="prototype-game-wrap">
       <div className="mini-score">
         <span>进度 {view.jumps}/{requiredJumps}</span>
-        <span>重力 {squareGravityLabel(gravity)}</span>
-        {mode === "base" ? <span>失败 {Math.min(view.failures, BASE_FAILURE_LIMIT)}/{BASE_FAILURE_LIMIT}</span> : null}
+        {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
         {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
       </div>
       <div

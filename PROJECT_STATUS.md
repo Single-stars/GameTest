@@ -1,6 +1,6 @@
 # 项目当前状态
 
-更新时间：2026-05-17
+更新时间：2026-05-18
 项目路径：`D:\GameTest`
 当前主分支：`main`
 应用名称：`测测你的游戏段位`
@@ -45,13 +45,14 @@ src/app/
 src/features/
   game-flow/                首页、轮次说明、播放框、mini-game round 适配层
   rounds/                   正式 Round Registry、RoundPlayer、native round 组件
-  rounds/native/            反应力、精准度、控制力的基础和进阶原生实现
+  rounds/native/            反应、精准、控制的基础和进阶原生实现
   mini-games/               Doodle、Fall Down、Square Jump、Flappy、Knife 的 React runtime
   advanced/                 进阶挑战页面
   results/                  结果页、运气页、分享页、雷达图、分享图生成
 
 src/lib/
   scoring.ts                TrialEvent、基础评分、段位、分享文案
+  round-display.ts          8 轮小游戏名和结果维度名的单一展示来源
   advanced-progress.ts      localStorage schema、进阶进度、运气抽取、返回行为
   advanced-challenges/      8 维度进阶配置、通关判定、调试入口控制
   mini-games/               5 个嵌入式小游戏的关卡配置、生成函数和纯逻辑
@@ -65,20 +66,22 @@ src/lib/
 
 | 顺序 | roundId | 展示玩法 | 结果维度 | 基础实现 | 进阶实现 |
 |---:|---|---|---|---|---|
-| 1 | `reaction` | 变色点我 | 反应力 | native reaction | native advanced-reaction |
-| 2 | `aim` | 移动靶 | 精准度 | native aim | native advanced-aim |
-| 3 | `search` | 一路向上 | 连续反应 | mini-game doodle | mini-game doodle |
-| 4 | `stroop` | 一路向下 | 专注力 | mini-game fall-down | mini-game fall-down |
-| 5 | `rhythm` | 跳一跳 | 节奏感 | mini-game square-jump | mini-game square-jump |
-| 6 | `memory` | 一路向前 | 手眼协调 | mini-game flappy | mini-game flappy |
-| 7 | `braking` | 小方块急停 | 控制力 | native braking | native advanced-braking |
-| 8 | `patience` | 飞刀连射 | 时机判断 | mini-game knife | mini-game knife |
+| 1 | `reaction` | 绿灯行 | 反应 | native reaction | native advanced-reaction |
+| 2 | `aim` | 移动靶 | 精准 | native aim | native advanced-aim |
+| 3 | `search` | 一路向上 | 走位 | mini-game doodle | mini-game doodle |
+| 4 | `stroop` | 一路向下 | 专注 | mini-game fall-down | mini-game fall-down |
+| 5 | `rhythm` | 跳一跳 | 手感 | mini-game square-jump | mini-game square-jump |
+| 6 | `memory` | 一路向前 | 协调 | mini-game flappy | mini-game flappy |
+| 7 | `braking` | 停下来 | 控制 | native braking | native advanced-braking |
+| 8 | `patience` | 丢飞刀 | 时机 | mini-game knife | mini-game knife |
 
-内部 `roundId` 保持稳定。`search/stroop/rhythm/memory/patience` 是评分、存储、`TrialEvent` 和测试数据的稳定内部 ID，不等于最终展示名；展示名由 registry 控制。
+内部 `roundId` 保持稳定。`search/stroop/rhythm/memory/patience` 是评分、存储、`TrialEvent` 和测试数据的稳定内部 ID，不等于最终展示名；展示名由 `src/lib/round-display.ts` 控制。
 
 ## 进阶与运气
 
 达到“最强王者”后，结果页会显示 8 个维度的进阶入口。每个维度 10 阶，合计 80 个进阶星。每次首次通关新阶数会获得 1 颗进阶星和 1 次运气抽取；重玩已通关阶数只更新最好成绩，不重复给星或抽取次数。
+
+进阶关标题由 `AdvancedStageConfig.stageTitle` 统一提供。游玩页左上角和进阶目标卡标题都读取这个字段，不再由 UI 拼接“维度 + 进阶 + 数字”。每个维度前 9 关按三类玩法循环展示 `Ⅰ/Ⅱ/Ⅲ` 难度后缀，第 10 关统一显示为 `最终试炼`。
 
 运气系统在进阶解锁后可用：
 
@@ -151,11 +154,11 @@ src/lib/advanced-memory.test.ts
 
 ## 维护原则
 
-1. 新增或调整正式 round 时，先改 `src/features/rounds/registry.ts`。
+1. 新增或调整正式 round 展示名时，先改 `src/lib/round-display.ts`；调整实现映射时再改 `src/features/rounds/registry.ts`。
 2. 不在 `src/app/page.tsx` 里新增 native/mini-game 分支判断。
 3. mini-game runtime 改 UI 或交互时，优先在 `src/features/mini-games/<game>.tsx` 内小步修改。
 4. mini-game 配置和纯逻辑改动应落在 `src/lib/mini-games/<game>.ts`，并补对应测试。
-5. 进阶规则改动应落在 `src/lib/advanced-challenges/`，不要把配置塞回 `page.tsx`。
+5. 进阶规则和进阶关标题改动应落在 `src/lib/advanced-challenges/`，不要把配置塞回 `page.tsx` 或 UI 组件。
 6. CSS 新增时放到当前职责 chunk，避免把无关选择器重复放入其他 chunk。
 7. 删除旧内容前先加或更新结构保护测试，确保不会恢复旧入口或旧 fallback。
 

@@ -63,15 +63,6 @@
   scale: 0.86;
 }
 
-.flappy-start-hint {
-  min-height: auto;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-  color: rgba(24, 24, 24, 0.62);
-}
-
 .flappy-gate {
   z-index: 5;
   border: 1px solid rgba(24, 24, 24, 0.12);

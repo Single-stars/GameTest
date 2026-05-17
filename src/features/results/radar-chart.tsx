@@ -15,7 +15,7 @@ export function RadarChart({ axis }: { axis: { label: string; score: number }[] 
       return `${current.x},${current.y}`;
     })
     .join(" ");
-  const labelScaleFor = (label: string) => (label === "控制力" || label === "连续反应" || label === "手眼协调" || label === "时机判断" ? 1.34 : 1.2);
+  const labelScaleFor = (label: string) => (label.length >= 4 ? 1.34 : label.length >= 3 ? 1.26 : 1.2);
 
   return (
     <section className="radar-card" aria-label="八向能力图">

@@ -422,7 +422,6 @@ export function KnifeHitPrototype({
         <span>已发射 {view.shotIndex}/{shotCount}</span>
         {mode === "base" ? <span>命中 {view.insertedAngles.length}/{shotCount}</span> : null}
         {hasCountdown ? <span>倒计时 {(view.timer ?? 0).toFixed(1)}s</span> : null}
-        {sineRotationEnabled ? <span>正弦转速</span> : null}
       </div>
       <div
         className={`prototype-stage knife-stage feedback-${feedbackTone} ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}

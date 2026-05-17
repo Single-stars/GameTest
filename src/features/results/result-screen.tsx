@@ -2,6 +2,7 @@
 
 import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText, getLuckLevelTone, getAdvancedTotalStars, formatResultRankTitle, type AdvancedProgress } from "@/lib/advanced-progress";
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
+import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
 import { RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 
@@ -40,32 +41,32 @@ export function ResultScreen({
   const luckStatus = getLuckDrawStatusText(advancedUnlocked, advancedProgress);
   const rows = [
     {
-      roundId: "reaction",
-      label: "反应力",
+      roundId: "reaction",
+      label: ROUND_DISPLAY_BY_ID.reaction.label,
       score: result.scores.reaction,
       detail: result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足",
     },
     {
-      roundId: "aim",
-      label: "精准度",
+      roundId: "aim",
+      label: ROUND_DISPLAY_BY_ID.aim.label,
       score: result.scores.targeting,
       detail: result.metrics.aimTotal > 0 ? `命中 ${result.metrics.aimHits}/${result.metrics.aimTotal}` : "不足",
     },
     {
-      roundId: "search",
-      label: "连续反应",
+      roundId: "search",
+      label: ROUND_DISPLAY_BY_ID.search.label,
       score: result.scores.search,
       detail: result.metrics.searchMeanCountError !== null ? `失误 ${result.metrics.searchMeanCountError.toFixed(0)}` : "不足",
     },
     {
-      roundId: "stroop",
-      label: "专注力",
+      roundId: "stroop",
+      label: ROUND_DISPLAY_BY_ID.stroop.label,
       score: result.scores.interference,
       detail: result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足",
     },
     {
       roundId: "rhythm",
-      label: "节奏感",
+      label: ROUND_DISPLAY_BY_ID.rhythm.label,
       score: result.scores.rhythm,
       detail:
         result.metrics.rhythmAvgOffsetMs !== null
@@ -75,14 +76,14 @@ export function ResultScreen({
             : "不足",
     },
     {
-      roundId: "memory",
-      label: "手眼协调",
+      roundId: "memory",
+      label: ROUND_DISPLAY_BY_ID.memory.label,
       score: result.scores.memory,
       detail: result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足",
     },
     {
-      roundId: "braking",
-      label: "控制力",
+      roundId: "braking",
+      label: ROUND_DISPLAY_BY_ID.braking.label,
       score: result.scores.braking,
       detail:
         result.metrics.dinoSafeStopRate !== null
@@ -92,8 +93,8 @@ export function ResultScreen({
             : "不足",
     },
     {
-      roundId: "patience",
-      label: "时机判断",
+      roundId: "patience",
+      label: ROUND_DISPLAY_BY_ID.patience.label,
       score: result.scores.waiting,
       detail: result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足",
     },

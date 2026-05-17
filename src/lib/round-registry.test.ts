@@ -41,6 +41,20 @@ test("formal round registry preserves official order and base implementations", 
     ],
   );
 
+  assert.deepEqual(
+    ROUND_DEFINITIONS.map((round) => [round.id, round.title, round.label]),
+    [
+      ["reaction", "绿灯行", "反应"],
+      ["aim", "移动靶", "精准"],
+      ["search", "一路向上", "走位"],
+      ["stroop", "一路向下", "专注"],
+      ["rhythm", "跳一跳", "手感"],
+      ["memory", "一路向前", "协调"],
+      ["braking", "停下来", "控制"],
+      ["patience", "丢飞刀", "时机"],
+    ],
+  );
+
   for (const round of ROUND_DEFINITIONS) {
     assert.equal(getRoundDefinition(round.id), round);
     assert.equal(typeof round.title, "string");

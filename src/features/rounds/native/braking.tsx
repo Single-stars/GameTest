@@ -1064,9 +1064,6 @@ export function BrakingRound({ onComplete }: RoundProps) {
   };
 
   const showThreat = hazard !== null && (status === "danger" || status === "stopped" || status === "crashed");
-  const statusLabel = status === "danger" ? "松手" : status === "crashed" ? "撞上" : status === "early" ? "早了" : status === "stopped" ? "停住" : holding ? "前进" : "长按";
-
-
   return (
 
     <div
@@ -1080,8 +1077,6 @@ export function BrakingRound({ onComplete }: RoundProps) {
       <div className="mini-score">
 
         <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
-
-        <span>{statusLabel}</span>
       </div>
 
       <div className="advanced-brake-track" aria-hidden="true" ref={trackRef}>

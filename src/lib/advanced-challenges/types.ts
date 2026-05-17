@@ -7,6 +7,7 @@ export type AdvancedDifficulty = "easy" | "medium" | "hard" | "boss";
 export type AdvancedStageConfig = {
   dimension: RoundId;
   level: number;
+  stageTitle: string;
   variant: string;
   variantIndex: 1 | 2 | 3 | 10;
   difficulty: AdvancedDifficulty;
@@ -39,7 +40,7 @@ export type AdvancedBrakeReleaseOutcome =
   | { outcome: "success" }
   | { outcome: "failure"; errorType: "false_alarm" | "early_stop" };
 
-export type ConfigInput = Omit<AdvancedStageConfig, "dimension">;
+export type ConfigInput = Omit<AdvancedStageConfig, "dimension" | "stageTitle">;
 
 export type MiniAdvancedLevelInput = {
   order: number;

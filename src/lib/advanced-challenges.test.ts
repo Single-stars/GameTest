@@ -21,6 +21,17 @@ import type { RoundId, TrialEvent } from "./scoring.ts";
 const viewport = { width: 390, height: 844, dpr: 3 };
 const ROUND_IDS: RoundId[] = ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"];
 
+const EXPECTED_ADVANCED_STAGE_TITLES: Record<RoundId, string[]> = {
+  reaction: ["红灯误导Ⅰ", "双屏分心Ⅰ", "双屏红灯Ⅰ", "红灯误导Ⅱ", "双屏分心Ⅱ", "双屏红灯Ⅱ", "红灯误导Ⅲ", "双屏分心Ⅲ", "双屏红灯Ⅲ", "最终试炼"],
+  aim: ["多靶轨迹Ⅰ", "逃逸靶Ⅰ", "干扰靶Ⅰ", "多靶轨迹Ⅱ", "逃逸靶Ⅱ", "干扰靶Ⅱ", "多靶轨迹Ⅲ", "逃逸靶Ⅲ", "干扰靶Ⅲ", "最终试炼"],
+  search: ["移动平台Ⅰ", "高能平台Ⅰ", "移动障碍Ⅰ", "移动平台Ⅱ", "高能平台Ⅱ", "移动障碍Ⅱ", "移动平台Ⅲ", "高能平台Ⅲ", "移动障碍Ⅲ", "最终试炼"],
+  stroop: ["移动平台Ⅰ", "脆弱平台Ⅰ", "危险平台Ⅰ", "移动平台Ⅱ", "脆弱平台Ⅱ", "危险平台Ⅱ", "移动平台Ⅲ", "脆弱平台Ⅲ", "危险平台Ⅲ", "最终试炼"],
+  rhythm: ["移动平台Ⅰ", "二段跳Ⅰ", "重力异常Ⅰ", "移动平台Ⅱ", "二段跳Ⅱ", "重力异常Ⅱ", "移动平台Ⅲ", "二段跳Ⅲ", "重力异常Ⅲ", "最终试炼"],
+  memory: ["移动通道Ⅰ", "道具收集Ⅰ", "翻转空间Ⅰ", "移动通道Ⅱ", "道具收集Ⅱ", "翻转空间Ⅱ", "移动通道Ⅲ", "道具收集Ⅲ", "翻转空间Ⅲ", "最终试炼"],
+  braking: ["走到最后Ⅰ", "假危险Ⅰ", "规则怪谈Ⅰ", "走到最后Ⅱ", "假危险Ⅱ", "规则怪谈Ⅱ", "走到最后Ⅲ", "假危险Ⅲ", "规则怪谈Ⅲ", "最终试炼"],
+  patience: ["倒计时Ⅰ", "变速转盘Ⅰ", "危险区Ⅰ", "倒计时Ⅱ", "变速转盘Ⅱ", "危险区Ⅱ", "倒计时Ⅲ", "变速转盘Ⅲ", "危险区Ⅲ", "最终试炼"],
+};
+
 function trial(roundId: RoundId, index: number, patch: Partial<TrialEvent> = {}): TrialEvent {
   return {
     roundId,
@@ -73,6 +84,7 @@ test("advanced stage configs cover every dimension with the required 10-level ma
       assert.equal(config.passText.startsWith("过关要求："), true);
       assert.equal(config.passText.includes("规则："), false);
       assert.equal(config.passText.includes("示例"), false);
+      assert.equal(config.stageTitle, EXPECTED_ADVANCED_STAGE_TITLES[roundId][level - 1]);
     }
   }
 });

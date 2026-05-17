@@ -119,7 +119,7 @@ export function AdvancedChallengeScreen({
       <section className="play-screen advanced-play-screen" aria-live="polite">
         <header className="round-header advanced-round-header">
           <div>
-            <p className="eyebrow">{round.measure}进阶 {challenge.level}</p>
+            <p className="eyebrow">{playingConfig.stageTitle}</p>
             <h1>{round.title}</h1>
           </div>
           <div className="advanced-header-actions">
@@ -230,9 +230,10 @@ export function AdvancedChallengeScreen({
               {levelItems.map((item) => {
                 const selected = item.position === "selected";
                 const tone = getAdvancedLevelToneForState(item.state, item.level);
+                const itemConfig = getAdvancedStageConfig(challenge.roundId, item.level);
                 return (
                   <button
-                    aria-label={`${round.measure}进阶${item.level}${getAdvancedChallengeStatusLabel(item.state)}`}
+                    aria-label={`${itemConfig.stageTitle}${getAdvancedChallengeStatusLabel(item.state)}`}
                     className={`advanced-lobby-level ${item.position} ${item.state} ${tone} ${selected ? "selected" : ""}`}
                     data-level={item.level}
                     disabled={!item.selectable}
@@ -255,7 +256,7 @@ export function AdvancedChallengeScreen({
 
           <div className="advanced-goal-card">
             <div className="advanced-goal-heading">
-              <h2>本关目标</h2>
+              <h2>{activeConfig.stageTitle}</h2>
               <span>{getAdvancedChallengeStatusLabel(selectedState)}</span>
             </div>
             <ul>

@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 
+import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { type GameRankResult, type ScoreAxis } from "@/lib/scoring";
 
 export const SHARE_IMAGE_WIDTH = 900;
@@ -85,11 +86,18 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
 }
 
 function defaultShareAxis(): ScoreAxis[] {
-  const labels: Array<ScoreAxis["label"]> = ["反应力", "精准度", "连续反应", "专注力", "节奏感", "手眼协调", "控制力", "时机判断"];
-  const keys: ScoreAxis["key"][] = ["reaction", "targeting", "search", "interference", "rhythm", "memory", "braking", "waiting"];
-  return labels.map((label, index) => ({
-    key: keys[index],
-    label,
+  const axis: Array<{ key: ScoreAxis["key"]; label: ScoreAxis["label"] }> = [
+    { key: "reaction", label: ROUND_DISPLAY_BY_ID.reaction.label },
+    { key: "targeting", label: ROUND_DISPLAY_BY_ID.aim.label },
+    { key: "search", label: ROUND_DISPLAY_BY_ID.search.label },
+    { key: "interference", label: ROUND_DISPLAY_BY_ID.stroop.label },
+    { key: "rhythm", label: ROUND_DISPLAY_BY_ID.rhythm.label },
+    { key: "memory", label: ROUND_DISPLAY_BY_ID.memory.label },
+    { key: "braking", label: ROUND_DISPLAY_BY_ID.braking.label },
+    { key: "waiting", label: ROUND_DISPLAY_BY_ID.patience.label },
+  ];
+  return axis.map((item) => ({
+    ...item,
     score: 72,
   }));
 }

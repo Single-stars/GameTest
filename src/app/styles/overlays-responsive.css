@@ -147,7 +147,6 @@
     box-shadow: 0 8px 18px rgba(24, 24, 24, 0.1);
   }
 
-  .prototype-start-hint,
   .prototype-end-overlay {
     box-shadow: none;
   }
