@@ -5,7 +5,9 @@ import test from "node:test";
 import {
   getAdvancedChallengeGoalItems,
   getAdvancedLobbyLevelItems,
+  getAdvancedLobbyUnlockedLevel,
   resolveAdvancedLobbyClickLevel,
+  resolveAdvancedLobbySliderLevel,
 } from "./advanced-challenge-view.ts";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
@@ -38,6 +40,22 @@ test("advanced lobby click switches only to unlocked levels", () => {
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 10 }), 10);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 11 }), 10);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 0, requestedLevel: 0 }), 1);
+});
+
+test("advanced lobby slider continuously maps to the requested unlocked level", () => {
+  assert.equal(getAdvancedLobbyUnlockedLevel(-1), 1);
+  assert.equal(getAdvancedLobbyUnlockedLevel(0), 1);
+  assert.equal(getAdvancedLobbyUnlockedLevel(1), 2);
+  assert.equal(getAdvancedLobbyUnlockedLevel(9), 10);
+  assert.equal(getAdvancedLobbyUnlockedLevel(10), 10);
+  assert.equal(getAdvancedLobbyUnlockedLevel(99), 10);
+
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 1 }), 1);
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 2 }), 2);
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 3 }), 3);
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 4 }), 4);
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 5 }), 4);
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 0 }), 1);
 });
 
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
@@ -127,6 +145,61 @@ test("advanced lobby level selection is click-only without carousel drag handler
   assert.doesNotMatch(cssSource, /cursor:\s*grab|cursor:\s*grabbing|touch-action:\s*pan-y/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transform:/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transition:\s*transform/);
+});
+
+test("advanced lobby slider is controlled by the same selected level as circular clicks", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(screenSource, /getAdvancedLobbyUnlockedLevel/);
+  assert.match(screenSource, /resolveAdvancedLobbySliderLevel/);
+  assert.match(screenSource, /const unlockedLevel = getAdvancedLobbyUnlockedLevel\(currentLevel\);/);
+  assert.match(screenSource, /const selectedLevel = resolveAdvancedLobbySliderLevel\(\{\s*currentLevel,\s*requestedLevel: activeLevel\s*}\);/);
+  assert.match(screenSource, /const selectedTone = getAdvancedLevelToneForState\(selectedState,\s*selectedLevel\);/);
+  assert.match(screenSource, /const sliderVisualRef = React\.useRef<HTMLDivElement \| null>\(null\);/);
+  assert.match(screenSource, /const \[sliderTravelPx,\s*setSliderTravelPx\] = React\.useState\(0\);/);
+  assert.match(screenSource, /const sliderThumbOffsetPx = unlockedLevel > 1 \? \(sliderTravelPx \* \(selectedLevel - 1\)\) \/ \(unlockedLevel - 1\) : 0;/);
+  assert.match(screenSource, /sliderVisual\.clientWidth/);
+  assert.match(screenSource, /new ResizeObserver\(updateSliderTravel\)/);
+  assert.match(screenSource, /function AdvancedLevelSelectionPanel/);
+  assert.match(screenSource, /useBrowserLayoutEffect\(\(\) => \{[\s\S]*sliderVisualRef\.current[\s\S]*}, \[unlockedLevel\]\);/);
+  assert.match(screenSource, /handleLevelClick/);
+  assert.match(screenSource, /onClick=\{\(\) => handleLevelClick\(item\.level\)\}/);
+  assert.match(screenSource, /handleLevelSliderInput/);
+  assert.match(screenSource, /onChange=\{handleLevelSliderInput\}/);
+  assert.match(screenSource, /className=\{`advanced-lobby-slider \$\{selectedState\} \$\{selectedTone\}`\}/);
+  assert.match(screenSource, /"--advanced-lobby-slider-thumb-offset": `\$\{sliderThumbOffsetPx\}px`/);
+  assert.match(screenSource, /className="advanced-lobby-slider-visual"/);
+  assert.match(screenSource, /ref=\{sliderVisualRef\}/);
+  assert.match(screenSource, /className="advanced-lobby-slider-thumb-label"/);
+  assert.match(screenSource, /\{selectedLevel\}/);
+  assert.doesNotMatch(screenSource, /advanced-lobby-slider-progress/);
+  assert.doesNotMatch(screenSource, /advanced-lobby-slider-numbers/);
+  assert.doesNotMatch(screenSource, /advanced-lobby-slider-number/);
+  assert.match(screenSource, /type="range"/);
+  assert.match(screenSource, /min=\{1\}/);
+  assert.match(screenSource, /max=\{unlockedLevel\}/);
+  assert.match(screenSource, /step=\{1\}/);
+  assert.match(screenSource, /value=\{selectedLevel\}/);
+
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*--advanced-lobby-slider-thumb-size:\s*36px;/);
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*--advanced-lobby-slider-thumb-offset:\s*0px;/);
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*height:\s*40px;/);
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*position:\s*relative;/);
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*touch-action:\s*none;/);
+  assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*overscroll-behavior-x:\s*contain;/);
+  assert.match(cssSource, /\.advanced-lobby-slider-visual\s*{[\s\S]*height:\s*8px;/);
+  assert.match(cssSource, /\.advanced-lobby-slider-thumb-label\s*{[\s\S]*width:\s*var\(--advanced-lobby-slider-thumb-size\);/);
+  assert.match(cssSource, /\.advanced-lobby-slider-thumb-label\s*{[\s\S]*border-radius:\s*10px;/);
+  assert.match(cssSource, /\.advanced-lobby-slider-thumb-label\s*{[\s\S]*font-variant-numeric:\s*tabular-nums;/);
+  assert.match(cssSource, /\.advanced-lobby-slider-thumb-label\s*{[\s\S]*transform:\s*translate3d\(var\(--advanced-lobby-slider-thumb-offset\),\s*-50%,\s*0\) translateX\(-50%\);/);
+  assert.match(cssSource, /\.advanced-lobby-slider-thumb-label\s*{[\s\S]*will-change:\s*transform;/);
+  assert.doesNotMatch(cssSource, /left:\s*var\(--advanced-lobby-slider-progress\);/);
+  assert.match(cssSource, /\.advanced-lobby-slider\.completed\.advanced-tier-1\s+\.advanced-lobby-slider-thumb-label\s*{[\s\S]*background:\s*#edf7f1;/);
+  assert.match(cssSource, /\.advanced-lobby-range\s*{[\s\S]*height:\s*40px;/);
+  assert.match(cssSource, /::-webkit-slider-runnable-track\s*{[\s\S]*background:\s*#efe4d2;/);
+  assert.match(cssSource, /::-webkit-slider-thumb\s*{[\s\S]*width:\s*var\(--advanced-lobby-slider-thumb-size\);/);
+  assert.match(cssSource, /::-webkit-slider-thumb\s*{[\s\S]*height:\s*var\(--advanced-lobby-slider-thumb-size\);/);
 });
 
 test("advanced lobby view helpers no longer expose drag or momentum selection APIs", () => {

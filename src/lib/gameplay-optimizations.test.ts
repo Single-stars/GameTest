@@ -218,14 +218,16 @@ test("advanced braking rule-tale variants show the active rule in the in-round H
 
 test("advanced completion header merges the round and challenge titles after settlement", () => {
   const screenSource = read(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url));
-  const completionSource = sourceBetween(screenSource, "const goalItems = getAdvancedChallengeGoalItems(activeConfig);", "{isComplete ? (");
+  const resultSource = sourceBetween(screenSource, "function AdvancedResultCard", "function AdvancedLevelSelectionPanel");
+  const lobbySource = sourceBetween(screenSource, "function AdvancedLobbyContent", "export function AdvancedChallengeScreen");
 
   assert.match(screenSource, /function getAdvancedChallengeHeroTitle/);
-  assert.match(screenSource, /roundId === "reaction" \? "红灯行" : roundTitle/);
-  assert.match(screenSource, /return `\$\{displayRoundTitle\} · \$\{stageTitle\}`;/);
-  assert.match(screenSource, /<h1>\s*\{getAdvancedChallengeHeroTitle\(\{\s*roundId: challenge\.roundId,\s*roundTitle: round\.title,\s*stageTitle: activeConfig\.stageTitle,\s*}\)\}\s*<\/h1>/);
-  assert.doesNotMatch(completionSource, /<p className="eyebrow">\{activeConfig\.stageTitle\}<\/p>/);
-  assert.doesNotMatch(completionSource, /<p className="eyebrow">进阶挑战<\/p>/);
+  assert.doesNotMatch(screenSource, /roundId === "reaction"/);
+  assert.doesNotMatch(screenSource, /"红灯行"/);
+  assert.match(screenSource, /return `\$\{roundTitle\} · \$\{stageTitle\}`;/);
+  assert.match(lobbySource, /<h1>\s*\{getAdvancedChallengeHeroTitle\(\{\s*roundTitle: round\.title,\s*stageTitle: activeConfig\.stageTitle,\s*}\)\}\s*<\/h1>/);
+  assert.doesNotMatch(resultSource, /<p className="eyebrow">\{activeConfig\.stageTitle\}<\/p>/);
+  assert.doesNotMatch(resultSource, /<p className="eyebrow">进阶挑战<\/p>/);
 });
 
 test("mobile long press browser affordances are disabled across game surfaces", () => {

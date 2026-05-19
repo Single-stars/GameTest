@@ -38,6 +38,10 @@ function defaultSelectableLevel(currentLevel: number) {
   return Math.min(ADVANCED_LEVEL_MAX, clampCurrentLevel(currentLevel) + 1);
 }
 
+export function getAdvancedLobbyUnlockedLevel(currentLevel: number) {
+  return defaultSelectableLevel(currentLevel);
+}
+
 function normalizeSelectableLevel(currentLevel: number, requestedLevel?: number) {
   const fallback = defaultSelectableLevel(currentLevel);
   if (requestedLevel === undefined) return fallback;
@@ -190,6 +194,16 @@ export function resolveAdvancedLobbyClickLevel({
 }) {
   const level = clampDisplayLevel(requestedLevel);
   return getAdvancedLevelState(currentLevel, level) === "locked" ? null : level;
+}
+
+export function resolveAdvancedLobbySliderLevel({
+  currentLevel,
+  requestedLevel,
+}: {
+  currentLevel: number;
+  requestedLevel: number;
+}) {
+  return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, getAdvancedLobbyUnlockedLevel(currentLevel));
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
