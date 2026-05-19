@@ -40,6 +40,23 @@ export type DoodleVisibleOptions = {
   stageHeight: number;
 };
 
+export const DOODLE_GRAVITY = 1500;
+export const DOODLE_JUMP_VELOCITY = 890;
+
+export function getDoodleJumpPeakHeight(velocity = DOODLE_JUMP_VELOCITY, gravity = DOODLE_GRAVITY) {
+  return (velocity * velocity) / (2 * gravity);
+}
+
+export function getDoodleBounceVelocity({
+  risk,
+  riskJumpMultiplier,
+}: {
+  risk: boolean;
+  riskJumpMultiplier: number;
+}) {
+  return DOODLE_JUMP_VELOCITY * (risk ? riskJumpMultiplier : 1);
+}
+
 function makeDoodleNoisePoints(rand: () => number, count: number) {
   return Array.from({ length: Math.max(2, count) }, () => rand());
 }

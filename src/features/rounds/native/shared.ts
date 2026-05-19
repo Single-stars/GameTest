@@ -12,6 +12,22 @@ export const now = () => performance.now();
 export const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export const ROUND_SETTLEMENT_DELAY_MS = 700;
+export const REACTION_MIN_SIGNAL_INTERVAL_MS = 2000;
+
+export function getReactionSignalDelayMs({
+  lastShownAtMs,
+  minIntervalMs = REACTION_MIN_SIGNAL_INTERVAL_MS,
+  nowMs,
+  randomDelayMs,
+}: {
+  lastShownAtMs: number;
+  minIntervalMs?: number;
+  nowMs: number;
+  randomDelayMs: number;
+}) {
+  const remainingIntervalMs = lastShownAtMs > 0 ? Math.max(0, minIntervalMs - (nowMs - lastShownAtMs)) : 0;
+  return Math.max(randomDelayMs, remainingIntervalMs);
+}
 
 export function shuffle<T>(items: T[]) {
   const copy = [...items];

@@ -16,6 +16,7 @@ import {
   getAdvancedBrakeDangerLeft,
   getAdvancedBrakeEventOptions,
   getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
   type AdvancedBrakeAction,
@@ -78,6 +79,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
   const speedPerSecond = getParamNumber(config, "speedPerSecond", 10);
 
   const finishSafeDistance = getParamNumber(config, "finishSafeDistance", 12);
+  const ruleHint = getAdvancedBrakeRuleHint(config.level, config.params.dualRule);
 
   const eventCountTarget = useMemo(
 
@@ -689,6 +691,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
       <div className="mini-score">
 
         <span>{Math.round(Math.min(100, progress + trackMetrics.runnerWidthPercent))}%</span>
+        {ruleHint ? <span>{ruleHint}</span> : null}
 
       </div>
 

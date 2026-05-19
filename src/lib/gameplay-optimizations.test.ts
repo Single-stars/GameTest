@@ -59,6 +59,19 @@ test("native advanced rounds defer final completion after visual feedback", () =
   }
 });
 
+test("reaction signals enforce at least two seconds between visible red or green prompts", () => {
+  const sharedSource = read(new URL("../features/rounds/native/shared.ts", import.meta.url));
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+
+  assert.match(sharedSource, /export const REACTION_MIN_SIGNAL_INTERVAL_MS = 2000;/);
+  assert.match(sharedSource, /export function getReactionSignalDelayMs/);
+  assert.match(sharedSource, /Math\.max\(randomDelayMs, remainingIntervalMs\)/);
+  assert.match(reactionSource, /REACTION_MIN_SIGNAL_INTERVAL_MS/);
+  assert.match(reactionSource, /lastSignalShownAtRef/);
+  assert.match(reactionSource, /getReactionSignalDelayMs\(\{/);
+  assert.doesNotMatch(reactionSource, /window\.setTimeout\(startSignal, 240\)/);
+});
+
 test("reaction rounds show the shared player avatar with red closed eyes and green open eyes", () => {
   const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
   const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
@@ -192,6 +205,42 @@ test("advanced braking mirrors base stop feedback for early release, crash, and 
   assert.match(cssSource, /\.advanced-braking\.early \.advanced-runner/);
   assert.match(cssSource, /\.advanced-braking\.crashed \.advanced-runner/);
   assert.match(cssSource, /\.advanced-braking\.success \.advanced-runner/);
+});
+
+test("advanced braking rule-tale variants show the active rule in the in-round HUD", () => {
+  const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+  const advancedBrakingSource = sourceBetween(brakingSource, "type AdvancedBrakingFeedback", "const DINO_TRIAL_COUNT");
+
+  assert.match(advancedBrakingSource, /getAdvancedBrakeRuleHint/);
+  assert.match(advancedBrakingSource, /const ruleHint = getAdvancedBrakeRuleHint\(config\.level, config\.params\.dualRule\);/);
+  assert.match(advancedBrakingSource, /\{ruleHint \? <span>\{ruleHint\}<\/span> : null\}/);
+});
+
+test("advanced completion header merges the round and challenge titles after settlement", () => {
+  const screenSource = read(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url));
+  const completionSource = sourceBetween(screenSource, "const goalItems = getAdvancedChallengeGoalItems(activeConfig);", "{isComplete ? (");
+
+  assert.match(screenSource, /function getAdvancedChallengeHeroTitle/);
+  assert.match(screenSource, /roundId === "reaction" \? "红灯行" : roundTitle/);
+  assert.match(screenSource, /return `\$\{displayRoundTitle\} · \$\{stageTitle\}`;/);
+  assert.match(screenSource, /<h1>\s*\{getAdvancedChallengeHeroTitle\(\{\s*roundId: challenge\.roundId,\s*roundTitle: round\.title,\s*stageTitle: activeConfig\.stageTitle,\s*}\)\}\s*<\/h1>/);
+  assert.doesNotMatch(completionSource, /<p className="eyebrow">\{activeConfig\.stageTitle\}<\/p>/);
+  assert.doesNotMatch(completionSource, /<p className="eyebrow">进阶挑战<\/p>/);
+});
+
+test("mobile long press browser affordances are disabled across game surfaces", () => {
+  const pageSource = read(new URL("../app/page.tsx", import.meta.url));
+  const tokenCss = read(new URL("../app/styles/base-flow/tokens.css", import.meta.url));
+  const overlayCss = read(new URL("../app/styles/overlays-responsive.css", import.meta.url));
+
+  assert.match(pageSource, /blockMobileLongPress/);
+  assert.match(pageSource, /matchMedia\("\(pointer: coarse\)"\)/);
+  assert.match(pageSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(tokenCss, /-webkit-user-drag: none;/);
+  assert.doesNotMatch(overlayCss, /-webkit-touch-callout:\s*default/);
+  assert.doesNotMatch(overlayCss, /user-select:\s*auto/);
 });
 
 test("finish platforms use the same gold flag language across square jump, doodle, and fall down", () => {

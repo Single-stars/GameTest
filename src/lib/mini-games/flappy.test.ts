@@ -77,6 +77,23 @@ test("flappy generated gates are seeded and encode initial placement", () => {
   );
 });
 
+test("flappy gates keep safe horizontal spacing and visible center variation", () => {
+  for (const levelId of ["flappy-3", "flappy-6", "flappy-10"]) {
+    const level = getMiniGameLevel("flappy", levelId);
+    for (let seedIndex = 0; seedIndex < 160; seedIndex += 1) {
+      const layout = generateFlappyGateLayout(level, `spacing-seed-${seedIndex}`);
+      const centers = layout.gates.map((gate) => gate.baseCenterY);
+      const centerSpread = Math.max(...centers) - Math.min(...centers);
+
+      assert.ok(centerSpread >= 88, `${levelId} seed ${seedIndex} center spread ${centerSpread.toFixed(1)} is too flat`);
+      for (let gateIndex = 1; gateIndex < layout.gates.length; gateIndex += 1) {
+        const spacing = layout.gates[gateIndex].distance - layout.gates[gateIndex - 1].distance;
+        assert.ok(spacing >= 156, `${levelId} seed ${seedIndex} gate ${gateIndex} spacing ${spacing.toFixed(1)} is too close`);
+      }
+    }
+  }
+});
+
 test("flappy maps its player visuals through the shared avatar without jump or fall states", () => {
   const componentSource = readMiniGameRuntimeSource();
   const flappySource = componentSource.slice(componentSource.indexOf("type FlappyGate"), componentSource.indexOf("export function FlappyPrototype"));

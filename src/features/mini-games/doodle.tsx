@@ -34,7 +34,10 @@ import {
   type PrototypeStatus,
 } from "@/features/mini-games/common";
 import {
+  DOODLE_GRAVITY,
+  DOODLE_JUMP_VELOCITY,
   generateDoodleWorldLayout,
+  getDoodleBounceVelocity,
   selectVisibleDoodleHazards,
   selectVisibleDoodlePlatforms,
   type GeneratedDoodleHazard,
@@ -261,7 +264,7 @@ export function DoodleJumpPrototype({
     const current = runtimeRef.current;
     if (current.started || current.status !== "playing") return;
     current.started = true;
-    current.playerVy = 760;
+    current.playerVy = DOODLE_JUMP_VELOCITY;
     current.jumpTurnAvailable = true;
     syncDoodleView();
   }, [syncDoodleView]);
@@ -360,7 +363,7 @@ export function DoodleJumpPrototype({
       current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, stageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
       const previousY = current.playerY;
-      let nextVy = current.playerVy - 1500 * delta;
+      let nextVy = current.playerVy - DOODLE_GRAVITY * delta;
       let nextY = current.playerY + nextVy * delta;
       let riskHit = current.riskHit;
       let playerTurns = current.playerTurns;
@@ -387,7 +390,7 @@ export function DoodleJumpPrototype({
           const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
           if (crossed && insideX) {
             nextY = platform.y + PLAYER_SIZE / 2;
-            nextVy = 760 * (platform.risk ? riskJumpMultiplier : 1);
+            nextVy = getDoodleBounceVelocity({ risk: platform.risk, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
             if (platform.risk) riskHit += 1;
@@ -475,7 +478,7 @@ export function DoodleJumpPrototype({
           };
           current.playerX = respawnX;
           current.playerY = respawnY;
-          current.playerVy = 760;
+          current.playerVy = DOODLE_JUMP_VELOCITY;
           current.jumpTurnAvailable = true;
           current.platforms.unshift(respawnPlatform);
           current.failures = failures;

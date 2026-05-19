@@ -86,6 +86,7 @@ button,
 .game-area,
 .braking-panel {
   -webkit-touch-callout: none;
+  -webkit-user-drag: none;
   -webkit-user-select: none;
   user-select: none;
 }

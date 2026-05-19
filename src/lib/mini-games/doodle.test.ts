@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DOODLE_JUMP_VELOCITY,
   generateDoodleWorldLayout,
+  getDoodleJumpPeakHeight,
   getMiniGameLevel,
   selectVisibleDoodleHazards,
   selectVisibleDoodlePlatforms,
@@ -129,6 +131,20 @@ test("doodle generated platforms use smooth lane noise to stay horizontally dist
   assert.ok(maxCenterRun <= 4, `expected no long centered platform run, got ${maxCenterRun}`);
   assert.ok(xs.some((x) => x <= 115), "expected at least one clearly left-side platform");
   assert.ok(xs.some((x) => x >= 245), "expected at least one clearly right-side platform");
+});
+
+test("doodle normal jump covers two layers without overshooting far beyond them", () => {
+  const source = readMiniGameRuntimeSource();
+  const doodleSource = source.slice(source.indexOf("function DoodleJumpPrototype"), source.indexOf("function makeFlappyLayout"));
+  const highestTwoLayerGap = 260;
+  const peakHeight = getDoodleJumpPeakHeight(DOODLE_JUMP_VELOCITY);
+
+  assert.ok(peakHeight >= highestTwoLayerGap, `expected normal jump peak >= ${highestTwoLayerGap}, got ${peakHeight.toFixed(1)}`);
+  assert.ok(peakHeight <= highestTwoLayerGap + 24, `expected normal jump peak to stay near two layers, got ${peakHeight.toFixed(1)}`);
+  assert.match(doodleSource, /current\.playerVy = DOODLE_JUMP_VELOCITY;/);
+  assert.match(doodleSource, /nextVy = getDoodleBounceVelocity/);
+  assert.doesNotMatch(doodleSource, /playerVy = 760/);
+  assert.doesNotMatch(doodleSource, /nextVy = 760 \*/);
 });
 
 test("doodle visible selectors cull used and off-screen world objects", () => {

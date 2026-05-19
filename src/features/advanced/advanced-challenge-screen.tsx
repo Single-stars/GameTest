@@ -62,6 +62,19 @@ function getRoundConfig(roundId: RoundId) {
   return rounds.find((round) => round.id === roundId) ?? rounds[0];
 }
 
+function getAdvancedChallengeHeroTitle({
+  roundId,
+  roundTitle,
+  stageTitle,
+}: {
+  roundId: RoundId;
+  roundTitle: string;
+  stageTitle: string;
+}) {
+  const displayRoundTitle = roundId === "reaction" ? "红灯行" : roundTitle;
+  return `${displayRoundTitle} · ${stageTitle}`;
+}
+
 export function AdvancedChallengeScreen({
   advancedProgress,
   challenge,
@@ -119,8 +132,13 @@ export function AdvancedChallengeScreen({
       <section className="play-screen advanced-play-screen" aria-live="polite">
         <header className="round-header advanced-round-header">
           <div>
-            <p className="eyebrow">{playingConfig.stageTitle}</p>
-            <h1>{round.title}</h1>
+            <h1>
+              {getAdvancedChallengeHeroTitle({
+                roundId: challenge.roundId,
+                roundTitle: round.title,
+                stageTitle: playingConfig.stageTitle,
+              })}
+            </h1>
           </div>
           <div className="advanced-header-actions">
             <button className="advanced-back-button" type="button" onPointerDown={onBack}>
@@ -196,8 +214,13 @@ export function AdvancedChallengeScreen({
       </header>
 
       <div className="advanced-hero">
-        <p className="eyebrow">进阶挑战</p>
-        <h1>{round.title}</h1>
+        <h1>
+          {getAdvancedChallengeHeroTitle({
+            roundId: challenge.roundId,
+            roundTitle: round.title,
+            stageTitle: activeConfig.stageTitle,
+          })}
+        </h1>
       </div>
 
       {isComplete ? (

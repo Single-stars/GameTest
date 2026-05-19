@@ -8,6 +8,7 @@ import {
   getAdvancedBrakeDangerLeft,
   getAdvancedBrakeEventOptions,
   getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
   getAdvancedStageConfig,
@@ -302,6 +303,14 @@ test("advanced braking correct action follows single red, gray fake, and dual-li
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: "red" }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: null }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: "gray" }), "hold");
+});
+
+test("advanced braking exposes in-round rule hints for rule-tale variants", () => {
+  assert.equal(getAdvancedBrakeRuleHint(1, undefined), null);
+  assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "规则：单红松手，双红按住");
+  assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "规则：双红松手，单红按住");
+  assert.equal(getAdvancedBrakeRuleHint(9, "single-red-stop"), "规则：单红松手，双红按住");
+  assert.equal(getAdvancedBrakeRuleHint(10, undefined), "规则：单红松手，双红和灰色按住");
 });
 
 test("advanced braking positions danger by reaction window and wins when block right edge reaches finish", () => {

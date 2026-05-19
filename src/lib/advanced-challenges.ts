@@ -26,6 +26,8 @@ export {
 
   getAdvancedBrakeHasReachedFinish,
 
+  getAdvancedBrakeRuleHint,
+
   getAdvancedBrakeReleaseOutcome,
 
   getAdvancedBrakeSchedulerStep,

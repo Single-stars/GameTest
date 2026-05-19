@@ -68,13 +68,23 @@ export function generateFlappyGateLayout(
   }
 
   let previousCenter = stageHeight / 2 + (rand() - 0.5) * 56;
+  let distance = 170 + rand() * 18;
+  const lanePattern = [0.34, 0.66, 0.46, 0.74, 0.26, 0.54];
+  const laneOffset = Math.floor(rand() * lanePattern.length);
   const gates = Array.from({ length: gateCount }, (_, index): GeneratedFlappyGate => {
     const maxStep = gateCount <= 8 ? 86 : gateCount <= 10 ? 104 : 116;
-    const centerY = clamp(previousCenter + (rand() * 2 - 1) * maxStep, 132, stageHeight - 132);
+    const lane = lanePattern[(index + laneOffset) % lanePattern.length];
+    const laneCenter = 132 + lane * (stageHeight - 264);
+    const targetCenter = laneCenter + (rand() - 0.5) * Math.min(72, maxStep);
+    const centerY = clamp(index === 0 ? targetCenter : clamp(targetCenter, previousCenter - maxStep, previousCenter + maxStep), 132, stageHeight - 132);
     previousCenter = centerY;
+    if (index > 0) {
+      const minSpacing = gateCount <= 8 ? 168 : gateCount <= 10 ? 174 : 180;
+      distance += minSpacing + rand() * 46;
+    }
     return {
       id: index,
-      distance: 170 + index * (178 + rand() * 24),
+      distance,
       baseCenterY: centerY,
       moving: rand() < movingRatio,
       phase: rand() * Math.PI * 2,

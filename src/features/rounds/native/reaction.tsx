@@ -4,7 +4,19 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PlayerAvatar, type PlayerAvatarMood, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
-import { getParamNumber, now, pointerKind, rand, ROUND_SETTLEMENT_DELAY_MS, shuffle, trial, type RoundProps, type TrialEvent } from "@/features/rounds/native/shared";
+import {
+  getParamNumber,
+  getReactionSignalDelayMs,
+  now,
+  pointerKind,
+  rand,
+  REACTION_MIN_SIGNAL_INTERVAL_MS,
+  ROUND_SETTLEMENT_DELAY_MS,
+  shuffle,
+  trial,
+  type RoundProps,
+  type TrialEvent,
+} from "@/features/rounds/native/shared";
 
 type AdvancedReactionCell = {
   id: number;
@@ -25,7 +37,9 @@ function reactionAvatarMood(cell: AdvancedReactionCell, feedbackTone: "idle" | "
   return cell.color === "green" ? "focused" : "sleepy";
 }
 
-export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
+const REACTION_FEEDBACK_DELAY_MS = 240;
+
+export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
   const config = advancedConfig!;
   const lanes = getParamNumber(config, "lanes", 1);
   const isBoss = config.variant === "reaction-grid-boss";
@@ -41,6 +55,8 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
   const activeShownAtRef = useRef(0);
   const activeGreenIdsRef = useRef<Set<number>>(new Set());
   const clickedGreenIdsRef = useRef<Set<number>>(new Set());
+  const lastSignalShownAtRef = useRef(0);
+
   const timersRef = useRef<number[]>([]);
   const completionTimerRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
@@ -78,11 +94,17 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
     resetCells();
     activeGreenIdsRef.current = new Set();
     clickedGreenIdsRef.current = new Set();
-    const delay = rand(420, 900);
+    const delay = getReactionSignalDelayMs({
+      lastShownAtMs: lastSignalShownAtRef.current,
+      minIntervalMs: REACTION_MIN_SIGNAL_INTERVAL_MS,
+      nowMs: now(),
+      randomDelayMs: rand(420, 900),
+    });
     timersRef.current.push(
       window.setTimeout(() => {
         const shownAt = now();
-        activeShownAtRef.current = shownAt;
+        activeShownAtRef.current = shownAt;
+        lastSignalShownAtRef.current = shownAt;
         if (isBoss) {
           const litCount = Math.random() > 0.52 ? 2 : 1;
           const ids = shuffle(Array.from({ length: lanes }, (_, id) => id)).slice(0, litCount);
@@ -224,12 +246,12 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
       if (signalIndexRef.current >= totalSignals) {
         finish();
       } else {
-        timersRef.current.push(window.setTimeout(startSignal, 240));
+        timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
       }
       return;
     }
     if (isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
-      timersRef.current.push(window.setTimeout(startSignal, 240));
+      timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
     }
   };
 
@@ -264,7 +286,8 @@ export function ReactionRound({ onComplete }: RoundProps) {
   const trialsRef = useRef<TrialEvent[]>([]);
   const scheduledAtRef = useRef(0);
   const plannedReadyAtRef = useRef(0);
-  const shownAtRef = useRef(0);
+  const shownAtRef = useRef(0);
+  const lastSignalShownAtRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
   const readyTimerRef = useRef<number | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
@@ -283,12 +306,19 @@ export function ReactionRound({ onComplete }: RoundProps) {
     setFeedbackTone("idle");
     setMessage("");
     const scheduledAt = now();
-    const delay = rand(900, 2200);
+    const delay = getReactionSignalDelayMs({
+      lastShownAtMs: lastSignalShownAtRef.current,
+      minIntervalMs: REACTION_MIN_SIGNAL_INTERVAL_MS,
+      nowMs: scheduledAt,
+      randomDelayMs: rand(900, 2200),
+    });
     scheduledAtRef.current = scheduledAt;
     plannedReadyAtRef.current = scheduledAt + delay;
 
     readyTimerRef.current = window.setTimeout(() => {
-      shownAtRef.current = now();
+      const shownAt = now();
+      shownAtRef.current = shownAt;
+      lastSignalShownAtRef.current = shownAt;
       setStatus("ready");
       setMessage("");
     }, delay);

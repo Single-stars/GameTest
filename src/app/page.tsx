@@ -236,6 +236,25 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+
+    const blockMobileLongPress = (event: Event) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener("contextmenu", blockMobileLongPress, { capture: true });
+    document.addEventListener("selectstart", blockMobileLongPress, { capture: true });
+    document.addEventListener("dragstart", blockMobileLongPress, { capture: true });
+
+    return () => {
+      document.removeEventListener("contextmenu", blockMobileLongPress, { capture: true });
+      document.removeEventListener("selectstart", blockMobileLongPress, { capture: true });
+      document.removeEventListener("dragstart", blockMobileLongPress, { capture: true });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
 
     const stored = readPersistedGameState(window.localStorage);

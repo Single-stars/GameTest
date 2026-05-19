@@ -20,6 +20,13 @@ export function getAdvancedBrakeCorrectAction(level: number, event: AdvancedBrak
   return event.top === "gray" || event.bottom === "gray" ? "hold" : "release";
 }
 
+export function getAdvancedBrakeRuleHint(level: number, dualRule?: unknown) {
+  if (level === 10) return "规则：单红松手，双红和灰色按住";
+  if (dualRule === "single-red-stop") return "规则：单红松手，双红按住";
+  if (dualRule === "double-red-stop") return "规则：双红松手，单红按住";
+  return null;
+}
+
 export function getAdvancedBrakeEventOptions(
   level: number,
   context: { eventIndex?: number; eventCount?: number; previousEvent?: AdvancedBrakeEvent | null } = {},

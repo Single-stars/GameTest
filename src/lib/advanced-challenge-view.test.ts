@@ -77,8 +77,11 @@ test("advanced challenge screen uses the focused lobby with base replay and clic
   assert.match(screenSource, /resolveAdvancedLobbyClickLevel/);
   assert.doesNotMatch(screenSource, /resolveAdvancedLobbyMomentumLevel/);
   assert.match(screenSource, /getAdvancedChallengeGoalItems/);
-  assert.match(screenSource, /\{playingConfig\.stageTitle\}/);
-  assert.match(screenSource, /\{activeConfig\.stageTitle\}/);
+  assert.match(screenSource, /getAdvancedChallengeHeroTitle/);
+  assert.match(screenSource, /stageTitle: playingConfig\.stageTitle/);
+  assert.match(screenSource, /stageTitle: activeConfig\.stageTitle/);
+  assert.doesNotMatch(screenSource, /<p className="eyebrow">\{playingConfig\.stageTitle\}<\/p>/);
+  assert.doesNotMatch(screenSource, /<p className="eyebrow">\{activeConfig\.stageTitle\}<\/p>/);
   assert.match(screenSource, /onRestartBaseRound/);
   assert.match(screenSource, /重新挑战基础关/);
   assert.doesNotMatch(screenSource, /round\.measure\}进阶/);

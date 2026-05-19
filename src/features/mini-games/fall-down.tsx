@@ -117,7 +117,7 @@ function constrainFallDownDangerRuns(kinds: FallDownPlatformKind[], rand: () => 
   let dangerRun = 0;
   for (let index = 0; index < kinds.length; index += 1) {
     dangerRun = kinds[index] === "danger" ? dangerRun + 1 : 0;
-    if (dangerRun >= 3) {
+    if (dangerRun > 3) {
       const swapCandidates = kinds
         .map((kind, candidateIndex) => ({ kind, candidateIndex }))
         .filter((item) => item.candidateIndex > index && item.kind !== "danger");
@@ -246,7 +246,7 @@ function makeFallDownPlatforms(level: MiniGameLevelConfig, runSeed: string, stag
       const gapNoise = fallDownSmoothNoise(gapNoisePoints, index * 0.61);
       y += minGap + (maxGap - minGap) * gapNoise;
     }
-    const kind = index === layersRequired ? "finish" : index === 0 ? "normal" : kindBag.splice(Math.floor(rand() * kindBag.length), 1)[0] ?? "normal";
+    const kind = index === layersRequired ? "finish" : index === 0 ? "normal" : kindBag[index - 1] ?? "normal";
     const widthNoise = fallDownSmoothNoise(widthNoisePoints, index * 0.53);
     const kindWidth = kind === "finish" ? baseWidth + 42 : kind === "danger" ? Math.max(58, baseWidth - 16) : baseWidth;
     const width = clamp(kindWidth + (widthNoise - 0.5) * 18, kind === "danger" ? 58 : 62, stageWidth - 58);
