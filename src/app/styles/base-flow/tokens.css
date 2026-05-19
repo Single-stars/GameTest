@@ -61,6 +61,18 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+body *:not(input):not(textarea):not(.share-image-preview),
+body *::before,
+body *::after {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+
+body *:not(input):not(textarea):not(.share-image-preview) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 html,
 body {
   max-width: 100vw;
@@ -94,6 +106,20 @@ button,
 button,
 textarea {
   font: inherit;
+}
+
+input,
+textarea {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.share-image-preview {
+  -webkit-touch-callout: default;
+  -webkit-user-drag: auto;
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 button {

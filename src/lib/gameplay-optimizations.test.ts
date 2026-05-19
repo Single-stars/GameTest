@@ -238,7 +238,13 @@ test("mobile long press browser affordances are disabled across game surfaces", 
   assert.match(pageSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
   assert.match(pageSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
   assert.match(pageSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
+  assert.match(pageSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(pageSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(pageSource, /\.share-image-preview/);
   assert.match(tokenCss, /-webkit-user-drag: none;/);
+  assert.match(tokenCss, /body \*:not\(input\):not\(textarea\):not\(\.share-image-preview\)/);
+  assert.match(tokenCss, /\.share-image-preview\s*\{[\s\S]*-webkit-touch-callout:\s*default;/);
   assert.doesNotMatch(overlayCss, /-webkit-touch-callout:\s*default/);
   assert.doesNotMatch(overlayCss, /user-select:\s*auto/);
 });
