@@ -64,6 +64,8 @@ const GOAL_ICON_LABELS = {
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const ADVANCED_TITLE_MIN_FONT_SIZE_PX = 14;
 const ADVANCED_TITLE_MAX_FONT_SIZE_PX = 22;
+const ADVANCED_HERO_TITLE_MIN_FONT_SIZE_PX = 22;
+const ADVANCED_HERO_TITLE_MAX_FONT_SIZE_PX = 34;
 const useBrowserLayoutEffect = typeof window === "undefined" ? React.useEffect : React.useLayoutEffect;
 
 function getResponsiveTitleFontSize({
@@ -101,12 +103,24 @@ function getAdvancedChallengeHeroTitle({
   return `${roundTitle} · ${stageTitle}`;
 }
 
-function AdaptiveAdvancedHeaderTitle({ title }: { title: string }) {
+function AdaptiveAdvancedTitle({
+  title,
+  blockClassName,
+  measureClassName,
+  minFontSizePx,
+  maxFontSizePx,
+}: {
+  title: string;
+  blockClassName: string;
+  measureClassName: string;
+  minFontSizePx: number;
+  maxFontSizePx: number;
+}) {
   const titleBlockRef = React.useRef<HTMLDivElement | null>(null);
   const measureRef = React.useRef<HTMLSpanElement | null>(null);
-  const [fontSizePx, setFontSizePx] = React.useState(ADVANCED_TITLE_MAX_FONT_SIZE_PX);
+  const [fontSizePx, setFontSizePx] = React.useState(maxFontSizePx);
 
-  React.useEffect(() => {
+  useBrowserLayoutEffect(() => {
     const titleBlock = titleBlockRef.current;
     const measure = measureRef.current;
     if (!titleBlock || !measure) return undefined;
@@ -115,8 +129,8 @@ function AdaptiveAdvancedHeaderTitle({ title }: { title: string }) {
       const nextFontSize = getResponsiveTitleFontSize({
         availableWidthPx: titleBlock.clientWidth,
         titleWidthAtMaxFontPx: measure.getBoundingClientRect().width,
-        minFontSizePx: ADVANCED_TITLE_MIN_FONT_SIZE_PX,
-        maxFontSizePx: ADVANCED_TITLE_MAX_FONT_SIZE_PX,
+        minFontSizePx,
+        maxFontSizePx,
       });
       setFontSizePx(nextFontSize);
     };
@@ -127,15 +141,39 @@ function AdaptiveAdvancedHeaderTitle({ title }: { title: string }) {
     const observer = new ResizeObserver(updateFontSize);
     observer.observe(titleBlock);
     return () => observer.disconnect();
-  }, [title]);
+  }, [maxFontSizePx, minFontSizePx, title]);
 
   return (
-    <div className="advanced-header-title-block" ref={titleBlockRef}>
+    <div className={blockClassName} ref={titleBlockRef}>
       <h1 style={{ fontSize: `${fontSizePx}px` }}>{title}</h1>
-      <span className="advanced-title-measure" ref={measureRef} aria-hidden="true">
+      <span className={measureClassName} ref={measureRef} style={{ fontSize: `${maxFontSizePx}px` }} aria-hidden="true">
         {title}
       </span>
     </div>
+  );
+}
+
+function AdaptiveAdvancedHeaderTitle({ title }: { title: string }) {
+  return (
+    <AdaptiveAdvancedTitle
+      title={title}
+      blockClassName="advanced-header-title-block"
+      measureClassName="advanced-title-measure"
+      minFontSizePx={ADVANCED_TITLE_MIN_FONT_SIZE_PX}
+      maxFontSizePx={ADVANCED_TITLE_MAX_FONT_SIZE_PX}
+    />
+  );
+}
+
+function AdaptiveAdvancedHeroTitle({ title }: { title: string }) {
+  return (
+    <AdaptiveAdvancedTitle
+      title={title}
+      blockClassName="advanced-hero-title-block"
+      measureClassName="advanced-hero-title-measure"
+      minFontSizePx={ADVANCED_HERO_TITLE_MIN_FONT_SIZE_PX}
+      maxFontSizePx={ADVANCED_HERO_TITLE_MAX_FONT_SIZE_PX}
+    />
   );
 }
 
@@ -411,12 +449,12 @@ function AdvancedLobbyContent({
       </header>
 
       <div className="advanced-hero">
-        <h1>
-          {getAdvancedChallengeHeroTitle({
+        <AdaptiveAdvancedHeroTitle
+          title={getAdvancedChallengeHeroTitle({
             roundTitle: round.title,
             stageTitle: activeConfig.stageTitle,
           })}
-        </h1>
+        />
       </div>
 
       {challenge.mode === "complete" ? (

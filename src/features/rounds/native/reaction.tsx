@@ -37,7 +37,7 @@ function reactionAvatarMood(cell: AdvancedReactionCell, feedbackTone: "idle" | "
   return cell.color === "green" ? "focused" : "sleepy";
 }
 
-const REACTION_FEEDBACK_DELAY_MS = 240;
+const REACTION_FEEDBACK_DELAY_MS = 400;
 
 export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
   const config = advancedConfig!;
@@ -362,7 +362,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
     if (finishedRef.current) return;
     if (answeredRef.current) return;
 
-    if (status === "waiting") {
+    if (status === "waiting") {
       answeredRef.current = true;
       if (readyTimerRef.current) window.clearTimeout(readyTimerRef.current);
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
@@ -387,11 +387,11 @@ export function ReactionRound({ onComplete }: RoundProps) {
         } else {
           startStep(stepRef.current + 1);
         }
-      }, 360);
-      return;
+      }, 360);
+      return;
     }
 
-    if (status === "ready") {
+    if (status === "ready") {
       answeredRef.current = true;
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
       const responseAt = now();
@@ -415,7 +415,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
         } else {
           startStep(stepRef.current + 1);
         }
-      }, 360);
+      }, 400);
     }
   };
 

@@ -135,6 +135,35 @@ test("reaction rounds use full-area shared-avatar eyes and only render ms after 
   assert.match(cssSource, /@keyframes advanced-reaction-feedback/);
 });
 
+test("advanced reaction green click feedback keeps the full green background like base reaction", () => {
+  const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
+  const clickedBlock = cssBlock(cssSource, ".advanced-reaction-cell.clicked");
+  const greenClickedBlock = cssBlock(cssSource, ".advanced-reaction-cell.green.clicked");
+  const clickedIndex = cssSource.indexOf(".advanced-reaction-cell.clicked {");
+  const greenClickedIndex = cssSource.indexOf(".advanced-reaction-cell.green.clicked {");
+
+  assert.match(clickedBlock, /background:\s*#e9f6ee;/);
+  assert.ok(greenClickedIndex > clickedIndex);
+  assert.match(greenClickedBlock, /background:\s*var\(--green\);/);
+  assert.match(greenClickedBlock, /color:\s*#ffffff;/);
+  assert.match(greenClickedBlock, /box-shadow:\s*var\(--glow-success\);/);
+});
+
+test("base and advanced reaction green click feedback lasts 400ms", () => {
+  const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
+  const baseReadySuccessSource = sourceBetween(reactionSource, 'if (status === "ready") {', "  return (");
+
+  assert.match(baseReadySuccessSource, /setFeedbackTone\("good"\)/);
+  assert.match(baseReadySuccessSource, /\}, 400\);/);
+  assert.match(cssBlock(cssSource, ".reaction-pad.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
+  assert.match(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 400;/);
+  assert.match(cssBlock(cssSource, ".advanced-reaction-grid.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
+  assert.match(reactionSource, /window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 240;/);
+  assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 360;/);
+});
+
 test("aim rounds fire arrows in the clicked direction from a visible charge launcher", () => {
   const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
   const cssSource = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
@@ -218,14 +247,19 @@ test("advanced braking rule-tale variants show the active rule in the in-round H
 
 test("advanced completion header merges the round and challenge titles after settlement", () => {
   const screenSource = read(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url));
+  const cssSource = read(new URL("../app/styles/base-flow/advanced.css", import.meta.url));
   const resultSource = sourceBetween(screenSource, "function AdvancedResultCard", "function AdvancedLevelSelectionPanel");
   const lobbySource = sourceBetween(screenSource, "function AdvancedLobbyContent", "export function AdvancedChallengeScreen");
 
   assert.match(screenSource, /function getAdvancedChallengeHeroTitle/);
+  assert.match(screenSource, /function AdaptiveAdvancedHeroTitle/);
   assert.doesNotMatch(screenSource, /roundId === "reaction"/);
   assert.doesNotMatch(screenSource, /"红灯行"/);
   assert.match(screenSource, /return `\$\{roundTitle\} · \$\{stageTitle\}`;/);
-  assert.match(lobbySource, /<h1>\s*\{getAdvancedChallengeHeroTitle\(\{\s*roundTitle: round\.title,\s*stageTitle: activeConfig\.stageTitle,\s*}\)\}\s*<\/h1>/);
+  assert.match(lobbySource, /<AdaptiveAdvancedHeroTitle[\s\S]*title=\{getAdvancedChallengeHeroTitle\(\{\s*roundTitle: round\.title,\s*stageTitle: activeConfig\.stageTitle,\s*}\)\}/);
+  assert.match(cssSource, /\.advanced-hero-title-block\s*{[\s\S]*min-width:\s*0;[\s\S]*overflow:\s*hidden;/);
+  assert.match(cssSource, /\.advanced-hero h1\s*{[\s\S]*white-space:\s*nowrap;[\s\S]*overflow:\s*hidden;/);
+  assert.match(cssSource, /\.advanced-hero-title-measure\s*{[\s\S]*visibility:\s*hidden;[\s\S]*white-space:\s*nowrap;/);
   assert.doesNotMatch(resultSource, /<p className="eyebrow">\{activeConfig\.stageTitle\}<\/p>/);
   assert.doesNotMatch(resultSource, /<p className="eyebrow">进阶挑战<\/p>/);
 });

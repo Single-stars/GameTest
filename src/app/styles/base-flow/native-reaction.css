@@ -30,7 +30,7 @@
   box-shadow:
     inset 0 0 0 4px rgba(49, 183, 117, 0.72),
     var(--glow-success);
-  animation: advanced-reaction-feedback 360ms ease;
+  animation: advanced-reaction-feedback 400ms ease;
 }
 
 .reaction-pad.early {
@@ -99,7 +99,7 @@
   box-shadow:
     inset 0 0 0 4px rgba(49, 183, 117, 0.72),
     var(--glow-success);
-  animation: advanced-reaction-feedback 360ms ease;
+  animation: advanced-reaction-feedback 400ms ease;
 }
 
 .advanced-reaction-grid.early::after {
@@ -177,6 +177,12 @@
 .advanced-reaction-cell.clicked {
   background: #e9f6ee;
   color: var(--ink);
+}
+
+.advanced-reaction-cell.green.clicked {
+  background: var(--green);
+  color: #ffffff;
+  box-shadow: var(--glow-success);
 }
 
 .reaction-cell-avatar {

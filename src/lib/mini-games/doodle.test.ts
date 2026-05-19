@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DOODLE_JUMP_VELOCITY,
   generateDoodleWorldLayout,
+  getDoodleBounceVelocity,
   getDoodleJumpPeakHeight,
   getMiniGameLevel,
   selectVisibleDoodleHazards,
@@ -170,6 +171,30 @@ test("doodle visible selectors cull used and off-screen world objects", () => {
   });
   assert.ok(visibleHazards.length < layout.hazards.length);
   assert.ok(visibleHazards.every((hazard) => hazard.y + hazard.size >= 560 && hazard.y - hazard.size <= 1360));
+});
+
+test("doodle hazards render far enough ahead to match collision checks during fast upward jumps", async () => {
+  const miniGames = await import("./index.ts") as typeof import("./index.ts") & {
+    getDoodleHazardVisibleBuffer?: (buffer: number) => number;
+  };
+  const runtimeSource = readMiniGameRuntimeSource();
+  const fastJumpTravel = getDoodleBounceVelocity({ risk: true, riskJumpMultiplier: 1.6 }) * 0.12;
+  const movingHazardVerticalDrift = 64;
+  const requiredBuffer = Math.ceil(fastJumpTravel + movingHazardVerticalDrift);
+
+  assert.equal(typeof miniGames.getDoodleHazardVisibleBuffer, "function");
+  assert.ok(
+    miniGames.getDoodleHazardVisibleBuffer(96) >= requiredBuffer,
+    `expected low-power hazard buffer to cover ${requiredBuffer}px of render-ahead`,
+  );
+  assert.ok(
+    miniGames.getDoodleHazardVisibleBuffer(160) >= requiredBuffer,
+    `expected normal hazard buffer to cover ${requiredBuffer}px of render-ahead`,
+  );
+  assert.equal(miniGames.getDoodleHazardVisibleBuffer(400), 400);
+  assert.match(runtimeSource, /getDoodleHazardVisibleBuffer,/);
+  assert.match(runtimeSource, /visibleHazards: selectVisibleDoodleHazards\(frame\.hazards, \{\s*buffer: getDoodleHazardVisibleBuffer\(buffer\),/);
+  assert.match(runtimeSource, /visiblePlatforms: selectVisibleDoodlePlatforms\(frame\.platforms, \{\s*buffer,/);
 });
 
 test("doodle completion uses a highest finish platform instead of a height line", () => {

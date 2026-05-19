@@ -42,6 +42,7 @@ export type DoodleVisibleOptions = {
 
 export const DOODLE_GRAVITY = 1500;
 export const DOODLE_JUMP_VELOCITY = 890;
+export const DOODLE_HAZARD_VISIBLE_BUFFER = 320;
 
 export function getDoodleJumpPeakHeight(velocity = DOODLE_JUMP_VELOCITY, gravity = DOODLE_GRAVITY) {
   return (velocity * velocity) / (2 * gravity);
@@ -55,6 +56,10 @@ export function getDoodleBounceVelocity({
   riskJumpMultiplier: number;
 }) {
   return DOODLE_JUMP_VELOCITY * (risk ? riskJumpMultiplier : 1);
+}
+
+export function getDoodleHazardVisibleBuffer(buffer: number) {
+  return Math.max(buffer, DOODLE_HAZARD_VISIBLE_BUFFER);
 }
 
 function makeDoodleNoisePoints(rand: () => number, count: number) {

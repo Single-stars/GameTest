@@ -38,6 +38,7 @@ import {
   DOODLE_JUMP_VELOCITY,
   generateDoodleWorldLayout,
   getDoodleBounceVelocity,
+  getDoodleHazardVisibleBuffer,
   selectVisibleDoodleHazards,
   selectVisibleDoodlePlatforms,
   type GeneratedDoodleHazard,
@@ -179,7 +180,7 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
     status: frame.status,
     time: frame.time,
     visibleHazards: selectVisibleDoodleHazards(frame.hazards, {
-      buffer,
+      buffer: getDoodleHazardVisibleBuffer(buffer),
       cameraY: frame.cameraY,
       stageHeight,
     }),
