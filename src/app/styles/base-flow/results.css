@@ -23,10 +23,14 @@
 .rank-title {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
-.result-card h1 {
-  font-size: 52px;
+.rank-title h1 {
+  margin: 0;
+  white-space: nowrap;
+  line-height: 1.02;
+  font-size: clamp(28px, 9.6vw, 52px);
 }
 
 .rank-avatar-entry {
@@ -38,7 +42,9 @@
   border: 0;
   background: transparent;
   box-shadow: none;
-  translate: -12px 0;
+  justify-self: end;
+  margin-inline-end: 2px;
+  translate: 0 0;
   appearance: none;
   cursor: pointer;
   touch-action: manipulation;
@@ -48,7 +54,7 @@
 }
 
 .rank-avatar-entry.playing {
-  translate: -12px -2px;
+  translate: 0 -2px;
   box-shadow: none;
   scale: 1.04;
 }
@@ -355,5 +361,22 @@
   50% {
     opacity: 0.88;
     transform: scale(1.08);
+  }
+}
+
+@media (max-width: 640px) {
+  .rank-card {
+    gap: 12px;
+    padding: 20px 16px;
+  }
+
+  .rank-title h1 {
+    font-size: clamp(24px, 8.8vw, 42px);
+  }
+
+  .rank-avatar-entry {
+    width: 54px;
+    height: 54px;
+    margin-inline-end: 0;
   }
 }
