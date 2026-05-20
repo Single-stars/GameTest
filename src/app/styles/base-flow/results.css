@@ -29,6 +29,8 @@
 .rank-title h1 {
   margin: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.02;
   font-size: clamp(28px, 9.6vw, 52px);
 }
@@ -366,8 +368,14 @@
 
 @media (max-width: 640px) {
   .rank-card {
+    min-height: 116px;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     padding: 20px 16px;
+  }
+
+  .rank-title {
+    padding-inline-end: 72px;
   }
 
   .rank-title h1 {
@@ -375,6 +383,9 @@
   }
 
   .rank-avatar-entry {
+    position: absolute;
+    top: calc(50% - 27px);
+    right: 12px;
     width: 54px;
     height: 54px;
     margin-inline-end: 0;
