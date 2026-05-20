@@ -58,6 +58,8 @@ import { RoundIntro } from "@/features/game-flow/round-intro";
 import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
 import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
+import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
+import { PLAYER_AVATAR_SKINS, PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
 import { ShareImageScreen } from "@/features/results/share-image-screen";
@@ -68,6 +70,7 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
+const AVATAR_SKIN_STORAGE_KEY = "game-rank-test/avatar-skin/v1";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -88,6 +91,7 @@ export default function Home() {
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
+  const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
@@ -99,6 +103,7 @@ export default function Home() {
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
   const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
+  const avatarSkinLoadedRef = useRef(false);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
@@ -233,6 +238,29 @@ export default function Home() {
   }, [roundIndex]);
 
   useEffect(() => clearShareCopyToastTimer, [clearShareCopyToastTimer]);
+
+  useEffect(() => {
+    if (!avatarSkinLoadedRef.current || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(AVATAR_SKIN_STORAGE_KEY, selectedAvatarSkin);
+    } catch {
+      // Storage can be unavailable; the in-session skin still updates.
+    }
+  }, [selectedAvatarSkin]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedSkin = window.localStorage.getItem(AVATAR_SKIN_STORAGE_KEY);
+      if (PLAYER_AVATAR_SKINS.includes(storedSkin as PlayerAvatarSkin)) {
+        setSelectedAvatarSkin(storedSkin as PlayerAvatarSkin);
+      }
+    } catch {
+      // Cosmetic preferences should never block the game.
+    } finally {
+      avatarSkinLoadedRef.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -408,6 +436,16 @@ export default function Home() {
     setStage("luck");
   }, []);
 
+  const openAvatarLab = useCallback(() => {
+    setStage("avatar-lab");
+  }, []);
+
+  const closeAvatarLab = useCallback(() => {
+    releaseHistoryGuard();
+    scrollResultToTop();
+    setStage("result");
+  }, [releaseHistoryGuard, scrollResultToTop]);
+
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
     releaseHistoryGuard();
@@ -565,6 +603,10 @@ export default function Home() {
       closeShareImage();
       return navigation;
     }
+    if (stage === "avatar-lab") {
+      closeAvatarLab();
+      return navigation;
+    }
     if (stage === "luck") {
       closeLuckDraw();
       return navigation;
@@ -578,7 +620,7 @@ export default function Home() {
       return navigation;
     }
     return navigation;
-  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
+  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeAvatarLab, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
 
   useEffect(() => {
     appBackHandlerRef.current = handleAppBack;
@@ -637,6 +679,7 @@ export default function Home() {
   }, [advancedChallenge, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
 
   return (
+    <PlayerAvatarSkinProvider skin={selectedAvatarSkin}>
     <main className={playShellActive ? "app-shell app-shell-play" : "app-shell"}>
       {stage === "share" ? (
         <ShareImageScreen
@@ -647,6 +690,12 @@ export default function Home() {
           rankTitle={shareImageTitle}
           result={shareImageResult}
           shareCopyNoticeId={shareCopyNoticeId}
+        />
+      ) : stage === "avatar-lab" ? (
+        <AvatarLabScreen
+          selectedSkin={selectedAvatarSkin}
+          onSelectSkin={setSelectedAvatarSkin}
+          onBack={requestAppBack}
         />
       ) : stage === "luck" ? (
         <LuckDrawScreen
@@ -683,10 +732,12 @@ export default function Home() {
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           advancedProgress={advancedProgress}
+          avatarSkin={selectedAvatarSkin}
           trials={safeTrials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
+          onOpenAvatarLab={openAvatarLab}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
@@ -708,10 +759,12 @@ export default function Home() {
       ) : (
         <ResultScreen
           advancedProgress={advancedProgress}
+          avatarSkin={selectedAvatarSkin}
           trials={trials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
+          onOpenAvatarLab={openAvatarLab}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
@@ -726,5 +779,6 @@ export default function Home() {
         />
       ) : null}
     </main>
+    </PlayerAvatarSkinProvider>
   );
 }

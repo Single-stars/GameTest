@@ -11,7 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   getAdvancedBrakeDangerLeft,
   getAdvancedBrakeEventOptions,
@@ -48,12 +48,12 @@ type AdvancedBrakeHazard = {
 
 type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 
-function resolveAdvancedBrakingAvatarState(holding: boolean, feedback: AdvancedBrakingFeedback): PlayerAvatarState {
-  if (feedback === "success") return "success";
-  if (feedback === "crashed") return "fail";
-  if (feedback === "early") return "hit";
-  if (holding) return "move";
-  return "idle";
+function resolveAdvancedBrakingAvatarView(holding: boolean, feedback: AdvancedBrakingFeedback): PlayerAvatarView {
+  if (feedback === "success") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (feedback === "crashed") return { action: "hit", expression: "hurt" };
+  if (feedback === "early") return { action: "hit", expression: "hurt" };
+  if (holding) return { action: "move", expression: "neutral" };
+  return { action: "idle", expression: "neutral" };
 }
 
 export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps) {
@@ -715,9 +715,9 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
             <span className="advanced-runner" style={{ left: `${progress}%`, translate: "0 0" }}>
               <PlayerAvatar
+                {...resolveAdvancedBrakingAvatarView(holding, advancedFeedback)}
                 direction={holding ? "right" : "none"}
                 size={46}
-                state={resolveAdvancedBrakingAvatarState(holding, advancedFeedback)}
                 visualScale={1.02}
               />
             </span>
@@ -739,20 +739,20 @@ const DINO_FAILURE_FEEDBACK_MS = 820;
 
 type DinoStatus = "ready" | "running" | "danger" | "stopped" | "crashed" | "early";
 
-function resolveDinoAvatarState(status: DinoStatus): PlayerAvatarState {
+function resolveDinoAvatarView(status: DinoStatus): PlayerAvatarView {
   switch (status) {
     case "danger":
-      return "move";
+      return { action: "move", expression: "neutral" };
     case "running":
-      return "move";
+      return { action: "move", expression: "neutral" };
     case "stopped":
-      return "success";
+      return { action: "celebrate", expression: "happy", effect: "sparkles" };
     case "crashed":
-      return "fail";
+      return { action: "hit", expression: "hurt" };
     case "early":
-      return "hit";
+      return { action: "hit", expression: "hurt" };
     case "ready":
-      return "idle";
+      return { action: "idle", expression: "neutral" };
   }
 }
 
@@ -1092,9 +1092,9 @@ export function BrakingRound({ onComplete }: RoundProps) {
           ) : null}
           <span className="advanced-runner" ref={runnerRef} style={{ left: `${progress}%`, translate: "0 0" }}>
             <PlayerAvatar
+              {...resolveDinoAvatarView(status)}
               direction={holding ? "right" : "none"}
               size={46}
-              state={resolveDinoAvatarState(status)}
               visualScale={1.02}
             />
           </span>

@@ -74,17 +74,30 @@ test("advanced challenge goal items are derived from challenge config instead of
 
   const miniGame = getAdvancedStageConfig("search", 3);
   assert.deepEqual(getAdvancedChallengeGoalItems(miniGame), [
-    { icon: "flag", text: "站上最高终点平台" },
-    { icon: "ban", text: "躲开 5 个移动障碍" },
+    { icon: "flag", text: "到达终点平台" },
+    { icon: "flag", text: "不能掉出场景外" },
+    { icon: "ban", text: "不能触碰到危险红点" },
   ]);
 });
 
-test("doodle finish platform goal copy is derived from the landing rule", () => {
-  const miniGame = getAdvancedStageConfig("search", 3);
-  const goals = getAdvancedChallengeGoalItems(miniGame);
+test("advanced mini-game goals follow level-group rules and fallback copy", () => {
+  const searchLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 4));
+  const searchLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 5));
+  const memoryLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 4));
+  const memoryLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 5));
+  const stroopLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 1));
+  const stroopLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 4));
+  const patienceLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 1));
+  const patienceLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 4));
 
-  assert.equal(goals[0]?.text, "站上最高终点平台");
-  assert.ok(goals.every((goal) => !goal.text.includes("到达 5 屏高度")));
+  assert.ok(searchLevel4.some((goal) => goal.text === "踩中所有平台"));
+  assert.ok(searchLevel5.some((goal) => goal.text === "踩中 5/5 个高能平台"));
+  assert.ok(memoryLevel4.some((goal) => goal.text === "收集所有道具"));
+  assert.ok(memoryLevel5.some((goal) => goal.text === "收集 6/6 个道具"));
+  assert.ok(stroopLevel1.every((goal) => goal.text !== "不能触碰到危险红点"));
+  assert.ok(stroopLevel4.some((goal) => goal.text === "不能触碰到危险红点"));
+  assert.ok(patienceLevel1.some((goal) => goal.text === "在倒计时结束前丢出飞刀"));
+  assert.ok(patienceLevel4.every((goal) => goal.text !== "在倒计时结束前丢出飞刀"));
 });
 
 test("advanced challenge screen uses the focused lobby with base replay and click-only support", () => {

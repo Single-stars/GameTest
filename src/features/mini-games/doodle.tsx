@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -192,11 +192,11 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
   };
 }
 
-function resolveDoodlePlayerAvatarState(view: DoodleViewFrame): PlayerAvatarState {
-  if (view.status === "failed") return "fail";
-  if (view.status === "passed") return "success";
-  if (view.time < view.invincibleUntil) return "shield";
-  return "idle";
+function resolveDoodlePlayerAvatarView(view: DoodleViewFrame): PlayerAvatarView {
+  if (view.status === "failed") return { action: "hit", expression: "hurt" };
+  if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (view.time < view.invincibleUntil) return { action: "idle", expression: "neutral", effect: "shield" };
+  return { action: "idle", expression: "neutral" };
 }
 
 export function DoodleJumpPrototype({
@@ -602,11 +602,10 @@ export function DoodleJumpPrototype({
           style={stagePointStyle(view.playerX, view.playerY, view.cameraY, PLAYER_SIZE, stageHeight)}
         >
           <PlayerAvatar
+            {...resolveDoodlePlayerAvatarView(view)}
             direction={view.playerDirection}
             gravity="normal"
-            mood={view.started ? "focused" : "normal"}
             rotationTurns={view.playerTurns}
-            state={resolveDoodlePlayerAvatarState(view)}
             visualScale={1.22}
           />
         </div>

@@ -549,6 +549,7 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   assert.equal(shouldGuardAppBack("result", false), false);
   assert.equal(shouldGuardAppBack("result", true), true);
   assert.equal(shouldGuardAppBack("advanced", false), true);
+  assert.equal(shouldGuardAppBack("avatar-lab", false), true);
   assert.equal(shouldGuardAppBack("home", false), false);
   assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: false }), 0);
   assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: true }), 1);
@@ -556,9 +557,11 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "intro" }), 1);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "playing" }), 2);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "complete" }), 2);
+  assert.equal(getAppBackHistoryLayer({ stage: "avatar-lab", restartConfirmOpen: false }), 1);
 
   assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: true }), "release");
   assert.equal(resolveAppBackNavigation({ stage: "result", restartConfirmOpen: false }), "unhandled");
+  assert.equal(resolveAppBackNavigation({ stage: "avatar-lab", restartConfirmOpen: false }), "release");
   assert.equal(
     resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "playing" }),
     "guard",

@@ -2,6 +2,8 @@
   position: relative;
   gap: 12px;
   padding-block: 8px;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  overflow: visible;
 }
 
 .result-card {
@@ -15,7 +17,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
-  padding: 26px 124px 26px 24px;
+  padding: 26px 24px;
 }
 
 .rank-title {
@@ -27,15 +29,50 @@
   font-size: 52px;
 }
 
-.rank-actions {
+.rank-avatar-entry {
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  translate: -12px 0;
+  appearance: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    translate 160ms ease,
+    scale 160ms ease;
+}
+
+.rank-avatar-entry.playing {
+  translate: -12px -2px;
+  box-shadow: none;
+  scale: 1.04;
+}
+
+.radar-card-shell {
+  position: relative;
+}
+
+.radar-actions {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  border: 1px solid rgba(24, 24, 24, 0.1);
+  border-radius: 14px;
+  padding: 4px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 10px 24px rgba(24, 24, 24, 0.1);
+  backdrop-filter: blur(8px);
 }
 
 .result-action-button {
@@ -69,6 +106,7 @@
 }
 
 .radar-card {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr;
   align-items: center;

@@ -24,6 +24,31 @@ function hasUserResponse(trial: TrialEvent) {
   return trial.responseAt !== null || trial.correct === false;
 }
 
+type GroupKey = "147" | "258" | "369" | "10";
+
+function resolveColumnGroup(level: number): GroupKey {
+  if (level === 10) return "10";
+  if (level === 1 || level === 4 || level === 7) return "147";
+  if (level === 2 || level === 5 || level === 8) return "258";
+  return "369";
+}
+
+function resolveBandGroup(level: number): GroupKey {
+  if (level === 10) return "10";
+  if (level <= 3) return "147";
+  if (level <= 6) return "258";
+  return "369";
+}
+
+function includesAny(text: string, patterns: string[]) {
+  return patterns.some((pattern) => text.includes(pattern));
+}
+
+function numberValue(value: TrialEvent["value"], key: string) {
+  const raw = Number(value?.[key]);
+  return Number.isFinite(raw) ? raw : null;
+}
+
 function toScore(correctCount: number, requiredCorrect: number) {
   return Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100)));
 }
@@ -81,11 +106,12 @@ function evaluateReaction(config: AdvancedStageConfig, trials: TrialEvent[]) {
 
   const hasRedTrap = config.variant.includes("trap") || config.variant.includes("boss");
   const hasRedClick = trials.some(
-    (trial) => isRedSignalTrial(trial) && (hasUserResponse(trial) || trial.errorType === "false_alarm"),
+    (trial) => trial.errorType === "false_alarm" || (isRedSignalTrial(trial) && hasUserResponse(trial)),
   );
   const hasEarlyClick = trials.some((trial) => {
     const signalColor = trial.value?.signalColor ?? trial.value?.cellColor;
     if (signalColor === "red") return false;
+    if (trial.errorType === "false_alarm") return false;
     return (
       trial.errorType === "early" ||
       trial.errorType === "wrong" ||
@@ -137,13 +163,58 @@ function evaluateReaction(config: AdvancedStageConfig, trials: TrialEvent[]) {
 
 function evaluateAim(config: AdvancedStageConfig, trials: TrialEvent[]) {
   const required = numberParam(config, "targetCount", numberParam(config, "arrowCount", 8));
-  const interference = trials.find((trial) => trial.errorType === "collision" || trial.value?.hitDecoy === true);
-  if (interference) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：箭撞到了干扰靶");
-  const flyOut = trials.find((trial) => trial.errorType === "timeout" || trial.value?.flyOut === true);
-  if (flyOut) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：目标飞出场景");
   const hits = trials.filter((trial) => trial.correct === true || trial.value?.shotHit === true).length;
-  if (hits < required) return fail(config, hits, required, `失败：少命中 ${required - hits} 个目标`);
-  return pass(config, hits, required);
+  const interference = trials.find((trial) => trial.errorType === "collision" || trial.value?.hitDecoy === true);
+  const flyOut = trials.find((trial) => trial.errorType === "timeout" || trial.value?.flyOut === true);
+  const miss = trials.find(
+    (trial) =>
+      trial.errorType === "miss" ||
+      (trial.value?.shotHit === false &&
+        trial.errorType !== "timeout" &&
+        trial.errorType !== "collision" &&
+        trial.value?.flyOut !== true &&
+        trial.value?.hitDecoy !== true),
+  );
+
+  const noInterference = !interference;
+  const hitBeforeFlyOut = !flyOut;
+  const noMiss = !miss && (hits >= required || !noInterference || !hitBeforeFlyOut);
+  const group = resolveColumnGroup(config.level);
+  const goalChecks =
+    group === "147"
+      ? [noMiss]
+      : group === "258"
+        ? [noMiss, hitBeforeFlyOut]
+        : group === "369"
+          ? [noMiss, noInterference]
+          : [noMiss, hitBeforeFlyOut, noInterference];
+
+  let passed = false;
+  let reason = "通过";
+  if (interference) {
+    reason = "失败：箭矢射中了干扰靶";
+  } else if (flyOut) {
+    reason = "失败：目标飞出场景";
+  } else if (miss) {
+    reason = "失败：箭矢射空";
+  } else if (hits < required) {
+    reason = `失败：少命中 ${required - hits} 个目标`;
+  } else {
+    passed = true;
+  }
+
+  const correctCount = goalChecks.filter(Boolean).length;
+  const requiredCorrect = goalChecks.length;
+  return {
+    level: config.level,
+    score: passed ? 100 : toScore(correctCount, requiredCorrect),
+    minScore: 100,
+    passed,
+    correctCount,
+    requiredCorrect,
+    reason,
+    goalChecks,
+  };
 }
 
 function isMiniGameConfig(config: AdvancedStageConfig) {
@@ -161,9 +232,69 @@ function evaluateMiniGameChallenge(config: AdvancedStageConfig, trials: TrialEve
       (trial.value?.miniGameId === config.params.miniGameId || trial.value?.gameId === config.params.miniGameId) &&
       trial.value?.miniLevelId === config.params.miniLevelId,
   );
-  if (!item) return fail(config, 0, 1, "失败：未完成挑战");
-  if (item.correct === true && item.value?.passed !== false) return pass(config, 1, 1);
-  return fail(config, 0, 1, miniGameFailureReason(item));
+  if (!item) {
+    return {
+      ...fail(config, 0, 1, "失败：未完成挑战"),
+      goalChecks: [false],
+    };
+  }
+
+  const passed = item.correct === true && item.value?.passed !== false;
+  const reasonText = String(item.value?.reason ?? item.errorType ?? "");
+  const bandGroup = resolveBandGroup(config.level);
+
+  let goalChecks: boolean[] = [passed];
+  if (config.dimension === "search") {
+    const riskHit = numberValue(item.value, "riskHit");
+    const riskTotal = numberValue(item.value, "riskTotal");
+    const reachedFinish = passed || includesAny(reasonText, ["终点平台", "通过终点", "站上最高终点平台"]);
+    const fellOut = includesAny(reasonText, ["掉出", "掉太深", "飞出边界"]);
+    const touchedDangerRed = includesAny(reasonText, ["撞到危险", "碰到危险"]);
+    const completedRiskPlatforms = riskTotal === null || riskTotal <= 0 ? true : (riskHit ?? 0) >= riskTotal;
+    goalChecks = [reachedFinish, !fellOut, !touchedDangerRed];
+    if (bandGroup === "258" || bandGroup === "10") goalChecks.push(completedRiskPlatforms);
+  } else if (config.dimension === "stroop") {
+    const reachedFinish = passed || includesAny(reasonText, ["终点平台", "成功下降", "通过终点"]);
+    const fellOut = includesAny(reasonText, ["掉出", "掉太深", "太慢了", "飞出边界"]);
+    const touchedDangerRed = includesAny(reasonText, ["下落危险", "危险红点"]);
+    const steppedDangerPlatform = includesAny(reasonText, ["踩到危险"]);
+    goalChecks = [reachedFinish, !fellOut];
+    if (bandGroup === "258" || bandGroup === "369" || bandGroup === "10") goalChecks.push(!touchedDangerRed);
+    if (bandGroup === "369" || bandGroup === "10") goalChecks.push(!steppedDangerPlatform);
+  } else if (config.dimension === "rhythm") {
+    const fellOut = includesAny(reasonText, ["掉下", "掉出", "飞出"]);
+    const reachedFinish = passed || includesAny(reasonText, ["终点平台", "通过终点"]);
+    goalChecks = [!fellOut, reachedFinish];
+  } else if (config.dimension === "memory") {
+    const collected = numberValue(item.value, "collected");
+    const collectibleCount = numberValue(item.value, "collectibleCount");
+    const hitObstacle = includesAny(reasonText, ["撞到障碍", "撞到柱子"]);
+    const fellOut = includesAny(reasonText, ["飞出边界", "掉出"]);
+    const collectedAll = collectibleCount === null || collectibleCount <= 0 ? true : (collected ?? 0) >= collectibleCount;
+    goalChecks = [!hitObstacle, !fellOut];
+    if (bandGroup === "258" || bandGroup === "10") goalChecks.push(collectedAll);
+  } else if (config.dimension === "patience") {
+    const fired = numberValue(item.value, "fired");
+    const shotCount = numberValue(item.value, "shotCount");
+    const overlapped = includesAny(reasonText, ["撞到已插入长条", "飞刀重叠", "重叠"]);
+    const countdownEnded = includesAny(reasonText, ["倒计时结束"]);
+    const hitDangerZone = includesAny(reasonText, ["命中危险区域", "危险区域"]);
+    const threwAll = shotCount === null || shotCount <= 0 ? passed : (fired ?? 0) >= shotCount;
+    goalChecks = [!overlapped, threwAll];
+    if (bandGroup === "147" || bandGroup === "10") goalChecks.push(!countdownEnded);
+    if (bandGroup === "369" || bandGroup === "10") goalChecks.push(!hitDangerZone);
+  }
+
+  return {
+    level: config.level,
+    score: passed ? 100 : 0,
+    minScore: 100,
+    passed,
+    correctCount: passed ? 1 : 0,
+    requiredCorrect: 1,
+    reason: passed ? "通过" : miniGameFailureReason(item),
+    goalChecks,
+  };
 }
 
 function evaluateSearch(config: AdvancedStageConfig, trials: TrialEvent[]) {
@@ -205,16 +336,51 @@ function evaluateMemory(config: AdvancedStageConfig, trials: TrialEvent[]) {
 }
 
 function evaluateBraking(config: AdvancedStageConfig, trials: TrialEvent[]) {
-  const required = numberParam(config, "hazardCount", 2);
   const collision = trials.find((trial) => trial.errorType === "collision" || trial.value?.collision === true);
-  if (collision) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：撞上危险");
   const early = trials.find((trial) => trial.errorType === "early_stop" || trial.value?.earlyStop === true);
-  if (early) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：等待中断");
   const falseStop = trials.find((trial) => trial.errorType === "false_alarm" || trial.value?.fakeStop === true);
-  if (falseStop) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：假危险松手");
   const exited = trials.some((trial) => trial.value?.exited === true);
-  if (config.params.exitRequired === true && !exited) return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：未走出屏幕");
-  return pass(config, Math.max(required, trials.filter((trial) => trial.correct === true).length), required);
+  const needExit = config.params.exitRequired === true;
+  const reachedFinish = needExit ? exited : true;
+  const noEarlyStop = !early;
+  const noCollision = !collision;
+  const noFalseStop = !falseStop;
+
+  const group = resolveColumnGroup(config.level);
+  const followRule = noCollision && noFalseStop;
+  const goalChecks =
+    group === "147"
+      ? [noEarlyStop, noCollision, reachedFinish]
+      : group === "258"
+        ? [noEarlyStop, noCollision, noFalseStop, reachedFinish]
+        : [noEarlyStop, followRule, reachedFinish];
+
+  let passed = false;
+  let reason = "通过";
+  if (collision) {
+    reason = "失败：撞上危险";
+  } else if (early) {
+    reason = "失败：等待中断";
+  } else if (falseStop) {
+    reason = "失败：假危险松手";
+  } else if (!reachedFinish) {
+    reason = "失败：未走出屏幕";
+  } else {
+    passed = true;
+  }
+
+  const correctCount = goalChecks.filter(Boolean).length;
+  const requiredCorrect = goalChecks.length;
+  return {
+    level: config.level,
+    score: passed ? 100 : toScore(correctCount, requiredCorrect),
+    minScore: 100,
+    passed,
+    correctCount,
+    requiredCorrect,
+    reason,
+    goalChecks,
+  };
 }
 
 function evaluatePatience(config: AdvancedStageConfig, trials: TrialEvent[]) {

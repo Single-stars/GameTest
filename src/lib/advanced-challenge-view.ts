@@ -80,33 +80,36 @@ function getReactionGoals(config: AdvancedStageConfig): AdvancedChallengeGoalIte
 }
 
 function getAimGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
-  const targetCount = numberParam(config, "targetCount") ?? numberParam(config, "arrowCount");
-  const decoyCount = numberParam(config, "decoyCount") ?? 0;
-
+  const group = resolveColumnGroup(config.level);
   return compactGoals([
-    targetCount !== null ? { icon: "target", text: `命中 ${targetCount} 个目标` } : null,
-    decoyCount > 0 ? { icon: "ban", text: "不要命中干扰靶" } : null,
-    config.params.failOnFlyOut === true ? { icon: "flag", text: "目标飞出场外前命中" } : null,
+    { icon: "target", text: "箭矢不能射空" },
+    group === "258" || group === "10" ? { icon: "flag", text: "在靶子飞出场景前击中" } : null,
+    group === "369" || group === "10" ? { icon: "ban", text: "箭矢不能射中干扰靶" } : null,
   ]);
 }
 
 function getBrakingGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
-  const hazardCount = numberParam(config, "hazardCount");
-  const eventCountMin = numberParam(config, "eventCountMin");
-  const eventCountMax = numberParam(config, "eventCountMax");
-  const eventText =
-    hazardCount !== null
-      ? `完成 ${hazardCount} 次正确松手`
-      : eventCountMin !== null && eventCountMax !== null
-        ? `完成 ${eventCountMin}-${eventCountMax} 次危险判断`
-        : null;
-
-  return compactGoals([
-    eventText ? { icon: "target", text: eventText } : null,
-    config.params.allowGray === true ? { icon: "ban", text: "灰色不可松手" } : null,
-    typeof config.params.dualRule === "string" ? { icon: "bolt", text: "按单双红灯规则判断" } : null,
-    config.params.exitRequired === true ? { icon: "flag", text: "到达终点" } : null,
-  ]);
+  const group = resolveColumnGroup(config.level);
+  if (group === "147") {
+    return [
+      { icon: "ban", text: "不能提前松手" },
+      { icon: "ban", text: "不能撞到危险上" },
+      { icon: "flag", text: "走到终点" },
+    ];
+  }
+  if (group === "258") {
+    return [
+      { icon: "ban", text: "不能提前松手" },
+      { icon: "ban", text: "不能撞到危险上" },
+      { icon: "ban", text: "遇到假危险不能松手" },
+      { icon: "flag", text: "走到终点" },
+    ];
+  }
+  return [
+    { icon: "ban", text: "不能提前松手" },
+    { icon: "bolt", text: "遵守规则" },
+    { icon: "flag", text: "走到终点" },
+  ];
 }
 
 function getPatienceGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
@@ -122,34 +125,88 @@ function isMiniGameId(value: unknown): value is MiniGameId {
   return value === "doodle" || value === "flappy" || value === "knife" || value === "square-jump" || value === "fall-down";
 }
 
+type GroupKey = "147" | "258" | "369" | "10";
+
+function resolveColumnGroup(level: number): GroupKey {
+  if (level === 10) return "10";
+  if (level === 1 || level === 4 || level === 7) return "147";
+  if (level === 2 || level === 5 || level === 8) return "258";
+  return "369";
+}
+
+function resolveBandGroup(level: number): GroupKey {
+  if (level === 10) return "10";
+  if (level <= 3) return "147";
+  if (level <= 6) return "258";
+  return "369";
+}
+
+function toPositiveCount(value: unknown) {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : null;
+}
+
+function riskPlatformGoalText(count: number | null) {
+  if (count === null) return "踩中所有平台";
+  return `踩中 ${count}/${count} 个高能平台`;
+}
+
+function collectibleGoalText(count: number | null) {
+  if (count === null) return "收集所有道具";
+  return `收集 ${count}/${count} 个道具`;
+}
+
 function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
   const miniGameId = config.params.miniGameId;
   const miniLevelId = config.params.miniLevelId;
   if (!isMiniGameId(miniGameId) || typeof miniLevelId !== "string") return [];
 
   const level = getMiniGameLevel(miniGameId, miniLevelId);
+  const group = resolveBandGroup(config.level);
+  if (config.dimension === "search") {
+    const requiredRiskPlatforms = toPositiveCount(level.params.requiredRiskPlatforms);
+    return compactGoals([
+      { icon: "flag", text: "到达终点平台" },
+      { icon: "flag", text: "不能掉出场景外" },
+      { icon: "ban", text: "不能触碰到危险红点" },
+      group === "258" || group === "10" ? { icon: "target", text: riskPlatformGoalText(requiredRiskPlatforms) } : null,
+    ]);
+  }
+  if (config.dimension === "stroop") {
+    return compactGoals([
+      { icon: "flag", text: "到达终点平台" },
+      { icon: "flag", text: "不能掉出场景外" },
+      group === "258" || group === "369" || group === "10" ? { icon: "ban", text: "不能触碰到危险红点" } : null,
+      group === "369" || group === "10" ? { icon: "ban", text: "不能踩到危险平台" } : null,
+    ]);
+  }
+  if (config.dimension === "rhythm") {
+    return [
+      { icon: "flag", text: "不能掉出场景外" },
+      { icon: "flag", text: "到达终点平台" },
+    ];
+  }
+  if (config.dimension === "memory") {
+    const collectibleCount = toPositiveCount(level.params.collectibleCount);
+    return compactGoals([
+      { icon: "ban", text: "不能撞到柱子" },
+      { icon: "flag", text: "不能掉出场景外" },
+      group === "258" || group === "10" ? { icon: "target", text: collectibleGoalText(collectibleCount) } : null,
+    ]);
+  }
+  if (config.dimension === "patience") {
+    return compactGoals([
+      { icon: "ban", text: "转盘上的飞刀不能重叠" },
+      { icon: "target", text: "丢出所有飞刀" },
+      group === "147" || group === "10" ? { icon: "bolt", text: "在倒计时结束前丢出飞刀" } : null,
+      group === "369" || group === "10" ? { icon: "ban", text: "飞刀不能丢进危险区域" } : null,
+    ]);
+  }
   if (miniGameId === "square-jump") {
-    const jumpsRequired = Number(level.params.jumpsRequired);
-    return compactGoals([
-      Number.isFinite(jumpsRequired) ? { icon: "target", text: `完成 ${jumpsRequired} 次跳跃` } : null,
-      { icon: "flag", text: "站上终点平台" },
-    ]);
-  }
-  if (miniGameId === "doodle") {
-    const requiredRiskPlatforms = Number(level.params.requiredRiskPlatforms ?? 0);
-    const movingObstacleCount = Number(level.params.movingObstacleCount ?? 0);
-    return compactGoals([
-      { icon: "flag", text: "站上最高终点平台" },
-      requiredRiskPlatforms > 0 ? { icon: "target", text: `踩中 ${requiredRiskPlatforms}/${requiredRiskPlatforms} 个高风险平台` } : null,
-      movingObstacleCount > 0 ? { icon: "ban", text: `躲开 ${movingObstacleCount} 个移动障碍` } : null,
-    ]);
-  }
-  if (miniGameId === "fall-down") {
-    const layersRequired = Number(level.params.layersRequired);
-    return compactGoals([
-      Number.isFinite(layersRequired) ? { icon: "target", text: `下降 ${layersRequired} 层` } : null,
-      { icon: "flag", text: "站上终点平台" },
-    ]);
+    return [
+      { icon: "flag", text: "不能掉出场景外" },
+      { icon: "flag", text: "到达终点平台" },
+    ];
   }
 
   return fallbackGoal(config);

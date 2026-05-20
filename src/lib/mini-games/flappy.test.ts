@@ -98,7 +98,7 @@ test("flappy maps its player visuals through the shared avatar without jump or f
   const componentSource = readMiniGameRuntimeSource();
   const flappySource = componentSource.slice(componentSource.indexOf("type FlappyGate"), componentSource.indexOf("export function FlappyPrototype"));
   const avatarStateSource = flappySource.slice(
-    flappySource.indexOf("function resolveFlappyPlayerAvatarState"),
+    flappySource.indexOf("function resolveFlappyPlayerAvatarView"),
     flappySource.indexOf("function flappyStartPlatformY"),
   );
   const renderSource = componentSource.slice(
@@ -107,15 +107,15 @@ test("flappy maps its player visuals through the shared avatar without jump or f
   );
 
   assert.match(componentSource, /from "@\/features\/player-avatar\/player-avatar"/);
-  assert.match(componentSource, /type PlayerAvatarState/);
-  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return "fail";/);
-  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
-  assert.match(avatarStateSource, /if \(view\.time < view\.invincibleUntil\) return "shield";/);
-  assert.match(avatarStateSource, /return "idle";/);
+  assert.match(componentSource, /type PlayerAvatarView/);
+  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return \{ action: "hit", expression: "hurt" \};/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.invincibleUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
+  assert.match(avatarStateSource, /return \{ action: "idle", expression: "neutral" \};/);
   assert.doesNotMatch(avatarStateSource, /return "jump";/);
   assert.doesNotMatch(avatarStateSource, /return "fall";/);
   assert.match(renderSource, /<PlayerAvatar/);
-  assert.match(renderSource, /state=\{resolveFlappyPlayerAvatarState\(view\)\}/);
+  assert.match(renderSource, /\{\.\.\.resolveFlappyPlayerAvatarView\(view\)\}/);
   assert.match(renderSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(renderSource, /visualScale=\{1\.18\}/);
   assert.doesNotMatch(renderSource, /prototype-player-box flappy-player/);

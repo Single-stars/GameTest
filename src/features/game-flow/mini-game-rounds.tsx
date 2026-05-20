@@ -73,6 +73,12 @@ function miniGameFailureError(outcome: MiniGameCompletion): TrialEvent["errorTyp
 }
 
 function miniGameValue(mode: string, outcome: MiniGameCompletion, score: number) {
+  const stats = Object.fromEntries(
+    Object.entries(outcome.stats).filter(
+      ([, value]) => value === null || typeof value === "number" || typeof value === "string" || typeof value === "boolean",
+    ),
+  ) as Record<string, number | string | boolean | null>;
+
   return {
     mode,
     miniGameId: outcome.gameId,
@@ -88,6 +94,7 @@ function miniGameValue(mode: string, outcome: MiniGameCompletion, score: number)
     gateCount: numberStat(outcome, "gateCount"),
     passedGates: numberStat(outcome, "passedGates"),
     forcedAdvance: outcome.stats.forcedAdvance === true,
+    ...stats,
   };
 }
 

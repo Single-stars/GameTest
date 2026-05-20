@@ -6,18 +6,20 @@
   --player-avatar-charge-offset: 0px;
   --player-avatar-charge-scale-x: 1;
   --player-avatar-charge-scale-y: 1;
+  --player-avatar-platform-lift: -5%;
+  --player-avatar-idle-offset: 0px;
   --player-avatar-visual-scale: 1;
   --player-avatar-body: #49b7c7;
   --player-avatar-outline: rgba(22, 83, 94, 0.58);
   --player-avatar-ink: rgba(14, 48, 58, 0.92);
+  --player-avatar-skin-line: rgba(14, 48, 58, 0.34);
   position: relative;
   display: block;
   width: var(--player-avatar-size-resolved);
   height: var(--player-avatar-size-resolved);
   overflow: visible;
+  color: var(--player-avatar-ink);
   pointer-events: none;
-  contain: layout style;
-  isolation: isolate;
 }
 
 .sm {
@@ -34,51 +36,52 @@
 
 .visual,
 .shadow,
-.speedLines,
 .sparkles,
-.warningMark,
 .shield,
 .motion,
 .rotator,
-.body {
+.body,
+.face,
+.eye,
+.skinSvg,
+.expressionSvg {
   position: absolute;
-  inset: 0;
 }
 
 .visual {
-  transform: scale(var(--player-avatar-visual-scale));
+  inset: 0;
+  overflow: visible;
+  transform: translateY(calc(var(--player-avatar-platform-lift) + var(--player-avatar-idle-offset))) scale(var(--player-avatar-visual-scale));
   transform-origin: 50% 50%;
 }
 
 .shadow {
-  z-index: 0;
-  top: auto;
-  bottom: -12%;
-  height: 22%;
+  left: 12%;
+  right: 12%;
+  bottom: -11%;
+  height: 18%;
   border-radius: 50%;
   background: rgba(24, 24, 24, 0.16);
-  filter: blur(5px);
+  filter: blur(2px);
   opacity: 0.72;
-  transform: scaleX(0.82);
-  transform-origin: 50% 50%;
+  transform: translateY(4%);
 }
 
-.speedLines,
 .sparkles,
-.warningMark,
 .shield {
-  z-index: 3;
   opacity: 0;
   pointer-events: none;
 }
 
 .motion {
+  inset: 0;
   z-index: 2;
   transform-origin: 50% 82%;
   will-change: transform, filter;
 }
 
 .rotator {
+  inset: 0;
   transform: rotate(var(--player-avatar-rotation));
   transform-origin: 50% 50%;
   transition: transform 420ms cubic-bezier(0.2, 0.86, 0.24, 1);
@@ -86,6 +89,7 @@
 }
 
 .body {
+  inset: 0;
   overflow: hidden;
   border: max(2px, calc(var(--player-avatar-size-resolved) * 0.08)) solid var(--player-avatar-outline);
   border-radius: 24%;
@@ -99,8 +103,27 @@
     filter 120ms ease;
 }
 
+.skinSvg {
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--player-avatar-skin-line);
+  stroke-width: 4.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.face {
+  inset: 0;
+  z-index: 2;
+  color: var(--player-avatar-ink);
+}
+
 .eye {
-  position: absolute;
   z-index: 2;
   top: var(--player-avatar-eye-y, 36%);
   width: var(--player-avatar-eye-w, 12%);
@@ -132,25 +155,47 @@
   transform-origin: 50% 50%;
 }
 
-.speedLines::before,
-.speedLines::after {
-  content: "";
-  position: absolute;
-  left: -42%;
-  width: 34%;
-  height: 8%;
-  border-radius: 999px;
-  background: rgba(80, 126, 128, 0.24);
-  transform: translateX(-8%);
+.expressionSvg {
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: playerAvatarExpressionSwap 140ms ease both;
 }
 
-.speedLines::before {
-  top: 32%;
+.expressionSvg circle {
+  fill: currentColor;
+  stroke: none;
 }
 
-.speedLines::after {
-  top: 56%;
-  width: 24%;
+.pigSvg {
+  stroke-width: 3.2;
+}
+
+.pigNose {
+  fill: var(--player-avatar-pig-nose);
+  stroke: var(--player-avatar-pig-nose-outline);
+  stroke-width: 3.4;
+}
+
+.pigEye {
+  fill: none;
+  stroke: var(--player-avatar-pig-eye);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+
+.pigNostril {
+  fill: none;
+  stroke: var(--player-avatar-pig-nostril);
+  stroke-width: 3.8;
+  stroke-linecap: round;
 }
 
 .sparkles::before,
@@ -175,21 +220,6 @@
   transform: scale(0.72);
 }
 
-.warningMark {
-  left: auto;
-  right: -34%;
-  top: -38%;
-  width: 48%;
-  height: 48%;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  color: #6b4200;
-  font-size: calc(var(--player-avatar-size-resolved) * 0.62);
-  font-weight: 950;
-  line-height: 1;
-}
-
 .shield {
   inset: -18%;
   border: 2px solid rgba(75, 127, 177, 0.38);
@@ -200,90 +230,55 @@
   transform: scale(0.92);
 }
 
-.root[data-state="idle"] .motion {
+.root[data-action="idle"] .motion {
   animation: playerAvatarIdle 2.8s ease-in-out infinite;
 }
 
-.root[data-state="idle"] .eye {
+.root[data-action="idle"] {
+  --player-avatar-idle-offset: 1px;
+}
+
+.root[data-action="idle"][data-expression="neutral"] .eye {
   animation: playerAvatarBlink 4.6s ease-in-out infinite;
 }
 
-.root[data-state="move"] .motion {
+.root[data-action="move"] .motion {
   animation: playerAvatarMove 420ms ease-in-out infinite;
 }
 
-.root[data-state="move"][data-direction="left"] .motion {
+.root[data-action="move"][data-direction="left"] .motion {
   animation: playerAvatarMoveLeft 420ms ease-in-out infinite;
 }
 
-.root[data-state="move"][data-direction="right"] .motion {
+.root[data-action="move"][data-direction="right"] .motion {
   animation: playerAvatarMoveRight 420ms ease-in-out infinite;
 }
 
-.root[data-state="boost"] .speedLines {
-  opacity: 1;
-}
-
-.root[data-state="jump"] .motion {
-  animation: playerAvatarJump 240ms cubic-bezier(0.2, 0.86, 0.24, 1) both;
-}
-
-.root[data-state="fall"] .motion {
-  transform: scaleX(0.96) scaleY(1.08);
-}
-
-.root[data-state="land"] .motion {
+.root[data-action="land"] .motion {
   animation: playerAvatarLand 280ms cubic-bezier(0.2, 0.86, 0.24, 1) both;
 }
 
-.root[data-state="charge"] .motion {
+.root[data-action="charge"] .motion {
   transform: translateY(var(--player-avatar-charge-offset)) scaleX(var(--player-avatar-charge-scale-x)) scaleY(var(--player-avatar-charge-scale-y));
-  filter: saturate(calc(1 + var(--player-avatar-charge) * 0.25));
-  transition:
-    transform 72ms linear,
-    filter 120ms ease;
+  transition: transform 72ms linear;
 }
 
-.root[data-state="success"] .motion,
-.root[data-state="win"] .motion {
-  animation: playerAvatarSuccess 560ms cubic-bezier(0.2, 0.86, 0.24, 1) both;
+.root[data-action="celebrate"] .motion {
+  animation: playerAvatarCelebrate 560ms cubic-bezier(0.2, 0.86, 0.24, 1) both;
 }
 
-.root[data-state="success"] .body,
-.root[data-state="win"] .body {
+.root[data-action="celebrate"] .body {
   border-color: rgba(62, 136, 91, 0.48);
   box-shadow:
     0 6px 12px rgba(48, 111, 75, 0.16),
     inset 0 -2px 0 rgba(24, 24, 24, 0.05);
 }
 
-.root[data-state="success"] .sparkles,
-.root[data-state="win"] .sparkles {
-  opacity: 1;
-}
-
-.root[data-state="warning"] .motion {
-  animation: playerAvatarWarning 320ms ease-in-out both;
-}
-
-.root[data-state="warning"] .body {
-  border-color: rgba(170, 125, 42, 0.56);
-  box-shadow:
-    0 6px 12px rgba(133, 94, 31, 0.16),
-    inset 0 -2px 0 rgba(24, 24, 24, 0.05);
-}
-
-.root[data-state="warning"] .warningMark {
-  opacity: 1;
-}
-
-.root[data-state="hit"] .motion,
-.root[data-state="fail"] .motion {
+.root[data-action="hit"] .motion {
   animation: playerAvatarHit 420ms ease-in-out both;
 }
 
-.root[data-state="hit"] .body,
-.root[data-state="fail"] .body {
+.root[data-action="hit"] .body {
   border-color: rgba(168, 76, 70, 0.5);
   background: #cf8078;
   box-shadow:
@@ -291,125 +286,53 @@
     inset 0 -2px 0 rgba(24, 24, 24, 0.05);
 }
 
-.root[data-state="shield"] .shield {
+.root[data-action="sleep"] .motion {
+  transform: translateY(2%) scaleX(1.04) scaleY(0.94);
+}
+
+.root[data-effect="sparkles"] .sparkles,
+.root[data-action="celebrate"] .sparkles {
+  opacity: 1;
+}
+
+.root[data-effect="shield"] .shield {
   opacity: 1;
   animation: playerAvatarShield 1.1s ease-out infinite;
 }
 
-.root[data-state="boost"] .motion {
-  transform: skewX(-5deg) scaleX(1.04);
+.root[data-expression="happy"] {
+  --player-avatar-ink: color-mix(in srgb, currentColor 86%, #2f6f42 14%);
 }
 
-.root[data-state="thinking"] .warningMark {
-  opacity: 0.62;
+.root[data-expression="sleepy"] .expressionSvg {
+  transform: translateY(7%) scaleY(0.96);
 }
 
-.root[data-state="sleep"] .eye,
-.root[data-mood="sleepy"] .eye {
-  border-radius: 999px;
-  transform: translateY(120%) scaleY(0.18);
+.root[data-expression="scared"] .expressionSvg {
+  transform: scale(1.06);
 }
 
-.root[data-mood="happy"],
-.root[data-state="success"],
-.root[data-state="win"] {
-  --player-avatar-eye-y: 35%;
-  --player-avatar-eye-w: 18%;
-  --player-avatar-eye-h: 24%;
-  --player-avatar-eye-side: 25%;
-}
-
-.root[data-mood="happy"] .eye,
-.root[data-state="success"] .eye,
-.root[data-state="win"] .eye {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  transform: none;
-}
-
-.root[data-mood="happy"] .eye::before,
-.root[data-mood="happy"] .eye::after,
-.root[data-state="success"] .eye::before,
-.root[data-state="success"] .eye::after,
-.root[data-state="win"] .eye::before,
-.root[data-state="win"] .eye::after {
-  background: var(--player-avatar-ink);
-}
-
-.root[data-mood="happy"] .leftEye::before,
-.root[data-state="success"] .leftEye::before,
-.root[data-state="win"] .leftEye::before {
-  transform: translateY(-50%) rotate(38deg);
-  transform-origin: 100% 50%;
-}
-
-.root[data-mood="happy"] .leftEye::after,
-.root[data-state="success"] .leftEye::after,
-.root[data-state="win"] .leftEye::after {
-  transform: translateY(-50%) rotate(-38deg);
-  transform-origin: 100% 50%;
-}
-
-.root[data-mood="happy"] .rightEye::before,
-.root[data-state="success"] .rightEye::before,
-.root[data-state="win"] .rightEye::before {
-  transform: translateY(-50%) rotate(-38deg);
-  transform-origin: 0 50%;
-}
-
-.root[data-mood="happy"] .rightEye::after,
-.root[data-state="success"] .rightEye::after,
-.root[data-state="win"] .rightEye::after {
-  transform: translateY(-50%) rotate(38deg);
-  transform-origin: 0 50%;
-}
-
-.root[data-mood="focused"] .eye {
-  transform: scaleY(0.9);
-}
-
-.root[data-mood="nervous"] .eye,
-.root[data-state="warning"] .eye {
-  transform: scaleX(0.76) scaleY(0.82);
-}
-
-.root[data-mood="scared"] .eye,
-.root[data-state="fall"] .eye {
-  transform: scaleX(1.12) scaleY(1.08);
-}
-
-.root[data-mood="angry"] .eye {
-  transform: skewY(-10deg) scaleX(0.88);
-}
-
-.root[data-state="hit"] .eye,
-.root[data-state="fail"] .eye {
+.root[data-expression="hurt"] .eye {
   background: transparent;
   transform: scale(1.45);
 }
 
-.root[data-state="hit"],
-.root[data-state="fail"] {
+.root[data-expression="hurt"] {
   --player-avatar-eye-stroke-x: -26%;
   --player-avatar-eye-stroke-y: 45%;
   --player-avatar-eye-stroke-w: 152%;
 }
 
-.root[data-state="hit"] .eye::before,
-.root[data-state="hit"] .eye::after,
-.root[data-state="fail"] .eye::before,
-.root[data-state="fail"] .eye::after {
+.root[data-expression="hurt"] .eye::before,
+.root[data-expression="hurt"] .eye::after {
   background: var(--player-avatar-ink);
 }
 
-.root[data-state="hit"] .eye::before,
-.root[data-state="fail"] .eye::before {
+.root[data-expression="hurt"] .eye::before {
   transform: rotate(45deg);
 }
 
-.root[data-state="hit"] .eye::after,
-.root[data-state="fail"] .eye::after {
+.root[data-expression="hurt"] .eye::after {
   transform: rotate(-45deg);
 }
 
@@ -437,10 +360,6 @@
   transform: translateY(-8%) scaleX(1.04);
 }
 
-.root[data-direction="right"] .speedLines {
-  transform: scaleX(-1);
-}
-
 .root[data-active="false"] {
   opacity: 0.82;
 }
@@ -449,45 +368,69 @@
   --player-avatar-body: #49b7c7;
   --player-avatar-outline: rgba(22, 83, 94, 0.58);
   --player-avatar-ink: rgba(14, 48, 58, 0.92);
+  --player-avatar-skin-line: rgba(14, 48, 58, 0.34);
 }
 
 .root[data-skin="mint"] {
   --player-avatar-body: #86c7aa;
   --player-avatar-outline: rgba(44, 99, 72, 0.52);
   --player-avatar-ink: rgba(21, 61, 46, 0.92);
+  --player-avatar-skin-line: rgba(21, 61, 46, 0.28);
 }
 
 .root[data-skin="amber"] {
   --player-avatar-body: #d4ad63;
   --player-avatar-outline: rgba(122, 83, 31, 0.48);
   --player-avatar-ink: rgba(73, 48, 20, 0.9);
+  --player-avatar-skin-line: rgba(73, 48, 20, 0.28);
 }
 
 .root[data-skin="rose"] {
   --player-avatar-body: #d28a93;
   --player-avatar-outline: rgba(127, 63, 71, 0.46);
   --player-avatar-ink: rgba(74, 35, 42, 0.9);
+  --player-avatar-skin-line: rgba(74, 35, 42, 0.28);
 }
 
 .root[data-skin="slate"] {
   --player-avatar-body: #718b96;
   --player-avatar-outline: rgba(40, 65, 74, 0.58);
   --player-avatar-ink: rgba(19, 39, 47, 0.94);
+  --player-avatar-skin-line: rgba(19, 39, 47, 0.32);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .root,
-  .root * {
-    animation: none !important;
-    transition-duration: 0ms !important;
+.root[data-skin="basketball"] {
+  --player-avatar-body: #f28d24;
+  --player-avatar-outline: rgba(132, 66, 16, 0.74);
+  --player-avatar-ink: rgba(67, 31, 8, 0.94);
+  --player-avatar-skin-line: rgba(92, 43, 9, 0.66);
+}
+
+.root[data-skin="pig"] {
+  --player-avatar-body: #efc2cf;
+  --player-avatar-outline: #dda1b2;
+  --player-avatar-ink: #ca849d;
+  --player-avatar-skin-line: #d79bac;
+  --player-avatar-pig-nose: #e9afbf;
+  --player-avatar-pig-nose-outline: #d695a8;
+  --player-avatar-pig-nostril: #c47f98;
+  --player-avatar-pig-eye: #4a363d;
+}
+
+.root[data-skin="basketball"][data-action="celebrate"] .body,
+.root[data-skin="pig"][data-action="celebrate"] .body {
+  border-color: var(--player-avatar-outline);
+}
+
+@keyframes playerAvatarExpressionSwap {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.94);
   }
 
-  .root[data-state="warning"] .motion,
-  .root[data-state="hit"] .motion,
-  .root[data-state="fail"] .motion,
-  .root[data-state="success"] .motion,
-  .root[data-state="win"] .motion {
-    transform: none;
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -498,7 +441,7 @@
   }
 
   50% {
-    transform: translateY(-3%) scaleX(1.015) scaleY(0.985);
+    transform: translateY(-3%) scaleX(1.02) scaleY(0.98);
   }
 }
 
@@ -510,25 +453,25 @@
   }
 
   95% {
-    transform: scaleY(0.12);
+    transform: scaleY(0.14);
   }
 }
 
 @keyframes playerAvatarMove {
   0%,
   100% {
-    transform: translateX(0) scaleX(1) scaleY(1);
+    transform: translateY(0) rotate(0deg) scaleX(1);
   }
 
   50% {
-    transform: translateX(3%) scaleX(1.1) scaleY(0.93);
+    transform: translateY(-5%) rotate(0deg) scaleX(1.04) scaleY(0.96);
   }
 }
 
 @keyframes playerAvatarMoveLeft {
   0%,
   100% {
-    transform: translateX(0) rotate(0deg) scaleX(1) scaleY(1);
+    transform: translateX(0) rotate(0deg) scaleX(1);
   }
 
   50% {
@@ -539,7 +482,7 @@
 @keyframes playerAvatarMoveRight {
   0%,
   100% {
-    transform: translateX(0) rotate(0deg) scaleX(1) scaleY(1);
+    transform: translateX(0) rotate(0deg) scaleX(1);
   }
 
   50% {
@@ -547,27 +490,13 @@
   }
 }
 
-@keyframes playerAvatarJump {
-  0% {
-    transform: translateY(5%) scaleX(1.12) scaleY(0.88);
-  }
-
-  58% {
-    transform: translateY(-7%) scaleX(0.94) scaleY(1.1);
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
 @keyframes playerAvatarLand {
   0% {
-    transform: translateY(0) scale(1);
+    transform: translateY(-8%) scaleX(0.94) scaleY(1.08);
   }
 
-  42% {
-    transform: translateY(7%) scaleX(1.16) scaleY(0.78);
+  55% {
+    transform: translateY(6%) scaleX(1.12) scaleY(0.86);
   }
 
   100% {
@@ -575,58 +504,69 @@
   }
 }
 
-@keyframes playerAvatarSuccess {
+@keyframes playerAvatarCelebrate {
   0% {
-    transform: scale(1);
+    transform: translateY(0) rotate(0deg) scale(1);
   }
 
-  40% {
-    transform: scale(1.13);
+  36% {
+    transform: translateY(-18%) rotate(-7deg) scale(1.08);
+  }
+
+  72% {
+    transform: translateY(2%) rotate(5deg) scaleX(1.06) scaleY(0.96);
   }
 
   100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes playerAvatarWarning {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-5%);
-  }
-
-  75% {
-    transform: translateX(5%);
+    transform: translateY(0) rotate(0deg) scale(1);
   }
 }
 
 @keyframes playerAvatarHit {
-  0%,
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+
+  20% {
+    transform: translateX(-8%) rotate(-8deg);
+  }
+
+  42% {
+    transform: translateX(7%) rotate(7deg);
+  }
+
+  64% {
+    transform: translateX(-4%) rotate(-4deg);
+  }
+
   100% {
-    transform: translateX(0) scale(1);
-  }
-
-  24% {
-    transform: translateX(-7%) rotate(-4deg) scaleY(0.92);
-  }
-
-  56% {
-    transform: translateX(7%) rotate(4deg) scaleY(0.92);
+    transform: translateX(0) rotate(0deg);
   }
 }
 
 @keyframes playerAvatarShield {
   0% {
-    opacity: 0.72;
-    transform: scale(0.88);
+    opacity: 0;
+    transform: scale(0.86);
+  }
+
+  35% {
+    opacity: 1;
   }
 
   100% {
     opacity: 0;
     transform: scale(1.16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root .motion,
+  .root .eye,
+  .root .expressionSvg,
+  .root .rotator,
+  .root .shield {
+    animation: none !important;
+    transition: none !important;
   }
 }

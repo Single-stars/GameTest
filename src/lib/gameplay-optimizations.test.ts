@@ -77,9 +77,9 @@ test("reaction rounds show the shared player avatar with red closed eyes and gre
   const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
 
   assert.match(reactionSource, /from "@\/features\/player-avatar\/player-avatar"/);
-  assert.match(reactionSource, /function reactionAvatarState/);
-  assert.match(reactionSource, /return cell\.color === "green" \? "idle" : "sleep";/);
-  assert.match(reactionSource, /return cell\.color === "green" \? "focused" : "sleepy";/);
+  assert.match(reactionSource, /function reactionAvatarView/);
+  assert.match(reactionSource, /cell\.color === "green" \? \{ action: "idle", expression: "neutral" \} : \{ action: "sleep", expression: "sleepy" \}/);
+  assert.match(reactionSource, /\{\.\.\.reactionAvatarView\(cell, feedbackTone\)\}/);
   assert.match(reactionSource, /<PlayerAvatar/);
   assert.match(reactionSource, /className="reaction-cell-avatar"/);
   assert.match(cssSource, /\.reaction-cell-avatar/);
@@ -176,7 +176,7 @@ test("aim rounds fire arrows in the clicked direction from a visible charge laun
   assert.match(aimSource, /const to = getAdvancedAimShotTargetPoint\(rect, shotX, shotY\);/);
   assert.match(aimSource, /className=\{`advanced-aim-shooter/);
   assert.match(aimSource, /<PlayerAvatar/);
-  assert.match(aimSource, /state=\{shooterAvatarState\}/);
+  assert.match(aimSource, /\{\.\.\.shooterAvatarView\}/);
   assert.match(aimSource, /charge=\{shooterFiring \? 0\.7 : 0\}/);
   assert.doesNotMatch(aimSource, /const from = \{ x: shotX, y: rect\.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX \};/);
   assert.doesNotMatch(aimSource, /const to = \{ x: shotX, y: 10 \};/);
@@ -206,7 +206,7 @@ test("base aim keeps the target size but enlarges only the bottom shooter visual
   const shooterBlock = cssBlock(cssSource, ".advanced-aim-shooter");
 
   assert.match(baseAimSource, /targetSize:\s*58,/);
-  assert.match(aimSource, /<PlayerAvatar[\s\S]*size=\{64\}[\s\S]*state=\{shooterAvatarState\}/);
+  assert.match(aimSource, /<PlayerAvatar[\s\S]*\{\.\.\.shooterAvatarView\}[\s\S]*size=\{64\}/);
   assert.match(shooterBlock, /width:\s*72px;/);
   assert.match(shooterBlock, /height:\s*72px;/);
   assert.match(aimSource, /const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 38;/);
@@ -218,16 +218,16 @@ test("advanced braking mirrors base stop feedback for early release, crash, and 
   const advancedBrakingSource = sourceBetween(brakingSource, "type AdvancedBrakingFeedback", "const DINO_TRIAL_COUNT");
 
   assert.match(advancedBrakingSource, /type AdvancedBrakingFeedback = "idle" \| "success" \| "early" \| "crashed";/);
-  assert.match(advancedBrakingSource, /function resolveAdvancedBrakingAvatarState\(holding: boolean, feedback: AdvancedBrakingFeedback\): PlayerAvatarState/);
-  assert.match(advancedBrakingSource, /if \(feedback === "success"\) return "success";/);
-  assert.match(advancedBrakingSource, /if \(feedback === "crashed"\) return "fail";/);
-  assert.match(advancedBrakingSource, /if \(feedback === "early"\) return "hit";/);
+  assert.match(advancedBrakingSource, /function resolveAdvancedBrakingAvatarView\(holding: boolean, feedback: AdvancedBrakingFeedback\): PlayerAvatarView/);
+  assert.match(advancedBrakingSource, /if \(feedback === "success"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(advancedBrakingSource, /if \(feedback === "crashed"\) return \{ action: "hit", expression: "hurt" \};/);
+  assert.match(advancedBrakingSource, /if \(feedback === "early"\) return \{ action: "hit", expression: "hurt" \};/);
   assert.match(advancedBrakingSource, /const \[advancedFeedback, setAdvancedFeedback\] = useState<AdvancedBrakingFeedback>\("idle"\);/);
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("early"/);
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("crashed"/);
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("success"/);
   assert.match(advancedBrakingSource, /advanced-braking lanes-\$\{lanes\} \$\{holding \? "holding" : ""\} \$\{advancedFeedback\}/);
-  assert.match(advancedBrakingSource, /state=\{resolveAdvancedBrakingAvatarState\(holding, advancedFeedback\)\}/);
+  assert.match(advancedBrakingSource, /\{\.\.\.resolveAdvancedBrakingAvatarView\(holding, advancedFeedback\)\}/);
   assert.match(cssSource, /\.advanced-braking\.early::after/);
   assert.match(cssSource, /\.advanced-braking\.crashed::after/);
   assert.match(cssSource, /\.advanced-braking\.success::after/);
@@ -299,16 +299,23 @@ test("finish platforms use the same gold flag language across square jump, doodl
   assert.match(fallDownSource, /<span className="fall-finish-flag" aria-hidden="true" \/>/);
 });
 
-test("advanced goal copy is derived from the actual completion rules for mini-game challenges", () => {
+test("advanced goal copy follows grouped level rules with fallback text", () => {
   const viewSource = read(new URL("./advanced-challenge-view.ts", import.meta.url));
   const viewTestSource = read(new URL("./advanced-challenge-view.test.ts", import.meta.url));
 
   assert.match(viewSource, /function getMiniGameGoals/);
+  assert.match(viewSource, /function resolveBandGroup/);
+  assert.match(viewSource, /function resolveColumnGroup/);
+  assert.match(viewSource, /function riskPlatformGoalText/);
+  assert.match(viewSource, /function collectibleGoalText/);
   assert.match(viewSource, /getMiniGameLevel\(miniGameId, miniLevelId\)/);
-  assert.match(viewSource, /站上最高终点平台/);
-  assert.match(viewSource, /站上终点平台/);
-  assert.match(viewSource, /完成 \${jumpsRequired} 次跳跃/);
-  assert.match(viewTestSource, /doodle finish platform goal/);
+  assert.match(viewSource, /config\.dimension === "search"/);
+  assert.match(viewSource, /config\.dimension === "stroop"/);
+  assert.match(viewSource, /config\.dimension === "memory"/);
+  assert.match(viewSource, /config\.dimension === "patience"/);
+  assert.match(viewSource, /group === "258" \|\| group === "10"/);
+  assert.match(viewSource, /group === "369" \|\| group === "10"/);
+  assert.match(viewTestSource, /advanced mini-game goals follow level-group rules and fallback copy/);
 });
 
 test("mini-game stages share a reusable screen shake hook and CSS feedback class", () => {
@@ -429,14 +436,11 @@ test("knife has a wheel-mounted avatar, stage feedback, and advanced failure imp
 
   assert.match(knifeSource, /from "@\/features\/player-avatar\/player-avatar"/);
   assert.match(knifeSource, /type KnifeFeedbackTone = "idle" \| "good" \| "bad";/);
-  assert.match(knifeSource, /function resolveKnifeWheelAvatarState\(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone\): PlayerAvatarState/);
-  assert.match(knifeSource, /function resolveKnifeWheelAvatarMood\(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone\): PlayerAvatarMood/);
-  assert.match(knifeSource, /if \(feedbackTone === "bad" \|\| view\.status === "failed"\) return "fail";/);
-  assert.match(knifeSource, /if \(view\.status === "passed"\) return "success";/);
-  assert.match(knifeSource, /return "idle";/);
-  assert.match(knifeSource, /if \(view\.status === "passed"\) return "happy";/);
-  assert.match(knifeSource, /return "scared";/);
-  assert.doesNotMatch(knifeSource, /feedbackTone === "good"[\s\S]*return "success"/);
+  assert.match(knifeSource, /function resolveKnifeWheelAvatarView\(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone\): PlayerAvatarView/);
+  assert.match(knifeSource, /if \(feedbackTone === "bad" \|\| view\.status === "failed"\) return \{ action: "hit", expression: "hurt" \};/);
+  assert.match(knifeSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(knifeSource, /return \{ action: "idle", expression: "scared" \};/);
+  assert.doesNotMatch(knifeSource, /feedbackTone === "good"[\s\S]*action: "celebrate"/);
   assert.match(knifeSource, /const \[feedbackTone, setFeedbackTone\] = useState<KnifeFeedbackTone>\("idle"\);/);
   assert.match(knifeSource, /const showKnifeFeedback = useCallback/);
   assert.match(knifeSource, /showKnifeFeedback\("good"\)/);
@@ -444,7 +448,7 @@ test("knife has a wheel-mounted avatar, stage feedback, and advanced failure imp
   assert.match(knifeSource, /current\.failedAngles\.push\(outcome\.impactAngle\);[\s\S]*?current\.failedAngle = outcome\.impactAngle;[\s\S]*?current\.status = "failed";/);
   assert.match(knifeSource, /className=\{`prototype-stage knife-stage[\s\S]*feedback-\$\{feedbackTone\}/);
   assert.match(knifeSource, /className="knife-wheel-avatar"/);
-  assert.match(knifeSource, /<PlayerAvatar[\s\S]*mood=\{resolveKnifeWheelAvatarMood\(view, feedbackTone\)\}[\s\S]*state=\{resolveKnifeWheelAvatarState\(view, feedbackTone\)\}/);
+  assert.match(knifeSource, /<PlayerAvatar[\s\S]*\{\.\.\.resolveKnifeWheelAvatarView\(view, feedbackTone\)\}/);
   assert.match(knifeSource, /size=\{42\}/);
   assert.doesNotMatch(knifeSource, /className="knife-launcher-avatar"/);
   assert.doesNotMatch(knifeSource, /resolveKnifeLauncherAvatarState/);

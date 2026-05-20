@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -92,12 +92,12 @@ function resolveFallDownPlayerDirection(direction: FallDownRuntime["inputDirecti
   return "none";
 }
 
-function resolveFallDownPlayerAvatarState(view: FallDownRuntime): PlayerAvatarState {
-  if (view.status === "failed") return "fail";
-  if (view.status === "passed") return "success";
-  if (view.time < view.respawnUntil) return "shield";
-  if (view.started && view.inputDirection !== 0) return "move";
-  return "idle";
+function resolveFallDownPlayerAvatarView(view: FallDownRuntime): PlayerAvatarView {
+  if (view.status === "failed") return { action: "hit", expression: "hurt" };
+  if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
+  if (view.started && view.inputDirection !== 0) return { action: "move", expression: "neutral" };
+  return { action: "idle", expression: "neutral" };
 }
 
 function makeFallDownNoisePoints(rand: () => number, count: number) {
@@ -787,9 +787,8 @@ export function FallDownPrototype({
         })}
         <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} ref={playerShellRef} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
           <PlayerAvatar
+            {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
-            mood={view.started ? "focused" : "normal"}
-            state={resolveFallDownPlayerAvatarState(view)}
             visualScale={1.18}
           />
         </div>

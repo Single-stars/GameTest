@@ -21,28 +21,28 @@ import {
 const LUCK_RULE_TEXT = "完成进阶挑战可获得抽取次数。每次抽取会得到 0-100 运气分，运气只保留历史最高值，不会因低分下降。第 80 次抽取必定补满运气。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
-export function LuckDrawScreen({
-  advancedProgress,
-  lastOutcome,
-  onBack,
-  onDraw,
-  onDrawBatch,
-}: {
-  advancedProgress: AdvancedProgress;
-  lastOutcome: LuckDrawOutcome | null;
-  onBack: () => void;
-  onDraw: () => LuckDrawOutcome | null;
-  onDrawBatch: () => LuckDrawOutcome | null;
-}) {
+export function LuckDrawScreen({
+  advancedProgress,
+  lastOutcome,
+  onBack,
+  onDraw,
+  onDrawBatch,
+}: {
+  advancedProgress: AdvancedProgress;
+  lastOutcome: LuckDrawOutcome | null;
+  onBack: () => void;
+  onDraw: () => LuckDrawOutcome | null;
+  onDrawBatch: () => LuckDrawOutcome | null;
+}) {
   const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
   const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [displayScore, setDisplayScore] = useState<number | null>(null);
-  const [spinMessage, setSpinMessage] = useState<string | null>(null);
-  const [settledReels, setSettledReels] = useState(3);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const spinTimersRef = useRef<number[]>([]);
-  const ruleDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const [spinMessage, setSpinMessage] = useState<string | null>(null);
+  const [settledReels, setSettledReels] = useState(3);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const spinTimersRef = useRef<number[]>([]);
+  const ruleDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const unlocked = advancedProgress.unlocked;
   const canDraw = canUseLuckDraw(unlocked, advancedProgress) && !spinning;
   const canDrawBatch = canUseLuckDrawBatch(unlocked, advancedProgress) && !spinning;
@@ -56,11 +56,11 @@ export function LuckDrawScreen({
       window.clearTimeout(timer);
     }
     spinTimersRef.current = [];
-  }, []);
-
-  useEffect(() => {
-    return clearSpinTimers;
-  }, [clearSpinTimers]);
+  }, []);
+
+  useEffect(() => {
+    return () => clearSpinTimers();
+  }, [clearSpinTimers]);
 
   useEffect(() => {
     if (!rulesOpen) return undefined;
@@ -106,14 +106,14 @@ export function LuckDrawScreen({
     playDrawAnimation(outcome);
   };
 
-  const drawBatch = () => {
-    if (!canDrawBatch) return;
-    const outcome = onDrawBatch();
-    if (!outcome) return;
-    playDrawAnimation(outcome);
-  };
-
-  return (
+  const drawBatch = () => {
+    if (!canDrawBatch) return;
+    const outcome = onDrawBatch();
+    if (!outcome) return;
+    playDrawAnimation(outcome);
+  };
+
+  return (
     <section className="luck-screen">
       <header className="advanced-topbar">
         <button className="advanced-back-button" type="button" onPointerDown={onBack}>
@@ -179,8 +179,7 @@ export function LuckDrawScreen({
         <p className="luck-rule-text">
           {resultText}
         </p>
-
-      </div>
-    </section>
-  );
+      </div>
+    </section>
+  );
 }

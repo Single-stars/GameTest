@@ -9,7 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarMood, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   DEBUG_MINI_GAME_FPS,
   MINI_GAME_TIMER_SYNC_MS,
@@ -132,16 +132,10 @@ function makeKnifeView(frame: KnifeFrame, launcherVisible: boolean): KnifeViewFr
   };
 }
 
-function resolveKnifeWheelAvatarState(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarState {
-  if (feedbackTone === "bad" || view.status === "failed") return "fail";
-  if (view.status === "passed") return "success";
-  return "idle";
-}
-
-function resolveKnifeWheelAvatarMood(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarMood {
-  if (view.status === "passed") return "happy";
-  if (feedbackTone === "bad" || view.status === "failed") return "scared";
-  return "scared";
+function resolveKnifeWheelAvatarView(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarView {
+  if (feedbackTone === "bad" || view.status === "failed") return { action: "hit", expression: "hurt" };
+  if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  return { action: "idle", expression: "scared" };
 }
 
 export function KnifeHitPrototype({
@@ -452,9 +446,8 @@ export function KnifeHitPrototype({
             </svg>
             <div className="knife-wheel-avatar" aria-hidden="true">
               <PlayerAvatar
-                mood={resolveKnifeWheelAvatarMood(view, feedbackTone)}
+                {...resolveKnifeWheelAvatarView(view, feedbackTone)}
                 size={42}
-                state={resolveKnifeWheelAvatarState(view, feedbackTone)}
                 visualScale={0.88}
               />
             </div>

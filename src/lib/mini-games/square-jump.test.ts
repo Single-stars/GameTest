@@ -311,7 +311,7 @@ test("square jump keeps only the base first-three-jump tutorial preview and char
   assert.match(componentSource, /<PlayerAvatar/);
   assert.match(componentSource, /charge=\{view\.charge\}/);
   assert.match(componentSource, /rootRef=\{playerAvatarRef\}/);
-  assert.match(componentSource, /state=\{resolveSquareJumpPlayerAvatarState\(view\)\}/);
+  assert.match(componentSource, /\{\.\.\.resolveSquareJumpPlayerAvatarView\(view\)\}/);
   assert.doesNotMatch(componentSource, /square-charge-meter/);
   assert.doesNotMatch(globalCss, /\.square-charge-meter/);
   assert.match(globalCss, /transform-origin: 50% 50%/);
@@ -323,7 +323,7 @@ test("square jump maps its player visuals through the shared avatar without fail
   const componentSource = readMiniGameRuntimeSource();
   const squareSource = componentSource.slice(componentSource.indexOf("function squareGravityMultiplier"), componentSource.indexOf("export function SquareJumpPrototype"));
   const avatarStateSource = squareSource.slice(
-    squareSource.indexOf("function resolveSquareJumpPlayerAvatarState"),
+    squareSource.indexOf("function resolveSquareJumpPlayerAvatarView"),
     squareSource.indexOf("function createSquareJumpPlan"),
   );
   const renderSource = componentSource.slice(
@@ -332,24 +332,24 @@ test("square jump maps its player visuals through the shared avatar without fail
   );
 
   assert.match(componentSource, /from "@\/features\/player-avatar\/player-avatar"/);
-  assert.match(componentSource, /type PlayerAvatarState/);
+  assert.match(componentSource, /type PlayerAvatarView/);
   assert.match(componentSource, /type PlayerAvatarGravity/);
-  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
-  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return "shield";/);
-  assert.match(avatarStateSource, /if \(view\.state === "charging" \|\| view\.state === "airCharging"\) return "charge";/);
-  assert.match(avatarStateSource, /if \(view\.feedback === "Good"\) return "land";/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
+  assert.match(avatarStateSource, /if \(view\.state === "charging" \|\| view\.state === "airCharging"\) return \{ action: "charge", expression: "neutral" \};/);
+  assert.match(avatarStateSource, /if \(view\.feedback === "Good"\) return \{ action: "land", expression: "neutral" \};/);
   assert.ok(
-    avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return "charge";') <
-      avatarStateSource.indexOf('if (view.feedback === "Good") return "land";'),
+    avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };') <
+      avatarStateSource.indexOf('if (view.feedback === "Good") return { action: "land", expression: "neutral" };'),
     "charging must override the temporary land feedback so charge squash starts during camera advance",
   );
-  assert.match(avatarStateSource, /if \(view\.state === "jumping"\) return "jump";/);
-  assert.match(avatarStateSource, /if \(view\.state === "falling"\) return "fall";/);
-  assert.match(avatarStateSource, /return "idle";/);
+  assert.match(avatarStateSource, /if \(view\.state === "jumping"\) return \{ action: "idle", expression: "neutral" \};/);
+  assert.match(avatarStateSource, /if \(view\.state === "falling"\) return \{ action: "idle", expression: "scared" \};/);
+  assert.match(avatarStateSource, /return \{ action: "idle", expression: "neutral" \};/);
   assert.doesNotMatch(avatarStateSource, /return "fail";/);
   assert.doesNotMatch(avatarStateSource, /view\.status === "failed"[\s\S]{0,80}"fail"/);
   assert.match(renderSource, /<PlayerAvatar/);
-  assert.match(renderSource, /state=\{resolveSquareJumpPlayerAvatarState\(view\)\}/);
+  assert.match(renderSource, /\{\.\.\.resolveSquareJumpPlayerAvatarView\(view\)\}/);
   assert.match(renderSource, /charge=\{view\.charge\}/);
   assert.match(renderSource, /rootRef=\{playerAvatarRef\}/);
   assert.match(renderSource, /gravity=\{view\.activeGravity\}/);

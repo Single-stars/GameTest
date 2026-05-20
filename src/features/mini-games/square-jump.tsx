@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarGravity, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -151,14 +151,14 @@ function getSquareJumpPlatformY(stageHeight: number) {
   return stageHeight * 0.72;
 }
 
-function resolveSquareJumpPlayerAvatarState(view: SquareJumpUnifiedRuntime): PlayerAvatarState {
-  if (view.status === "passed") return "success";
-  if (view.time < view.respawnUntil) return "shield";
-  if (view.state === "charging" || view.state === "airCharging") return "charge";
-  if (view.feedback === "Good") return "land";
-  if (view.state === "jumping") return "jump";
-  if (view.state === "falling") return "fall";
-  return "idle";
+function resolveSquareJumpPlayerAvatarView(view: SquareJumpUnifiedRuntime): PlayerAvatarView {
+  if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
+  if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };
+  if (view.feedback === "Good") return { action: "land", expression: "neutral" };
+  if (view.state === "jumping") return { action: "idle", expression: "neutral" };
+  if (view.state === "falling") return { action: "idle", expression: "scared" };
+  return { action: "idle", expression: "neutral" };
 }
 
 function toSquareJumpAvatarVar(value: number) {
@@ -830,12 +830,11 @@ export function SquareJumpPrototype({
             }}
           >
             <PlayerAvatar
+              {...resolveSquareJumpPlayerAvatarView(view)}
               charge={view.charge}
               gravity={view.activeGravity}
-              mood={isCharging ? "focused" : "normal"}
               rotationTurns={view.playerTurns}
               rootRef={playerAvatarRef}
-              state={resolveSquareJumpPlayerAvatarState(view)}
               visualScale={1.18}
             />
           </div>

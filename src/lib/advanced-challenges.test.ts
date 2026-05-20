@@ -468,6 +468,65 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   assert.equal(earlyOrMiss.reactionAverageMs, null);
 });
 
+test("advanced completion keeps reaction red-click failure isolated from early-or-miss goal", () => {
+  const config = getAdvancedStageConfig("reaction", 4);
+  const result = evaluateAdvancedChallengeCompletion(config, [
+    trial("reaction", 0, {
+      shownAt: 0,
+      responseAt: 260,
+      value: { signalColor: "green" },
+    }),
+    trial("reaction", 1, {
+      correct: false,
+      errorType: "false_alarm",
+      responseAt: 120,
+      value: {},
+    }),
+  ]);
+
+  assert.equal(result.passed, false);
+  assert.equal(result.reason, "失败：点到了红灯");
+  assert.deepEqual(result.goalChecks, [true, false, true]);
+});
+
+test("advanced completion evaluates aim goals by miss, fly-out and decoy independently", () => {
+  const incomingConfig = getAdvancedStageConfig("aim", 2);
+  const incomingFlyOut = evaluateAdvancedChallengeCompletion(incomingConfig, [
+    trial("aim", 0, {
+      correct: false,
+      errorType: "timeout",
+      value: { mode: "arrow", shotHit: false, flyOut: true },
+    }),
+  ]);
+  assert.equal(incomingFlyOut.passed, false);
+  assert.equal(incomingFlyOut.reason, "失败：目标飞出场景");
+  assert.deepEqual(incomingFlyOut.goalChecks, [true, false]);
+
+  const decoyConfig = getAdvancedStageConfig("aim", 3);
+  const decoyCollision = evaluateAdvancedChallengeCompletion(decoyConfig, [
+    trial("aim", 0, {
+      correct: false,
+      errorType: "collision",
+      value: { mode: "arrow", shotHit: false, hitDecoy: true },
+    }),
+  ]);
+  assert.equal(decoyCollision.passed, false);
+  assert.equal(decoyCollision.reason, "失败：箭矢射中了干扰靶");
+  assert.deepEqual(decoyCollision.goalChecks, [true, false]);
+
+  const bossConfig = getAdvancedStageConfig("aim", 10);
+  const bossMiss = evaluateAdvancedChallengeCompletion(bossConfig, [
+    trial("aim", 0, {
+      correct: false,
+      errorType: "miss",
+      value: { mode: "arrow", shotHit: false },
+    }),
+  ]);
+  assert.equal(bossMiss.passed, false);
+  assert.equal(bossMiss.reason, "失败：箭矢射空");
+  assert.deepEqual(bossMiss.goalChecks, [false, true, true]);
+});
+
 test("advanced completion evaluates replaced dimensions through mini-game challenge outcomes", () => {
   const rhythm = getAdvancedStageConfig("rhythm", 4);
   const rhythmResult = evaluateAdvancedChallengeCompletion(rhythm, [
@@ -498,6 +557,59 @@ test("advanced completion evaluates replaced dimensions through mini-game challe
   assert.equal(fallDownResult.reason, "通过");
   assert.equal(flappyResult.passed, true);
   assert.equal(flappyResult.reason, "通过");
+});
+
+test("advanced completion maps mini-game advanced goals into ordered goal checks", () => {
+  const doodle = getAdvancedStageConfig("search", 5);
+  const doodleResult = evaluateAdvancedChallengeCompletion(doodle, [
+    trial("search", 0, {
+      correct: false,
+      errorType: "collision",
+      value: {
+        mode: "mini-game",
+        miniGameId: "doodle",
+        miniLevelId: String(doodle.params.miniLevelId),
+        reason: "撞到危险",
+        riskHit: 5,
+        riskTotal: 5,
+      },
+    }),
+  ]);
+  assert.deepEqual(doodleResult.goalChecks, [false, true, false, true]);
+
+  const flappy = getAdvancedStageConfig("memory", 5);
+  const flappyResult = evaluateAdvancedChallengeCompletion(flappy, [
+    trial("memory", 0, {
+      correct: false,
+      errorType: "collision",
+      value: {
+        mode: "mini-game",
+        miniGameId: "flappy",
+        miniLevelId: String(flappy.params.miniLevelId),
+        reason: "漏收集道具 3/6",
+        collected: 3,
+        collectibleCount: 6,
+      },
+    }),
+  ]);
+  assert.deepEqual(flappyResult.goalChecks, [true, true, false]);
+
+  const knife = getAdvancedStageConfig("patience", 10);
+  const knifeResult = evaluateAdvancedChallengeCompletion(knife, [
+    trial("patience", 0, {
+      correct: false,
+      errorType: "timeout",
+      value: {
+        mode: "mini-game",
+        miniGameId: "knife",
+        miniLevelId: String(knife.params.miniLevelId),
+        reason: "倒计时结束",
+        fired: 9,
+        shotCount: 13,
+      },
+    }),
+  ]);
+  assert.deepEqual(knifeResult.goalChecks, [true, false, false, true]);
 });
 
 test("debug tools are hidden unless explicitly enabled by development mode or URL flag", () => {

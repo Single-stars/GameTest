@@ -230,6 +230,86 @@ test("luck draw rule tooltip uses readable copy instead of placeholder question 
   assert.match(luckDrawScreenSource, /历史最高/);
 });
 
+test("result screen opens the avatar lab through a compact rank-side avatar entry", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const luckSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const resultSource = readFileSync(new URL("../features/results/result-screen.tsx", import.meta.url), "utf8");
+  const avatarLabUrl = new URL("../features/player-avatar/avatar-lab-screen.tsx", import.meta.url);
+  const baseFlowCss = readFileSync(new URL("../app/styles/base-flow.css", import.meta.url), "utf8");
+  const tokensCss = readFileSync(new URL("../app/styles/base-flow/tokens.css", import.meta.url), "utf8");
+  const luckCss = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const resultCss = readFileSync(new URL("../app/styles/base-flow/results.css", import.meta.url), "utf8");
+  const labCssUrl = new URL("../app/styles/base-flow/avatar-lab.css", import.meta.url);
+
+  assert.equal(existsSync(avatarLabUrl), true);
+  assert.equal(existsSync(labCssUrl), true);
+  assert.match(baseFlowCss, /@import "\.\/base-flow\/avatar-lab\.css";/);
+  assert.doesNotMatch(luckSource, /luck-avatar-entry|onOpenAvatarLab|avatarSkin|PlayerAvatar/);
+  assert.doesNotMatch(luckCss, /luck-avatar-entry/);
+
+  assert.match(resultSource, /PlayerAvatar, type PlayerAvatarSkin/);
+  assert.match(resultSource, /const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;/);
+  assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
+  assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
+  assert.match(resultSource, /const \[avatarEntryAnimating, setAvatarEntryAnimating\] = useState\(false\);/);
+  assert.match(resultSource, /window\.setTimeout\(\(\) => \{/);
+  assert.match(resultSource, /onOpenAvatarLab\(\);/);
+  assert.match(resultSource, /className=\{`rank-avatar-entry \$\{avatarEntryAnimating \? "playing" : ""\}`\}/);
+  assert.match(resultSource, /aria-label="进入皮肤测试"/);
+  assert.match(resultSource, /skin=\{avatarSkin\}/);
+  assert.match(resultSource, /action=\{avatarEntryAnimating \? "celebrate" : "idle"\}/);
+  assert.match(resultSource, /<div className="radar-card-shell">[\s\S]*<div className="radar-actions"/);
+  assert.match(resultSource, /<RadarChart axis=\{result\.axis\} \/>/);
+  assert.doesNotMatch(resultSource, /<div className="rank-actions"/);
+  assert.match(resultCss, /\.rank-avatar-entry/);
+  assert.match(resultCss, /\.rank-avatar-entry\.playing/);
+  assert.match(resultCss, /\.radar-card-shell/);
+  assert.match(resultCss, /\.radar-actions/);
+  assert.match(resultCss, /\.result-screen\s*\{[\s\S]*overflow:\s*visible;/);
+  assert.match(resultCss, /\.rank-avatar-entry\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*translate:\s*-12px 0;/);
+  assert.match(resultCss, /\.rank-avatar-entry\.playing\s*\{[\s\S]*translate:\s*-12px -2px;[\s\S]*box-shadow:\s*none;/);
+  assert.match(resultCss, /\.radar-actions\s*\{[\s\S]*z-index:\s*3;[\s\S]*background:\s*rgba\(255, 253, 248, 0\.94\);[\s\S]*box-shadow:/);
+  assert.match(tokensCss, /html\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*auto;/);
+  assert.match(tokensCss, /body\s*\{[\s\S]*overflow-y:\s*visible;[\s\S]*overscroll-behavior-y:\s*auto;/);
+
+  const avatarLabSource = readFileSync(avatarLabUrl, "utf8");
+  assert.match(avatarLabSource, /export function AvatarLabScreen/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_SKINS/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_ACTIONS/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_EXPRESSIONS/);
+  assert.match(avatarLabSource, /pig:\s*"猪猪"/);
+  assert.match(avatarLabSource, /selectedSkin:\s*PlayerAvatarSkin;/);
+  assert.match(avatarLabSource, /onSelectSkin:\s*\(skin: PlayerAvatarSkin\) => void;/);
+  assert.match(avatarLabSource, /<PlayerAvatar/);
+  assert.match(avatarLabSource, /action=\{activeAction\}/);
+  assert.match(avatarLabSource, /expression=\{activeExpression\}/);
+  assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{38\} \/>/);
+  const avatarLabScenesSource = avatarLabSource.slice(
+    avatarLabSource.indexOf("const AVATAR_LAB_SCENES"),
+    avatarLabSource.indexOf("const SKIN_LABELS"),
+  );
+  assert.doesNotMatch(avatarLabScenesSource, /id: "jump"|id: "fall"/);
+  assert.doesNotMatch(avatarLabSource, /mouth/i);
+
+  assert.match(appPageSource, /import \{ AvatarLabScreen \}/);
+  assert.match(appPageSource, /type PlayerAvatarSkin/);
+  assert.match(appPageSource, /PlayerAvatarSkinProvider/);
+  assert.match(appPageSource, /const AVATAR_SKIN_STORAGE_KEY = "game-rank-test\/avatar-skin\/v1";/);
+  assert.match(appPageSource, /const \[selectedAvatarSkin, setSelectedAvatarSkin\] = useState<PlayerAvatarSkin>\("cyan"\);/);
+  assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
+  assert.match(appPageSource, /setStage\("avatar-lab"\);/);
+  assert.match(appPageSource, /stage === "avatar-lab"/);
+  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onSelectSkin=\{setSelectedAvatarSkin\}/);
+  assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}/);
+  assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*scrollResultToTop\(\);[\s\S]*setStage\("result"\);[\s\S]*\}, \[releaseHistoryGuard, scrollResultToTop\]\);/);
+  assert.match(appPageSource, /if \(stage === "avatar-lab"\) \{[\s\S]*closeAvatarLab\(\);[\s\S]*return navigation;[\s\S]*\}/);
+  assert.doesNotMatch(appPageSource, /if \(stage === "avatar-lab"\) \{\s*setStage\("luck"\);/);
+  const luckDrawInvocations = appPageSource.match(/<LuckDrawScreen[\s\S]*?\/>/g) ?? [];
+  assert.equal(luckDrawInvocations.length, 1);
+  assert.doesNotMatch(luckDrawInvocations.join("\n"), /avatarSkin=\{selectedAvatarSkin\}/);
+  assert.doesNotMatch(luckDrawInvocations.join("\n"), /onOpenAvatarLab=\{openAvatarLab\}/);
+});
+
 test("app page delegates round rendering and remaining screen shells to feature modules", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const roundPlayerUrl = new URL("../features/rounds/round-player.tsx", import.meta.url);
@@ -354,8 +434,8 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
   assert.match(globalCss, /@import "\.\/styles\/mini-games\.css";/);
   assert.match(globalCss, /@import "\.\/styles\/overlays-responsive\.css";/);
   assert.match(baseFlowCss, /@import "\.\/base-flow\/tokens\.css";/);
-  assert.match(baseFlowChunks, /overflow-x: clip;/);
-  assert.doesNotMatch(baseFlowChunks, /overflow-x: hidden;/);
+  assert.match(baseFlowChunks, /overflow-x: hidden;/);
+  assert.match(baseFlowChunks, /overflow-y: auto;/);
   const baseAppShellBlock = shellCss.match(/\.app-shell \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(baseAppShellBlock, /overflow/);
   assert.match(baseFlowChunks, /\.app-shell\.app-shell-play \{/);
@@ -483,14 +563,27 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   const componentSource = readFileSync(componentUrl, "utf8");
   const cssSource = readFileSync(cssUrl, "utf8");
 
-  assert.match(componentSource, /export type PlayerAvatarState =/);
-  assert.match(componentSource, /export type PlayerAvatarMood =/);
+  assert.match(componentSource, /export type PlayerAvatarAction =/);
+  assert.match(componentSource, /export type PlayerAvatarExpression =/);
+  assert.match(componentSource, /export type PlayerAvatarEffect = "none" \| "shield" \| "sparkles";/);
   assert.match(componentSource, /export type PlayerAvatarGravity = "normal" \| "light" \| "heavy";/);
-  assert.match(componentSource, /export type PlayerAvatarSkin = "cyan" \| "mint" \| "amber" \| "rose" \| "slate";/);
+  assert.match(componentSource, /export type PlayerAvatarSkin = "cyan" \| "mint" \| "amber" \| "rose" \| "slate" \| "basketball" \| "pig";/);
+  assert.match(componentSource, /export type PlayerAvatarView =/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_SKINS = \["cyan", "mint", "amber", "rose", "slate", "basketball", "pig"\]/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_FACELESS_SKINS = \["basketball", "pig"\]/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_ACTIONS = \["idle", "move", "charge", "land", "hit", "celebrate", "sleep"\]/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_EXPRESSIONS = \["neutral", "happy", "sleepy", "scared", "hurt"\]/);
+  assert.match(componentSource, /createContext<PlayerAvatarSkin>\("cyan"\)/);
+  assert.match(componentSource, /export function PlayerAvatarSkinProvider/);
+  assert.match(componentSource, /export function usePlayerAvatarSkin/);
   assert.match(componentSource, /type PlayerAvatarProps =/);
   assert.match(componentSource, /export function PlayerAvatar/);
-  assert.match(componentSource, /const PLAYER_AVATAR_STATE_PRIORITY/);
-  assert.match(componentSource, /function resolvePlayerAvatarState/);
+  assert.doesNotMatch(componentSource, /focused/);
+  assert.doesNotMatch(componentSource, /"jump"|"fall"/);
+  assert.doesNotMatch(componentSource, /PlayerAvatarState/);
+  assert.doesNotMatch(componentSource, /PlayerAvatarMood/);
+  assert.doesNotMatch(componentSource, /PLAYER_AVATAR_STATE_PRIORITY/);
+  assert.doesNotMatch(componentSource, /resolvePlayerAvatarState/);
   assert.match(componentSource, /rotationTurns\?: number;/);
   assert.match(componentSource, /rotationDeg\?: number;/);
   assert.match(componentSource, /charge\?: number;/);
@@ -500,19 +593,42 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /--player-avatar-charge/);
   assert.match(componentSource, /--player-avatar-visual-scale/);
   assert.match(componentSource, /--player-avatar-size/);
-  assert.match(componentSource, /const shouldRecenterForDisplay = resolvedState === "success" \|\| resolvedState === "win";/);
+  assert.match(componentSource, /const shouldRecenterForDisplay = action === "celebrate";/);
   assert.match(componentSource, /const rotation = shouldRecenterForDisplay \? 0 : rotationDeg \?\? rotationTurns \* 90;/);
-  assert.match(componentSource, /data-state=\{resolvedState\}/);
-  assert.match(componentSource, /data-mood=\{mood\}/);
+  assert.match(componentSource, /data-action=\{resolvedAction\}/);
+  assert.match(componentSource, /data-expression=\{resolvedExpression\}/);
+  assert.match(componentSource, /data-effect=\{effect\}/);
   assert.match(componentSource, /data-gravity=\{gravity\}/);
-  assert.match(componentSource, /data-skin=\{skin\}/);
+  assert.match(componentSource, /const currentSkin = usePlayerAvatarSkin\(\);/);
+  assert.match(componentSource, /const resolvedSkin = skin \?\? currentSkin;/);
+  assert.match(componentSource, /data-skin=\{resolvedSkin\}/);
+  assert.match(componentSource, /const shouldRenderExpression = !PLAYER_AVATAR_FACELESS_SKINS\.includes\(resolvedSkin\);/);
+  assert.match(componentSource, /function renderAvatarExpression/);
+  assert.match(componentSource, /function renderAvatarSkinArt/);
+  assert.match(componentSource, /M0 32 H64/);
+  assert.match(componentSource, /M32 0 C/);
+  assert.match(componentSource, /C.*64/);
+  assert.match(componentSource, /<path className=\{styles\.pigEye\} d="M22 13 V21" \/>/);
+  assert.match(componentSource, /<path className=\{styles\.pigEye\} d="M42 13 V21" \/>/);
+  assert.match(componentSource, /<ellipse className=\{styles\.pigNose\} cx="32" cy="35" rx="24" ry="16" \/>/);
+  assert.match(componentSource, /<path className=\{styles\.pigNostril\} d="M24 30 V40" \/>/);
+  assert.match(componentSource, /<path className=\{styles\.pigNostril\} d="M40 30 V40" \/>/);
+  assert.doesNotMatch(componentSource, /pigEar|pigNoseShine/);
+  assert.match(componentSource, /M16 42 Q22 45 28 42/);
+  assert.match(componentSource, /M18 25 L28 32 L18 39/);
+  assert.match(componentSource, /M46 25 L36 32 L46 39/);
+  assert.match(componentSource, /shouldRenderExpression \? <span className=\{styles\.face\}>/);
+  assert.match(componentSource, /viewBox="0 0 64 64"/);
+  assert.doesNotMatch(componentSource, /mouth/i);
   assert.doesNotMatch(componentSource, /useState|useEffect|requestAnimationFrame|localStorage|score|collision/i);
 
   assert.match(cssSource, /\.root/);
   assert.match(cssSource, /overflow:\s*visible;/);
   assert.doesNotMatch(cssSource, /contain:\s*paint/);
   assert.match(cssSource, /\.visual/);
-  assert.match(cssSource, /scale\(var\(--player-avatar-visual-scale\)\)/);
+  assert.match(cssSource, /--player-avatar-idle-offset:\s*0px;/);
+  assert.match(cssSource, /translateY\(calc\(var\(--player-avatar-platform-lift\) \+ var\(--player-avatar-idle-offset\)\)\) scale\(var\(--player-avatar-visual-scale\)\)/);
+  assert.match(cssSource, /\.root\[data-action="idle"\]\s*\{[\s\S]*--player-avatar-idle-offset:\s*1px;/);
   assert.match(cssSource, /\.motion/);
   assert.match(cssSource, /\.rotator/);
   assert.match(cssSource, /transition:\s*transform 4[0-9]{2}ms cubic-bezier/);
@@ -524,44 +640,77 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\[data-skin="amber"\]/);
   assert.match(cssSource, /\[data-skin="rose"\]/);
   assert.match(cssSource, /\[data-skin="slate"\]/);
+  assert.match(cssSource, /\[data-skin="basketball"\]/);
+  assert.match(cssSource, /\[data-skin="pig"\]/);
+  assert.match(cssSource, /\.skinSvg/);
+  assert.match(cssSource, /\.skinSvg\s*\{[\s\S]*inset:\s*0;/);
+  assert.match(cssSource, /\.pigNose/);
+  assert.match(cssSource, /\.pigNostril/);
+  assert.doesNotMatch(cssSource, /\.pigEar|\.pigNoseShine/);
+  assert.match(cssSource, /\.pigEye/);
+  assert.match(cssSource, /--player-avatar-body:\s*#efc2cf;/);
+  assert.match(cssSource, /--player-avatar-pig-nose:\s*#e9afbf;/);
+  assert.match(cssSource, /\.expressionSvg/);
+  assert.match(cssSource, /\.face/);
   assert.match(cssSource, /\.eye/);
-  assert.match(cssSource, /\.speedLines/);
-  assert.doesNotMatch(cssSource, /\[data-state="move"\]\s+\.speedLines/);
-  assert.doesNotMatch(cssSource, /\[data-state="fall"\]\s+\.speedLines/);
-  assert.match(cssSource, /\[data-state="boost"\]\s+\.speedLines/);
   assert.match(cssSource, /\.sparkles/);
-  assert.match(cssSource, /\.warningMark/);
-  assert.match(cssSource, /\[data-state="idle"\]/);
-  assert.match(cssSource, /\[data-state="move"\]\[data-direction="left"\]\s+\.motion/);
-  assert.match(cssSource, /\[data-state="move"\]\[data-direction="right"\]\s+\.motion/);
+  assert.doesNotMatch(cssSource, /warningMark/);
+  assert.doesNotMatch(cssSource, /speedLines/);
+  assert.match(cssSource, /\[data-action="idle"\]/);
+  assert.match(cssSource, /\[data-action="move"\]\[data-direction="left"\]\s+\.motion/);
+  assert.match(cssSource, /\[data-action="move"\]\[data-direction="right"\]\s+\.motion/);
   assert.match(cssSource, /translateX\(-4%\) rotate\(-7deg\) scaleX\(1\.1\) scaleY\(0\.93\)/);
   assert.match(cssSource, /translateX\(4%\) rotate\(7deg\) scaleX\(1\.1\) scaleY\(0\.93\)/);
-  assert.match(cssSource, /\[data-state="charge"\]/);
-  assert.match(cssSource, /\[data-state="charge"\]\s+\.motion\s*\{[\s\S]*transition:\s*transform 7[0-9]ms linear,\s*filter 120ms ease;/);
-  assert.match(cssSource, /\[data-state="success"\]/);
-  assert.match(cssSource, /\[data-state="success"\]\s+\.eye[\s\S]*background:\s*transparent;/);
-  assert.match(cssSource, /\[data-mood="happy"\]\s+\.eye,[\s\S]*\[data-state="success"\]\s+\.eye,[\s\S]*\[data-state="win"\]\s+\.eye/);
-  assert.match(cssSource, /\[data-mood="happy"\]\s+\.eye::before,[\s\S]*\[data-state="success"\]\s+\.eye::after,[\s\S]*\[data-state="win"\]\s+\.eye::after/);
+  assert.match(cssSource, /\[data-action="charge"\]/);
+  const chargeCssBlock = cssSource.match(/\.root\[data-action="charge"\] \.motion \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.notEqual(chargeCssBlock, "");
+  assert.match(chargeCssBlock, /transition:\s*transform 7[0-9]ms linear;/);
+  assert.doesNotMatch(chargeCssBlock, /filter:|saturate|brightness/);
+  assert.match(cssSource, /\[data-action="celebrate"\]/);
+  assert.match(cssSource, /\[data-expression="happy"\]/);
+  assert.match(cssSource, /@keyframes playerAvatarExpressionSwap/);
+  assert.match(cssSource, /animation:\s*playerAvatarExpressionSwap 1[0-9]{2}ms ease both;/);
   assert.match(cssSource, /height:\s*max\(2px,\s*calc\(var\(--player-avatar-size-resolved\) \* 0\.058\)\);/);
-  assert.match(cssSource, /\.leftEye::before,[\s\S]*rotate\(38deg\)/);
-  assert.match(cssSource, /\.leftEye::after,[\s\S]*rotate\(-38deg\)/);
-  assert.match(cssSource, /\.rightEye::before,[\s\S]*rotate\(-38deg\)/);
-  assert.match(cssSource, /\.rightEye::after,[\s\S]*rotate\(38deg\)/);
-  assert.doesNotMatch(cssSource, /\[data-state="success"\]\s+\.body::after/);
+  assert.match(cssSource, /\[data-expression="hurt"\]\s+\.eye/);
+  assert.doesNotMatch(cssSource, /\[data-action="celebrate"\]\s+\.body::after/);
   assert.doesNotMatch(cssSource, /border-block-start:\s*max\(3px,\s*calc\(var\(--player-avatar-size-resolved\) \* 0\.09\)\) solid var\(--player-avatar-ink\);/);
-  assert.doesNotMatch(cssSource, /\[data-state="success"\]\s+\.leftEye[\s\S]*translate\(-46%,\s*-2%\) scale\(1\.18\)/);
+  assert.doesNotMatch(cssSource, /\[data-action="celebrate"\]\s+\.leftEye[\s\S]*translate\(-46%,\s*-2%\) scale\(1\.18\)/);
   assert.doesNotMatch(cssSource, /translateX\(-30%\) rotate\(-56deg\)/);
   assert.doesNotMatch(cssSource, /translateX\(30%\) rotate\(56deg\)/);
-  assert.match(cssSource, /\[data-state="warning"\]/);
-  assert.match(cssSource, /\[data-state="fail"\]/);
+  assert.doesNotMatch(cssSource, /\[data-action="warning"\]/);
+  assert.doesNotMatch(cssSource, /\[data-action="boost"\]/);
+  assert.match(cssSource, /\[data-action="hit"\]/);
   assert.match(cssSource, /\[data-gravity="light"\]/);
   assert.match(cssSource, /\[data-gravity="heavy"\]/);
+  assert.doesNotMatch(cssSource, /mouth/i);
   assert.match(cssSource, /prefers-reduced-motion: reduce/);
   assert.doesNotMatch(cssSource, /var\(--glow-accent\)/);
   assert.doesNotMatch(cssSource, /linear-gradient\(180deg,\s*rgba\(255,\s*255,\s*255/);
   assert.doesNotMatch(cssSource, /@keyframes[\s\S]*?(left|top|width|height):/);
   assert.doesNotMatch(cssSource, /transition:\s*[^;]*(background|border|color|left|top|width|height)[^;]*;/);
   assert.doesNotMatch(cssSource, /\[data-[^\]]+\][\s\S]*?(left|top|width|height):/);
+});
+
+test("avatar expression usage removes focused and maps gameplay focus to neutral", () => {
+  const avatarRelatedSources = [
+    new URL("../features/player-avatar/player-avatar.tsx", import.meta.url),
+    new URL("../features/player-avatar/avatar-lab-screen.tsx", import.meta.url),
+    new URL("../features/mini-games/square-jump.tsx", import.meta.url),
+    new URL("../features/mini-games/fall-down.tsx", import.meta.url),
+    new URL("../features/mini-games/doodle.tsx", import.meta.url),
+    new URL("../features/rounds/native/reaction.tsx", import.meta.url),
+    new URL("../features/rounds/native/aim.tsx", import.meta.url),
+    new URL("../features/rounds/native/braking.tsx", import.meta.url),
+  ].map((url) => readFileSync(url, "utf8")).join("\n");
+
+  assert.doesNotMatch(avatarRelatedSources, /"focused"|focused:/);
+  assert.doesNotMatch(avatarRelatedSources, /action: "jump"|action: "fall"/);
+  assert.match(avatarRelatedSources, /action: "move", expression: "neutral"/);
+  assert.match(avatarRelatedSources, /action: "charge", expression: "neutral"/);
+  assert.match(avatarRelatedSources, /view\.feedback === "Good"\) return \{ action: "land", expression: "neutral" \};/);
+  assert.match(avatarRelatedSources, /view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(avatarRelatedSources, /view\.state === "jumping"\) return \{ action: "idle", expression: "neutral" \};/);
+  assert.match(avatarRelatedSources, /view\.state === "falling"\) return \{ action: "idle", expression: "scared" \};/);
 });
 
 test("doodle player uses the shared avatar pilot without owning visual square markup", () => {
@@ -572,20 +721,21 @@ test("doodle player uses the shared avatar pilot without owning visual square ma
   assert.match(doodleSource, /playerVy: number;/);
   assert.match(doodleSource, /playerDirection: PlayerAvatarDirection;/);
   assert.match(doodleSource, /jumpTurnAvailable: boolean;/);
-  assert.match(doodleSource, /function resolveDoodlePlayerAvatarState/);
+  assert.match(doodleSource, /function resolveDoodlePlayerAvatarView/);
   const avatarStateSource = doodleSource.slice(
-    doodleSource.indexOf("function resolveDoodlePlayerAvatarState"),
+    doodleSource.indexOf("function resolveDoodlePlayerAvatarView"),
     doodleSource.indexOf("export function DoodleJumpPrototype"),
   );
-  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return "fail";/);
-  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
-  assert.match(avatarStateSource, /if \(view\.time < view\.invincibleUntil\) return "shield";/);
-  assert.match(avatarStateSource, /return "idle";/);
+  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return \{ action: "hit", expression: "hurt" \};/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.invincibleUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
+  assert.match(avatarStateSource, /return \{ action: "idle", expression: "neutral" \};/);
   assert.doesNotMatch(avatarStateSource, /return \["shield", view\.playerVy >= 0 \? "jump" : "fall"\]/);
   assert.doesNotMatch(avatarStateSource, /return "move";/);
   assert.doesNotMatch(avatarStateSource, /return "jump";/);
   assert.doesNotMatch(avatarStateSource, /return "fall";/);
   assert.match(doodleSource, /<PlayerAvatar/);
+  assert.match(doodleSource, /\{\.\.\.resolveDoodlePlayerAvatarView\(view\)\}/);
   assert.match(doodleSource, /direction=\{view\.playerDirection\}/);
   assert.match(doodleSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(doodleSource, /visualScale=\{1\.22\}/);
@@ -614,6 +764,7 @@ test("base flow CSS is split into ordered focused chunks", () => {
     '@import "./base-flow/results.css";',
     '@import "./base-flow/advanced.css";',
     '@import "./base-flow/luck.css";',
+    '@import "./base-flow/avatar-lab.css";',
   ];
 
   assert.deepEqual(

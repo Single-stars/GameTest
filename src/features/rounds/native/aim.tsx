@@ -13,7 +13,7 @@ import {
   type AdvancedAimArrow,
   type AdvancedAimEntity,
 } from "@/lib/advanced-aim";
-import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import {
   clamp,
@@ -750,10 +750,14 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
   };
 
   const arrowsLeft = unlimitedArrows ? null : Math.max(0, arrowCount - firedCount);
-  const shooterAvatarState =
-    feedbackTone === "good" ? "success" : feedbackTone === "bad" ? "fail" : shooterFiring ? "charge" : "idle";
-  const shooterAvatarMood =
-    feedbackTone === "good" ? "happy" : feedbackTone === "bad" ? "scared" : shooterFiring ? "focused" : "normal";
+  const shooterAvatarView: PlayerAvatarView =
+    feedbackTone === "good"
+      ? { action: "celebrate", expression: "happy", effect: "sparkles" }
+      : feedbackTone === "bad"
+        ? { action: "hit", expression: "hurt" }
+        : shooterFiring
+          ? { action: "charge", expression: "neutral" }
+          : { action: "idle", expression: "neutral" };
   return (
     <div className={`game-area advanced-aim ${config.variant} mode-${mode} feedback-${feedbackTone}`} ref={areaRef} onPointerDown={shoot}>
       <div className="mini-score advanced-aim-score">
@@ -762,10 +766,9 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
       </div>
       <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""}`} aria-hidden="true">
         <PlayerAvatar
+          {...shooterAvatarView}
           charge={shooterFiring ? 0.7 : 0}
-          mood={shooterAvatarMood}
           size={64}
-          state={shooterAvatarState}
         />
       </div>
 

@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -85,11 +85,11 @@ type FlappyViewFrame = {
   visibleGates: FlappyGate[];
 };
 
-function resolveFlappyPlayerAvatarState(view: FlappyViewFrame): PlayerAvatarState {
-  if (view.status === "failed") return "fail";
-  if (view.status === "passed") return "success";
-  if (view.time < view.invincibleUntil) return "shield";
-  return "idle";
+function resolveFlappyPlayerAvatarView(view: FlappyViewFrame): PlayerAvatarView {
+  if (view.status === "failed") return { action: "hit", expression: "hurt" };
+  if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (view.time < view.invincibleUntil) return { action: "idle", expression: "neutral", effect: "shield" };
+  return { action: "idle", expression: "neutral" };
 }
 
 function flappyStartPlatformY(stageHeight: number) {
@@ -542,10 +542,10 @@ export function FlappyPrototype({
           style={{ transform: transformPoint3d(playerX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
         >
           <PlayerAvatar
+            {...resolveFlappyPlayerAvatarView(view)}
             direction={reverseDirection ? "left" : "right"}
             gravity={reversedGravity ? "light" : "normal"}
             rotationTurns={view.playerTurns}
-            state={resolveFlappyPlayerAvatarState(view)}
             visualScale={1.18}
           />
         </div>

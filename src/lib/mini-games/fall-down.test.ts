@@ -208,7 +208,7 @@ test("fall down maps its player visuals through the shared avatar without warnin
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
   const avatarStateSource = fallDownSource.slice(
-    fallDownSource.indexOf("function resolveFallDownPlayerAvatarState"),
+    fallDownSource.indexOf("function resolveFallDownPlayerAvatarView"),
     fallDownSource.indexOf("function makeFallDownNoisePoints"),
   );
   const renderSource = fallDownSource.slice(
@@ -218,17 +218,17 @@ test("fall down maps its player visuals through the shared avatar without warnin
 
   assert.match(componentSource, /from "@\/features\/player-avatar\/player-avatar"/);
   assert.match(componentSource, /type PlayerAvatarDirection/);
-  assert.match(componentSource, /type PlayerAvatarState/);
+  assert.match(componentSource, /type PlayerAvatarView/);
   assert.match(fallDownSource, /function resolveFallDownPlayerDirection/);
-  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return "fail";/);
-  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return "success";/);
-  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return "shield";/);
-  assert.match(avatarStateSource, /if \(view\.started && view\.inputDirection !== 0\) return "move";/);
-  assert.match(avatarStateSource, /return "idle";/);
+  assert.match(avatarStateSource, /if \(view\.status === "failed"\) return \{ action: "hit", expression: "hurt" \};/);
+  assert.match(avatarStateSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
+  assert.match(avatarStateSource, /if \(view\.started && view\.inputDirection !== 0\) return \{ action: "move", expression: "neutral" \};/);
+  assert.match(avatarStateSource, /return \{ action: "idle", expression: "neutral" \};/);
   assert.doesNotMatch(avatarStateSource, /return "warning";/);
   assert.doesNotMatch(avatarStateSource, /fragile|danger|fallingHazard|pressure/i);
   assert.match(renderSource, /<PlayerAvatar/);
-  assert.match(renderSource, /state=\{resolveFallDownPlayerAvatarState\(view\)\}/);
+  assert.match(renderSource, /\{\.\.\.resolveFallDownPlayerAvatarView\(view\)\}/);
   assert.match(renderSource, /direction=\{resolveFallDownPlayerDirection\(view\.inputDirection\)\}/);
   assert.match(renderSource, /visualScale=\{1\.18\}/);
   assert.doesNotMatch(renderSource, /prototype-player-box fall-down-player/);

@@ -86,7 +86,7 @@ export type AdvancedLevelState = "completed" | "current" | "locked";
 export type AdvancedBackSource = "select" | "intro" | "playing" | "base-playing" | "complete";
 export type AdvancedBackDestination = "result" | "challenge";
 export type AdvancedCompletionAction = "retry" | "next" | "maxed";
-export type AppStage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck";
+export type AppStage = "home" | "intro" | "playing" | "result" | "share" | "advanced" | "luck" | "avatar-lab";
 export type AppBackNavigation = "unhandled" | "release" | "guard";
 export type AppBackHistoryLayer = 0 | 1 | 2;
 
@@ -485,7 +485,7 @@ export function resolveAppBackNavigation({
   advancedBackSource?: AdvancedBackSource | null;
 }): AppBackNavigation {
   if (restartConfirmOpen) return shouldGuardAppBack(stage, false) ? "guard" : "release";
-  if (stage === "share" || stage === "luck" || stage === "intro" || stage === "playing") return "release";
+  if (stage === "share" || stage === "luck" || stage === "avatar-lab" || stage === "intro" || stage === "playing") return "release";
   if (stage !== "advanced") return "unhandled";
   if (!advancedBackSource) return "release";
   return getAdvancedBackDestination(advancedBackSource) === "challenge" ? "guard" : "release";

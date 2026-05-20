@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/immutability */
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { PlayerAvatar, type PlayerAvatarMood, type PlayerAvatarState } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import {
   getParamNumber,
   getReactionSignalDelayMs,
@@ -25,16 +25,10 @@ type AdvancedReactionCell = {
   clicked?: boolean;
 };
 
-function reactionAvatarState(cell: AdvancedReactionCell, feedbackTone: "idle" | "good" | "early" = "idle"): PlayerAvatarState {
-  if (feedbackTone === "early") return "fail";
-  if (feedbackTone === "good" && cell.clicked) return "success";
-  return cell.color === "green" ? "idle" : "sleep";
-}
-
-function reactionAvatarMood(cell: AdvancedReactionCell, feedbackTone: "idle" | "good" | "early" = "idle"): PlayerAvatarMood {
-  if (feedbackTone === "good" && cell.clicked) return "happy";
-  if (feedbackTone === "early") return "scared";
-  return cell.color === "green" ? "focused" : "sleepy";
+function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "good" | "early" = "idle"): PlayerAvatarView {
+  if (feedbackTone === "early") return { action: "hit", expression: "hurt" };
+  if (feedbackTone === "good" && cell.clicked) return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  return cell.color === "green" ? { action: "idle", expression: "neutral" } : { action: "sleep", expression: "sleepy" };
 }
 
 const REACTION_FEEDBACK_DELAY_MS = 400;
@@ -267,9 +261,8 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
         >
           <span className="reaction-cell-avatar" aria-hidden="true">
             <PlayerAvatar
-              mood={reactionAvatarMood(cell, feedbackTone)}
+              {...reactionAvatarView(cell, feedbackTone)}
               size={120}
-              state={reactionAvatarState(cell, feedbackTone)}
             />
           </span>
           {cell.clicked && cell.resultText ? <span className="reaction-result-text">{cell.resultText}</span> : null}
@@ -423,9 +416,10 @@ export function ReactionRound({ onComplete }: RoundProps) {
     <div className={`test-pad reaction-pad ${status} ${feedbackTone}`} aria-label="reaction area" role="button" tabIndex={0} onPointerDown={tap}>
       <span className="reaction-pad-avatar" aria-hidden="true">
         <PlayerAvatar
-          mood={feedbackTone === "good" ? "happy" : feedbackTone === "early" ? "scared" : status === "waiting" ? "sleepy" : "focused"}
+          action={feedbackTone === "good" ? "celebrate" : feedbackTone === "early" ? "hit" : status === "waiting" ? "sleep" : "idle"}
+          effect={feedbackTone === "good" ? "sparkles" : "none"}
+          expression={feedbackTone === "good" ? "happy" : feedbackTone === "early" ? "hurt" : status === "waiting" ? "sleepy" : "neutral"}
           size={144}
-          state={feedbackTone === "good" ? "success" : feedbackTone === "early" ? "fail" : status === "waiting" ? "sleep" : "idle"}
         />
       </span>
       {message ? <span className="reaction-result-text">{message}</span> : null}
