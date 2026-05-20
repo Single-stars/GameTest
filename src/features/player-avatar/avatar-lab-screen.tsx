@@ -29,6 +29,7 @@ const AVATAR_LAB_SCENES = [
   { id: "hit", label: "受击", action: "hit", expression: "hurt", effect: "none" },
   { id: "celebrate", label: "胜利", action: "celebrate", expression: "happy", effect: "sparkles" },
   { id: "sleep", label: "睡眠", action: "sleep", expression: "sleepy", effect: "none" },
+  { id: "wonder", label: "疑问", action: "wonder", expression: "neutral", effect: "question" },
   { id: "shield", label: "护盾", action: "idle", expression: "neutral", effect: "shield" },
 ] as const satisfies readonly AvatarScene[];
 
@@ -50,6 +51,7 @@ const ACTION_LABELS: Record<PlayerAvatarAction, string> = {
   land: "落地",
   move: "移动",
   sleep: "睡眠",
+  wonder: "疑问",
 };
 
 const EXPRESSION_LABELS: Record<PlayerAvatarExpression, string> = {

@@ -38,6 +38,7 @@
 .shadow,
 .sparkles,
 .shield,
+.questionMark,
 .motion,
 .rotator,
 .body,
@@ -68,7 +69,8 @@
 }
 
 .sparkles,
-.shield {
+.shield,
+.questionMark {
   opacity: 0;
   pointer-events: none;
 }
@@ -230,6 +232,27 @@
   transform: scale(0.92);
 }
 
+.questionMark {
+  z-index: 4;
+  right: -20%;
+  top: -30%;
+  width: 42%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: rgba(54, 65, 70, 0.78);
+  font-size: calc(var(--player-avatar-size-resolved) * 0.38);
+  font-weight: 950;
+  line-height: 1;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 4px 8px rgba(24, 24, 24, 0.12));
+}
+
+.questionMark::before {
+  content: "?";
+}
+
 .root[data-action="idle"] .motion {
   animation: playerAvatarIdle 2.8s ease-in-out infinite;
 }
@@ -274,6 +297,11 @@
     inset 0 -2px 0 rgba(24, 24, 24, 0.05);
 }
 
+.root[data-action="wonder"] .motion {
+  transform-origin: 12% 88%;
+  animation: playerAvatarWonder 1400ms ease-in-out infinite;
+}
+
 .root[data-action="hit"] .motion {
   animation: playerAvatarHit 420ms ease-in-out both;
 }
@@ -298,6 +326,11 @@
 .root[data-effect="shield"] .shield {
   opacity: 1;
   animation: playerAvatarShield 1.1s ease-out infinite;
+}
+
+.root[data-effect="question"] .questionMark {
+  opacity: 1;
+  animation: playerAvatarQuestion 1100ms ease-in-out infinite;
 }
 
 .root[data-expression="happy"] {
@@ -544,6 +577,32 @@
   }
 }
 
+@keyframes playerAvatarWonder {
+  0%,
+  100% {
+    transform: rotate(-6deg) translateX(-1%) scale(1);
+  }
+
+  45% {
+    transform: rotate(-12deg) translateX(-3%) scaleX(1.03) scaleY(0.98);
+  }
+
+  72% {
+    transform: rotate(-4deg) translateX(-1%) scaleX(0.99) scaleY(1.01);
+  }
+}
+
+@keyframes playerAvatarQuestion {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-10%) scale(1.08);
+  }
+}
+
 @keyframes playerAvatarShield {
   0% {
     opacity: 0;
@@ -565,7 +624,8 @@
   .root .eye,
   .root .expressionSvg,
   .root .rotator,
-  .root .shield {
+  .root .shield,
+  .root .questionMark {
     animation: none !important;
     transition: none !important;
   }

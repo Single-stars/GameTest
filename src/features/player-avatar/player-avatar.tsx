@@ -11,7 +11,8 @@ export type PlayerAvatarAction =
   | "land"
   | "hit"
   | "celebrate"
-  | "sleep";
+  | "sleep"
+  | "wonder";
 
 export type PlayerAvatarExpression =
   | "neutral"
@@ -20,7 +21,7 @@ export type PlayerAvatarExpression =
   | "scared"
   | "hurt";
 
-export type PlayerAvatarEffect = "none" | "shield" | "sparkles";
+export type PlayerAvatarEffect = "none" | "shield" | "sparkles" | "question";
 export type PlayerAvatarGravity = "normal" | "light" | "heavy";
 export type PlayerAvatarSize = "sm" | "md" | "lg" | number;
 export type PlayerAvatarDirection = "left" | "right" | "none";
@@ -34,9 +35,9 @@ export type PlayerAvatarView = {
 
 export const PLAYER_AVATAR_SKINS = ["cyan", "mint", "amber", "rose", "slate", "basketball", "pig"] as const satisfies readonly PlayerAvatarSkin[];
 export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig"] as readonly PlayerAvatarSkin[];
-export const PLAYER_AVATAR_ACTIONS = ["idle", "move", "charge", "land", "hit", "celebrate", "sleep"] as const satisfies readonly PlayerAvatarAction[];
+export const PLAYER_AVATAR_ACTIONS = ["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"] as const satisfies readonly PlayerAvatarAction[];
 export const PLAYER_AVATAR_EXPRESSIONS = ["neutral", "happy", "sleepy", "scared", "hurt"] as const satisfies readonly PlayerAvatarExpression[];
-export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles"] as const satisfies readonly PlayerAvatarEffect[];
+export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question"] as const satisfies readonly PlayerAvatarEffect[];
 
 const PlayerAvatarSkinContext = createContext<PlayerAvatarSkin>("cyan");
 
@@ -206,6 +207,7 @@ export function PlayerAvatar({
         <span className={styles.shadow} />
         <span className={styles.sparkles} />
         <span className={styles.shield} />
+        <span className={styles.questionMark} />
         <span className={styles.motion}>
           <span className={styles.rotator}>
             <span className={styles.body}>
