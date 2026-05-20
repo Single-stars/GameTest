@@ -23,6 +23,9 @@ export type AdvancedCompletionEvaluation = {
   correctCount: number;
   requiredCorrect: number;
   reason: string;
+  goalChecks?: boolean[];
+  reactionAverageMs?: number | null;
+  reactionThresholdMs?: number | null;
 };
 
 export type AdvancedBrakeDanger = "red" | "gray";

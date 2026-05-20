@@ -421,17 +421,27 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   ]);
 
   assert.equal(passing.passed, true);
-  assert.equal(passing.correctCount, 5);
-  assert.equal(passing.requiredCorrect, 1);
+  assert.equal(passing.correctCount, 3);
+  assert.equal(passing.requiredCorrect, 3);
   assert.equal(passing.reason, "通过");
+  assert.deepEqual(passing.goalChecks, [true, true, true]);
+  assert.equal(passing.reactionAverageMs, 290);
+  assert.equal(passing.reactionThresholdMs, 300);
 
   const slow = evaluateAdvancedChallengeCompletion(config, [
     trial("reaction", 0, { shownAt: 0, responseAt: 317, value: { signalColor: "green" } }),
   ]);
   assert.equal(slow.passed, false);
   assert.equal(slow.reason, "失败：平均反应 317ms，要求 ≤ 300ms");
+  assert.deepEqual(slow.goalChecks, [true, true, false]);
+  assert.equal(slow.reactionAverageMs, 317);
 
   const redClick = evaluateAdvancedChallengeCompletion(config, [
+    trial("reaction", 0, {
+      shownAt: 0,
+      responseAt: 260,
+      value: { signalColor: "green" },
+    }),
     trial("reaction", 0, {
       correct: false,
       errorType: "false_alarm",
@@ -441,6 +451,21 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   ]);
   assert.equal(redClick.passed, false);
   assert.equal(redClick.reason, "失败：点到了红灯");
+  assert.deepEqual(redClick.goalChecks, [true, false, true]);
+  assert.equal(redClick.reactionAverageMs, 260);
+
+  const earlyOrMiss = evaluateAdvancedChallengeCompletion(config, [
+    trial("reaction", 0, {
+      correct: false,
+      errorType: "wrong",
+      responseAt: 100,
+      value: { signalColor: "idle" },
+    }),
+  ]);
+  assert.equal(earlyOrMiss.passed, false);
+  assert.equal(earlyOrMiss.reason, "失败：提前点击或漏点");
+  assert.deepEqual(earlyOrMiss.goalChecks, [false, true, false]);
+  assert.equal(earlyOrMiss.reactionAverageMs, null);
 });
 
 test("advanced completion evaluates replaced dimensions through mini-game challenge outcomes", () => {

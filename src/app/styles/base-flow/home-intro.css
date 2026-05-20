@@ -74,15 +74,19 @@
 }
 
 .round-measure-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
+  min-height: 32px;
   border: 1px solid rgba(27, 154, 170, 0.24);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 0 10px;
   background: rgba(27, 154, 170, 0.08);
   color: var(--cyan);
   font-size: 13px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .intro-rule-card {

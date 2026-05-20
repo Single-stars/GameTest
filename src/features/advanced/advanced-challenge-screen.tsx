@@ -14,6 +14,7 @@ import {
   getAdvancedChallengeStatusLabel,
   getAdvancedCompletionActions,
   getAdvancedDimensionLevel,
+  getAdvancedLevelChallengeSnapshot,
   getAdvancedLevelToneForState,
   type AdvancedProgress,
 } from "@/lib/advanced-progress";
@@ -36,6 +37,9 @@ export type AdvancedChallengeState =
       correctCount: number;
       requiredCorrect: number;
       reason: string;
+      goalChecks?: boolean[];
+      reactionAverageMs?: number | null;
+      reactionThresholdMs?: number | null;
     };
 
 type AdvancedRoundRenderProps =
@@ -55,12 +59,6 @@ type AdvancedRoundRenderProps =
 
 type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" }>;
 
-const GOAL_ICON_LABELS = {
-  target: "◎",
-  ban: "⊘",
-  bolt: "↯",
-  flag: "✓",
-} as const;
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const ADVANCED_TITLE_MIN_FONT_SIZE_PX = 14;
 const ADVANCED_TITLE_MAX_FONT_SIZE_PX = 22;
@@ -181,7 +179,12 @@ function textIncludesAny(text: string, patterns: string[]) {
   return patterns.some((pattern) => text.includes(pattern));
 }
 
-function getAdvancedResultGoalStatus({
+function numberParam(config: AdvancedStageConfig, key: string) {
+  const value = Number(config.params[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function getFallbackResultGoalStatus({
   goal,
   challenge,
 }: {
@@ -189,7 +192,6 @@ function getAdvancedResultGoalStatus({
   challenge: Extract<AdvancedChallengeState, { mode: "complete" }>;
 }) {
   if (challenge.passed) return true;
-
   const reason = challenge.reason.replace(/^失败[:：]\s*/, "");
   if (goal.icon === "target") {
     return challenge.correctCount >= challenge.requiredCorrect && !textIncludesAny(reason, ["少", "未", "漏", "错"]);
@@ -206,26 +208,95 @@ function getAdvancedResultGoalStatus({
   return false;
 }
 
+function formatReactionAverageGoalText(averageMs: number | null, thresholdMs: number) {
+  return `平均反应 ${averageMs === null ? "--" : averageMs}/${thresholdMs}ms`;
+}
+
+function decorateGoalItemsWithReactionAverage({
+  config,
+  goalItems,
+  averageMs,
+  challenged,
+}: {
+  config: AdvancedStageConfig;
+  goalItems: AdvancedChallengeGoalItem[];
+  averageMs: number | null;
+  challenged: boolean;
+}) {
+  if (config.dimension !== "reaction" || !challenged) return goalItems;
+  const threshold = numberParam(config, "avgMsThreshold");
+  if (threshold === null) return goalItems;
+  return goalItems.map((goal, index) =>
+    goal.icon === "bolt" || index === goalItems.length - 1 ? { ...goal, text: formatReactionAverageGoalText(averageMs, threshold) } : goal,
+  );
+}
+
+function resolveResultGoalChecks({
+  challenge,
+  goalItems,
+}: {
+  challenge: Extract<AdvancedChallengeState, { mode: "complete" }>;
+  goalItems: AdvancedChallengeGoalItem[];
+}) {
+  if (challenge.passed) return goalItems.map(() => true);
+  if (Array.isArray(challenge.goalChecks) && challenge.goalChecks.length > 0) {
+    return goalItems.map((_, index) => challenge.goalChecks?.[index] === true);
+  }
+  return goalItems.map((goal) => getFallbackResultGoalStatus({ goal, challenge }));
+}
+
+function resolveSelectionGoalChecks({
+  goalCount,
+  challenged,
+  forceCompleted,
+  lastPassed,
+  lastGoalChecks,
+}: {
+  goalCount: number;
+  challenged: boolean;
+  forceCompleted: boolean;
+  lastPassed: boolean | null;
+  lastGoalChecks: boolean[] | null;
+}) {
+  if (forceCompleted) return Array.from({ length: goalCount }, () => true);
+  if (!challenged) return Array.from({ length: goalCount }, () => null as boolean | null);
+  if (Array.isArray(lastGoalChecks) && lastGoalChecks.length > 0) {
+    return Array.from({ length: goalCount }, (_, index) => lastGoalChecks[index] === true);
+  }
+  if (lastPassed === true) return Array.from({ length: goalCount }, () => true);
+  return Array.from({ length: goalCount }, () => false);
+}
+
 function AdvancedResultCard({
+  config,
   challenge,
   goalItems,
   onBack,
   onStartLevel,
 }: {
+  config: AdvancedStageConfig;
   challenge: Extract<AdvancedChallengeState, { mode: "complete" }>;
   goalItems: AdvancedChallengeGoalItem[];
   onBack: () => void;
   onStartLevel: (level: number) => void;
 }) {
   const completionActions = getAdvancedCompletionActions({ passed: challenge.passed, gained: challenge.gained, level: challenge.level });
-  const resultGoalItems = goalItems.map((goal) => ({
+  const decoratedGoals = decorateGoalItemsWithReactionAverage({
+    config,
+    goalItems,
+    averageMs: challenge.reactionAverageMs ?? null,
+    challenged: true,
+  });
+  const goalChecks = resolveResultGoalChecks({ challenge, goalItems: decoratedGoals });
+  const resultGoalItems = decoratedGoals.map((goal, index) => ({
     ...goal,
-    complete: getAdvancedResultGoalStatus({ goal, challenge }),
+    complete: goalChecks[index] === true,
   }));
+  const outcomeTitle = `进阶${challenge.level}·${challenge.passed ? "挑战成功" : "挑战失败"}`;
 
   return (
     <div className={`advanced-result-card ${challenge.passed ? "passed" : "failed"}`}>
-      <p className="eyebrow">{challenge.passed ? "挑战成功" : "挑战失败"}</p>
+      <p className="eyebrow">{outcomeTitle}</p>
       <ul className="advanced-result-goals">
         {resultGoalItems.map((goal) => (
           <li className={`advanced-result-goal ${goal.complete ? "complete" : "incomplete"}`} key={`${goal.icon}-${goal.text}`}>
@@ -258,6 +329,7 @@ function AdvancedResultCard({
 }
 
 function AdvancedLevelSelectionPanel({
+  advancedProgress,
   activeConfig,
   challenge,
   currentLevel,
@@ -267,6 +339,7 @@ function AdvancedLevelSelectionPanel({
   onRestartBaseRound,
   onStartLevel,
 }: {
+  advancedProgress: AdvancedProgress;
   activeConfig: AdvancedStageConfig;
   challenge: Exclude<AdvancedLobbyChallengeState, { mode: "complete" }>;
   currentLevel: number;
@@ -285,7 +358,23 @@ function AdvancedLevelSelectionPanel({
   const selectedState = selectedItem?.state ?? "locked";
   const selectedTone = getAdvancedLevelToneForState(selectedState, selectedLevel);
   const sliderThumbOffsetPx = unlockedLevel > 1 ? (sliderTravelPx * (selectedLevel - 1)) / (unlockedLevel - 1) : 0;
-  const goalItems = getAdvancedChallengeGoalItems(activeConfig);
+  const baseGoalItems = getAdvancedChallengeGoalItems(activeConfig);
+  const levelSnapshot = getAdvancedLevelChallengeSnapshot(advancedProgress, challenge.roundId, selectedLevel);
+  const shouldUseBestSnapshot = selectedState === "completed";
+  const selectionAverageMs = levelSnapshot.reactionBestAverageMs ?? levelSnapshot.reactionLastAverageMs;
+  const goalItems = decorateGoalItemsWithReactionAverage({
+    config: activeConfig,
+    goalItems: baseGoalItems,
+    averageMs: selectionAverageMs,
+    challenged: levelSnapshot.attempted || shouldUseBestSnapshot,
+  });
+  const selectionGoalChecks = resolveSelectionGoalChecks({
+    goalCount: goalItems.length,
+    challenged: levelSnapshot.attempted || shouldUseBestSnapshot,
+    forceCompleted: shouldUseBestSnapshot,
+    lastPassed: levelSnapshot.lastPassed,
+    lastGoalChecks: levelSnapshot.lastGoalChecks,
+  });
   const lobbyTrackStyle = {
     "--advanced-lobby-anchor": `${(selectedLevel - 1) * trackStepPx}px`,
   } as React.CSSProperties;
@@ -392,10 +481,15 @@ function AdvancedLevelSelectionPanel({
           <span>{getAdvancedChallengeStatusLabel(selectedState)}</span>
         </div>
         <ul>
-          {goalItems.map((item) => (
-            <li key={`${item.icon}-${item.text}`}>
-              <span className={`advanced-goal-icon ${item.icon}`} aria-hidden="true">
-                {GOAL_ICON_LABELS[item.icon]}
+          {goalItems.map((item, index) => (
+            <li
+              className={`advanced-goal-item ${
+                selectionGoalChecks[index] === null ? "pending" : selectionGoalChecks[index] ? "complete" : "incomplete"
+              }`}
+              key={`${item.icon}-${item.text}`}
+            >
+              <span className="advanced-goal-box" aria-hidden="true">
+                {selectionGoalChecks[index] === null ? "" : selectionGoalChecks[index] ? "✓" : "×"}
               </span>
               <span>{item.text}</span>
             </li>
@@ -416,6 +510,7 @@ function AdvancedLevelSelectionPanel({
 }
 
 function AdvancedLobbyContent({
+  advancedProgress,
   challenge,
   currentLevel,
   round,
@@ -425,6 +520,7 @@ function AdvancedLobbyContent({
   onRestartBaseRound,
   onStartLevel,
 }: {
+  advancedProgress: AdvancedProgress;
   challenge: AdvancedLobbyChallengeState;
   currentLevel: number;
   round: AdvancedRoundConfig;
@@ -438,6 +534,21 @@ function AdvancedLobbyContent({
   const selectedLevel = resolveAdvancedLobbySliderLevel({ currentLevel, requestedLevel: activeLevel });
   const activeConfig = getAdvancedStageConfig(challenge.roundId, selectedLevel);
   const goalItems = getAdvancedChallengeGoalItems(activeConfig);
+  const [baseRulesOpen, setBaseRulesOpen] = React.useState(false);
+  const baseRuleDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
+
+  React.useEffect(() => {
+    if (!baseRulesOpen) return undefined;
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!baseRuleDetailsRef.current?.contains(event.target as Node)) {
+        setBaseRulesOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", closeOnOutside);
+    return () => window.removeEventListener("pointerdown", closeOnOutside);
+  }, [baseRulesOpen]);
 
   return (
     <section className="advanced-screen">
@@ -448,19 +559,33 @@ function AdvancedLobbyContent({
         <span>{round.measure}</span>
       </header>
 
-      <div className="advanced-hero">
+      <div className="advanced-hero advanced-hero-with-rule">
         <AdaptiveAdvancedHeroTitle
           title={getAdvancedChallengeHeroTitle({
             roundTitle: round.title,
             stageTitle: activeConfig.stageTitle,
           })}
         />
+        <details
+          className="advanced-rule-details"
+          onToggle={(event) => setBaseRulesOpen(event.currentTarget.open)}
+          open={baseRulesOpen}
+          ref={baseRuleDetailsRef}
+        >
+          <summary>?</summary>
+          <div className="advanced-rule-details-content">
+            <p>{round.rule}</p>
+            <p>{round.action}</p>
+            <p>PS：作者不怀好意地加大了难度。</p>
+          </div>
+        </details>
       </div>
 
       {challenge.mode === "complete" ? (
-        <AdvancedResultCard challenge={challenge} goalItems={goalItems} onBack={onBack} onStartLevel={onStartLevel} />
+        <AdvancedResultCard config={activeConfig} challenge={challenge} goalItems={goalItems} onBack={onBack} onStartLevel={onStartLevel} />
       ) : (
         <AdvancedLevelSelectionPanel
+          advancedProgress={advancedProgress}
           activeConfig={activeConfig}
           challenge={challenge}
           currentLevel={currentLevel}
@@ -564,6 +689,7 @@ export function AdvancedChallengeScreen({
 
   return (
     <AdvancedLobbyContent
+      advancedProgress={advancedProgress}
       challenge={challenge}
       currentLevel={currentLevel}
       round={round}

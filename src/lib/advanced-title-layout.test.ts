@@ -40,10 +40,11 @@ test("advanced result card uses challenge success labels and a self-check goal l
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
 
-  assert.match(screenSource, /challenge\.passed \? "挑战成功" : "挑战失败"/);
+  assert.match(screenSource, /const outcomeTitle = `进阶\$\{challenge\.level\}·\$\{challenge\.passed \? "挑战成功" : "挑战失败"\}`;/);
+  assert.match(screenSource, /<p className="eyebrow">\{outcomeTitle\}<\/p>/);
   assert.doesNotMatch(screenSource, /差一点/);
   assert.doesNotMatch(screenSource, /<small>\{challenge\.correctCount\}\/\{challenge\.requiredCorrect\}<\/small>/);
-  assert.match(screenSource, /getAdvancedResultGoalStatus/);
+  assert.match(screenSource, /resolveResultGoalChecks/);
   assert.match(screenSource, /className="advanced-result-goals"/);
   assert.match(screenSource, /className=\{`advanced-result-goal \$\{goal\.complete \? "complete" : "incomplete"\}`\}/);
   assert.match(screenSource, /className="advanced-result-goal-box"/);
@@ -75,4 +76,26 @@ test("advanced lobby measurement hooks are isolated from the main challenge scre
   assert.doesNotMatch(mainScreenSource, /sliderTravelPx/);
   assert.doesNotMatch(mainScreenSource, /useBrowserLayoutEffect/);
   assert.match(mainScreenSource, /<AdvancedLobbyContent/);
+});
+
+test("advanced reaction goals render persisted box states and actual average text", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(screenSource, /getAdvancedLevelChallengeSnapshot/);
+  assert.match(screenSource, /const shouldUseBestSnapshot = selectedState === "completed";/);
+  assert.match(screenSource, /const selectionAverageMs = levelSnapshot\.reactionBestAverageMs \?\? levelSnapshot\.reactionLastAverageMs;/);
+  assert.match(screenSource, /function formatReactionAverageGoalText/);
+  assert.match(screenSource, /平均反应 \$\{averageMs === null \? "--" : averageMs}\/\$\{thresholdMs}ms/);
+  assert.match(screenSource, /selectionGoalChecks/);
+  assert.match(screenSource, /forceCompleted:\s*shouldUseBestSnapshot/);
+  assert.match(screenSource, /if \(Array\.isArray\(lastGoalChecks\) && lastGoalChecks\.length > 0\)/);
+  assert.match(screenSource, /className=\{`advanced-goal-item \$\{/);
+  assert.match(screenSource, /className="advanced-goal-box"/);
+  assert.match(screenSource, /\{selectionGoalChecks\[index] === null \? "" : selectionGoalChecks\[index] \? "✓" : "×"\}/);
+
+  assert.match(cssSource, /\.advanced-goal-box\s*{[\s\S]*border-radius:\s*8px;/);
+  assert.match(cssSource, /\.advanced-goal-item\.pending\s+\.advanced-goal-box\s*{[\s\S]*color:\s*rgba\(24,\s*24,\s*24,\s*0\.38\);/);
+  assert.match(cssSource, /\.advanced-goal-item\.complete\s+\.advanced-goal-box\s*{[\s\S]*color:\s*#2f7f59;/);
+  assert.match(cssSource, /\.advanced-goal-item\.incomplete\s+\.advanced-goal-box\s*{[\s\S]*color:\s*#8f3b35;/);
 });

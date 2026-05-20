@@ -69,17 +69,11 @@ function compactGoals(items: Array<AdvancedChallengeGoalItem | null>) {
 }
 
 function getReactionGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
-  const requiredGreenClicks = numberParam(config, "requiredGreenClicks");
-  const signalCount = numberParam(config, "signalCount");
   const avgMsThreshold = numberParam(config, "avgMsThreshold");
   const hasRedTrap = config.variant.includes("trap") || config.variant.includes("boss");
 
   return compactGoals([
-    requiredGreenClicks !== null && requiredGreenClicks > 1
-      ? { icon: "target", text: `完成 ${requiredGreenClicks} 次有效点击` }
-      : signalCount !== null
-        ? { icon: "target", text: `完成 ${signalCount} 个信号判定` }
-        : null,
+    { icon: "target", text: "不可提前点击或漏点" },
     hasRedTrap ? { icon: "ban", text: "红灯不可点击" } : null,
     avgMsThreshold !== null ? { icon: "bolt", text: `平均反应 ≤ ${avgMsThreshold}ms` } : null,
   ]);

@@ -11,6 +11,7 @@ import {
   getAdvancedChallengeStatusLabel,
   getAdvancedBackDestination,
   getAdvancedLevelState,
+  getAdvancedLevelChallengeSnapshot,
   getAdvancedLevelTone,
   getAdvancedLevelToneForState,
   getLuckDrawStatusText,
@@ -169,6 +170,77 @@ test("completed advanced levels can be replayed without awarding extra stars", (
   assert.equal(getAdvancedTotalStars(progress), 1);
   assert.equal(progress.dimensions.reaction.attempts[0], 2);
   assert.equal(progress.dimensions.reaction.bestScores[0], 96);
+});
+
+test("reaction challenge snapshot keeps last attempt while persisting best successful average", () => {
+  let progress = markAdvancedUnlocked(createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z"), "2026-05-10T00:00:01.000Z");
+
+  const initial = getAdvancedLevelChallengeSnapshot(progress, "reaction", 1);
+  assert.equal(initial.attempted, false);
+  assert.equal(initial.lastPassed, null);
+  assert.equal(initial.lastGoalChecks, null);
+  assert.equal(initial.reactionLastAverageMs, null);
+  assert.equal(initial.reactionBestAverageMs, null);
+
+  progress = recordAdvancedChallengeResult(progress, {
+    roundId: "reaction",
+    level: 1,
+    score: 45,
+    passed: false,
+    goalChecks: [false, true, false],
+    reactionAverageMs: 299,
+    completedAt: "2026-05-10T00:00:02.000Z",
+  });
+  const failedOnce = getAdvancedLevelChallengeSnapshot(progress, "reaction", 1);
+  assert.equal(failedOnce.attempted, true);
+  assert.equal(failedOnce.lastPassed, false);
+  assert.deepEqual(failedOnce.lastGoalChecks, [false, true, false]);
+  assert.equal(failedOnce.reactionLastAverageMs, 299);
+  assert.equal(failedOnce.reactionBestAverageMs, null);
+
+  progress = recordAdvancedChallengeResult(progress, {
+    roundId: "reaction",
+    level: 1,
+    score: 100,
+    passed: true,
+    goalChecks: [true, true, true],
+    reactionAverageMs: 280,
+    completedAt: "2026-05-10T00:00:03.000Z",
+  });
+  const passedFast = getAdvancedLevelChallengeSnapshot(progress, "reaction", 1);
+  assert.equal(passedFast.lastPassed, true);
+  assert.deepEqual(passedFast.lastGoalChecks, [true, true, true]);
+  assert.equal(passedFast.reactionLastAverageMs, 280);
+  assert.equal(passedFast.reactionBestAverageMs, 280);
+
+  progress = recordAdvancedChallengeResult(progress, {
+    roundId: "reaction",
+    level: 1,
+    score: 100,
+    passed: true,
+    goalChecks: [true, true, true],
+    reactionAverageMs: 310,
+    completedAt: "2026-05-10T00:00:04.000Z",
+  });
+  const passedSlower = getAdvancedLevelChallengeSnapshot(progress, "reaction", 1);
+  assert.equal(passedSlower.lastPassed, true);
+  assert.equal(passedSlower.reactionLastAverageMs, 310);
+  assert.equal(passedSlower.reactionBestAverageMs, 280);
+
+  progress = recordAdvancedChallengeResult(progress, {
+    roundId: "reaction",
+    level: 1,
+    score: 60,
+    passed: false,
+    goalChecks: [true, false, false],
+    reactionAverageMs: 355,
+    completedAt: "2026-05-10T00:00:05.000Z",
+  });
+  const failedLater = getAdvancedLevelChallengeSnapshot(progress, "reaction", 1);
+  assert.equal(failedLater.lastPassed, false);
+  assert.deepEqual(failedLater.lastGoalChecks, [true, false, false]);
+  assert.equal(failedLater.reactionLastAverageMs, 355);
+  assert.equal(failedLater.reactionBestAverageMs, 280);
 });
 
 test("newly cleared advanced levels grant one luck draw chance but replays do not", () => {

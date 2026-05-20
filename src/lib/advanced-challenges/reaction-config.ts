@@ -7,7 +7,7 @@ export function reactionConfigs() {
   for (const level of [1, 4, 7]) {
     const index = bandIndex(level);
     levels.push(
-      config(level, "reaction-red-trap", `过关要求：完成 ${reactionCounts[index]} 个红绿信号，红灯不能点，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
+      config(level, "reaction-red-trap", `过关要求：不可提前点击或漏点，红灯不可点击，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
         signalCount: reactionCounts[index],
         avgMsThreshold: reactionThresholds[index],
         requiredGreenClicks: 1,
@@ -18,7 +18,7 @@ export function reactionConfigs() {
   for (const level of [2, 5, 8]) {
     const index = bandIndex(level);
     levels.push(
-      config(level, "reaction-dual-green", `过关要求：完成 ${reactionCounts[index]} 次绿灯点击，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
+      config(level, "reaction-dual-green", `过关要求：不可提前点击或漏点，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
         requiredGreenClicks: reactionCounts[index],
         avgMsThreshold: reactionThresholds[index],
         lanes: 2,
@@ -28,7 +28,7 @@ export function reactionConfigs() {
   for (const level of [3, 6, 9]) {
     const index = bandIndex(level);
     levels.push(
-      config(level, "reaction-dual-trap", `过关要求：完成 ${reactionCounts[index]} 个红绿信号，红灯不能点，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
+      config(level, "reaction-dual-trap", `过关要求：不可提前点击或漏点，红灯不可点击，平均反应 ≤ ${reactionThresholds[index]}ms。`, {
         signalCount: reactionCounts[index],
         avgMsThreshold: reactionThresholds[index],
         requiredGreenClicks: 1,
@@ -37,7 +37,7 @@ export function reactionConfigs() {
     );
   }
   levels.push(
-    config(10, "reaction-grid-boss", "过关要求：累计 8 次绿格点击，红格不能点，平均反应 ≤ 250ms。", {
+    config(10, "reaction-grid-boss", "过关要求：不可提前点击或漏点，红灯不可点击，平均反应 ≤ 250ms。", {
       requiredGreenClicks: 8,
       avgMsThreshold: 250,
       lanes: 4,

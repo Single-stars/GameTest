@@ -61,13 +61,13 @@ test("advanced lobby slider continuously maps to the requested unlocked level", 
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
   const reaction = getAdvancedStageConfig("reaction", 2);
   assert.deepEqual(getAdvancedChallengeGoalItems(reaction), [
-    { icon: "target", text: "完成 5 次有效点击" },
+    { icon: "target", text: "不可提前点击或漏点" },
     { icon: "bolt", text: "平均反应 ≤ 350ms" },
   ]);
 
   const redTrap = getAdvancedStageConfig("reaction", 1);
   assert.deepEqual(getAdvancedChallengeGoalItems(redTrap), [
-    { icon: "target", text: "完成 5 个信号判定" },
+    { icon: "target", text: "不可提前点击或漏点" },
     { icon: "ban", text: "红灯不可点击" },
     { icon: "bolt", text: "平均反应 ≤ 350ms" },
   ]);

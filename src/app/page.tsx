@@ -510,6 +510,8 @@ export default function Home() {
         level: current.level,
         score: evaluation.score,
         passed: evaluation.passed,
+        goalChecks: evaluation.goalChecks,
+        reactionAverageMs: evaluation.reactionAverageMs,
       });
       const afterLevel = getAdvancedDimensionLevel(nextProgress, current.roundId);
 
@@ -527,6 +529,9 @@ export default function Home() {
         correctCount: evaluation.correctCount,
         requiredCorrect: evaluation.requiredCorrect,
         reason: evaluation.reason,
+        goalChecks: evaluation.goalChecks,
+        reactionAverageMs: evaluation.reactionAverageMs,
+        reactionThresholdMs: evaluation.reactionThresholdMs,
       });
       setStage("advanced");
     },

@@ -16,6 +16,18 @@ function greenTrials(trials: TrialEvent[]) {
   return trials.filter((trial) => trial.value?.signalColor === "green" || trial.value?.cellColor === "green");
 }
 
+function isRedSignalTrial(trial: TrialEvent) {
+  return trial.value?.signalColor === "red" || trial.value?.cellColor === "red";
+}
+
+function hasUserResponse(trial: TrialEvent) {
+  return trial.responseAt !== null || trial.correct === false;
+}
+
+function toScore(correctCount: number, requiredCorrect: number) {
+  return Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100)));
+}
+
 function baseEvaluation(config: AdvancedStageConfig, requiredCorrect: number): AdvancedCompletionEvaluation {
   return {
     level: config.level,
@@ -48,7 +60,7 @@ function fail(
 ): AdvancedCompletionEvaluation {
   return {
     level: config.level,
-    score: Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100))),
+    score: toScore(correctCount, requiredCorrect),
     minScore: 100,
     passed: false,
     correctCount,
@@ -60,29 +72,67 @@ function fail(
 function evaluateReaction(config: AdvancedStageConfig, trials: TrialEvent[]) {
   const requiredGreenClicks = numberParam(config, "requiredGreenClicks", 1);
   const threshold = numberParam(config, "avgMsThreshold", 350);
-  const redClick = trials.find(
-    (trial) =>
-      (trial.value?.signalColor === "red" || trial.value?.cellColor === "red") &&
-      (trial.responseAt !== null || trial.correct === false || trial.errorType === "false_alarm"),
-  );
-  if (redClick) return fail(config, 0, requiredGreenClicks, "失败：点到了红灯");
-
   const green = greenTrials(trials);
-  const missedGreen = green.find((trial) => trial.responseAt === null || trial.errorType === "timeout" || trial.errorType === "miss");
-  if (missedGreen) return fail(config, green.filter((trial) => trial.correct === true && trial.responseAt !== null).length, requiredGreenClicks, "失败：漏点");
-
   const successfulGreen = green.filter((trial) => trial.correct === true && trial.responseAt !== null);
-  if (successfulGreen.length < requiredGreenClicks) {
-    return fail(config, successfulGreen.length, requiredGreenClicks, `失败：少点了 ${requiredGreenClicks - successfulGreen.length} 次绿灯`);
+  const average =
+    successfulGreen.length > 0
+      ? Math.round(successfulGreen.reduce((sum, trial) => sum + (reactionMs(trial) ?? 0), 0) / successfulGreen.length)
+      : null;
+
+  const hasRedTrap = config.variant.includes("trap") || config.variant.includes("boss");
+  const hasRedClick = trials.some(
+    (trial) => isRedSignalTrial(trial) && (hasUserResponse(trial) || trial.errorType === "false_alarm"),
+  );
+  const hasEarlyClick = trials.some((trial) => {
+    const signalColor = trial.value?.signalColor ?? trial.value?.cellColor;
+    if (signalColor === "red") return false;
+    return (
+      trial.errorType === "early" ||
+      trial.errorType === "wrong" ||
+      signalColor === "idle" ||
+      (trial.correct === false && trial.responseAt !== null && trial.errorType !== "timeout" && trial.errorType !== "miss")
+    );
+  });
+  const hasMissedGreen = green.some(
+    (trial) =>
+      trial.responseAt === null ||
+      trial.errorType === "timeout" ||
+      trial.errorType === "miss" ||
+      trial.correct === false,
+  );
+
+  const noEarlyOrMiss = !hasEarlyClick && !hasMissedGreen && successfulGreen.length >= requiredGreenClicks;
+  const noRedClick = hasRedTrap ? !hasRedClick : true;
+  const avgPass = average !== null && average <= threshold;
+  const goalChecks = hasRedTrap ? [noEarlyOrMiss, noRedClick, avgPass] : [noEarlyOrMiss, avgPass];
+
+  const passed = goalChecks.every(Boolean);
+  const correctCount = goalChecks.filter(Boolean).length;
+  const requiredCorrect = goalChecks.length;
+
+  let reason = "通过";
+  if (!passed) {
+    if (!noRedClick) {
+      reason = "失败：点到了红灯";
+    } else if (!noEarlyOrMiss) {
+      reason = "失败：提前点击或漏点";
+    } else {
+      reason = `失败：平均反应 ${average ?? "--"}ms，要求 ≤ ${threshold}ms`;
+    }
   }
 
-  const average = Math.round(
-    successfulGreen.reduce((sum, trial) => sum + (reactionMs(trial) ?? threshold + 1), 0) / successfulGreen.length,
-  );
-  if (average > threshold) {
-    return fail(config, successfulGreen.length, requiredGreenClicks, `失败：平均反应 ${average}ms，要求 ≤ ${threshold}ms`);
-  }
-  return pass(config, successfulGreen.length, requiredGreenClicks);
+  return {
+    level: config.level,
+    score: passed ? 100 : toScore(correctCount, requiredCorrect),
+    minScore: 100,
+    passed,
+    correctCount,
+    requiredCorrect,
+    reason,
+    goalChecks,
+    reactionAverageMs: average,
+    reactionThresholdMs: threshold,
+  };
 }
 
 function evaluateAim(config: AdvancedStageConfig, trials: TrialEvent[]) {

@@ -34,6 +34,10 @@ export type AdvancedDimensionProgress = {
   clearedLevels: boolean[];
   attempts: number[];
   bestScores: number[];
+  lastPassed: Array<boolean | null>;
+  lastGoalChecks: Array<boolean[] | null>;
+  reactionLastAveragesMs: Array<number | null>;
+  reactionBestAveragesMs: Array<number | null>;
 };
 
 export type AdvancedProgress = {
@@ -65,7 +69,17 @@ export type AdvancedChallengeRecord = {
   level: number;
   score: number;
   passed: boolean;
+  goalChecks?: boolean[];
+  reactionAverageMs?: number | null;
   completedAt?: string;
+};
+
+export type AdvancedLevelChallengeSnapshot = {
+  attempted: boolean;
+  lastPassed: boolean | null;
+  lastGoalChecks: boolean[] | null;
+  reactionLastAverageMs: number | null;
+  reactionBestAverageMs: number | null;
 };
 
 export type AdvancedLevelState = "completed" | "current" | "locked";
@@ -122,6 +136,10 @@ function createDefaultDimensionProgress(): AdvancedDimensionProgress {
     clearedLevels: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => false),
     attempts: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => 0),
     bestScores: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => 0),
+    lastPassed: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => null),
+    lastGoalChecks: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => null),
+    reactionLastAveragesMs: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => null),
+    reactionBestAveragesMs: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => null),
   };
 }
 
@@ -136,12 +154,37 @@ function normalizeFixedArray<T>(
   );
 }
 
+function normalizeOptionalBoolean(item: unknown): boolean | null {
+  if (typeof item !== "boolean") return null;
+  return item;
+}
+
+function normalizeGoalChecks(item: unknown): boolean[] | null {
+  if (!Array.isArray(item)) return null;
+  const checks = item
+    .filter((entry) => typeof entry === "boolean")
+    .map((entry) => Boolean(entry))
+    .slice(0, 8);
+  return checks.length > 0 ? checks : null;
+}
+
+function normalizeReactionAverageMs(item: unknown): number | null {
+  if (item === null || item === undefined || item === "") return null;
+  const value = Number(item);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value);
+}
+
 function sanitizeDimensionProgress(value: unknown): AdvancedDimensionProgress {
   const source = typeof value === "object" && value !== null ? (value as Partial<AdvancedDimensionProgress>) : {};
   return {
     clearedLevels: normalizeFixedArray(source.clearedLevels, false, Boolean),
     attempts: normalizeFixedArray(source.attempts, 0, (item) => clampInteger(item, 0, 9999)),
     bestScores: normalizeFixedArray(source.bestScores, 0, clampScore),
+    lastPassed: normalizeFixedArray(source.lastPassed, null, normalizeOptionalBoolean),
+    lastGoalChecks: normalizeFixedArray(source.lastGoalChecks, null, normalizeGoalChecks),
+    reactionLastAveragesMs: normalizeFixedArray(source.reactionLastAveragesMs, null, normalizeReactionAverageMs),
+    reactionBestAveragesMs: normalizeFixedArray(source.reactionBestAveragesMs, null, normalizeReactionAverageMs),
   };
 }
 
@@ -230,6 +273,24 @@ export function getAdvancedDimensionLevel(progress: AdvancedProgress, roundId: R
   return 0;
 }
 
+export function getAdvancedLevelChallengeSnapshot(
+  progress: AdvancedProgress,
+  roundId: RoundId,
+  level: number,
+): AdvancedLevelChallengeSnapshot {
+  const sanitized = sanitizeAdvancedProgress(progress);
+  const levelIndex = clampInteger(level, 1, ADVANCED_LEVEL_COUNT) - 1;
+  const dimension = sanitized.dimensions[roundId];
+  const lastGoalChecks = dimension.lastGoalChecks[levelIndex];
+  return {
+    attempted: dimension.attempts[levelIndex] > 0,
+    lastPassed: dimension.lastPassed[levelIndex] ?? null,
+    lastGoalChecks: Array.isArray(lastGoalChecks) ? [...lastGoalChecks] : null,
+    reactionLastAverageMs: dimension.reactionLastAveragesMs[levelIndex] ?? null,
+    reactionBestAverageMs: dimension.reactionBestAveragesMs[levelIndex] ?? null,
+  };
+}
+
 export function getAdvancedTotalStars(progress: AdvancedProgress) {
   const sanitized = sanitizeAdvancedProgress(progress);
   const dimensionStars = countClearedAdvancedLevels(sanitized.dimensions);
@@ -254,10 +315,28 @@ export function recordAdvancedChallengeResult(progress: AdvancedProgress, record
     clearedLevels: [...dimension.clearedLevels],
     attempts: [...dimension.attempts],
     bestScores: [...dimension.bestScores],
+    lastPassed: [...dimension.lastPassed],
+    lastGoalChecks: [...dimension.lastGoalChecks],
+    reactionLastAveragesMs: [...dimension.reactionLastAveragesMs],
+    reactionBestAveragesMs: [...dimension.reactionBestAveragesMs],
   };
 
   nextDimension.attempts[levelIndex] += 1;
   nextDimension.bestScores[levelIndex] = Math.max(nextDimension.bestScores[levelIndex], clampScore(record.score));
+  nextDimension.lastPassed[levelIndex] = record.passed;
+  nextDimension.lastGoalChecks[levelIndex] =
+    Array.isArray(record.goalChecks) && record.goalChecks.length > 0 ? record.goalChecks.map(Boolean) : null;
+
+  if (record.roundId === "reaction") {
+    const reactionAverageMs = normalizeReactionAverageMs(record.reactionAverageMs);
+    nextDimension.reactionLastAveragesMs[levelIndex] = reactionAverageMs;
+    if (record.passed && reactionAverageMs !== null) {
+      const previousBest = nextDimension.reactionBestAveragesMs[levelIndex];
+      nextDimension.reactionBestAveragesMs[levelIndex] =
+        previousBest === null ? reactionAverageMs : Math.min(previousBest, reactionAverageMs);
+    }
+  }
+
   const newlyCleared = record.passed && level <= previousLevel + 1 && !nextDimension.clearedLevels[levelIndex];
   if (newlyCleared) {
     nextDimension.clearedLevels[levelIndex] = true;

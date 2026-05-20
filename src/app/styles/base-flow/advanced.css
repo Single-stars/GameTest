@@ -97,6 +97,10 @@
   padding: 20px;
 }
 
+.advanced-hero-with-rule {
+  padding-right: 64px;
+}
+
 .advanced-hero-title-block {
   position: relative;
   min-width: 0;
@@ -125,6 +129,56 @@
   pointer-events: none;
   font-size: 34px;
   line-height: 1.05;
+}
+
+.advanced-rule-details {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 4;
+}
+
+.advanced-rule-details summary {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(24, 24, 24, 0.18);
+  border-radius: 999px;
+  color: var(--ink);
+  background: #fffdf8;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1;
+  list-style: none;
+  cursor: pointer;
+}
+
+.advanced-rule-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-rule-details-content {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  top: 30px;
+  width: min(300px, 76vw);
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fffdf8;
+  color: var(--muted);
+  box-shadow: 0 14px 34px rgba(24, 24, 24, 0.12);
+}
+
+.advanced-rule-details-content p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.45;
 }
 
 .advanced-panel,
@@ -479,24 +533,27 @@
   border-top: 0;
 }
 
-.advanced-goal-icon {
+.advanced-goal-box {
   width: 28px;
   height: 28px;
   display: grid;
   place-items: center;
   border: 2px solid currentColor;
-  border-radius: 999px;
-  color: var(--ink);
+  border-radius: 8px;
   font-size: 17px;
+  font-weight: 950;
   line-height: 1;
 }
 
-.advanced-goal-icon.bolt {
-  border-radius: 8px;
-  color: #3f6086;
+.advanced-goal-item.pending .advanced-goal-box {
+  color: rgba(24, 24, 24, 0.38);
 }
 
-.advanced-goal-icon.ban {
+.advanced-goal-item.complete .advanced-goal-box {
+  color: #2f7f59;
+}
+
+.advanced-goal-item.incomplete .advanced-goal-box {
   color: #8f3b35;
 }
 
