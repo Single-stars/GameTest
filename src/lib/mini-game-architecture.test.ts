@@ -333,9 +333,10 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   const avatarLabSource = readFileSync(avatarLabUrl, "utf8");
   assert.match(avatarLabSource, /export function AvatarLabScreen/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_SKINS/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_LABELS/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_ACTIONS/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_EXPRESSIONS/);
-  assert.match(avatarLabSource, /pig:\s*"猪猪"/);
+  assert.doesNotMatch(avatarLabSource, /const SKIN_LABELS/);
   assert.match(avatarLabSource, /selectedSkin:\s*PlayerAvatarSkin;/);
   assert.match(avatarLabSource, /onSelectSkin:\s*\(skin: PlayerAvatarSkin\) => void;/);
   assert.match(avatarLabSource, /<PlayerAvatar/);
@@ -346,7 +347,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{38\} \/>/);
   const avatarLabScenesSource = avatarLabSource.slice(
     avatarLabSource.indexOf("const AVATAR_LAB_SCENES"),
-    avatarLabSource.indexOf("const SKIN_LABELS"),
+    avatarLabSource.indexOf("const ACTION_LABELS"),
   );
   assert.doesNotMatch(avatarLabScenesSource, /id: "jump"|id: "fall"/);
   assert.doesNotMatch(avatarLabSource, /mouth/i);
@@ -622,18 +623,70 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
 
   const componentSource = readFileSync(componentUrl, "utf8");
   const cssSource = readFileSync(cssUrl, "utf8");
+  const expectedSkins = [
+    "cyan",
+    "mint",
+    "amber",
+    "rose",
+    "slate",
+    "basketball",
+    "pig",
+    "aqua",
+    "cocoa",
+    "sand",
+    "pine",
+    "ivory",
+    "arcade",
+    "paw",
+  ] as const;
+  const removedSkins = ["jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
 
   assert.match(componentSource, /export type PlayerAvatarAction =/);
   assert.match(componentSource, /export type PlayerAvatarExpression =/);
   assert.match(componentSource, /export type PlayerAvatarEffect = "none" \| "shield" \| "sparkles" \| "question";/);
   assert.match(componentSource, /export type PlayerAvatarGravity = "normal" \| "light" \| "heavy";/);
-  assert.match(componentSource, /export type PlayerAvatarSkin = "cyan" \| "mint" \| "amber" \| "rose" \| "slate" \| "basketball" \| "pig";/);
+  assert.match(componentSource, /export type PlayerAvatarSkin =/);
   assert.match(componentSource, /export type PlayerAvatarView =/);
-  assert.match(componentSource, /export const PLAYER_AVATAR_SKINS = \["cyan", "mint", "amber", "rose", "slate", "basketball", "pig"\]/);
-  assert.match(componentSource, /export const PLAYER_AVATAR_FACELESS_SKINS = \["basketball", "pig"\]/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_SKINS = \[/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_SKIN_LABELS =/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_FACELESS_SKINS = \["basketball", "pig", "paw"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_ACTIONS = \["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_EXPRESSIONS = \["neutral", "happy", "sleepy", "scared", "hurt"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_EFFECTS = \["none", "shield", "sparkles", "question"\]/);
+  const skinArrayMatch = componentSource.match(/export const PLAYER_AVATAR_SKINS = \[([\s\S]*?)\] as const/);
+  assert.notEqual(skinArrayMatch, null);
+  assert.equal((skinArrayMatch?.[1].match(/"/g)?.length ?? 0) / 2, expectedSkins.length);
+  for (const skin of expectedSkins) {
+    assert.match(componentSource, new RegExp(`"${skin}"`));
+    assert.match(componentSource, new RegExp(`${skin}:\\s*"`));
+  }
+  for (const skin of removedSkins) {
+    assert.doesNotMatch(componentSource, new RegExp(`"${skin}"|${skin}:`));
+    assert.doesNotMatch(cssSource, new RegExp(`\\[data-skin="${skin}"\\]`));
+  }
+  const styledSkinMatches = Array.from(cssSource.matchAll(/\.root\[data-skin="([^"]+)"\]/g), (match) => match[1]);
+  assert.deepEqual([...new Set(styledSkinMatches)], [...expectedSkins]);
+  assert.doesNotMatch(cssSource, /\/assets\/avatar-skins\//);
+  assert.match(cssSource, /--player-avatar-texture-inset:\s*0;/);
+  assert.match(cssSource, /--player-avatar-texture-blend-mode:\s*multiply;/);
+  assert.match(cssSource, /--player-avatar-texture-animation:\s*none;/);
+  assert.match(cssSource, /\.body::before\s*\{[\s\S]*inset:\s*var\(--player-avatar-texture-inset\);[\s\S]*background-position:\s*var\(--player-avatar-texture-position\);[\s\S]*animation:\s*var\(--player-avatar-texture-animation\);[\s\S]*mix-blend-mode:\s*var\(--player-avatar-texture-blend-mode\);[\s\S]*will-change:\s*transform,\s*background-position,\s*opacity;/);
+  assert.match(cssSource, /\.root\[data-skin="sand"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*42px 39px,\s*57px 51px,\s*68px 44px;/);
+  assert.match(cssSource, /\.root\[data-skin="arcade"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*58px 54px,\s*74px 63px,\s*92px 81px;[\s\S]*--player-avatar-texture-inset:\s*-34%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
+  assert.match(cssSource, /\.root\[data-skin="paw"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*72px 62px,\s*79px 70px,\s*88px 78px,\s*67px 74px;[\s\S]*--player-avatar-texture-inset:\s*-28%;/);
+  assert.match(cssSource, /\.root\[data-skin="arcade"\]\s+\.body::before\s*\{[\s\S]*animation:\s*playerAvatarArcadeTextureDrift 1\.45s linear infinite;/);
+  assert.match(cssSource, /\.root\[data-skin="paw"\]\s+\.body::before\s*\{[\s\S]*animation:\s*playerAvatarPawTextureWander 2\.2s ease-in-out infinite;/);
+  assert.match(cssSource, /\.arcadeGlyph/);
+  assert.match(cssSource, /\.arcadeDpad/);
+  assert.match(cssSource, /\.arcadeButton/);
+  assert.match(cssSource, /\.pawGlyph/);
+  assert.match(cssSource, /\.pawPad/);
+  assert.match(cssSource, /\.pawToe/);
+  assert.match(cssSource, /@keyframes playerAvatarArcadeTextureDrift/);
+  assert.match(cssSource, /@keyframes playerAvatarPawTextureWander/);
+  assert.match(cssSource, /@keyframes playerAvatarArcadeTextureDrift\s*\{[\s\S]*transform:\s*translate3d\(/);
+  assert.match(cssSource, /@keyframes playerAvatarPawTextureWander\s*\{[\s\S]*transform:\s*translate3d\(/);
+  assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.body::before\s*\{[\s\S]*animation:\s*none;/);
   assert.match(componentSource, /createContext<PlayerAvatarSkin>\("cyan"\)/);
   assert.match(componentSource, /export function PlayerAvatarSkinProvider/);
   assert.match(componentSource, /export function usePlayerAvatarSkin/);
@@ -675,6 +728,12 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /<path className=\{styles\.pigNostril\} d="M24 30 V40" \/>/);
   assert.match(componentSource, /<path className=\{styles\.pigNostril\} d="M40 30 V40" \/>/);
   assert.doesNotMatch(componentSource, /pigEar|pigNoseShine/);
+  assert.match(componentSource, /styles\.arcadeGlyph/);
+  assert.match(componentSource, /styles\.arcadeDpad/);
+  assert.match(componentSource, /styles\.arcadeButton/);
+  assert.match(componentSource, /styles\.pawGlyph/);
+  assert.match(componentSource, /styles\.pawPad/);
+  assert.match(componentSource, /styles\.pawToe/);
   assert.match(componentSource, /M16 42 Q22 45 28 42/);
   assert.match(componentSource, /M18 25 L28 32 L18 39/);
   assert.match(componentSource, /M46 25 L36 32 L46 39/);
@@ -697,13 +756,9 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.body/);
   assert.match(cssSource, /--player-avatar-body:\s*#49b7c7;/);
   assert.match(cssSource, /--player-avatar-outline:\s*rgba\(22,\s*83,\s*94,\s*0\.58\);/);
-  assert.match(cssSource, /\[data-skin="cyan"\]/);
-  assert.match(cssSource, /\[data-skin="mint"\]/);
-  assert.match(cssSource, /\[data-skin="amber"\]/);
-  assert.match(cssSource, /\[data-skin="rose"\]/);
-  assert.match(cssSource, /\[data-skin="slate"\]/);
-  assert.match(cssSource, /\[data-skin="basketball"\]/);
-  assert.match(cssSource, /\[data-skin="pig"\]/);
+  for (const skin of expectedSkins) {
+    assert.match(cssSource, new RegExp(`\\[data-skin="${skin}"\\]`));
+  }
   assert.match(cssSource, /\.skinSvg/);
   assert.match(cssSource, /\.skinSvg\s*\{[\s\S]*inset:\s*0;/);
   assert.match(cssSource, /\.pigNose/);
@@ -863,7 +918,7 @@ test("hidden mini game performance panel is URL-gated and ref-backed", () => {
   const perfSource = commonSource.slice(commonSource.indexOf("type MiniGamePerfMetrics"), commonSource.indexOf("export function PrototypeEndOverlay"));
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
-  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
 
   assert.match(commonSource, /const MINI_GAME_PERF_PANEL_SYNC_MS = 500;/);
   assert.match(perfSource, /function isMiniGamePerfPanelEnabled\(\)/);
@@ -892,9 +947,9 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
   const fallDownPointerMoveSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDirection = useCallback"), fallDownSource.indexOf("const beginFallDownDirection"));
   const fallDownDomSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDom = useCallback"), fallDownSource.indexOf("const resumeFallDownInput"));
-  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
   const doodlePointerMoveSource = doodleSource.slice(doodleSource.indexOf("const updateDoodleDirection = useCallback"), doodleSource.indexOf("const beginDoodleDirection"));
-  const doodleDomSource = doodleSource.slice(doodleSource.indexOf("const updateDom = (current: DoodleFrame) =>"), doodleSource.indexOf("const tick = (time: number) =>"));
+  const doodleDomSource = doodleSource.slice(doodleSource.indexOf("const updateDom = (current: DoodleFrame, frameTime: number) =>"), doodleSource.indexOf("const tick = (time: number) =>"));
 
   assert.match(fallDownSource, /onPointerMove=\{updateFallDownDirection\}/);
   assert.match(fallDownPointerMoveSource, /fallDownInputDirectionRef\.current = direction;/);
@@ -922,7 +977,7 @@ test("performance-sensitive prototype ticks cache level params outside RAF loops
   const squareJumpTickSource = squareJumpSource.slice(squareJumpSource.indexOf("const tick = (time: number) =>"), squareJumpSource.indexOf("frameId = requestAnimationFrame(tick);", squareJumpSource.indexOf("const tick = (time: number) =>")));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
   const fallDownTickSource = fallDownSource.slice(fallDownSource.indexOf("const tick = (time: number) =>"), fallDownSource.indexOf("frameId = requestAnimationFrame(tick);", fallDownSource.indexOf("const tick = (time: number) =>")));
-  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function makeFlappyLayout"));
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
   const doodleTickSource = doodleSource.slice(doodleSource.indexOf("const tick = (time: number) =>"), doodleSource.indexOf("frameId = requestAnimationFrame(tick);", doodleSource.indexOf("const tick = (time: number) =>")));
 
   assert.match(squareJumpSource, /const flyAwayLandingCatchDepth = numberParam\(level\.params, "flyAwayLandingCatchDepth", PLAYER_SIZE \* 1\.25\);/);

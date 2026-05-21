@@ -56,7 +56,7 @@
 }
 
 .avatar-lab-skin-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .avatar-lab-button-grid {
@@ -102,7 +102,7 @@
 
 @media (max-width: 620px) {
   .avatar-lab-skin-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .avatar-lab-button-grid {

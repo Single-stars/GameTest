@@ -5,6 +5,8 @@
 }
 
 .doodle-player-shell,
+.doodle-remote-player-shell,
+.doodle-world-layer,
 .flappy-player-shell,
 .doodle-platform,
 .doodle-hazard,
@@ -23,10 +25,22 @@
 }
 
 .doodle-player-shell,
+.doodle-remote-player-shell,
 .flappy-player-shell {
   z-index: 9;
   width: 32px;
   height: 32px;
+}
+
+.doodle-world-layer {
+  z-index: 1;
+  transform-origin: 0 0;
+}
+
+.doodle-remote-player-shell {
+  z-index: 8;
+  opacity: 0.78;
+  filter: drop-shadow(0 4px 10px rgba(24, 24, 24, 0.18));
 }
 
 .flappy-player-shell {

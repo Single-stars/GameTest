@@ -9,7 +9,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import {
+  PlayerAvatar,
+  PLAYER_AVATAR_SKINS,
+  type PlayerAvatarDirection,
+  type PlayerAvatarSkin,
+  type PlayerAvatarView,
+} from "@/features/player-avatar/player-avatar";
+import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -21,7 +28,6 @@ import {
   PrototypeEndOverlay,
   clamp,
   numberParam,
-  stagePointStyle,
   transformPoint3d,
   useMiniGameFpsCounter,
   useMiniGameStageSize,
@@ -45,8 +51,10 @@ import {
   type GeneratedDoodlePlatform,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
+import type { SelfGameState } from "@/lib/multiplayer/types";
 
 const DOODLE_PLAYER_SPEED = 315;
+const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 50;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -88,6 +96,24 @@ type DoodleViewFrame = {
   visibleHazards: DoodleHazard[];
   visiblePlatforms: DoodlePlatform[];
 };
+
+export type DoodleRuntimeState = {
+  cameraY: number;
+  direction: PlayerAvatarDirection;
+  elapsedMs: number;
+  failures: number;
+  playerDirection: PlayerAvatarDirection;
+  progress: number;
+  status: PrototypeStatus;
+  x: number;
+  y: number;
+};
+
+export type DoodleRemotePlayer = {
+  skinId?: string;
+};
+
+export type DoodleRemoteState = SelfGameState;
 
 function makeDoodleWorld(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize) {
   return generateDoodleWorldLayout(level, runSeed, {
@@ -192,6 +218,21 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
   };
 }
 
+function makeDoodleRuntimeState(frame: DoodleFrame, targetHeight: number): DoodleRuntimeState {
+  const progressPercent = clamp((frame.playerY / targetHeight) * 100, 0, 100);
+  return {
+    cameraY: frame.cameraY,
+    direction: frame.playerDirection,
+    elapsedMs: Math.round(frame.time * 1000),
+    failures: frame.failures,
+    playerDirection: frame.playerDirection,
+    progress: Number((progressPercent / 100).toFixed(4)),
+    status: frame.status,
+    x: frame.playerX,
+    y: frame.playerY,
+  };
+}
+
 function resolveDoodlePlayerAvatarView(view: DoodleViewFrame): PlayerAvatarView {
   if (view.status === "failed") return { action: "hit", expression: "hurt" };
   if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
@@ -199,67 +240,148 @@ function resolveDoodlePlayerAvatarView(view: DoodleViewFrame): PlayerAvatarView 
   return { action: "idle", expression: "neutral" };
 }
 
+function resolveDoodleRemoteSkin(remotePlayer: DoodleRemotePlayer | null | undefined): PlayerAvatarSkin {
+  const skinId = remotePlayer?.skinId;
+  return PLAYER_AVATAR_SKINS.includes(skinId as PlayerAvatarSkin) ? (skinId as PlayerAvatarSkin) : "cyan";
+}
+
+function resolveDoodleRemoteAvatarView(remoteState: DoodleRemoteState): PlayerAvatarView {
+  if (remoteState.status === "failed") return { action: "hit", expression: "hurt" };
+  if (remoteState.status === "finished") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  return { action: "idle", expression: "neutral" };
+}
+
 export function DoodleJumpPrototype({
+  autoStart = false,
   level,
   mode,
+  onRuntimeState,
+  remotePlayer,
+  remoteState,
   runSeed,
+  logicStageSizeOverride,
+  unlimitedRespawn = false,
   onBackToSelect,
   onComplete,
   onRestart,
 }: {
+  autoStart?: boolean;
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode;
+  onRuntimeState?: (state: DoodleRuntimeState) => void;
+  remotePlayer?: DoodleRemotePlayer | null;
+  remoteState?: DoodleRemoteState | null;
   runSeed: string;
+  logicStageSizeOverride?: MiniGameStageSize;
+  unlimitedRespawn?: boolean;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
-  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
-  const stageWidth = stageSize.width;
-  const stageHeight = stageSize.height;
-  const world = useMemo(() => makeDoodleWorld(level, runSeed, stageSize), [level, runSeed, stageSize]);
+  const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
+  const logicStageWidth = logicStageSize.width;
+  const logicStageHeight = logicStageSize.height;
+  const visualStageWidth = measuredStageSize.width;
+  const visualStageHeight = measuredStageSize.height;
+  const worldLayerScale = Math.min(visualStageWidth / logicStageWidth, visualStageHeight / logicStageHeight);
+  const worldLayerOffsetX = (visualStageWidth - logicStageWidth * worldLayerScale) / 2;
+  const worldLayerOffsetY = (visualStageHeight - logicStageHeight * worldLayerScale) / 2;
+  const world = useMemo(() => makeDoodleWorld(level, runSeed, logicStageSize), [logicStageSize, level, runSeed]);
   const riskTotal = numberParam(level.params, "requiredRiskPlatforms", 0);
   const riskJumpMultiplier = numberParam(level.params, "riskJumpMultiplier", 1);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const visibleBuffer = isLowPowerDevice ? 96 : 160;
-  const initialRuntime = useMemo(() => createDoodleRuntime(world, stageWidth), [stageWidth, world]);
+  const initialRuntime = useMemo(() => createDoodleRuntime(world, logicStageWidth), [logicStageWidth, world]);
   const inputDirectionRef = useRef(0);
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
+  const remoteSmootherRef = useRef(new RemoteStateSmoother({ interpolationDelayMs: 100, maxExtrapolationMs: 80 }));
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
   const lastUiSyncRef = useRef(0);
+  const lastRuntimeSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Doodle");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
-  const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, stageHeight));
+  const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, logicStageHeight));
+  const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+
+  useEffect(() => {
+    onRuntimeStateRef.current = onRuntimeState;
+  }, [onRuntimeState]);
 
   const syncDoodleView = useCallback(
     (time = performance.now()) => {
       lastUiSyncRef.current = time;
       recordReactSync();
-      setView(makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer, stageHeight));
+      const nextView = makeDoodleView(runtimeRef.current, world.targetHeight, visibleBuffer, logicStageHeight);
+      setView(nextView);
     },
-    [recordReactSync, stageHeight, visibleBuffer, world.targetHeight],
+    [logicStageHeight, recordReactSync, visibleBuffer, world.targetHeight],
+  );
+
+  const syncDoodleRuntimeState = useCallback(
+    (time = performance.now(), force = false) => {
+      if (!onRuntimeStateRef.current) return;
+      if (!force && time - lastRuntimeSyncRef.current < DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS) return;
+      lastRuntimeSyncRef.current = time;
+      onRuntimeStateRef.current(makeDoodleRuntimeState(runtimeRef.current, world.targetHeight));
+    },
+    [world.targetHeight],
   );
 
   useEffect(() => {
     runtimeRef.current = initialRuntime;
     lastUiSyncRef.current = 0;
+    lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     const timer = window.setTimeout(() => {
-      setView(makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, stageHeight));
+      setView(makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, logicStageHeight));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [initialRuntime, stageHeight, visibleBuffer, world.targetHeight]);
+  }, [initialRuntime, logicStageHeight, visibleBuffer, world.targetHeight]);
+
+  useEffect(() => {
+    remoteSmootherRef.current.reset();
+    if (remotePlayerShellRef.current) {
+      remotePlayerShellRef.current.style.display = "none";
+    }
+  }, [runSeed]);
+
+  useEffect(() => {
+    if (!remoteState) {
+      remoteSmootherRef.current.reset();
+      if (remotePlayerShellRef.current) {
+        remotePlayerShellRef.current.style.display = "none";
+      }
+      return;
+    }
+    remoteSmootherRef.current.push(remoteState, performance.now());
+  }, [remoteState]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => syncDoodleView(), 0);
     return () => window.clearTimeout(timer);
   }, [syncDoodleView]);
+
+  useEffect(() => {
+    if (!autoStart) return;
+    const timer = window.setTimeout(() => {
+      const current = runtimeRef.current;
+      if (current.started || current.status !== "playing") return;
+      current.started = true;
+      current.playerVy = DOODLE_JUMP_VELOCITY;
+      current.jumpTurnAvailable = true;
+      syncDoodleView();
+      syncDoodleRuntimeState(performance.now(), true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [autoStart, syncDoodleRuntimeState, syncDoodleView]);
 
   const startDoodle = useCallback(() => {
     const current = runtimeRef.current;
@@ -268,7 +390,8 @@ export function DoodleJumpPrototype({
     current.playerVy = DOODLE_JUMP_VELOCITY;
     current.jumpTurnAvailable = true;
     syncDoodleView();
-  }, [syncDoodleView]);
+    syncDoodleRuntimeState(performance.now(), true);
+  }, [syncDoodleRuntimeState, syncDoodleView]);
 
   function chooseDoodleDirection(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -302,14 +425,26 @@ export function DoodleJumpPrototype({
     let frameId = 0;
     let last = performance.now();
 
-    const updateDom = (current: DoodleFrame) => {
+    const updateDom = (current: DoodleFrame, frameTime: number) => {
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.hazards.map((hazard) => [hazard.id, hazard]));
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(
           current.playerX - PLAYER_SIZE / 2,
-          stageHeight - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
+          logicStageHeight - (current.playerY - current.cameraY) - PLAYER_SIZE / 2,
         );
+      }
+      if (remotePlayerShellRef.current) {
+        const sampledRemote = remoteSmootherRef.current.sample(frameTime);
+        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
+          remotePlayerShellRef.current.style.display = "";
+          remotePlayerShellRef.current.style.transform = transformPoint3d(
+            clamp(sampledRemote.x, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2) - PLAYER_SIZE / 2,
+            logicStageHeight - (sampledRemote.y - current.cameraY) - PLAYER_SIZE / 2,
+          );
+        } else {
+          remotePlayerShellRef.current.style.display = "none";
+        }
       }
 
       for (const [id, node] of platformRefs.current) {
@@ -319,16 +454,16 @@ export function DoodleJumpPrototype({
           continue;
         }
         node.style.display = "";
-        const x = movingPlatformX(platform, current.time, stageWidth);
-        const y = stageHeight - (platform.y - current.cameraY);
+        const x = movingPlatformX(platform, current.time, logicStageWidth);
+        const y = logicStageHeight - (platform.y - current.cameraY);
         node.style.transform = transformPoint3d(x - platform.width / 2, y);
       }
 
       for (const [id, node] of hazardRefs.current) {
         const hazard = hazardById.get(id);
         if (!hazard) continue;
-        const position = movingHazardPosition(hazard, current.time, stageWidth);
-        const y = stageHeight - (position.y - current.cameraY) - hazard.size / 2;
+        const position = movingHazardPosition(hazard, current.time, logicStageWidth);
+        const y = logicStageHeight - (position.y - current.cameraY) - hazard.size / 2;
         const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
         const scale = position.size / hazard.size;
         node.style.transform = `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`;
@@ -343,17 +478,19 @@ export function DoodleJumpPrototype({
       const paintDoodleFrame = (frame: DoodleFrame) => {
         const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
         const renderStartedAt = perfEnabled ? performance.now() : 0;
-        updateDom(frame);
+        updateDom(frame, time);
         if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
       };
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
         paintDoodleFrame(current);
+        syncDoodleRuntimeState(time, true);
         return;
       }
       if (!current.started) {
         paintDoodleFrame(current);
+        syncDoodleRuntimeState(time);
         frameId = requestAnimationFrame(tick);
         return;
       }
@@ -361,7 +498,7 @@ export function DoodleJumpPrototype({
       const nextTime = current.time + delta;
       const inputDirection = inputDirectionRef.current;
       current.playerDirection = resolveDoodlePlayerDirection(inputDirection);
-      current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, stageWidth - PLAYER_SIZE / 2);
+      current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
       const previousY = current.playerY;
       let nextVy = current.playerVy - DOODLE_GRAVITY * delta;
@@ -386,7 +523,7 @@ export function DoodleJumpPrototype({
         const maxY = Math.max(previousY, nextY) + PLAYER_SIZE;
         for (const platform of current.platforms) {
           if (platform.used || platform.y < minY || platform.y > maxY) continue;
-          const platformX = movingPlatformX(platform, nextTime, stageWidth);
+          const platformX = movingPlatformX(platform, nextTime, logicStageWidth);
           const crossed = previousY - PLAYER_SIZE / 2 >= platform.y && nextY - PLAYER_SIZE / 2 <= platform.y;
           const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
           if (crossed && insideX) {
@@ -402,11 +539,11 @@ export function DoodleJumpPrototype({
         }
       }
 
-      const cameraY = Math.max(current.cameraY, nextY - stageHeight * 0.45);
+      const cameraY = Math.max(current.cameraY, nextY - logicStageHeight * 0.45);
       if (status === "playing" && riskHit < riskTotal) {
         let missedRisk = false;
         for (const platform of current.platforms) {
-          if (!platform.used && platform.risk && cameraY > platform.y + stageHeight * 0.34) {
+          if (!platform.used && platform.risk && cameraY > platform.y + logicStageHeight * 0.34) {
             missedRisk = true;
             break;
           }
@@ -420,8 +557,8 @@ export function DoodleJumpPrototype({
       if (status === "playing" && nextTime >= current.invincibleUntil) {
         for (const hazard of current.hazards) {
           const movementRange = hazard.movementEnabled ? hazard.range + 18 : 0;
-          if (hazard.y + hazard.size + movementRange < cameraY - 70 || hazard.y - hazard.size - movementRange > cameraY + stageHeight + 70) continue;
-          const position = movingHazardPosition(hazard, nextTime, stageWidth);
+          if (hazard.y + hazard.size + movementRange < cameraY - 70 || hazard.y - hazard.size - movementRange > cameraY + logicStageHeight + 70) continue;
+          const position = movingHazardPosition(hazard, nextTime, logicStageWidth);
           const hitRadius = position.size / 2 + PLAYER_SIZE / 2 - 3;
           const dx = nextX - position.x;
           const dy = nextY - position.y;
@@ -458,12 +595,12 @@ export function DoodleJumpPrototype({
       current.playerTurns = playerTurns;
       current.jumpTurnAvailable = jumpTurnAvailable;
 
-      if (mode === "base" && status === "failed") {
+      if ((mode === "base" || unlimitedRespawn) && status === "failed") {
         const failures = current.failures + 1;
-        if (failures <= BASE_FAILURE_LIMIT) {
+        if (unlimitedRespawn || failures <= BASE_FAILURE_LIMIT) {
           triggerScreenShake();
-          const respawnY = cameraY + stageHeight * 0.34;
-          const respawnX = clamp(nextX, 70, stageWidth - 70);
+          const respawnY = cameraY + logicStageHeight * 0.34;
+          const respawnX = clamp(nextX, 70, logicStageWidth - 70);
           const respawnPlatform: DoodlePlatform = {
             id: -1000 - failures,
             x: respawnX,
@@ -488,6 +625,7 @@ export function DoodleJumpPrototype({
           current.reason = reason;
           paintDoodleFrame(current);
           syncDoodleView(time);
+          syncDoodleRuntimeState(time, true);
           frameId = requestAnimationFrame(tick);
           return;
         }
@@ -499,6 +637,11 @@ export function DoodleJumpPrototype({
       current.status = status;
       current.reason = reason;
       paintDoodleFrame(current);
+      if (status !== "playing" || eventChanged) {
+        syncDoodleRuntimeState(time, true);
+      } else {
+        syncDoodleRuntimeState(time);
+      }
 
       if (status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncDoodleView(time);
@@ -508,9 +651,25 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, stageHeight, stageWidth, syncDoodleView, triggerScreenShake, world.targetHeight]);
+  }, [logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
+  const multiplayerStageMaxWidth = Math.max(260, Math.min(logicStageWidth, 760));
+  const wrapStyle = logicStageSizeOverride
+    ? { maxWidth: `${multiplayerStageMaxWidth}px`, width: "100%" }
+    : undefined;
+  const stageStyle = logicStageSizeOverride
+    ? {
+        aspectRatio: `${logicStageWidth} / ${logicStageHeight}`,
+        height: "auto",
+        width: `min(100%, ${multiplayerStageMaxWidth}px)`,
+      }
+    : undefined;
+  const worldLayerStyle = {
+    height: `${logicStageHeight}px`,
+    transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
+    width: `${logicStageWidth}px`,
+  };
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -539,7 +698,7 @@ export function DoodleJumpPrototype({
   }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
   return (
-    <div className="prototype-game-wrap">
+    <div className="prototype-game-wrap" style={wrapStyle}>
       <div className="mini-score">
         <span>进度 {Math.round(view.progressPercent)}%</span>
         {riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}
@@ -554,60 +713,73 @@ export function DoodleJumpPrototype({
         onPointerDown={beginDoodleDirection}
         onPointerMove={updateDoodleDirection}
         onPointerUp={stopDoodleDirection}
+        style={stageStyle}
       >
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
-        {view.visiblePlatforms.map((platform) => {
-          const x = movingPlatformX(platform, view.time, stageWidth);
-          const y = stageHeight - (platform.y - view.cameraY);
-          return (
-            <div
-              className={`doodle-platform ${platform.start ? "start" : ""} ${platform.finish ? "finish" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
-              key={platform.id}
-              ref={(node) => {
-                if (node) platformRefs.current.set(platform.id, node);
-                else platformRefs.current.delete(platform.id);
-              }}
-              style={{
-                transform: transformPoint3d(x - platform.width / 2, y),
-                width: `${platform.width}px`,
-              }}
+        <div className="doodle-world-layer" style={worldLayerStyle}>
+          {view.visiblePlatforms.map((platform) => {
+            const x = movingPlatformX(platform, view.time, logicStageWidth);
+            const y = logicStageHeight - (platform.y - view.cameraY);
+            return (
+              <div
+                className={`doodle-platform ${platform.start ? "start" : ""} ${platform.finish ? "finish" : ""} ${platform.moving ? "moving" : ""} ${platform.risk ? "risk" : ""}`}
+                key={platform.id}
+                ref={(node) => {
+                  if (node) platformRefs.current.set(platform.id, node);
+                  else platformRefs.current.delete(platform.id);
+                }}
+                style={{
+                  transform: transformPoint3d(x - platform.width / 2, y),
+                  width: `${platform.width}px`,
+                }}
+              />
+            );
+          })}
+          {view.visibleHazards.map((hazard) => {
+            const position = movingHazardPosition(hazard, view.time, logicStageWidth);
+            const y = logicStageHeight - (position.y - view.cameraY) - hazard.size / 2;
+            const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
+            const scale = position.size / hazard.size;
+            return (
+              <div
+                className={`doodle-hazard motion-${hazard.movementPattern} ${hazard.movementEnabled ? "moving" : ""}`}
+                key={hazard.id}
+                ref={(node) => {
+                  if (node) hazardRefs.current.set(hazard.id, node);
+                  else hazardRefs.current.delete(hazard.id);
+                }}
+                style={{
+                  height: `${hazard.size}px`,
+                  transform: `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`,
+                  width: `${hazard.size}px`,
+                }}
+              />
+            );
+          })}
+          <div
+            className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
+            ref={playerShellRef}
+          >
+            <PlayerAvatar
+              {...resolveDoodlePlayerAvatarView(view)}
+              direction={view.playerDirection}
+              gravity="normal"
+              rotationTurns={view.playerTurns}
+              visualScale={1.22}
             />
-          );
-        })}
-        {view.visibleHazards.map((hazard) => {
-          const position = movingHazardPosition(hazard, view.time, stageWidth);
-          const y = stageHeight - (position.y - view.cameraY) - hazard.size / 2;
-          const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
-          const scale = position.size / hazard.size;
-          return (
-            <div
-              className={`doodle-hazard motion-${hazard.movementPattern} ${hazard.movementEnabled ? "moving" : ""}`}
-              key={hazard.id}
-              ref={(node) => {
-                if (node) hazardRefs.current.set(hazard.id, node);
-                else hazardRefs.current.delete(hazard.id);
-              }}
-              style={{
-                height: `${hazard.size}px`,
-                transform: `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`,
-                width: `${hazard.size}px`,
-              }}
-            />
-          );
-        })}
-        <div
-          className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
-          ref={playerShellRef}
-          style={stagePointStyle(view.playerX, view.playerY, view.cameraY, PLAYER_SIZE, stageHeight)}
-        >
-          <PlayerAvatar
-            {...resolveDoodlePlayerAvatarView(view)}
-            direction={view.playerDirection}
-            gravity="normal"
-            rotationTurns={view.playerTurns}
-            visualScale={1.22}
-          />
+          </div>
+          {remoteState ? (
+            <div className="doodle-remote-player-shell" ref={remotePlayerShellRef}>
+              <PlayerAvatar
+                {...resolveDoodleRemoteAvatarView(remoteState)}
+                direction={remoteState.direction ?? "none"}
+                gravity="normal"
+                skin={resolveDoodleRemoteSkin(remotePlayer)}
+                visualScale={1.22}
+              />
+            </div>
+          ) : null}
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>

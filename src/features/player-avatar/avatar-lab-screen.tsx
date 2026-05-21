@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   PLAYER_AVATAR_ACTIONS,
   PLAYER_AVATAR_EXPRESSIONS,
+  PLAYER_AVATAR_SKIN_LABELS,
   PLAYER_AVATAR_SKINS,
   PlayerAvatar,
   type PlayerAvatarAction,
@@ -32,16 +33,6 @@ const AVATAR_LAB_SCENES = [
   { id: "wonder", label: "疑问", action: "wonder", expression: "neutral", effect: "question" },
   { id: "shield", label: "护盾", action: "idle", expression: "neutral", effect: "shield" },
 ] as const satisfies readonly AvatarScene[];
-
-const SKIN_LABELS: Record<PlayerAvatarSkin, string> = {
-  amber: "琥珀",
-  basketball: "篮球",
-  cyan: "青蓝",
-  mint: "薄荷",
-  pig: "猪猪",
-  rose: "玫瑰",
-  slate: "石板",
-};
 
 const ACTION_LABELS: Record<PlayerAvatarAction, string> = {
   celebrate: "胜利",
@@ -128,7 +119,7 @@ export function AvatarLabScreen({
                 type="button"
               >
                 <PlayerAvatar action="idle" expression="neutral" skin={skin} size={38} />
-                <span>{SKIN_LABELS[skin]}</span>
+                <span>{PLAYER_AVATAR_SKIN_LABELS[skin]}</span>
               </button>
             ))}
           </div>

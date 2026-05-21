@@ -25,7 +25,21 @@ export type PlayerAvatarEffect = "none" | "shield" | "sparkles" | "question";
 export type PlayerAvatarGravity = "normal" | "light" | "heavy";
 export type PlayerAvatarSize = "sm" | "md" | "lg" | number;
 export type PlayerAvatarDirection = "left" | "right" | "none";
-export type PlayerAvatarSkin = "cyan" | "mint" | "amber" | "rose" | "slate" | "basketball" | "pig";
+export type PlayerAvatarSkin =
+  | "cyan"
+  | "mint"
+  | "amber"
+  | "rose"
+  | "slate"
+  | "basketball"
+  | "pig"
+  | "aqua"
+  | "cocoa"
+  | "sand"
+  | "pine"
+  | "ivory"
+  | "arcade"
+  | "paw";
 
 export type PlayerAvatarView = {
   action: PlayerAvatarAction;
@@ -33,8 +47,41 @@ export type PlayerAvatarView = {
   effect?: PlayerAvatarEffect;
 };
 
-export const PLAYER_AVATAR_SKINS = ["cyan", "mint", "amber", "rose", "slate", "basketball", "pig"] as const satisfies readonly PlayerAvatarSkin[];
-export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig"] as readonly PlayerAvatarSkin[];
+export const PLAYER_AVATAR_SKINS = [
+  "cyan",
+  "mint",
+  "amber",
+  "rose",
+  "slate",
+  "basketball",
+  "pig",
+  "aqua",
+  "cocoa",
+  "sand",
+  "pine",
+  "ivory",
+  "arcade",
+  "paw",
+] as const satisfies readonly PlayerAvatarSkin[];
+
+export const PLAYER_AVATAR_SKIN_LABELS = {
+  arcade: "手柄",
+  amber: "琥珀",
+  aqua: "海沫",
+  basketball: "篮球",
+  cocoa: "可可",
+  cyan: "青蓝",
+  ivory: "象牙",
+  mint: "薄荷",
+  paw: "猫爪",
+  pig: "猪猪",
+  pine: "松绿",
+  rose: "玫瑰",
+  sand: "沙丘",
+  slate: "石板",
+} as const satisfies Record<PlayerAvatarSkin, string>;
+
+export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw"] as readonly PlayerAvatarSkin[];
 export const PLAYER_AVATAR_ACTIONS = ["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"] as const satisfies readonly PlayerAvatarAction[];
 export const PLAYER_AVATAR_EXPRESSIONS = ["neutral", "happy", "sleepy", "scared", "hurt"] as const satisfies readonly PlayerAvatarExpression[];
 export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question"] as const satisfies readonly PlayerAvatarEffect[];
@@ -139,17 +186,42 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
     );
   }
 
-  if (skin !== "basketball") return null;
+  if (skin === "basketball") {
+    return (
+      <svg className={styles.skinSvg} viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M0 32 H64" />
+        <path d="M32 0 C19 16 19 48 32 64" />
+        <path d="M32 0 C45 16 45 48 32 64" />
+        <path d="M4 7 C17 19 47 19 60 7" />
+        <path d="M4 57 C17 45 47 45 60 57" />
+      </svg>
+    );
+  }
 
-  return (
-    <svg className={styles.skinSvg} viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M0 32 H64" />
-      <path d="M32 0 C19 16 19 48 32 64" />
-      <path d="M32 0 C45 16 45 48 32 64" />
-      <path d="M4 7 C17 19 47 19 60 7" />
-      <path d="M4 57 C17 45 47 45 60 57" />
-    </svg>
-  );
+  if (skin === "arcade") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.arcadeGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <path className={styles.arcadeDpad} d="M15 43 H31 M23 35 V51" />
+        <circle className={styles.arcadeButton} cx="43" cy="39" r="4" />
+        <circle className={styles.arcadeButton} cx="52" cy="46" r="3.6" />
+        <path className={styles.arcadeButton} d="M39 51 H51" />
+      </svg>
+    );
+  }
+
+  if (skin === "paw") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.pawGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <ellipse className={styles.pawPad} cx="32" cy="40" rx="11" ry="9" />
+        <ellipse className={styles.pawToe} cx="19" cy="27" rx="4.6" ry="5.4" />
+        <ellipse className={styles.pawToe} cx="29" cy="23" rx="4.8" ry="6" />
+        <ellipse className={styles.pawToe} cx="40" cy="23" rx="4.8" ry="6" />
+        <ellipse className={styles.pawToe} cx="49" cy="29" rx="4.4" ry="5.2" />
+      </svg>
+    );
+  }
+
+  return null;
 }
 
 export function PlayerAvatar({

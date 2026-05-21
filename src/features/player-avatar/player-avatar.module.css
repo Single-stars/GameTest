@@ -13,6 +13,13 @@
   --player-avatar-outline: rgba(22, 83, 94, 0.58);
   --player-avatar-ink: rgba(14, 48, 58, 0.92);
   --player-avatar-skin-line: rgba(14, 48, 58, 0.34);
+  --player-avatar-texture: none;
+  --player-avatar-texture-opacity: 0;
+  --player-avatar-texture-size: 56px;
+  --player-avatar-texture-position: center;
+  --player-avatar-texture-inset: 0;
+  --player-avatar-texture-blend-mode: multiply;
+  --player-avatar-texture-animation: none;
   position: relative;
   display: block;
   width: var(--player-avatar-size-resolved);
@@ -103,6 +110,22 @@
   transition:
     box-shadow 120ms ease,
     filter 120ms ease;
+}
+
+.body::before {
+  content: "";
+  position: absolute;
+  inset: var(--player-avatar-texture-inset);
+  z-index: 0;
+  background-image: var(--player-avatar-texture);
+  background-repeat: repeat;
+  background-size: var(--player-avatar-texture-size);
+  background-position: var(--player-avatar-texture-position);
+  opacity: var(--player-avatar-texture-opacity);
+  animation: var(--player-avatar-texture-animation);
+  mix-blend-mode: var(--player-avatar-texture-blend-mode);
+  pointer-events: none;
+  will-change: transform, background-position, opacity;
 }
 
 .skinSvg {
@@ -198,6 +221,41 @@
   stroke: var(--player-avatar-pig-nostril);
   stroke-width: 3.8;
   stroke-linecap: round;
+}
+
+.arcadeGlyph {
+  opacity: 0.95;
+  fill: none;
+  stroke: rgba(191, 233, 250, 0.88);
+  stroke-width: 4.6;
+  transform-origin: 50% 58%;
+}
+
+.arcadeDpad {
+  stroke: rgba(207, 239, 255, 0.94);
+  stroke-width: 5.4;
+}
+
+.arcadeButton {
+  fill: rgba(207, 239, 255, 0.82);
+  stroke: rgba(5, 33, 44, 0.32);
+  stroke-width: 2.4;
+}
+
+.pawGlyph {
+  opacity: 0.96;
+  fill: rgba(43, 43, 43, 0.42);
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.4;
+  transform-origin: 50% 56%;
+}
+
+.pawPad {
+  fill: rgba(43, 43, 43, 0.48);
+}
+
+.pawToe {
+  fill: rgba(43, 43, 43, 0.42);
 }
 
 .sparkles::before,
@@ -450,9 +508,160 @@
   --player-avatar-pig-eye: #4a363d;
 }
 
+.root[data-skin="aqua"] {
+  --player-avatar-body: #73b7c3;
+  --player-avatar-outline: rgba(33, 86, 95, 0.54);
+  --player-avatar-ink: rgba(18, 56, 63, 0.9);
+  --player-avatar-skin-line: rgba(18, 56, 63, 0.3);
+}
+
+.root[data-skin="cocoa"] {
+  --player-avatar-body: #9b7a63;
+  --player-avatar-outline: rgba(78, 56, 41, 0.54);
+  --player-avatar-ink: rgba(50, 35, 25, 0.92);
+  --player-avatar-skin-line: rgba(50, 35, 25, 0.3);
+}
+
+.root[data-skin="sand"] {
+  --player-avatar-body: #c69a58;
+  --player-avatar-outline: rgba(102, 75, 43, 0.55);
+  --player-avatar-ink: rgba(58, 42, 22, 0.92);
+  --player-avatar-skin-line: rgba(58, 42, 22, 0.31);
+  --player-avatar-texture:
+    radial-gradient(circle at 18% 24%, rgba(71, 49, 24, 0.2) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 72% 62%, rgba(255, 244, 202, 0.18) 0 1px, transparent 1.5px),
+    repeating-linear-gradient(31deg, rgba(82, 55, 24, 0.12) 0 1px, transparent 1px 11px);
+  --player-avatar-texture-opacity: 0.7;
+  --player-avatar-texture-size: 42px 39px, 57px 51px, 68px 44px;
+  --player-avatar-texture-position: -8px 5px, 21px -13px, 7px 18px;
+}
+
+.root[data-skin="pine"] {
+  --player-avatar-body: #6a8e74;
+  --player-avatar-outline: rgba(44, 70, 52, 0.54);
+  --player-avatar-ink: rgba(28, 46, 35, 0.92);
+  --player-avatar-skin-line: rgba(28, 46, 35, 0.3);
+}
+
+.root[data-skin="ivory"] {
+  --player-avatar-body: #e2dbce;
+  --player-avatar-outline: rgba(116, 105, 84, 0.46);
+  --player-avatar-ink: rgba(72, 64, 49, 0.9);
+  --player-avatar-skin-line: rgba(72, 64, 49, 0.28);
+}
+
+.root[data-skin="arcade"] {
+  --player-avatar-body: #14566a;
+  --player-avatar-outline: rgba(15, 50, 62, 0.66);
+  --player-avatar-ink: rgba(8, 32, 40, 0.95);
+  --player-avatar-skin-line: rgba(8, 32, 40, 0.32);
+  --player-avatar-texture:
+    radial-gradient(circle at 22% 22%, rgba(207, 238, 255, 0.8) 0 3px, transparent 3.8px),
+    repeating-linear-gradient(43deg, transparent 0 18px, rgba(176, 223, 255, 0.58) 18px 24px, transparent 24px 43px),
+    repeating-linear-gradient(-37deg, transparent 0 28px, rgba(10, 42, 64, 0.38) 28px 33px, transparent 33px 52px);
+  --player-avatar-texture-opacity: 0.9;
+  --player-avatar-texture-size: 58px 54px, 74px 63px, 92px 81px;
+  --player-avatar-texture-position: 4px -6px, 23px 11px, -17px 28px;
+  --player-avatar-texture-inset: -34%;
+  --player-avatar-texture-blend-mode: screen;
+}
+
+.root[data-skin="paw"] {
+  --player-avatar-body: #8f8f8f;
+  --player-avatar-outline: rgba(74, 74, 74, 0.66);
+  --player-avatar-ink: rgba(42, 42, 42, 0.95);
+  --player-avatar-skin-line: rgba(42, 42, 42, 0.32);
+  --player-avatar-texture:
+    radial-gradient(ellipse at 50% 60%, rgba(42, 42, 42, 0.3) 0 6px, transparent 7.2px),
+    radial-gradient(ellipse at 34% 37%, rgba(42, 42, 42, 0.24) 0 3.5px, transparent 4.5px),
+    radial-gradient(ellipse at 52% 30%, rgba(42, 42, 42, 0.22) 0 3.6px, transparent 4.7px),
+    radial-gradient(ellipse at 68% 42%, rgba(42, 42, 42, 0.24) 0 3.5px, transparent 4.5px);
+  --player-avatar-texture-opacity: 0.9;
+  --player-avatar-texture-size: 72px 62px, 79px 70px, 88px 78px, 67px 74px;
+  --player-avatar-texture-position: -10px 8px, 20px -6px, 36px 12px, 3px 31px;
+  --player-avatar-texture-inset: -28%;
+}
+
+.root[data-skin="arcade"] .body::before {
+  animation: playerAvatarArcadeTextureDrift 1.45s linear infinite;
+}
+
+.root[data-skin="arcade"] .arcadeGlyph {
+  animation: playerAvatarArcadeControlsPulse 900ms ease-in-out infinite;
+}
+
+.root[data-skin="paw"] .body::before {
+  animation: playerAvatarPawTextureWander 2.2s ease-in-out infinite;
+}
+
+.root[data-skin="paw"] .pawGlyph {
+  animation: playerAvatarPawPress 1.2s ease-in-out infinite;
+}
+
 .root[data-skin="basketball"][data-action="celebrate"] .body,
 .root[data-skin="pig"][data-action="celebrate"] .body {
   border-color: var(--player-avatar-outline);
+}
+
+@keyframes playerAvatarArcadeTextureDrift {
+  0% {
+    background-position: 4px -6px, 23px 11px, -17px 28px;
+    opacity: 0.68;
+    transform: translate3d(-12%, -9%, 0) rotate(-5deg) scale(1.04);
+  }
+
+  47% {
+    background-position: 31px 14px, -8px 42px, 19px -13px;
+    opacity: 1;
+    transform: translate3d(8%, 6%, 0) rotate(3deg) scale(1.13);
+  }
+
+  100% {
+    background-position: 59px 35px, -39px 73px, 55px -54px;
+    opacity: 0.68;
+    transform: translate3d(18%, 15%, 0) rotate(-5deg) scale(1.04);
+  }
+}
+
+@keyframes playerAvatarPawTextureWander {
+  0%,
+  100% {
+    background-position: -10px 8px, 20px -6px, 36px 12px, 3px 31px;
+    opacity: 0.7;
+    transform: translate3d(-9%, 4%, 0) rotate(-4deg) scale(1.05);
+  }
+
+  55% {
+    background-position: 14px 24px, -6px 18px, 52px -9px, -18px 45px;
+    opacity: 0.95;
+    transform: translate3d(8%, -7%, 0) rotate(5deg) scale(1.12);
+  }
+}
+
+@keyframes playerAvatarArcadeControlsPulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: translateY(1%) scale(0.98);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-2%) scale(1.05);
+  }
+}
+
+@keyframes playerAvatarPawPress {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateY(2%) rotate(-3deg) scale(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-2%) rotate(3deg) scale(1.08);
+  }
 }
 
 @keyframes playerAvatarExpressionSwap {
@@ -623,10 +832,17 @@
   .root .motion,
   .root .eye,
   .root .expressionSvg,
+  .root .skinSvg,
   .root .rotator,
   .root .shield,
   .root .questionMark {
     animation: none !important;
     transition: none !important;
+  }
+
+  .root[data-skin="arcade"] .body::before,
+  .root[data-skin="paw"] .body::before,
+  .body::before {
+    animation: none;
   }
 }
