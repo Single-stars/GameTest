@@ -113,7 +113,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   );
 
   const handleRuntimeState = useCallback(
-    (runtime: MultiplayerRuntimeState, scoreResolver: (state: MultiplayerRuntimeState) => number) => {
+    <TRuntime extends MultiplayerRuntimeState,>(runtime: TRuntime, scoreResolver: (state: TRuntime) => number) => {
       const score = scoreResolver(runtime);
       publishRuntimeState(runtime, score);
     },

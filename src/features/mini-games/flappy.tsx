@@ -404,7 +404,7 @@ export function FlappyPrototype({
       }
       if (remotePlayerShellRef.current) {
         const sampledRemote = remoteSmootherRef.current.sample(performance.now());
-        if (sampledRemote) {
+        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
           remotePlayerShellRef.current.style.display = "";
           remotePlayerShellRef.current.style.transform = transformPoint3d(
             sampledRemote.x - PLAYER_SIZE / 2,
