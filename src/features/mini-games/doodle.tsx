@@ -469,7 +469,7 @@ export function DoodleJumpPrototype({
 
       for (const [id, node] of platformRefs.current) {
         const platform = platformById.get(id);
-        if (!platform || platform.used) {
+        if (!platform || (platform.used && !platform.finish)) {
           node.style.display = "none";
           continue;
         }

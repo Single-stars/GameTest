@@ -4,88 +4,130 @@
   z-index: 1000;
   width: 100dvw;
   height: 100dvh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   overflow: hidden;
   padding:
-    env(safe-area-inset-top)
-    env(safe-area-inset-right)
-    env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
+    calc(env(safe-area-inset-top) + var(--play-pad-y))
+    max(10px, env(safe-area-inset-right))
+    calc(env(safe-area-inset-bottom) + var(--play-pad-y))
+    max(10px, env(safe-area-inset-left));
   background:
     radial-gradient(circle at 18% 12%, rgba(255, 207, 87, 0.2), transparent 30%),
     linear-gradient(180deg, #fff9eb 0%, #f8fbff 100%);
 }
 
-.multiplayer-game-shell-main {
-  position: absolute;
-  inset: 0;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.multiplayer-game-hud {
-  position: absolute;
-  z-index: 60;
-  top: calc(env(safe-area-inset-top) + 8px);
-  left: calc(env(safe-area-inset-left) + 8px);
-  right: calc(env(safe-area-inset-right) + 8px);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.multiplayer-game-hud-scoreboard {
+.multiplayer-progress-hud {
+  min-height: 44px;
   display: grid;
-  gap: 6px;
-  min-width: min(58vw, 300px);
-  border: 1px solid rgba(24, 24, 24, 0.12);
-  border-radius: 16px;
-  padding: 8px;
-  background: rgba(255, 253, 248, 0.78);
-  box-shadow: 0 12px 28px rgba(24, 24, 24, 0.1);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: var(--hud-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 8px 8px 12px;
+  background: var(--hud-bg);
+  box-shadow: var(--shadow-soft);
   backdrop-filter: blur(14px);
 }
 
-.multiplayer-game-hud-line {
+.multiplayer-progress-wrap {
+  min-width: 0;
+  padding: 20px 18px 4px;
+}
+
+.multiplayer-progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(24, 24, 24, 0.1);
+  box-shadow: inset 0 1px 2px rgba(24, 24, 24, 0.08);
+}
+
+.multiplayer-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: 0 0 18px rgba(79, 197, 188, 0.28);
+}
+
+.multiplayer-progress-marker {
+  position: absolute;
+  top: 50%;
+  translate: -50% -50%;
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  color: rgba(24, 24, 24, 0.78);
-  font-size: 12px;
-  font-weight: 900;
+  place-items: center;
+  pointer-events: none;
+}
+
+.multiplayer-progress-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  box-shadow: none;
+}
+
+.multiplayer-progress-marker.self .multiplayer-progress-avatar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  width: 14px;
+  height: 10px;
+  translate: -50% 0;
+  background: var(--cyan);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+  filter: drop-shadow(0 2px 4px rgba(24, 24, 24, 0.16));
+}
+
+.multiplayer-progress-marker small {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  translate: -50% 0;
+  border-radius: 999px;
+  padding: 2px 5px;
+  background: rgba(255, 253, 248, 0.86);
+  color: rgba(24, 24, 24, 0.66);
+  box-shadow: 0 4px 10px rgba(24, 24, 24, 0.08);
+  font-size: 9px;
+  font-weight: 950;
   line-height: 1;
+  white-space: nowrap;
 }
 
-.multiplayer-game-hud-line strong {
-  color: var(--ink);
-  font-size: 14px;
-}
-
-.multiplayer-game-hud-line small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.multiplayer-game-hud-actions {
-  display: flex;
-  gap: 6px;
-  pointer-events: auto;
-}
-
-.multiplayer-game-hud-actions button,
+.multiplayer-progress-action,
 .multiplayer-game-result-actions button {
   border: 1px solid rgba(24, 24, 24, 0.12);
   border-radius: 999px;
-  padding: 8px 10px;
-  background: rgba(255, 253, 248, 0.86);
+  padding: 9px 12px;
+  background: rgba(255, 253, 248, 0.9);
   color: var(--ink);
   box-shadow: 0 10px 22px rgba(24, 24, 24, 0.1);
   font-size: 12px;
   font-weight: 950;
   touch-action: manipulation;
+}
+
+.multiplayer-progress-action {
+  min-width: 58px;
+}
+
+.multiplayer-game-result-actions button:disabled {
+  opacity: 0.56;
+}
+
+.multiplayer-game-shell-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .multiplayer-game-result-panel {
@@ -135,26 +177,44 @@
   font-weight: 950;
 }
 
+.multiplayer-rematch-hint {
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: rgba(79, 197, 188, 0.12);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .multiplayer-game-result-grid {
   display: grid;
   gap: 8px;
 }
 
 .multiplayer-game-result-grid p {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   border-radius: 14px;
   padding: 10px 12px;
   background: rgba(24, 24, 24, 0.05);
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;
+  text-align: left;
 }
 
 .multiplayer-game-result-grid strong {
+  min-width: 0;
   color: var(--ink);
+  text-align: right;
+}
+
+.multiplayer-game-result-grid small {
+  color: rgba(24, 24, 24, 0.52);
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .multiplayer-game-result-actions {
@@ -164,20 +224,21 @@
 }
 
 @media (max-width: 560px) {
-  .multiplayer-game-hud {
-    align-items: stretch;
+  .multiplayer-game-shell {
+    gap: 6px;
   }
 
-  .multiplayer-game-hud-scoreboard {
-    min-width: 0;
-    flex: 1;
+  .multiplayer-progress-hud {
+    gap: 8px;
+    padding: 7px 7px 7px 10px;
   }
 
-  .multiplayer-game-hud-actions {
-    flex-direction: column;
+  .multiplayer-progress-wrap {
+    padding-inline: 16px;
   }
 
-  .multiplayer-game-hud-actions button {
-    padding-inline: 9px;
+  .multiplayer-progress-action {
+    min-width: 52px;
+    padding-inline: 10px;
   }
 }

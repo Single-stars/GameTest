@@ -14,6 +14,7 @@ import { PlayerCard } from "@/features/multiplayer/player-card";
 import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { readPersistedPlayerAvatarSkin } from "@/features/player-avatar/player-avatar-storage";
 import { getMiniGameLevel } from "@/lib/mini-games";
+import { resolveMultiplayerWinnerText } from "@/lib/multiplayer/match-result";
 import {
   buildInitialSnapshot,
   MultiplayerSession,
@@ -95,17 +96,6 @@ function resolvePeerOptions(): PeerJSOption | undefined {
     path: path && path.length > 0 ? path : "/",
     secure,
   };
-}
-
-function resolveWinner(selfResult: GameResult | null, opponentResult: GameResult | null) {
-  if (!selfResult || !opponentResult) return "等待结果";
-  if (selfResult.score > opponentResult.score) return "你赢了";
-  if (selfResult.score < opponentResult.score) return "你输了";
-  const selfTime = selfResult.timeMs ?? Number.POSITIVE_INFINITY;
-  const opponentTime = opponentResult.timeMs ?? Number.POSITIVE_INFINITY;
-  if (selfTime < opponentTime) return "你赢了";
-  if (selfTime > opponentTime) return "你输了";
-  return "平局";
 }
 
 function copyRoomLinkWithFallback(text: string) {
@@ -272,6 +262,10 @@ function MultiplayerPageContent() {
     sessionRef.current?.requestRematch();
   }, []);
 
+  const handleReturnRoom = useCallback(() => {
+    sessionRef.current?.returnToRoom();
+  }, []);
+
   const handleForfeit = useCallback(() => {
     sessionRef.current?.forfeit();
   }, []);
@@ -394,7 +388,7 @@ function MultiplayerPageContent() {
     snapshot.status === "countdown" ||
     snapshot.status === "playing" ||
     snapshot.status === "finished";
-  const winnerText = resolveWinner(snapshot.selfResult, snapshot.opponentResult);
+  const winnerText = resolveMultiplayerWinnerText(snapshot.selfResult, snapshot.opponentResult);
   const countdownSeconds =
     snapshot.countdown && snapshot.countdown.remainMs > 0
       ? Math.ceil(snapshot.countdown.remainMs / 1000)
@@ -503,8 +497,10 @@ function MultiplayerPageContent() {
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}
             onForfeit={handleForfeit}
-            onLeave={handleLeave}
             onRematch={handleRematch}
+            onReturnRoom={handleReturnRoom}
+            rematchRequestedByOpponent={snapshot.opponentReady}
+            rematchRequestedBySelf={snapshot.selfReady}
             selfPlayer={snapshot.selfPlayer}
             selfResult={snapshot.selfResult}
             selfState={snapshot.selfState}

@@ -29,6 +29,7 @@ const SERVER_RECOVERY_WINDOW_MS = 30_000;
 const SERVER_RECONNECT_RETRY_MS = 1_000;
 const GUEST_RECONNECT_RETRY_MS = 1_200;
 const MAX_GUEST_RECONNECT_ATTEMPTS = 8;
+const HOST_STALE_CONNECTION_REPLACE_MS = 9_000;
 
 export class PeerTransport {
   private readonly role: "host" | "guest";
@@ -46,6 +47,7 @@ export class PeerTransport {
   private guestReconnectTimer: number | null = null;
   private serverReconnectTimer: number | null = null;
   private serverRecoveryDeadline = 0;
+  private lastConnectionActivityAt = 0;
 
   constructor(options: PeerTransportOptions) {
     this.role = options.role;
@@ -67,6 +69,7 @@ export class PeerTransport {
     this.activeHostId = this.role === "guest" ? this.targetRoomId : null;
     this.guestReconnectAttempts = 0;
     this.serverRecoveryDeadline = 0;
+    this.lastConnectionActivityAt = 0;
     this.clearGuestReconnectTimer();
     this.clearServerReconnectTimer();
 
@@ -167,11 +170,24 @@ export class PeerTransport {
     }
   }
 
+  disconnectActiveConnection() {
+    const connection = this.connection;
+    if (!connection) return;
+    this.clearConnectTimer();
+    this.connection = null;
+    this.lastConnectionActivityAt = 0;
+    connection.close();
+  }
+
   private bindHostIncomingConnection(peer: Peer) {
     peer.on("connection", (connection) => {
       if (this.connection && this.connection.open) {
-        connection.close();
-        return;
+        if (Date.now() - this.lastConnectionActivityAt > HOST_STALE_CONNECTION_REPLACE_MS) {
+          this.disconnectActiveConnection();
+        } else {
+          connection.close();
+          return;
+        }
       }
       if (this.connection && !this.connection.open) {
         this.connection = null;
@@ -193,6 +209,7 @@ export class PeerTransport {
 
   private bindConnection(connection: DataConnection, hostId?: string) {
     this.connection = connection;
+    this.lastConnectionActivityAt = Date.now();
     this.connectTimer = window.setTimeout(() => {
       if (connection.open) return;
       if (this.destroyed) return;
@@ -209,11 +226,13 @@ export class PeerTransport {
       this.clearConnectTimer();
       this.clearGuestReconnectTimer();
       this.guestReconnectAttempts = 0;
+      this.lastConnectionActivityAt = Date.now();
       this.events.onConnected?.(connection.peer);
     });
 
     connection.on("data", (data) => {
       if (this.connection !== connection) return;
+      this.lastConnectionActivityAt = Date.now();
       const parsed = parseNetMessage(data);
       if (!parsed) return;
       this.events.onMessage?.(parsed);

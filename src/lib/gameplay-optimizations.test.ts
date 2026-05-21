@@ -404,10 +404,13 @@ test("flappy base respawn separates gameplay progress from smoothed display prog
   assert.match(flappySource, /visibleGates: selectVisibleFlappyGates\(frame\.gates, \{[\s\S]*?progress: frame\.displayProgress,/);
   assert.match(flappySource, /const renderProgress = current\.displayProgress;/);
   assert.match(flappySource, /progress: renderProgress,/);
-  assert.match(flappySource, /const respawnProgressEnd = Math\.max\(0, nextProgress - 92\);/);
+  assert.match(flappySource, /resolveFlappySafeRespawnProgress/);
+  assert.match(flappySource, /const respawnProgressEnd = resolveFlappySafeRespawnProgress\(\{/);
+  assert.match(flappySource, /gates: current\.gates,/);
   assert.match(flappySource, /current\.progress = respawnProgressEnd;/);
   assert.match(flappySource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
   assert.match(flappySource, /const drift = reverseDirection \? view\.displayProgress : -view\.displayProgress;/);
+  assert.doesNotMatch(flappySource, /const respawnProgressEnd = Math\.max\(0, nextProgress - 92\);/);
   assert.doesNotMatch(flappySource, /current\.progress = Math\.max\(0, nextProgress - 92\);/);
 });
 

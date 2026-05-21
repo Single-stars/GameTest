@@ -1,11 +1,13 @@
 import type {
   NetByeMessage,
   NetForfeitMessage,
+  NetHeartbeatMessage,
   NetHelloMessage,
   NetMessage,
   NetReadyMessage,
   NetRematchMessage,
   NetResultMessage,
+  NetReturnRoomMessage,
   NetStartMessage,
   NetStateMessage,
   PlayerInfo,
@@ -120,12 +122,22 @@ function isByeMessage(value: unknown): value is NetByeMessage {
 
 function isRematchMessage(value: unknown): value is NetRematchMessage {
   if (!isRecord(value)) return false;
-  return isProtocolV1(value.v) && value.kind === "rematch";
+  return isProtocolV1(value.v) && value.kind === "rematch" && isString(value.matchId);
 }
 
 function isForfeitMessage(value: unknown): value is NetForfeitMessage {
   if (!isRecord(value)) return false;
   return isProtocolV1(value.v) && value.kind === "forfeit" && isString(value.matchId);
+}
+
+function isReturnRoomMessage(value: unknown): value is NetReturnRoomMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "return-room" && isString(value.matchId);
+}
+
+function isHeartbeatMessage(value: unknown): value is NetHeartbeatMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "heartbeat" && isNumber(value.sentAt);
 }
 
 export function parseNetMessage(raw: unknown): NetMessage | null {
@@ -146,6 +158,8 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isResultMessage(payload)) return payload;
   if (isRematchMessage(payload)) return payload;
   if (isForfeitMessage(payload)) return payload;
+  if (isReturnRoomMessage(payload)) return payload;
+  if (isHeartbeatMessage(payload)) return payload;
   if (isByeMessage(payload)) return payload;
 
   if (isRecord(payload) && payload.kind !== undefined) {
@@ -204,10 +218,18 @@ export function createByeMessage(reason?: string): NetByeMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "bye", reason };
 }
 
-export function createRematchMessage(): NetRematchMessage {
-  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "rematch" };
+export function createRematchMessage(matchId: string): NetRematchMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "rematch", matchId };
 }
 
 export function createForfeitMessage(matchId: string): NetForfeitMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "forfeit", matchId };
+}
+
+export function createReturnRoomMessage(matchId: string): NetReturnRoomMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "return-room", matchId };
+}
+
+export function createHeartbeatMessage(sentAt: number): NetHeartbeatMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "heartbeat", sentAt };
 }

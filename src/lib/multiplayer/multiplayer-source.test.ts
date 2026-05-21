@@ -7,6 +7,14 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+function cssRule(source: string, selector: string) {
+  const start = source.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `missing CSS rule ${selector}`);
+  const end = source.indexOf("}", start);
+  assert.notEqual(end, -1, `unterminated CSS rule ${selector}`);
+  return source.slice(start, end + 1);
+}
+
 test("PeerJS expected connection failures do not trigger the Next dev error overlay", () => {
   const source = readSource("./peer-transport.ts");
 
@@ -52,14 +60,18 @@ test("multiplayer state protocol exposes map coordinates for same-map rendering"
   assert.match(typesSource, /matchId: string;/);
   assert.match(messagesSource, /kind: "rematch"/);
   assert.match(messagesSource, /kind: "forfeit"/);
+  assert.match(messagesSource, /kind: "return-room"/);
 });
 
-test("multiplayer page restarts rounds without leaving the P2P session", () => {
+test("multiplayer page requests rematch without leaving or immediately resetting the P2P session", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const sessionSource = readSource("./multiplayer-session.ts");
 
   assert.match(pageSource, /requestRematch/);
-  assert.match(sessionSource, /resetRound/);
+  assert.match(sessionSource, /createRematchMessage\(matchId\)/);
+  assert.match(sessionSource, /tryStartRematch/);
+  assert.match(sessionSource, /opponentReady: true/);
+  assert.doesNotMatch(sessionSource, /requestRematch\(\)[\s\S]{0,260}resetRound\(\)/);
   assert.doesNotMatch(pageSource, /再来一局[\s\S]{0,180}handleLeave/);
 });
 
@@ -76,6 +88,29 @@ test("multiplayer game can be forfeited without leaving the P2P room", () => {
   assert.match(sessionSource, /forfeit\(\)/);
   assert.match(sessionSource, /createForfeitMessage/);
   assert.doesNotMatch(sessionSource, /forfeit\(\)[\s\S]{0,240}createByeMessage/);
+});
+
+test("finished multiplayer rounds can return both players to the room without disconnecting", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const messagesSource = readSource("./messages.ts");
+  const typesSource = readSource("./types.ts");
+
+  assert.match(typesSource, /NetReturnRoomMessage/);
+  assert.match(messagesSource, /createReturnRoomMessage/);
+  assert.match(sessionSource, /returnToRoom\(\)/);
+  assert.match(sessionSource, /createReturnRoomMessage\(matchId\)/);
+  assert.match(sessionSource, /case "return-room":/);
+  assert.match(sessionSource, /case "return-room":[\s\S]*resetRound\(\)/);
+  assert.match(pageSource, /const handleReturnRoom = useCallback/);
+  assert.match(pageSource, /sessionRef\.current\?\.returnToRoom\(\);/);
+  assert.match(pageSource, /onReturnRoom=\{handleReturnRoom\}/);
+  assert.match(shellSource, /onReturnRoom/);
+  assert.match(shellSource, />\s*返回房间\s*</);
+  assert.match(shellSource, /rematchRequestedByOpponent/);
+  assert.match(shellSource, /对方想再来一局/);
+  assert.doesNotMatch(shellSource, /退出联机/);
 });
 
 test("multiplayer drops stale round packets and clears opponent on guest bye", () => {
@@ -147,7 +182,7 @@ test("multiplayer gameplay uses an in-page fullscreen shell instead of a route s
   assert.doesNotMatch(pageSource, /["'`]\/multiplayer\/play/);
   assert.doesNotMatch(pageSource, /DoodleJumpPrototype/);
   assert.doesNotMatch(pageSource, /new SimpleGameSync/);
-  assert.match(shellSource, /requestFullscreen/);
+  assert.doesNotMatch(shellSource, /requestFullscreen/);
   assert.match(shellSource, /play-screen/);
   assert.match(cssSource, /\.multiplayer-game-shell/);
   assert.match(cssSource, /position:\s*fixed/);
@@ -155,6 +190,42 @@ test("multiplayer gameplay uses an in-page fullscreen shell instead of a route s
   assert.match(runtimeSource, /DoodleJumpPrototype/);
   assert.match(runtimeSource, /memo\(function MultiplayerMatchRuntime/);
   assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*MULTIPLAYER_STATE_SYNC_MS/);
+});
+
+test("multiplayer in-game HUD uses avatar progress markers and only keeps surrender", () => {
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(shellSource, /PlayerAvatar/);
+  assert.match(shellSource, /resolvePlayerAvatarSkin/);
+  assert.match(shellSource, /className="multiplayer-progress-track"/);
+  assert.match(shellSource, /className=\{`multiplayer-progress-marker/);
+  assert.match(shellSource, /const markersAreClose/);
+  assert.match(shellSource, /selfMarkerZIndex/);
+  assert.match(shellSource, />\s*认输\s*</);
+  assert.doesNotMatch(shellSource, /进入全屏/);
+  assert.doesNotMatch(shellSource, /离开联机/);
+  assert.doesNotMatch(shellSource, /multiplayer-game-hud-scoreboard/);
+  assert.match(cssSource, /\.multiplayer-progress-hud/);
+  assert.match(cssSource, /\.multiplayer-progress-track/);
+  assert.match(cssSource, /\.multiplayer-progress-marker/);
+  assert.match(cssSource, /\.multiplayer-progress-action/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-game-hud-scoreboard/);
+});
+
+test("multiplayer progress avatars render as bare squares with a self pointer", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const avatarRule = cssRule(cssSource, ".multiplayer-progress-avatar");
+
+  assert.match(avatarRule, /position:\s*relative/);
+  assert.match(avatarRule, /background:\s*transparent/);
+  assert.match(avatarRule, /box-shadow:\s*none/);
+  assert.doesNotMatch(avatarRule, /\bborder\s*:/);
+  assert.doesNotMatch(avatarRule, /\boutline\s*:/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-progress-marker\.(self|opponent) \.multiplayer-progress-avatar\s*{[\s\S]*?\boutline\s*:/);
+  assert.match(cssSource, /\.multiplayer-progress-marker\.self \.multiplayer-progress-avatar::before\s*{[\s\S]*?content:\s*""/);
+  assert.match(cssSource, /\.multiplayer-progress-marker\.self \.multiplayer-progress-avatar::before\s*{[\s\S]*?clip-path:\s*polygon\(50% 0,\s*0 100%,\s*100% 100%\)/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-progress-marker\.opponent \.multiplayer-progress-avatar::before/);
 });
 
 test("multiplayer gameplay disables mobile long press browser affordances", () => {
@@ -330,6 +401,35 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(sessionSource, /opponentReady:\s*false/);
   assert.match(sessionSource, /opponentState:\s*null/);
   assert.match(sessionSource, /opponentResult:\s*null/);
+});
+
+test("host clears half-open guest slots with heartbeat stale detection so rooms can be rejoined", () => {
+  const transportSource = readSource("./peer-transport.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const messagesSource = readSource("./messages.ts");
+  const typesSource = readSource("./types.ts");
+  const connectedHandlerSource = sessionSource.slice(
+    sessionSource.indexOf("onConnected: () => {"),
+    sessionSource.indexOf("onPeerDisconnected:", sessionSource.indexOf("onConnected: () => {")),
+  );
+
+  assert.match(typesSource, /NetHeartbeatMessage/);
+  assert.match(messagesSource, /createHeartbeatMessage/);
+  assert.match(messagesSource, /kind === "heartbeat"/);
+  assert.match(sessionSource, /HEARTBEAT_INTERVAL_MS/);
+  assert.match(sessionSource, /PEER_STALE_MS/);
+  assert.match(sessionSource, /startPeerPresence/);
+  assert.match(sessionSource, /notePeerMessage/);
+  assert.match(sessionSource, /case "heartbeat":/);
+  assert.match(sessionSource, /disconnectActiveConnection\(\)/);
+  assert.match(sessionSource, /resetHostWaitingState\(\)/);
+  assert.match(connectedHandlerSource, /selfReady:\s*false/);
+  assert.match(connectedHandlerSource, /opponentReady:\s*false/);
+  assert.match(connectedHandlerSource, /match:\s*null/);
+  assert.match(transportSource, /HOST_STALE_CONNECTION_REPLACE_MS/);
+  assert.match(transportSource, /lastConnectionActivityAt/);
+  assert.match(transportSource, /disconnectActiveConnection\(\)/);
+  assert.match(transportSource, /Date\.now\(\) - this\.lastConnectionActivityAt > HOST_STALE_CONNECTION_REPLACE_MS/);
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {

@@ -36,6 +36,7 @@ import {
   getFlappyGateScreenX,
   getFlappyPlayerScreenX,
   getFlappySignedProgress,
+  resolveFlappySafeRespawnProgress,
   selectVisibleFlappyGates,
   type GeneratedFlappyGate,
   type MiniGameLevelConfig,
@@ -124,13 +125,12 @@ function resolveFlappyRemoteSkin(remotePlayer: FlappyRemotePlayer | null | undef
 function resolveFlappyRemoteAvatarView(remoteState: FlappyRemoteState): PlayerAvatarView {
   if (remoteState.status === "failed") return { action: "hit", expression: "hurt" };
   if (remoteState.status === "finished") return { action: "celebrate", expression: "happy", effect: "sparkles" };
-  return remoteState.direction && remoteState.direction !== "none"
-    ? { action: "move", expression: "neutral" }
-    : { action: "idle", expression: "neutral" };
+  return { action: "idle", expression: "neutral" };
 }
 
 function resolveFlappyDirection(reverseDirection: boolean): PlayerAvatarDirection {
-  return reverseDirection ? "left" : "right";
+  void reverseDirection;
+  return "none";
 }
 
 function flappyStartPlatformY(stageHeight: number) {
@@ -563,7 +563,15 @@ export function FlappyPrototype({
         const failures = current.failures + 1;
         if (failures <= BASE_FAILURE_LIMIT) {
           triggerScreenShake();
-          const respawnProgressEnd = Math.max(0, nextProgress - 92);
+          const respawnProgressEnd = resolveFlappySafeRespawnProgress({
+            gates: current.gates,
+            gateWidth: FLAPPY_GATE_WIDTH,
+            nextProgress,
+            playerSize: PLAYER_SIZE,
+            playerX,
+            reverseDirection,
+            stageWidth,
+          });
           current.progress = respawnProgressEnd;
           current.displayProgress = nextProgress;
           current.respawnProgressStart = nextTime;
@@ -589,7 +597,15 @@ export function FlappyPrototype({
       if (unlimitedRespawn && status === "failed") {
         const failures = current.failures + 1;
         triggerScreenShake();
-        const respawnProgressEnd = Math.max(0, nextProgress - 92);
+        const respawnProgressEnd = resolveFlappySafeRespawnProgress({
+          gates: current.gates,
+          gateWidth: FLAPPY_GATE_WIDTH,
+          nextProgress,
+          playerSize: PLAYER_SIZE,
+          playerX,
+          reverseDirection,
+          stageWidth,
+        });
         current.progress = respawnProgressEnd;
         current.displayProgress = nextProgress;
         current.respawnProgressStart = nextTime;

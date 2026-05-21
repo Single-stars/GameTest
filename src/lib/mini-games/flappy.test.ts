@@ -1,14 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import * as miniGames from "./index.ts";
 import {
   generateFlappyGateLayout,
   getFlappyInitialPlacement,
   getFlappyPlayerScreenX,
+  getFlappyGateScreenX,
   getMiniGameLevel,
   selectVisibleFlappyGates,
 } from "./index.ts";
 import { readMiniGameRuntimeSource } from "./test-utils.ts";
+
+type FlappySafeRespawnResolver = (options: {
+  gates: readonly { distance: number; passed?: boolean }[];
+  gateWidth: number;
+  nextProgress: number;
+  playerSize: number;
+  playerX: number;
+  reverseDirection: boolean;
+  safeApproachDistance: number;
+  stageWidth: number;
+}) => number;
+
+function getSafeRespawnResolver() {
+  const resolver = (miniGames as typeof miniGames & {
+    resolveFlappySafeRespawnProgress?: FlappySafeRespawnResolver;
+  }).resolveFlappySafeRespawnProgress;
+  assert.equal(typeof resolver, "function");
+  return resolver;
+}
 
 test("flappy levels encode gates, collectibles, reversed gravity, and final rules", () => {
   assert.equal(getMiniGameLevel("flappy", "flappy-base").params.gateCount, 6);
@@ -108,6 +129,88 @@ test("flappy generated gates are seeded and encode initial placement", () => {
   );
 });
 
+test("flappy safe respawn backs up far enough before the blocking gate", () => {
+  const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
+  const gate = { distance: 250 };
+  const playerX = 92;
+  const stageWidth = 360;
+  const gateWidth = 54;
+  const playerSize = 32;
+  const nextProgress = stageWidth + gate.distance - (playerX - 8);
+  const fixedBacktrackProgress = Math.max(0, nextProgress - 92);
+  const fixedGateX = getFlappyGateScreenX(gate, {
+    progress: fixedBacktrackProgress,
+    reverseDirection: false,
+    stageWidth,
+  });
+
+  assert.ok(fixedGateX < playerX + playerSize / 2 + 140);
+
+  const safeProgress = resolveFlappySafeRespawnProgress({
+    gates: [gate],
+    gateWidth,
+    nextProgress,
+    playerSize,
+    playerX,
+    reverseDirection: false,
+    safeApproachDistance: 140,
+    stageWidth,
+  });
+  const safeGateX = getFlappyGateScreenX(gate, {
+    progress: safeProgress,
+    reverseDirection: false,
+    stageWidth,
+  });
+
+  assert.ok(safeProgress <= fixedBacktrackProgress);
+  assert.ok(safeGateX >= playerX + playerSize / 2 + 140);
+});
+
+test("flappy safe respawn also keeps reverse-direction gates away from the player", () => {
+  const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
+  const gate = { distance: 250 };
+  const stageWidth = 360;
+  const playerX = stageWidth - 92;
+  const gateWidth = 54;
+  const playerSize = 32;
+  const nextProgress = gate.distance + playerX - 8;
+  const fixedBacktrackProgress = Math.max(0, nextProgress - 92);
+  const fixedGateX = getFlappyGateScreenX(gate, {
+    progress: fixedBacktrackProgress,
+    reverseDirection: true,
+    stageWidth,
+  });
+
+  assert.ok(fixedGateX + gateWidth > playerX - playerSize / 2 - 140);
+
+  const safeProgress = resolveFlappySafeRespawnProgress({
+    gates: [gate],
+    gateWidth,
+    nextProgress,
+    playerSize,
+    playerX,
+    reverseDirection: true,
+    safeApproachDistance: 140,
+    stageWidth,
+  });
+  const safeGateX = getFlappyGateScreenX(gate, {
+    progress: safeProgress,
+    reverseDirection: true,
+    stageWidth,
+  });
+
+  assert.ok(safeProgress <= fixedBacktrackProgress);
+  assert.ok(safeGateX + gateWidth <= playerX - playerSize / 2 - 140);
+});
+
+test("flappy recoverable failures use safe respawn instead of a fixed backtrack", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+
+  assert.match(flappyRuntimeSource, /resolveFlappySafeRespawnProgress/);
+  assert.doesNotMatch(flappyRuntimeSource, /Math\.max\(0, nextProgress - 92\)/);
+});
+
 test("flappy gates keep safe horizontal spacing and visible center variation", () => {
   for (const levelId of ["flappy-3", "flappy-6", "flappy-10"]) {
     const level = getMiniGameLevel("flappy", levelId);
@@ -150,6 +253,22 @@ test("flappy maps its player visuals through the shared avatar without jump or f
   assert.match(renderSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(renderSource, /visualScale=\{1\.18\}/);
   assert.doesNotMatch(renderSource, /prototype-player-box flappy-player/);
+});
+
+test("flappy multiplayer does not treat automatic forward scrolling as avatar movement", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappySource = componentSource.slice(componentSource.indexOf("type FlappyGate"), componentSource.indexOf("export function FlappyPrototype"));
+  const directionSource = flappySource.slice(
+    flappySource.indexOf("function resolveFlappyDirection"),
+    flappySource.indexOf("function flappyStartPlatformY"),
+  );
+  const remoteAvatarSource = flappySource.slice(
+    flappySource.indexOf("function resolveFlappyRemoteAvatarView"),
+    flappySource.indexOf("function resolveFlappyDirection"),
+  );
+
+  assert.match(directionSource, /return "none";/);
+  assert.doesNotMatch(remoteAvatarSource, /action: "move"/);
 });
 
 test("flappy renders the local player anchored while the respawn camera moves", () => {

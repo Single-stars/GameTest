@@ -109,12 +109,25 @@ export type NetStateMessage = {
 export type NetRematchMessage = {
   v: 1;
   kind: "rematch";
+  matchId: string;
 };
 
 export type NetForfeitMessage = {
   v: 1;
   kind: "forfeit";
   matchId: string;
+};
+
+export type NetReturnRoomMessage = {
+  v: 1;
+  kind: "return-room";
+  matchId: string;
+};
+
+export type NetHeartbeatMessage = {
+  v: 1;
+  kind: "heartbeat";
+  sentAt: number;
 };
 
 export type NetResultMessage = {
@@ -140,6 +153,8 @@ export type NetMessage =
   | NetResultMessage
   | NetRematchMessage
   | NetForfeitMessage
+  | NetReturnRoomMessage
+  | NetHeartbeatMessage
   | NetByeMessage;
 
 export type MultiplayerSnapshot = {

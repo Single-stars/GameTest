@@ -148,7 +148,7 @@ test("doodle normal jump covers two layers without overshooting far beyond them"
   assert.doesNotMatch(doodleSource, /nextVy = 760 \*/);
 });
 
-test("doodle visible selectors cull used and off-screen world objects", () => {
+test("doodle visible selectors cull used non-finish and off-screen world objects", () => {
   const layout = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-10"), "visibility-seed");
   const visiblePlatforms = selectVisibleDoodlePlatforms(layout.platforms, {
     buffer: 80,
@@ -162,6 +162,11 @@ test("doodle visible selectors cull used and off-screen world objects", () => {
   assert.equal(
     selectVisibleDoodlePlatforms([usedPlatform], { buffer: 80, cameraY: 640, stageHeight: 640 }).length,
     0,
+  );
+  const usedFinishPlatform = { ...visiblePlatforms[0], finish: true, used: true };
+  assert.deepEqual(
+    selectVisibleDoodlePlatforms([usedFinishPlatform], { buffer: 80, cameraY: 640, stageHeight: 640 }),
+    [usedFinishPlatform],
   );
 
   const visibleHazards = selectVisibleDoodleHazards(layout.hazards, {
@@ -205,6 +210,11 @@ test("doodle completion uses a highest finish platform instead of a height line"
   const highestY = Math.max(...layout.platforms.map((platform) => platform.y));
   const runtimeSource = readMiniGameRuntimeSource();
   const cssSource = readAppCssSource();
+  const doodleSource = runtimeSource.slice(runtimeSource.indexOf("function DoodleJumpPrototype"), runtimeSource.indexOf("function makeFlappyLayout"));
+  const updateDomSource = doodleSource.slice(
+    doodleSource.indexOf("for (const [id, node] of platformRefs.current)"),
+    doodleSource.indexOf("for (const [id, node] of hazardRefs.current)"),
+  );
 
   assert.equal(finishPlatforms.length, 1);
   assert.equal(finish.y, layout.targetHeight);
@@ -214,10 +224,34 @@ test("doodle completion uses a highest finish platform instead of a height line"
   assert.match(runtimeSource, /let landedFinishPlatform = false;/);
   assert.match(runtimeSource, /landedFinishPlatform = platform\.finish === true;/);
   assert.match(runtimeSource, /if \(status === "playing" && landedFinishPlatform\)/);
+  assert.match(updateDomSource, /\(platform\.used && !platform\.finish\)/);
+  assert.doesNotMatch(updateDomSource, /!platform \|\| platform\.used/);
   assert.doesNotMatch(runtimeSource, /nextY >= world\.targetHeight/);
   assert.doesNotMatch(runtimeSource, /className="doodle-progress-line"/);
   assert.match(cssSource, /\.doodle-platform\.finish/);
   assert.match(cssSource, /\.doodle-platform\.finish::after/);
+});
+
+test("finish platforms are not hidden after landing in fall down or square jump", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+  const fallDownSource = runtimeSource.slice(runtimeSource.indexOf("function FallDownPrototype"), runtimeSource.indexOf("function makeDoodleWorld"));
+  const squareJumpSource = runtimeSource.slice(runtimeSource.indexOf("function squareGravityMultiplier"), runtimeSource.indexOf("export function SquareJumpPrototype"));
+  const fallDownDomSource = fallDownSource.slice(
+    fallDownSource.indexOf("for (const [id, node] of fallPlatformRefs.current)"),
+    fallDownSource.indexOf("for (const [id, node] of fallHazardRefs.current)"),
+  );
+  const squareAdvanceSource = squareJumpSource.slice(
+    squareJumpSource.indexOf("const landedPlatform = { ...current.nextPlatform };"),
+    squareJumpSource.indexOf("const cameraStart = { ...current.camera };"),
+  );
+
+  assert.match(fallDownDomSource, /if \(!platform \|\| platform\.broken\)/);
+  assert.doesNotMatch(fallDownDomSource, /platform\.kind === "finish"[\s\S]{0,120}display = "none"/);
+  assert.match(fallDownSource, /platform\.kind === "finish"[\s\S]*?paintFallDownFrame\(current\);/);
+  assert.match(squareAdvanceSource, /const landedPlatform = \{ \.\.\.current\.nextPlatform \};/);
+  assert.match(squareAdvanceSource, /current\.currentPlatform = landedPlatform;/);
+  assert.match(squareAdvanceSource, /if \(nextJumps >= requiredJumps\) \{[\s\S]*?current\.status = "passed";/);
+  assert.match(runtimeSource, /selectSquareJumpVisiblePlatforms\(view\.currentPlatform, view\.nextPlatform, view\.exitingPlatform\)/);
 });
 
 test("doodle only moving obstacle variants enable moving hazards", () => {

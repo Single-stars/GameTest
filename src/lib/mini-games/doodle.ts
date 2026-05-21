@@ -75,13 +75,13 @@ function doodleSmoothNoise(points: number[], position: number) {
   return points[leftIndex] * (1 - smooth) + points[rightIndex] * smooth;
 }
 
-export function selectVisibleDoodlePlatforms<T extends { y: number; used?: boolean }>(
+export function selectVisibleDoodlePlatforms<T extends { finish?: boolean; y: number; used?: boolean }>(
   platforms: readonly T[],
   { buffer, cameraY, stageHeight }: DoodleVisibleOptions,
 ) {
   const minY = cameraY - buffer;
   const maxY = cameraY + stageHeight + buffer;
-  return platforms.filter((platform) => !platform.used && platform.y >= minY && platform.y <= maxY);
+  return platforms.filter((platform) => !(platform.used && !platform.finish) && platform.y >= minY && platform.y <= maxY);
 }
 
 export function selectVisibleDoodleHazards<T extends { y: number; size: number; used?: boolean }>(

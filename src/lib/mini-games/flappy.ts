@@ -28,6 +28,18 @@ export type FlappyVisibleOptions = {
   stageWidth: number;
 };
 
+export type FlappySafeRespawnOptions<T extends { distance: number; passed?: boolean }> = {
+  fallbackBacktrack?: number;
+  gates: readonly T[];
+  gateWidth: number;
+  nextProgress: number;
+  playerSize: number;
+  playerX: number;
+  reverseDirection: boolean;
+  safeApproachDistance?: number;
+  stageWidth: number;
+};
+
 export function getFlappyGateScreenX(
   gate: { distance: number },
   { progress, reverseDirection, stageWidth }: Pick<FlappyVisibleOptions, "progress" | "reverseDirection" | "stageWidth">,
@@ -54,6 +66,47 @@ export function getFlappyPlayerScreenX({
   void progress;
   void reverseDirection;
   return playerX;
+}
+
+export function resolveFlappySafeRespawnProgress<T extends { distance: number; passed?: boolean }>({
+  fallbackBacktrack = 92,
+  gates,
+  gateWidth,
+  nextProgress,
+  playerSize,
+  playerX,
+  reverseDirection,
+  safeApproachDistance = 150,
+  stageWidth,
+}: FlappySafeRespawnOptions<T>) {
+  let respawnProgress = Math.max(0, nextProgress - fallbackBacktrack);
+  const playerHalfSize = playerSize / 2;
+  const safeForwardGateX = playerX + playerHalfSize + safeApproachDistance;
+  const safeReverseGateRight = playerX - playerHalfSize - safeApproachDistance;
+
+  for (const gate of gates) {
+    if (gate.passed) continue;
+    const screenX = getFlappyGateScreenX(gate, {
+      progress: respawnProgress,
+      reverseDirection,
+      stageWidth,
+    });
+
+    if (reverseDirection) {
+      const gateRight = screenX + gateWidth;
+      const playerRight = playerX + playerHalfSize;
+      if (gateRight > safeReverseGateRight && screenX < playerRight) {
+        respawnProgress = Math.min(respawnProgress, gate.distance + safeReverseGateRight - gateWidth);
+      }
+    } else {
+      const playerLeft = playerX - playerHalfSize;
+      if (screenX < safeForwardGateX && screenX + gateWidth > playerLeft) {
+        respawnProgress = Math.min(respawnProgress, stageWidth + gate.distance - safeForwardGateX);
+      }
+    }
+  }
+
+  return Math.max(0, respawnProgress);
 }
 
 export function selectVisibleFlappyGates<T extends { distance: number }>(

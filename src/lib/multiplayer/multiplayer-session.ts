@@ -3,10 +3,12 @@
 import {
   createByeMessage,
   createForfeitMessage,
+  createHeartbeatMessage,
   createHelloMessage,
   createReadyMessage,
   createRematchMessage,
   createResultMessage,
+  createReturnRoomMessage,
   createStateMessage,
 } from "@/lib/multiplayer/messages";
 import {
@@ -28,6 +30,9 @@ import type {
 
 const COUNTDOWN_TICK_MS = 100;
 const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 100;
+const REMATCH_COUNTDOWN_MS = 3_000;
+const HEARTBEAT_INTERVAL_MS = 2_000;
+const PEER_STALE_MS = 9_000;
 
 function now() {
   return Date.now();
@@ -35,6 +40,10 @@ function now() {
 
 function createMatchId(seed: string) {
   return `${seed}:${now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+function createRematchSeed(seed: string) {
+  return `${seed}:again:${now()}:${Math.random().toString(36).slice(2)}`;
 }
 
 export function buildInitialSnapshot(): MultiplayerSnapshot {
@@ -82,6 +91,8 @@ export class MultiplayerSession {
   private opponentStateAcceptedPackets = 0;
   private opponentStateDroppedOldPackets = 0;
   private lastOpponentStateAcceptedAt: number | null = null;
+  private heartbeatTimer: number | null = null;
+  private lastPeerMessageAt: number | null = null;
 
   constructor(options: SessionOptions) {
     this.onChange = options.onChange;
@@ -126,9 +137,26 @@ export class MultiplayerSession {
           });
         },
         onConnected: () => {
+          this.stopCountdown();
+          this.stopOpponentStateSnapshotTimer();
+          this.pendingOpponentStateSnapshot = null;
+          this.lastOpponentStateSnapshotAt = 0;
+          this.selfStateSeq = 0;
+          this.opponentStateSeq = -1;
+          this.notePeerMessage();
+          this.startPeerPresence();
           this.patchSnapshot({
             status: "connected",
             errorMessage: null,
+            selfReady: false,
+            opponentReady: false,
+            match: null,
+            countdown: null,
+            selfState: null,
+            opponentPlayer: null,
+            opponentState: null,
+            selfResult: null,
+            opponentResult: null,
           });
           this.send(createHelloMessage(this.selfPlayer));
         },
@@ -141,6 +169,7 @@ export class MultiplayerSession {
         onFailed: (message) => {
           this.stopCountdown();
           this.stopOpponentStateSnapshotTimer();
+          this.stopPeerPresence();
           this.pendingOpponentStateSnapshot = null;
           this.patchSnapshot({
             status: "failed",
@@ -158,6 +187,7 @@ export class MultiplayerSession {
         onDisconnected: (message) => {
           this.stopCountdown();
           this.stopOpponentStateSnapshotTimer();
+          this.stopPeerPresence();
           this.pendingOpponentStateSnapshot = null;
           this.patchSnapshot({
             status: "disconnected",
@@ -205,6 +235,8 @@ export class MultiplayerSession {
       match,
       status: "countdown",
       countdown: { startAt, remainMs: Math.max(0, startAt - now()) },
+      selfReady: false,
+      opponentReady: false,
       selfState: null,
       opponentState: null,
       selfResult: null,
@@ -272,8 +304,17 @@ export class MultiplayerSession {
   }
 
   requestRematch() {
-    if (!this.transport) return;
-    this.send(createRematchMessage());
+    const matchId = this.currentMatchId();
+    if (!this.transport || !matchId || this.snapshot.status !== "finished") return;
+    this.patchSnapshot({ selfReady: true, errorMessage: null });
+    this.send(createRematchMessage(matchId));
+    this.tryStartRematch();
+  }
+
+  returnToRoom() {
+    const matchId = this.currentMatchId();
+    if (!matchId) return;
+    this.send(createReturnRoomMessage(matchId));
     this.resetRound();
   }
 
@@ -283,6 +324,7 @@ export class MultiplayerSession {
     this.transport = null;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
+    this.stopPeerPresence();
     this.pendingOpponentStateSnapshot = null;
     this.lastOpponentStateSnapshotAt = 0;
     this.selfStateSeq = 0;
@@ -310,6 +352,7 @@ export class MultiplayerSession {
     this.transport = null;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
+    this.stopPeerPresence();
     this.pendingOpponentStateSnapshot = null;
     this.lastOpponentStateSnapshotAt = 0;
     this.opponentStateAcceptedPackets = 0;
@@ -330,9 +373,12 @@ export class MultiplayerSession {
   }
 
   private handleMessage(message: NetMessage) {
+    this.notePeerMessage();
     switch (message.kind) {
       case "hello":
         this.patchSnapshot({ opponentPlayer: message.player });
+        break;
+      case "heartbeat":
         break;
       case "ready":
         this.patchSnapshot({ opponentReady: message.ready });
@@ -388,6 +434,12 @@ export class MultiplayerSession {
         this.resetRound();
         break;
       case "rematch":
+        if (!this.isCurrentMatchMessage(message)) return;
+        this.patchSnapshot({ opponentReady: true });
+        this.tryStartRematch();
+        break;
+      case "return-room":
+        if (!this.isCurrentMatchMessage(message)) return;
         this.resetRound();
         break;
       case "bye":
@@ -395,6 +447,8 @@ export class MultiplayerSession {
           this.resetHostWaitingState();
         } else {
           this.stopCountdown();
+          this.stopOpponentStateSnapshotTimer();
+          this.stopPeerPresence();
           this.patchSnapshot({
             status: "disconnected",
             errorMessage: message.reason || MULTIPLAYER_DISCONNECTED_MESSAGE,
@@ -441,6 +495,7 @@ export class MultiplayerSession {
   private resetHostWaitingState() {
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
+    this.stopPeerPresence();
     this.selfStateSeq = 0;
     this.opponentStateSeq = -1;
     this.lastOpponentStateSnapshotAt = 0;
@@ -484,6 +539,8 @@ export class MultiplayerSession {
       match,
       status: "countdown",
       countdown: { startAt: match.startAt, remainMs: Math.max(0, match.startAt - now()) },
+      selfReady: false,
+      opponentReady: false,
       selfState: null,
       opponentState: null,
       selfResult: null,
@@ -500,12 +557,73 @@ export class MultiplayerSession {
     if (!this.snapshot.match) return;
   }
 
+  private tryStartRematch() {
+    const { match, opponentReady, selfReady, status } = this.snapshot;
+    if (this.role !== "host") return;
+    if (status !== "finished") return;
+    if (!match || !selfReady || !opponentReady) return;
+    this.startMatch({
+      levelId: match.levelId,
+      seed: createRematchSeed(match.seed),
+      logicWidth: match.logicWidth,
+      logicHeight: match.logicHeight,
+      countdownMs: REMATCH_COUNTDOWN_MS,
+    });
+  }
+
   private tryFinishSession() {
     if (!this.snapshot.selfResult || !this.snapshot.opponentResult) return;
     this.patchSnapshot({
       status: "finished",
       countdown: null,
       selfReady: false,
+      opponentReady: false,
+    });
+  }
+
+  private startPeerPresence() {
+    this.stopPeerPresence();
+    this.lastPeerMessageAt = now();
+    this.heartbeatTimer = window.setInterval(() => {
+      this.send(createHeartbeatMessage(now()));
+      this.checkPeerStale();
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopPeerPresence() {
+    if (this.heartbeatTimer !== null) {
+      window.clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.lastPeerMessageAt = null;
+  }
+
+  private notePeerMessage() {
+    this.lastPeerMessageAt = now();
+  }
+
+  private checkPeerStale() {
+    if (this.lastPeerMessageAt === null) return;
+    if (now() - this.lastPeerMessageAt <= PEER_STALE_MS) return;
+    this.transport?.disconnectActiveConnection();
+    if (this.role === "host") {
+      this.resetHostWaitingState();
+      return;
+    }
+    this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    this.stopPeerPresence();
+    this.pendingOpponentStateSnapshot = null;
+    this.patchSnapshot({
+      status: "disconnected",
+      errorMessage: MULTIPLAYER_DISCONNECTED_MESSAGE,
+      match: null,
+      countdown: null,
+      selfState: null,
+      opponentPlayer: null,
+      opponentState: null,
+      selfResult: null,
+      opponentResult: null,
       opponentReady: false,
     });
   }

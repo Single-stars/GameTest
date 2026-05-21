@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   MULTIPLAYER_PROTOCOL_VERSION,
   createForfeitMessage,
+  createHeartbeatMessage,
   createHelloMessage,
   createRematchMessage,
+  createReturnRoomMessage,
   createStateMessage,
   parseNetMessage,
   serializeNetMessage,
@@ -89,11 +91,13 @@ test("state messages carry shared-map runtime coordinates", () => {
   assert.equal(parsed.sentAt, 123456);
 });
 
-test("parseNetMessage parses rematch round reset messages", () => {
-  const parsed = parseNetMessage(createRematchMessage());
+test("parseNetMessage parses rematch request messages with match identity", () => {
+  const parsed = parseNetMessage(createRematchMessage("match-1"));
 
   assert.ok(parsed);
   assert.equal(parsed.kind, "rematch");
+  if (parsed.kind !== "rematch") return;
+  assert.equal(parsed.matchId, "match-1");
 });
 
 test("result and forfeit messages carry match identity", () => {
@@ -116,4 +120,22 @@ test("result and forfeit messages carry match identity", () => {
   assert.equal(forfeit.kind, "forfeit");
   if (forfeit.kind !== "forfeit") return;
   assert.equal(forfeit.matchId, "match-2");
+});
+
+test("return-room messages carry match identity without leaving the P2P room", () => {
+  const parsed = parseNetMessage(createReturnRoomMessage("match-3"));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "return-room");
+  if (parsed.kind !== "return-room") return;
+  assert.equal(parsed.matchId, "match-3");
+});
+
+test("heartbeat messages keep half-open rooms from holding stale guests", () => {
+  const parsed = parseNetMessage(createHeartbeatMessage(123456));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "heartbeat");
+  if (parsed.kind !== "heartbeat") return;
+  assert.equal(parsed.sentAt, 123456);
 });
