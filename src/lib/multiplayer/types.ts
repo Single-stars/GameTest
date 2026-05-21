@@ -75,6 +75,7 @@ export type NetStartMessage = {
   kind: "start";
   seed: string;
   startAt: number;
+  sentAt: number;
   levelId: string;
   logicWidth: number;
   logicHeight: number;

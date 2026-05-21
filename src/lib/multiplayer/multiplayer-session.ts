@@ -134,7 +134,8 @@ export class MultiplayerSession {
 
   startMatch(config: Omit<MatchConfig, "startAt"> & { countdownMs: number }) {
     if (this.role !== "host") return;
-    const startAt = now() + config.countdownMs;
+    const sentAt = now();
+    const startAt = sentAt + config.countdownMs;
     const match: MatchConfig = {
       levelId: config.levelId,
       seed: config.seed,
@@ -152,6 +153,7 @@ export class MultiplayerSession {
       kind: "start",
       seed: match.seed,
       startAt: match.startAt,
+      sentAt,
       levelId: match.levelId,
       logicWidth: match.logicWidth,
       logicHeight: match.logicHeight,
@@ -324,12 +326,15 @@ export class MultiplayerSession {
   }
 
   private acceptStartMessage(message: Extract<NetMessage, { kind: "start" }>) {
+    const receivedAt = now();
+    const syncedCountdownMs = Math.max(0, message.startAt - message.sentAt);
+    const localStartAt = receivedAt + syncedCountdownMs;
     const match: MatchConfig = {
       levelId: message.levelId,
       seed: message.seed,
       logicWidth: message.logicWidth,
       logicHeight: message.logicHeight,
-      startAt: message.startAt,
+      startAt: localStartAt,
     };
     this.patchSnapshot({
       match,

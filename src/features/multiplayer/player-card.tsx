@@ -50,7 +50,7 @@ export function PlayerCard({
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
         <PlayerAvatar skin={resolveSkinId(player, fallbackSkin)} size={44} action="idle" expression="neutral" />
         <div>
-          <p style={{ margin: 0, fontWeight: 600 }}>{player?.name ?? "等待中"}</p>
+          <p style={{ margin: 0, fontWeight: 600 }}>{player?.name ?? title}</p>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: ready ? "#087443" : "#934f00" }}>
             {ready ? "已准备" : "未准备"}
           </p>

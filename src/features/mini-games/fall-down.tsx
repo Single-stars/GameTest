@@ -723,7 +723,7 @@ export function FallDownPrototype({
             const playerScreenY = current.playerY - current.cameraY;
             const overlapsX = Math.abs(current.playerX - hazardX) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
             const overlapsY = Math.abs(playerScreenY - hazardY) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
-            if (overlapsX && overlapsY) {
+            if (overlapsX && overlapsY && current.time >= current.respawnUntil) {
               continueAfterRecoverableFailure("躲开下落危险");
               return;
             }
@@ -738,7 +738,7 @@ export function FallDownPrototype({
             const landingBounds = fallDownPlatformLandingBounds(platform, platformX);
             const horizontalOverlap = current.playerX + PLAYER_SIZE / 2 >= landingBounds.left && current.playerX - PLAYER_SIZE / 2 <= landingBounds.right;
             if (!crossedPlatform || !horizontalOverlap) continue;
-            if (platform.kind === "danger") {
+            if (platform.kind === "danger" && current.time >= current.respawnUntil) {
               continueAfterRecoverableFailure("踩到危险");
               return;
             }

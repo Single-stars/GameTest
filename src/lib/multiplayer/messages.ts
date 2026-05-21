@@ -69,6 +69,7 @@ function isStartMessage(value: unknown): value is NetStartMessage {
     value.kind === "start" &&
     isString(value.seed) &&
     isNumber(value.startAt) &&
+    isNumber(value.sentAt) &&
     isString(value.levelId) &&
     isNumber(value.logicWidth) &&
     isNumber(value.logicHeight)

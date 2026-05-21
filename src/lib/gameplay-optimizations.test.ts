@@ -338,11 +338,11 @@ test("screen shake has one global implementation and old stage-shake styles are 
   const squareCss = read(new URL("../app/styles/mini-games/square-jump.css", import.meta.url));
   const miniGameCss = [commonCss, fallCss, squareCss].join("\n");
 
-  assert.match(commonCss, /\.prototype-stage\.screen-shake,\n\.prototype-stage\.failed\s*{\n\s*animation: mini-game-screen-shake 180ms ease-out both;/);
+  assert.match(commonCss, /\.prototype-stage\.screen-shake,\r?\n\.prototype-stage\.failed\s*{\r?\n\s*animation: mini-game-screen-shake 180ms ease-out both;/);
   assert.doesNotMatch(miniGameCss, /prototype-stage-shake/);
   assert.doesNotMatch(fallCss, /\.fall-down-stage\.failed/);
   assert.doesNotMatch(squareCss, /\.square-jump-stage\.failed/);
-  assert.match(fallCss, /\.fall-platform\.danger\s*{\n\s*animation: fall-danger-platform-shake 180ms ease-in-out infinite;/);
+  assert.match(fallCss, /\.fall-platform\.danger\s*{\r?\n\s*animation: fall-danger-platform-shake 180ms ease-in-out infinite;/);
   assert.match(fallCss, /@keyframes fall-danger-platform-shake/);
 });
 

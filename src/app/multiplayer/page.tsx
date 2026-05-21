@@ -156,7 +156,9 @@ function MultiplayerPageContent() {
   const peerOptions = useMemo(() => resolvePeerOptions(), []);
   const matchSeed = snapshot.match?.seed ?? "";
   const runSeed = `${battleLevelOption.levelId}:${matchSeed}`;
-  const showGameShell = (snapshot.status === "playing" || snapshot.status === "finished") && Boolean(snapshot.match);
+  const showGameShell =
+    (snapshot.status === "countdown" || snapshot.status === "playing" || snapshot.status === "finished") &&
+    Boolean(snapshot.match);
   const matchStageSize = useMemo(
     () =>
       snapshot.match
@@ -456,13 +458,15 @@ function MultiplayerPageContent() {
             state={snapshot.selfState}
             result={snapshot.selfResult}
           />
-          <PlayerCard
-            title="对方"
-            player={snapshot.opponentPlayer}
-            ready={snapshot.opponentReady}
-            state={snapshot.opponentState}
-            result={snapshot.opponentResult}
-          />
+          {snapshot.opponentPlayer ? (
+            <PlayerCard
+              title="对方"
+              player={snapshot.opponentPlayer}
+              ready={snapshot.opponentReady}
+              state={snapshot.opponentState}
+              result={snapshot.opponentResult}
+            />
+          ) : null}
         </section>
 
         {snapshot.status === "connected" ? (
@@ -476,25 +480,9 @@ function MultiplayerPageContent() {
           </section>
         ) : null}
 
-        {snapshot.status === "countdown" && countdownSeconds !== null ? (
-          <section
-            style={{
-              marginTop: 16,
-              borderRadius: 12,
-              background: "#111",
-              color: "#fff",
-              textAlign: "center",
-              padding: "18px 12px",
-              fontSize: 28,
-              fontWeight: 700,
-            }}
-          >
-            {countdownSeconds}
-          </section>
-        ) : null}
-
         {showGameShell ? (
           <MultiplayerGameShell
+            countdownSeconds={countdownSeconds}
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}

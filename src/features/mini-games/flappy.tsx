@@ -164,7 +164,18 @@ function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): Flapp
   };
 }
 
-function makeFlappyRuntimeState(frame: FlappyFrame, gateCount: number, playerX: number, direction: PlayerAvatarDirection): FlappyRuntimeState {
+function resolveFlappySignedProgress(progress: number, reverseDirection: boolean) {
+  return reverseDirection ? -progress : progress;
+}
+
+function makeFlappyRuntimeState(
+  frame: FlappyFrame,
+  gateCount: number,
+  playerX: number,
+  direction: PlayerAvatarDirection,
+  reverseDirection: boolean,
+): FlappyRuntimeState {
+  const absoluteWorldX = playerX + resolveFlappySignedProgress(frame.progress, reverseDirection);
   return {
     cameraY: 0,
     direction,
@@ -172,7 +183,7 @@ function makeFlappyRuntimeState(frame: FlappyFrame, gateCount: number, playerX: 
     failures: frame.failures,
     progress: Number((frame.passed / Math.max(1, gateCount)).toFixed(4)),
     status: frame.status,
-    x: playerX,
+    x: absoluteWorldX,
     y: frame.playerY,
   };
 }
@@ -310,7 +321,7 @@ export function FlappyPrototype({
     if (!force && time - lastRuntimeSyncRef.current < FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS) return;
     lastRuntimeSyncRef.current = time;
     onRuntimeStateRef.current(
-      makeFlappyRuntimeState(runtimeRef.current, gateCount, playerX, resolveFlappyDirection(reverseDirection)),
+      makeFlappyRuntimeState(runtimeRef.current, gateCount, playerX, resolveFlappyDirection(reverseDirection), reverseDirection),
     );
   }, [gateCount, playerX, reverseDirection]);
 
@@ -405,9 +416,11 @@ export function FlappyPrototype({
       if (remotePlayerShellRef.current) {
         const sampledRemote = remoteSmootherRef.current.sample(performance.now());
         if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
+          const localSignedProgress = resolveFlappySignedProgress(current.displayProgress, reverseDirection);
+          const remoteScreenX = sampledRemote.x - localSignedProgress;
           remotePlayerShellRef.current.style.display = "";
           remotePlayerShellRef.current.style.transform = transformPoint3d(
-            sampledRemote.x - PLAYER_SIZE / 2,
+            remoteScreenX - PLAYER_SIZE / 2,
             sampledRemote.y - PLAYER_SIZE / 2,
           );
         } else {
@@ -424,6 +437,10 @@ export function FlappyPrototype({
       const current = runtimeRef.current;
       if (current.status !== "playing") {
         updateDom(current);
+        const keepRemoteRenderingAfterSettled = mode === "advanced" && Boolean(onRuntimeStateRef.current);
+        if (keepRemoteRenderingAfterSettled) {
+          frameId = requestAnimationFrame(tick);
+        }
         return;
       }
       if (!current.started) {

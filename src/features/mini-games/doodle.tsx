@@ -484,7 +484,14 @@ export function DoodleJumpPrototype({
       const current = runtimeRef.current;
       if (current.status !== "playing") {
         paintDoodleFrame(current);
-        syncDoodleRuntimeState(time, true);
+        syncDoodleRuntimeState(time);
+        const keepRemoteRenderingAfterSettled = mode === "advanced" && Boolean(onRuntimeStateRef.current);
+        if (keepRemoteRenderingAfterSettled) {
+          syncDoodleRuntimeState(time, true);
+          frameId = requestAnimationFrame(tick);
+        } else {
+          syncDoodleRuntimeState(time, true);
+        }
         return;
       }
       if (!current.started) {

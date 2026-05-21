@@ -48,6 +48,7 @@ function PlayerHudLine({
 
 export function MultiplayerGameShell({
   children,
+  countdownSeconds,
   opponentPlayer,
   opponentResult,
   opponentState,
@@ -60,6 +61,7 @@ export function MultiplayerGameShell({
   winnerText,
 }: {
   children?: ReactNode;
+  countdownSeconds: number | null;
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
   opponentState: SelfGameState | null;
@@ -82,6 +84,11 @@ export function MultiplayerGameShell({
   return (
     <section className="multiplayer-game-shell play-screen" ref={shellRef} aria-label="联机游戏">
       <div className="multiplayer-game-shell-main">{children}</div>
+      {status === "countdown" && countdownSeconds !== null ? (
+        <div className="multiplayer-game-countdown-panel" aria-live="polite">
+          {countdownSeconds}
+        </div>
+      ) : null}
 
       <aside className="multiplayer-game-hud" aria-label="联机状态">
         <div className="multiplayer-game-hud-scoreboard">
