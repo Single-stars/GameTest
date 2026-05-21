@@ -243,7 +243,7 @@ test("fall down base recovery keeps the animation loop alive after a recoverable
   );
 
   assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
-  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)\) \{[\s\S]*?return true;/);
+  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?return true;/);
   assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
   assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
   assert.doesNotMatch(resumeInputSource, /respawnUntil\s*=\s*0/);
@@ -255,9 +255,9 @@ test("fall down base failures respawn on a safe platform at the current camera m
 
   assert.match(fallDownSource, /failures: number;/);
   assert.match(fallDownSource, /respawnUntil: number;/);
-  assert.match(fallDownSource, /function recoverFallDownBaseFailure\(current: FallDownRuntime, reason: string, stageSize: MiniGameStageSize\)/);
+  assert.match(fallDownSource, /function recoverFallDownBaseFailure\([\s\S]*current: FallDownRuntime,[\s\S]*reason: string,[\s\S]*stageSize: MiniGameStageSize,[\s\S]*unlimitedRespawn = false,[\s\S]*\)/);
   assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
-  assert.match(fallDownSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(fallDownSource, /if \(!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT\)/);
   assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
   assert.match(fallDownSource, /const platformY = current\.cameraY \+ stageSize\.height \* 0\.5;/);
   assert.match(fallDownSource, /id: -2000 - failures,/);
@@ -266,7 +266,7 @@ test("fall down base failures respawn on a safe platform at the current camera m
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(fallDownSource, /current\.started = false;/);
-  assert.match(fallDownSource, /mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)/);
+  assert.match(fallDownSource, /\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)/);
   assert.match(fallDownSource, /failures: latest\.failures,/);
   assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });
@@ -295,7 +295,7 @@ test("fall down platform layout varies by run seed", () => {
   assert.match(fallDownSource, /phase: rand\(\) \* Math\.PI \* 2/);
   assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\)/);
   assert.match(fallDownSource, /makeFallDownPlatforms\(level, runSeed, stageSize\.width\)/);
-  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, stageSize\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, logicStageSize\)/);
 });
 
 test("fall down adds falling hazards and L platforms without more than three consecutive danger layers", () => {

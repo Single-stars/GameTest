@@ -24,6 +24,10 @@ export type PeerTransportOptions = {
 
 const PEER_OPEN_TIMEOUT_MS = 12_000;
 const CONNECT_TIMEOUT_MS = 12_000;
+const SERVER_RECOVERY_WINDOW_MS = 30_000;
+const SERVER_RECONNECT_RETRY_MS = 1_000;
+const GUEST_RECONNECT_RETRY_MS = 1_200;
+const MAX_GUEST_RECONNECT_ATTEMPTS = 8;
 
 export class PeerTransport {
   private readonly role: "host" | "guest";
@@ -36,6 +40,11 @@ export class PeerTransport {
   private peerOpenTimer: number | null = null;
   private connectTimer: number | null = null;
   private localPeerId: string | null = null;
+  private activeHostId: string | null = null;
+  private guestReconnectAttempts = 0;
+  private guestReconnectTimer: number | null = null;
+  private serverReconnectTimer: number | null = null;
+  private serverRecoveryDeadline = 0;
 
   constructor(options: PeerTransportOptions) {
     this.role = options.role;
@@ -54,6 +63,12 @@ export class PeerTransport {
 
   async start(): Promise<string | null> {
     this.destroyed = false;
+    this.activeHostId = this.role === "guest" ? this.targetRoomId : null;
+    this.guestReconnectAttempts = 0;
+    this.serverRecoveryDeadline = 0;
+    this.clearGuestReconnectTimer();
+    this.clearServerReconnectTimer();
+
     return new Promise<string | null>((resolve, reject) => {
       const peer = this.peerOptions ? new Peer(this.peerOptions) : new Peer();
       this.peer = peer;
@@ -67,11 +82,24 @@ export class PeerTransport {
       }, PEER_OPEN_TIMEOUT_MS);
 
       peer.on("open", (id) => {
-        if (this.destroyed || settled) return;
-        settled = true;
+        if (this.destroyed) return;
         this.clearPeerOpenTimer();
-        this.localPeerId = id;
-        this.events.onPeerOpen?.(id);
+        this.clearServerReconnectTimer();
+        this.serverRecoveryDeadline = 0;
+
+        if (this.localPeerId !== id) {
+          this.localPeerId = id;
+          this.events.onPeerOpen?.(id);
+        }
+
+        if (settled) {
+          if (this.role === "guest" && this.activeHostId && !this.connection?.open) {
+            this.connectToHost(this.activeHostId);
+          }
+          return;
+        }
+
+        settled = true;
 
         if (this.role === "host") {
           this.bindHostIncomingConnection(peer);
@@ -90,17 +118,17 @@ export class PeerTransport {
       });
 
       peer.on("error", (error) => {
+        this.handlePeerError(error);
         if (!settled) {
           settled = true;
           this.clearPeerOpenTimer();
+          reject(error);
         }
-        this.handlePeerError(error);
-        reject(error);
       });
 
       peer.on("disconnected", () => {
         if (this.destroyed) return;
-        this.handleDisconnected(MULTIPLAYER_DISCONNECTED_MESSAGE);
+        this.scheduleServerReconnectAttempt();
       });
     });
   }
@@ -127,6 +155,9 @@ export class PeerTransport {
     this.destroyed = true;
     this.clearPeerOpenTimer();
     this.clearConnectTimer();
+    this.clearGuestReconnectTimer();
+    this.clearServerReconnectTimer();
+    this.serverRecoveryDeadline = 0;
     this.connection?.close();
     this.connection = null;
     if (this.peer) {
@@ -147,26 +178,38 @@ export class PeerTransport {
 
   private connectToHost(hostId: string) {
     if (!this.peer) return;
+    this.activeHostId = hostId;
+    this.clearConnectTimer();
     const connection = this.peer.connect(hostId, {
       reliable: false,
       serialization: "json",
     });
-    this.bindConnection(connection);
+    this.bindConnection(connection, hostId);
   }
 
-  private bindConnection(connection: DataConnection) {
+  private bindConnection(connection: DataConnection, hostId?: string) {
     this.connection = connection;
     this.connectTimer = window.setTimeout(() => {
       if (connection.open) return;
+      if (this.destroyed) return;
+      if (this.connection !== connection) return;
+      if (this.role === "guest" && hostId) {
+        this.scheduleGuestReconnectAttempt(hostId);
+        return;
+      }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
     }, CONNECT_TIMEOUT_MS);
 
     connection.on("open", () => {
+      if (this.connection !== connection) return;
       this.clearConnectTimer();
+      this.clearGuestReconnectTimer();
+      this.guestReconnectAttempts = 0;
       this.events.onConnected?.(connection.peer);
     });
 
     connection.on("data", (data) => {
+      if (this.connection !== connection) return;
       const parsed = parseNetMessage(data);
       if (!parsed) return;
       this.events.onMessage?.(parsed);
@@ -174,11 +217,23 @@ export class PeerTransport {
 
     connection.on("close", () => {
       if (this.destroyed) return;
+      if (this.connection !== connection) return;
+      this.clearConnectTimer();
+      if (this.role === "guest" && hostId) {
+        this.scheduleGuestReconnectAttempt(hostId);
+        return;
+      }
       this.handleDisconnected(MULTIPLAYER_DISCONNECTED_MESSAGE);
     });
 
     connection.on("error", () => {
       if (this.destroyed) return;
+      if (this.connection !== connection) return;
+      this.clearConnectTimer();
+      if (this.role === "guest" && hostId) {
+        this.scheduleGuestReconnectAttempt(hostId);
+        return;
+      }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
     });
   }
@@ -186,7 +241,86 @@ export class PeerTransport {
   private handlePeerError(error: PeerError<string>) {
     console.warn("[multiplayer] peer error", error.type, error.message);
     if (this.destroyed) return;
+    if (error.type === "peer-unavailable" && this.role === "guest" && this.activeHostId) {
+      this.scheduleGuestReconnectAttempt(this.activeHostId);
+      return;
+    }
+    if (this.isRecoverablePeerErrorType(error.type)) {
+      this.scheduleServerReconnectAttempt();
+      return;
+    }
     this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+  }
+
+  private isRecoverablePeerErrorType(type: string) {
+    return (
+      type === "network" ||
+      type === "server-error" ||
+      type === "socket-error" ||
+      type === "socket-closed" ||
+      type === "disconnected"
+    );
+  }
+
+  private scheduleGuestReconnectAttempt(hostId: string) {
+    if (this.destroyed || this.role !== "guest") return;
+    if (this.connection?.open) return;
+    if (this.guestReconnectAttempts >= MAX_GUEST_RECONNECT_ATTEMPTS) {
+      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+      return;
+    }
+    if (this.guestReconnectTimer !== null) return;
+
+    this.guestReconnectTimer = window.setTimeout(() => {
+      this.guestReconnectTimer = null;
+      if (this.destroyed) return;
+      if (this.connection?.open) return;
+
+      this.guestReconnectAttempts += 1;
+      const peer = this.peer;
+      if (!peer) return;
+
+      if (peer.disconnected) {
+        this.scheduleServerReconnectAttempt();
+        this.scheduleGuestReconnectAttempt(hostId);
+        return;
+      }
+      this.connectToHost(hostId);
+    }, GUEST_RECONNECT_RETRY_MS);
+  }
+
+  private scheduleServerReconnectAttempt() {
+    if (this.destroyed) return;
+    const peer = this.peer;
+    if (!peer) return;
+    if (!peer.disconnected) return;
+
+    if (this.serverRecoveryDeadline === 0) {
+      this.serverRecoveryDeadline = Date.now() + SERVER_RECOVERY_WINDOW_MS;
+    }
+    if (Date.now() > this.serverRecoveryDeadline) {
+      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+      return;
+    }
+    if (this.serverReconnectTimer !== null) return;
+
+    this.serverReconnectTimer = window.setTimeout(() => {
+      this.serverReconnectTimer = null;
+      if (this.destroyed) return;
+      const currentPeer = this.peer;
+      if (!currentPeer) return;
+      if (!currentPeer.disconnected) {
+        this.serverRecoveryDeadline = 0;
+        return;
+      }
+
+      try {
+        currentPeer.reconnect();
+      } catch {
+        // reconnect can throw when peer state is not recoverable.
+      }
+      this.scheduleServerReconnectAttempt();
+    }, SERVER_RECONNECT_RETRY_MS);
   }
 
   private handleFailure(message: string) {
@@ -211,5 +345,17 @@ export class PeerTransport {
     if (this.connectTimer === null) return;
     window.clearTimeout(this.connectTimer);
     this.connectTimer = null;
+  }
+
+  private clearGuestReconnectTimer() {
+    if (this.guestReconnectTimer === null) return;
+    window.clearTimeout(this.guestReconnectTimer);
+    this.guestReconnectTimer = null;
+  }
+
+  private clearServerReconnectTimer() {
+    if (this.serverReconnectTimer === null) return;
+    window.clearTimeout(this.serverReconnectTimer);
+    this.serverReconnectTimer = null;
   }
 }

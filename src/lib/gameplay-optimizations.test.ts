@@ -360,8 +360,8 @@ test("requested base and advanced mini-games trigger screen shake only on discre
 
   assert.match(doodleSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
   assert.match(doodleSource, /if \(status === "failed"\) triggerScreenShake\(\);/);
-  assert.match(fallDownSource, /if \(mode === "base" && recoverFallDownBaseFailure\(current, reason, stageSize\)\) \{[\s\S]*?triggerScreenShake\(\);/);
-  assert.match(fallDownSource, /if \(mode === "base"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return false;/);
+  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?triggerScreenShake\(\);/);
+  assert.match(fallDownSource, /if \(mode === "base" \|\| unlimitedRespawn\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return false;/);
   assert.match(squareJumpSource, /if \(mode === "base" && recoverSquareJumpBaseMiss\(current, ".*?", stageSize\)\) \{[\s\S]*?triggerScreenShake\(\);/);
   assert.match(flappySource, /if \(mode === "base" && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
   assert.match(flappySource, /if \(status === "failed"\) triggerScreenShake\(\);/);

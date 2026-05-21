@@ -13,7 +13,6 @@ import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
 import { PlayerCard } from "@/features/multiplayer/player-card";
 import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { readPersistedPlayerAvatarSkin } from "@/features/player-avatar/player-avatar-storage";
-import { getAdvancedStageConfig } from "@/lib/advanced-challenges";
 import { getMiniGameLevel } from "@/lib/mini-games";
 import {
   buildInitialSnapshot,
@@ -30,8 +29,14 @@ import type {
 
 const COUNTDOWN_MS = 3_000;
 const MATCH_LOGIC_HEIGHT = 640;
+const DEFAULT_MULTIPLAYER_LEVEL_ID = "doodle-3";
+const MULTIPLAYER_LEVEL_OPTIONS = [
+  { gameId: "doodle", levelId: "doodle-3", label: "一路向上（进阶3）" },
+  { gameId: "fall-down", levelId: "fall-down-final", label: "一路向下（第十关）" },
+] as const;
 
 type CopyStatus = "idle" | "copied" | "manual";
+type MultiplayerLevelOption = (typeof MULTIPLAYER_LEVEL_OPTIONS)[number];
 
 function createSeed() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -69,10 +74,9 @@ function createSelfPlayer(role: SessionRole, selectedSkin: PlayerAvatarSkin): Pl
   };
 }
 
-function resolveBattleLevelId() {
-  const config = getAdvancedStageConfig("search", 7);
-  const levelId = config.params.miniLevelId;
-  return typeof levelId === "string" && levelId.length > 0 ? levelId : "doodle-3";
+function resolveBattleLevelOption(levelId: string | null | undefined): MultiplayerLevelOption {
+  const selected = MULTIPLAYER_LEVEL_OPTIONS.find((item) => item.levelId === levelId);
+  return selected ?? MULTIPLAYER_LEVEL_OPTIONS.find((item) => item.levelId === DEFAULT_MULTIPLAYER_LEVEL_ID) ?? MULTIPLAYER_LEVEL_OPTIONS[0];
 }
 
 function resolvePeerOptions(): PeerJSOption | undefined {
@@ -132,17 +136,24 @@ function MultiplayerPageContent() {
   const hostParam = (searchParams.get("host") ?? "").trim();
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
+  const [hostSelectedLevelId, setHostSelectedLevelId] = useState(DEFAULT_MULTIPLAYER_LEVEL_ID);
   const [joinInputVisible, setJoinInputVisible] = useState(Boolean(hostParam));
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const autoJoinHostRef = useRef<string | null>(null);
   const copyStatusTimerRef = useRef<number | null>(null);
 
-  const battleLevelId = useMemo(() => resolveBattleLevelId(), []);
-  const battleLevel = useMemo(() => getMiniGameLevel("doodle", battleLevelId), [battleLevelId]);
+  const battleLevelOption = useMemo(
+    () => resolveBattleLevelOption(snapshot.match?.levelId ?? hostSelectedLevelId),
+    [hostSelectedLevelId, snapshot.match?.levelId],
+  );
+  const battleLevel = useMemo(
+    () => getMiniGameLevel(battleLevelOption.gameId, battleLevelOption.levelId),
+    [battleLevelOption.gameId, battleLevelOption.levelId],
+  );
   const peerOptions = useMemo(() => resolvePeerOptions(), []);
   const matchSeed = snapshot.match?.seed ?? "";
-  const runSeed = `${battleLevelId}:${matchSeed}`;
+  const runSeed = `${battleLevelOption.levelId}:${matchSeed}`;
   const showGameShell = (snapshot.status === "playing" || snapshot.status === "finished") && Boolean(snapshot.match);
   const matchStageSize = useMemo(
     () =>
@@ -326,14 +337,14 @@ function MultiplayerPageContent() {
     if (!snapshot.selfPlayer || !snapshot.opponentPlayer) return;
     const { logicWidth, logicHeight } = resolveLogicSize(snapshot.selfPlayer, snapshot.opponentPlayer);
     session.startMatch({
-      levelId: battleLevelId,
+      levelId: hostSelectedLevelId,
       seed: createSeed(),
       logicWidth,
       logicHeight,
       countdownMs: COUNTDOWN_MS,
     });
   }, [
-    battleLevelId,
+    hostSelectedLevelId,
     snapshot.match,
     snapshot.opponentPlayer,
     snapshot.opponentReady,
@@ -354,6 +365,12 @@ function MultiplayerPageContent() {
   const showEntry = snapshot.status === "idle";
   const showJoinForm = showEntry && joinInputVisible;
   const showRoom = snapshot.role === "host" && (snapshot.status === "waiting" || snapshot.status === "connected" || snapshot.status === "countdown");
+  const showHostLevelPicker = snapshot.status === "idle" || snapshot.role === "host";
+  const levelPickerLocked =
+    snapshot.match !== null ||
+    snapshot.status === "countdown" ||
+    snapshot.status === "playing" ||
+    snapshot.status === "finished";
   const winnerText = resolveWinner(snapshot.selfResult, snapshot.opponentResult);
   const countdownSeconds =
     snapshot.countdown && snapshot.countdown.remainMs > 0
@@ -374,6 +391,40 @@ function MultiplayerPageContent() {
         </p>
 
         <ConnectionStatus status={snapshot.status} errorMessage={snapshot.errorMessage} />
+
+        {showHostLevelPicker ? (
+          <section
+            style={{
+              marginTop: 14,
+              display: "grid",
+              gap: 8,
+              border: "1px solid #d6d6d6",
+              borderRadius: 12,
+              padding: "12px",
+              background: "#fff",
+            }}
+          >
+            <label htmlFor="host-level-picker" style={{ fontWeight: 600 }}>
+              房主关卡选择
+            </label>
+            <select
+              id="host-level-picker"
+              value={hostSelectedLevelId}
+              disabled={levelPickerLocked}
+              onChange={(event) => setHostSelectedLevelId(event.currentTarget.value)}
+              style={{ maxWidth: 340, padding: "8px", borderRadius: 8, border: "1px solid #d6d6d6" }}
+            >
+              {MULTIPLAYER_LEVEL_OPTIONS.map((option) => (
+                <option key={option.levelId} value={option.levelId}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
+              开局后关卡会锁定并同步给访客。
+            </p>
+          </section>
+        ) : null}
 
         {showEntry ? (
           <section style={{ marginTop: 14, display: "grid", gap: 12 }}>

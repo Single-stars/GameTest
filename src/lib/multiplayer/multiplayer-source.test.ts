@@ -14,6 +14,29 @@ test("PeerJS expected connection failures do not trigger the Next dev error over
   assert.doesNotMatch(source, /console\.error\("\[multiplayer\] peer error"/);
 });
 
+test("multiplayer transport keeps room join alive across short signalling disconnects", () => {
+  const source = readSource("./peer-transport.ts");
+
+  assert.match(source, /SERVER_RECOVERY_WINDOW_MS = 30_000/);
+  assert.match(source, /scheduleServerReconnectAttempt/);
+  assert.match(source, /\.reconnect\(\)/);
+  assert.match(source, /isRecoverablePeerErrorType/);
+  assert.match(source, /type === "network"/);
+  assert.match(source, /type === "server-error"/);
+  assert.match(source, /type === "socket-error"/);
+  assert.match(source, /type === "socket-closed"/);
+});
+
+test("multiplayer guest retries host join before surfacing direct-connect failure", () => {
+  const source = readSource("./peer-transport.ts");
+
+  assert.match(source, /MAX_GUEST_RECONNECT_ATTEMPTS = 8/);
+  assert.match(source, /scheduleGuestReconnectAttempt/);
+  assert.match(source, /window\.setTimeout\(\(\) => \{/);
+  assert.match(source, /this\.connectToHost\(hostId\)/);
+  assert.match(source, /if \(error\.type === "peer-unavailable"/);
+});
+
 test("multiplayer state protocol exposes map coordinates for same-map rendering", () => {
   const typesSource = readSource("./types.ts");
   const messagesSource = readSource("./messages.ts");
@@ -193,6 +216,32 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
   assert.match(pageSource, /copyStatus/);
   assert.match(hostRoomSource, /copyStatus/);
   assert.match(hostRoomSource, /readOnly/);
+});
+
+test("multiplayer host can choose the battle level before match start", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /hostSelectedLevelId/);
+  assert.match(pageSource, /setHostSelectedLevelId/);
+  assert.match(pageSource, /fall-down-final/);
+  assert.match(pageSource, /<select/);
+  assert.match(pageSource, /session\.startMatch\(\{/);
+  assert.match(pageSource, /levelId: hostSelectedLevelId/);
+});
+
+test("multiplayer runtime supports fall-down with synced state and unlimited respawn", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+
+  assert.match(runtimeSource, /FallDownPrototype/);
+  assert.match(runtimeSource, /level\.gameId === "fall-down"/);
+  assert.match(runtimeSource, /handleFallDownRuntimeState/);
+  assert.match(runtimeSource, /onRuntimeState=\{handleFallDownRuntimeState\}/);
+  assert.match(runtimeSource, /unlimitedRespawn/);
+  assert.match(fallDownSource, /export type FallDownRuntimeState/);
+  assert.match(fallDownSource, /onRuntimeState\?: \(state: FallDownRuntimeState\) => void;/);
+  assert.match(fallDownSource, /logicStageSizeOverride\?: MiniGameStageSize;/);
+  assert.match(fallDownSource, /unlimitedRespawn = false/);
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {

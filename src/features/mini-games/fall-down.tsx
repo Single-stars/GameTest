@@ -85,6 +85,18 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
+const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = 50;
+
+export type FallDownRuntimeState = {
+  cameraY: number;
+  direction: PlayerAvatarDirection;
+  elapsedMs: number;
+  failures: number;
+  progress: number;
+  status: PrototypeStatus;
+  x: number;
+  y: number;
+};
 
 function resolveFallDownPlayerDirection(direction: FallDownRuntime["inputDirection"]): PlayerAvatarDirection {
   if (direction < 0) return "left";
@@ -98,6 +110,19 @@ function resolveFallDownPlayerAvatarView(view: FallDownRuntime): PlayerAvatarVie
   if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
   if (view.started && view.inputDirection !== 0) return { action: "move", expression: "neutral" };
   return { action: "idle", expression: "neutral" };
+}
+
+function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number): FallDownRuntimeState {
+  return {
+    cameraY: runtime.cameraY,
+    direction: resolveFallDownPlayerDirection(runtime.inputDirection),
+    elapsedMs: Math.round(runtime.time * 1000),
+    failures: runtime.failures,
+    progress: Number((runtime.layersReached / Math.max(1, requiredLayers)).toFixed(4)),
+    status: runtime.status,
+    x: runtime.playerX,
+    y: runtime.playerY,
+  };
 }
 
 function makeFallDownNoisePoints(rand: () => number, count: number) {
@@ -281,7 +306,12 @@ function fallPlatformX(platform: FallDownPlatform, time: number, stageWidth: num
   return clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 14, stageWidth - platform.width / 2 - 14);
 }
 
-function recoverFallDownBaseFailure(current: FallDownRuntime, reason: string, stageSize: MiniGameStageSize) {
+function recoverFallDownBaseFailure(
+  current: FallDownRuntime,
+  reason: string,
+  stageSize: MiniGameStageSize,
+  unlimitedRespawn = false,
+) {
   const failures = current.failures + 1;
   current.failures = failures;
   current.reason = reason;
@@ -290,7 +320,7 @@ function recoverFallDownBaseFailure(current: FallDownRuntime, reason: string, st
   current.vx = 0;
   current.vy = 0;
 
-  if (failures >= BASE_FAILURE_LIMIT) {
+  if (!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT) {
     current.reason = "失败达到 3 次，进入下一关";
     current.status = "failed";
     return false;
@@ -355,27 +385,59 @@ function makeFallDownView(runtime: FallDownRuntime): FallDownRuntime {
 
 export function FallDownPrototype({
   level,
+  logicStageSizeOverride,
   mode,
   onBackToSelect,
   onComplete,
+  onRuntimeState,
   onRestart,
   runSeed,
+  unlimitedRespawn = false,
 }: {
   level: MiniGameLevelConfig;
+  logicStageSizeOverride?: MiniGameStageSize;
   mode: MiniGameRunMode;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
+  onRuntimeState?: (state: FallDownRuntimeState) => void;
   onRestart: () => void;
   runSeed: string;
+  unlimitedRespawn?: boolean;
 }) {
-  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
-  const stageWidth = stageSize.width;
-  const stageHeight = stageSize.height;
+  const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
+  const stageWidth = logicStageSize.width;
+  const stageHeight = logicStageSize.height;
+  const visualStageWidth = measuredStageSize.width;
+  const visualStageHeight = measuredStageSize.height;
+  const worldLayerScale = Math.min(visualStageWidth / stageWidth, visualStageHeight / stageHeight);
+  const worldLayerOffsetX = (visualStageWidth - stageWidth * worldLayerScale) / 2;
+  const worldLayerOffsetY = (visualStageHeight - stageHeight * worldLayerScale) / 2;
+  const multiplayerStageMaxWidth = Math.max(260, Math.min(stageWidth, 760));
+  const stageStyle = logicStageSizeOverride
+    ? {
+        aspectRatio: `${stageWidth} / ${stageHeight}`,
+        height: "auto",
+        width: `min(100%, ${multiplayerStageMaxWidth}px)`,
+      }
+    : undefined;
+  const worldLayerStyle = {
+    height: `${stageHeight}px`,
+    left: 0,
+    position: "absolute" as const,
+    top: 0,
+    transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
+    transformOrigin: "top left",
+    width: `${stageWidth}px`,
+  };
   const requiredLayers = numberParam(level.params, "layersRequired", 12);
   const fallDownPlayerSpeed = numberParam(level.params, "playerSpeed", 230);
   const fragileTime = numberParam(level.params, "fragileTime", 1.2);
   const topPressureSpeed = numberParam(level.params, "topPressureSpeed", 18);
-  const initialRuntime = useMemo(() => createFallDownRuntime(level, runSeed, stageSize), [level, runSeed, stageSize]);
+  const initialRuntime = useMemo(
+    () => createFallDownRuntime(level, runSeed, logicStageSize),
+    [level, logicStageSize, runSeed],
+  );
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
   const dangerLineRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
@@ -384,12 +446,14 @@ export function FallDownPrototype({
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
   const fallDownPointerIdRef = useRef<number | null>(null);
   const lastUiSyncRef = useRef(0);
+  const lastRuntimeSyncRef = useRef(0);
   const completedRef = useRef(false);
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Fall Down");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
+  const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -398,8 +462,23 @@ export function FallDownPrototype({
   }, [recordReactSync]);
 
   useEffect(() => {
+    onRuntimeStateRef.current = onRuntimeState;
+  }, [onRuntimeState]);
+
+  const syncRuntimeState = useCallback(
+    (time = performance.now(), force = false) => {
+      if (!onRuntimeStateRef.current) return;
+      if (!force && time - lastRuntimeSyncRef.current < FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS) return;
+      lastRuntimeSyncRef.current = time;
+      onRuntimeStateRef.current(makeFallDownRuntimeState(runtimeRef.current, requiredLayers));
+    },
+    [requiredLayers],
+  );
+
+  useEffect(() => {
     runtimeRef.current = initialRuntime;
     lastUiSyncRef.current = 0;
+    lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     const timer = window.setTimeout(() => {
       setView(makeFallDownView(initialRuntime));
@@ -470,7 +549,7 @@ export function FallDownPrototype({
   const fail = useCallback(
     (reason: string): boolean => {
       const current = runtimeRef.current;
-      if (mode === "base" && recoverFallDownBaseFailure(current, reason, stageSize)) {
+      if ((mode === "base" || unlimitedRespawn) && recoverFallDownBaseFailure(current, reason, logicStageSize, unlimitedRespawn)) {
         triggerScreenShake();
         if (fallDownInputDirectionRef.current !== 0) {
           resumeFallDownInput(current, fallDownInputDirectionRef.current);
@@ -478,7 +557,7 @@ export function FallDownPrototype({
         syncView();
         return true;
       }
-      if (mode === "base") {
+      if (mode === "base" || unlimitedRespawn) {
         triggerScreenShake();
         syncView();
         return false;
@@ -490,7 +569,7 @@ export function FallDownPrototype({
       syncView();
       return false;
     },
-    [mode, resumeFallDownInput, stageSize, syncView, triggerScreenShake],
+    [logicStageSize, mode, resumeFallDownInput, syncView, triggerScreenShake, unlimitedRespawn],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -547,8 +626,12 @@ export function FallDownPrototype({
       const continueAfterRecoverableFailure = (reason: string) => {
         if (fail(reason)) {
           paintFallDownFrame(runtimeRef.current);
+          syncRuntimeState(time, true);
           frameId = requestAnimationFrame(tick);
+          return;
         }
+        paintFallDownFrame(runtimeRef.current);
+        syncRuntimeState(time, true);
       };
 
       if (current.status === "playing") {
@@ -624,6 +707,7 @@ export function FallDownPrototype({
               current.reason = `成功下降 ${requiredLayers} 层，到达终点平台`;
               paintFallDownFrame(current);
               syncView(time);
+              syncRuntimeState(time, true);
               return;
             }
             break;
@@ -661,6 +745,11 @@ export function FallDownPrototype({
       }
 
       paintFallDownFrame(current);
+      if (current.status !== "playing" || eventChanged) {
+        syncRuntimeState(time, true);
+      } else {
+        syncRuntimeState(time);
+      }
       if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncView(time);
       }
@@ -669,7 +758,7 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [fail, fallDownPlayerSpeed, fragileTime, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncView, topPressureSpeed, updateFallDownDom]);
+  }, [fail, fallDownPlayerSpeed, fragileTime, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -714,9 +803,11 @@ export function FallDownPrototype({
         onPointerDown={beginFallDownDirection}
         onPointerMove={updateFallDownDirection}
         onPointerUp={stopDirection}
+        style={stageStyle}
       >
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
+        <div style={worldLayerStyle}>
         <div className="fall-danger-line" ref={dangerLineRef} style={{ transform: transformPoint3d(0, pressureScreenY) }} aria-hidden="true" />
         {view.platforms.map((platform) => {
           const platformX = fallPlatformX(platform, view.time, stageWidth);
@@ -791,6 +882,7 @@ export function FallDownPrototype({
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
             visualScale={1.18}
           />
+        </div>
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
