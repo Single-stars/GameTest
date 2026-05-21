@@ -33,6 +33,7 @@ const DEFAULT_MULTIPLAYER_LEVEL_ID = "doodle-3";
 const MULTIPLAYER_LEVEL_OPTIONS = [
   { gameId: "doodle", levelId: "doodle-3", label: "一路向上（进阶3）" },
   { gameId: "fall-down", levelId: "fall-down-final", label: "一路向下（第十关）" },
+  { gameId: "flappy", levelId: "flappy-7", label: "一路向前（第七关）" },
 ] as const;
 
 type CopyStatus = "idle" | "copied" | "manual";
@@ -139,6 +140,7 @@ function MultiplayerPageContent() {
   const [hostSelectedLevelId, setHostSelectedLevelId] = useState(DEFAULT_MULTIPLAYER_LEVEL_ID);
   const [joinInputVisible, setJoinInputVisible] = useState(Boolean(hostParam));
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [skinHydrated, setSkinHydrated] = useState(false);
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const autoJoinHostRef = useRef<string | null>(null);
   const copyStatusTimerRef = useRef<number | null>(null);
@@ -180,7 +182,8 @@ function MultiplayerPageContent() {
     async (role: SessionRole, roomId?: string | null) => {
       cleanupSession();
       setSnapshot(buildInitialSnapshot());
-      const selfPlayer = createSelfPlayer(role, selectedSkin);
+      const resolvedSkin = skinHydrated ? selectedSkin : readPersistedPlayerAvatarSkin();
+      const selfPlayer = createSelfPlayer(role, resolvedSkin);
       const session = new MultiplayerSession({
         role,
         roomId,
@@ -200,7 +203,7 @@ function MultiplayerPageContent() {
         }));
       }
     },
-    [cleanupSession, peerOptions, selectedSkin],
+    [cleanupSession, peerOptions, selectedSkin, skinHydrated],
   );
 
   const handleCreate = useCallback(() => {
@@ -279,6 +282,7 @@ function MultiplayerPageContent() {
 
   useEffect(() => {
     setSelectedSkin(readPersistedPlayerAvatarSkin());
+    setSkinHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -321,11 +325,12 @@ function MultiplayerPageContent() {
   }, []);
 
   useEffect(() => {
+    if (!skinHydrated) return;
     if (!hostParam || autoJoinHostRef.current === hostParam) return;
     autoJoinHostRef.current = hostParam;
     setJoinInputVisible(true);
     void bootstrapSession("guest", hostParam);
-  }, [bootstrapSession, hostParam]);
+  }, [bootstrapSession, hostParam, skinHydrated]);
 
   useEffect(() => {
     const session = sessionRef.current;
@@ -501,7 +506,7 @@ function MultiplayerPageContent() {
             status={snapshot.status}
             winnerText={winnerText}
           >
-            {snapshot.status === "playing" ? (
+            {(snapshot.status === "playing" || snapshot.status === "finished") ? (
               <MultiplayerMatchRuntime
                 level={battleLevel}
                 matchStageSize={matchStageSize}

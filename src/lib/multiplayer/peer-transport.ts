@@ -10,6 +10,7 @@ export const MULTIPLAYER_DISCONNECTED_MESSAGE = "对方已断开，联机已结�
 export type PeerTransportEvents = {
   onPeerOpen?: (peerId: string) => void;
   onConnected?: (remotePeerId: string) => void;
+  onPeerDisconnected?: (reason: string) => void;
   onMessage?: (message: NetMessage) => void;
   onFailed?: (message: string) => void;
   onDisconnected?: (message: string) => void;
@@ -172,6 +173,9 @@ export class PeerTransport {
         connection.close();
         return;
       }
+      if (this.connection && !this.connection.open) {
+        this.connection = null;
+      }
       this.bindConnection(connection);
     });
   }
@@ -223,6 +227,11 @@ export class PeerTransport {
         this.scheduleGuestReconnectAttempt(hostId);
         return;
       }
+      if (this.role === "host") {
+        this.connection = null;
+        this.events.onPeerDisconnected?.(MULTIPLAYER_DISCONNECTED_MESSAGE);
+        return;
+      }
       this.handleDisconnected(MULTIPLAYER_DISCONNECTED_MESSAGE);
     });
 
@@ -232,6 +241,11 @@ export class PeerTransport {
       this.clearConnectTimer();
       if (this.role === "guest" && hostId) {
         this.scheduleGuestReconnectAttempt(hostId);
+        return;
+      }
+      if (this.role === "host") {
+        this.connection = null;
+        this.events.onPeerDisconnected?.(MULTIPLAYER_DISCONNECTED_MESSAGE);
         return;
       }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);

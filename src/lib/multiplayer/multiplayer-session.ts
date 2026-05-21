@@ -106,6 +106,11 @@ export class MultiplayerSession {
           });
           this.send(createHelloMessage(this.selfPlayer));
         },
+        onPeerDisconnected: (message) => {
+          void message;
+          if (this.role !== "host") return;
+          this.resetHostWaitingState();
+        },
         onMessage: (message) => this.handleMessage(message),
         onFailed: (message) => {
           this.stopCountdown();
@@ -266,11 +271,15 @@ export class MultiplayerSession {
         this.resetRound();
         break;
       case "bye":
-        this.stopCountdown();
-        this.patchSnapshot({
-          status: "disconnected",
-          errorMessage: message.reason || MULTIPLAYER_DISCONNECTED_MESSAGE,
-        });
+        if (this.role === "host") {
+          this.resetHostWaitingState();
+        } else {
+          this.stopCountdown();
+          this.patchSnapshot({
+            status: "disconnected",
+            errorMessage: message.reason || MULTIPLAYER_DISCONNECTED_MESSAGE,
+          });
+        }
         break;
       default:
         break;
@@ -292,6 +301,25 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+    });
+  }
+
+  private resetHostWaitingState() {
+    this.stopCountdown();
+    this.selfStateSeq = 0;
+    this.opponentStateSeq = -1;
+    this.patchSnapshot({
+      status: "waiting",
+      errorMessage: null,
+      selfReady: false,
+      opponentReady: false,
+      match: null,
+      countdown: null,
+      selfState: null,
+      opponentState: null,
+      selfResult: null,
+      opponentResult: null,
+      opponentPlayer: null,
     });
   }
 

@@ -43,6 +43,19 @@
   box-shadow: var(--glow-accent);
 }
 
+.flappy-remote-player-shell {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 9;
+  width: 32px;
+  height: 32px;
+  opacity: 0.78;
+  filter: drop-shadow(0 4px 10px rgba(24, 24, 24, 0.18));
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
 .flappy-player.reversed {
   background: var(--violet);
 }

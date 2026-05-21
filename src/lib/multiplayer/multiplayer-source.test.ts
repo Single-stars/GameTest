@@ -244,6 +244,57 @@ test("multiplayer runtime supports fall-down with synced state and unlimited res
   assert.match(fallDownSource, /unlimitedRespawn = false/);
 });
 
+test("multiplayer runtime supports flappy-7 with synced state and unlimited respawn", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const flappySource = readSource("../../features/mini-games/flappy.tsx");
+
+  assert.match(pageSource, /flappy-7/);
+  assert.match(runtimeSource, /FlappyPrototype/);
+  assert.match(runtimeSource, /level\.gameId === "flappy"/);
+  assert.match(runtimeSource, /handleFlappyRuntimeState/);
+  assert.match(runtimeSource, /onRuntimeState=\{handleFlappyRuntimeState\}/);
+  assert.match(runtimeSource, /unlimitedRespawn/);
+  assert.match(flappySource, /export type FlappyRuntimeState/);
+  assert.match(flappySource, /onRuntimeState\?: \(state: FlappyRuntimeState\) => void;/);
+  assert.match(flappySource, /logicStageSizeOverride\?: MiniGameStageSize;/);
+  assert.match(flappySource, /unlimitedRespawn = false/);
+});
+
+test("fall-down multiplayer renders a remote player avatar from shared state", () => {
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+
+  assert.match(fallDownSource, /remotePlayer\?: \{ skinId\?: string \} \| null;/);
+  assert.match(fallDownSource, /remoteState\?: SelfGameState \| null;/);
+  assert.match(fallDownSource, /RemoteStateSmoother/);
+  assert.match(fallDownSource, /fall-down-remote-player-shell/);
+});
+
+test("multiplayer stage keeps full viewport width and removes narrow-map width caps", () => {
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+
+  assert.doesNotMatch(doodleSource, /multiplayerStageMaxWidth/);
+  assert.doesNotMatch(doodleSource, /width:\s*`min\(100%,/);
+  assert.doesNotMatch(fallDownSource, /multiplayerStageMaxWidth/);
+  assert.doesNotMatch(fallDownSource, /width:\s*`min\(100%,/);
+});
+
+test("host keeps room reusable when guests leave and clears opponent snapshot for new joins", () => {
+  const transportSource = readSource("./peer-transport.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+
+  assert.match(transportSource, /onPeerDisconnected\?: \(reason: string\) => void;/);
+  assert.match(transportSource, /if \(this\.role === "host"\) \{/);
+  assert.match(transportSource, /this\.events\.onPeerDisconnected\?\.\(MULTIPLAYER_DISCONNECTED_MESSAGE\);/);
+  assert.match(sessionSource, /onPeerDisconnected: \(message\) => \{/);
+  assert.match(sessionSource, /status:\s*"waiting"/);
+  assert.match(sessionSource, /opponentPlayer:\s*null/);
+  assert.match(sessionSource, /opponentReady:\s*false/);
+  assert.match(sessionSource, /opponentState:\s*null/);
+  assert.match(sessionSource, /opponentResult:\s*null/);
+});
+
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {
   const source = readSource("../../features/mini-games/doodle.tsx");
   const viewSyncSource = source.slice(source.indexOf("const syncDoodleView = useCallback"), source.indexOf("useEffect(() => {", source.indexOf("const syncDoodleView = useCallback")));
