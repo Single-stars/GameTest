@@ -276,7 +276,7 @@ function MultiplayerPageContent() {
 
     const mobileLongPressTouchOptions = { capture: true, passive: false } as const;
     const mobileLongPressBlockedSurface = ".multiplayer-game-shell, .play-screen, .prototype-stage, .game-area";
-    const mobileLongPressAllowedSurface = "input, textarea, select, [contenteditable='true']";
+    const mobileLongPressAllowedSurface = "button, a, input, textarea, select, [contenteditable='true'], [role='button']";
 
     const getEventElement = (target: EventTarget | null) => (target instanceof Element ? target : null);
     const shouldBlockEarlyMobileLongPress = (target: EventTarget | null) => {

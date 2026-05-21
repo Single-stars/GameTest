@@ -118,7 +118,7 @@ test("multiplayer gameplay disables mobile long press browser affordances", () =
   assert.match(pageSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
   assert.match(pageSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
   assert.match(pageSource, /\.multiplayer-game-shell, \.play-screen, \.prototype-stage, \.game-area/);
-  assert.match(pageSource, /input, textarea, select, \[contenteditable='true'\]/);
+  assert.match(pageSource, /button, a, input, textarea, select, \[contenteditable='true'\], \[role='button'\]/);
 });
 
 test("multiplayer avatars use the shared player avatar skin resolver", () => {
