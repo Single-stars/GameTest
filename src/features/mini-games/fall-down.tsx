@@ -694,6 +694,16 @@ export function FallDownPrototype({
         paintFallDownFrame(runtimeRef.current);
         syncRuntimeState(time, true);
       };
+      const keepRemoteRenderingAfterSettled = mode === "advanced" && Boolean(onRuntimeStateRef.current);
+
+      if (current.status !== "playing") {
+        paintFallDownFrame(current);
+        syncRuntimeState(time, true);
+        if (keepRemoteRenderingAfterSettled) {
+          frameId = requestAnimationFrame(tick);
+        }
+        return;
+      }
 
       if (current.status === "playing") {
         const previousTime = current.time;
@@ -769,6 +779,9 @@ export function FallDownPrototype({
               paintFallDownFrame(current);
               syncView(time);
               syncRuntimeState(time, true);
+              if (keepRemoteRenderingAfterSettled) {
+                frameId = requestAnimationFrame(tick);
+              }
               return;
             }
             break;
@@ -819,7 +832,7 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [fail, fallDownPlayerSpeed, fragileTime, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
+  }, [fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;

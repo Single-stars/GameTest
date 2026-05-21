@@ -272,6 +272,10 @@ function MultiplayerPageContent() {
     sessionRef.current?.requestRematch();
   }, []);
 
+  const handleForfeit = useCallback(() => {
+    sessionRef.current?.forfeit();
+  }, []);
+
   useEffect(
     () => () => {
       if (copyStatusTimerRef.current !== null) {
@@ -367,6 +371,18 @@ function MultiplayerPageContent() {
 
   const reportResult = useCallback((result: GameResult) => {
     sessionRef.current?.reportResult(result);
+  }, []);
+
+  const subscribeOpponentState = useCallback((listener: (state: SelfGameState) => void) => {
+    return sessionRef.current?.subscribeOpponentState(listener) ?? (() => undefined);
+  }, []);
+
+  const readOpponentStateMetrics = useCallback(() => {
+    return sessionRef.current?.readOpponentStateMetrics() ?? {
+      acceptedPackets: 0,
+      droppedOldPackets: 0,
+      lastAcceptedAt: null,
+    };
   }, []);
 
   const showEntry = snapshot.status === "idle";
@@ -486,6 +502,7 @@ function MultiplayerPageContent() {
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}
+            onForfeit={handleForfeit}
             onLeave={handleLeave}
             onRematch={handleRematch}
             selfPlayer={snapshot.selfPlayer}
@@ -499,8 +516,8 @@ function MultiplayerPageContent() {
                 level={battleLevel}
                 matchStageSize={matchStageSize}
                 opponentPlayer={snapshot.opponentPlayer}
-                opponentStateSubscription={sessionRef.current?.subscribeOpponentState ?? null}
-                readOpponentStateMetrics={sessionRef.current?.readOpponentStateMetrics ?? null}
+                opponentStateSubscription={subscribeOpponentState}
+                readOpponentStateMetrics={readOpponentStateMetrics}
                 opponentState={snapshot.opponentState}
                 reportResult={reportResult}
                 reportState={reportState}

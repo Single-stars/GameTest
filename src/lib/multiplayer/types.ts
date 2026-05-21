@@ -26,6 +26,7 @@ export type PlayerInfo = {
 export type GameStateStatus = "playing" | "failed" | "finished";
 
 export type MatchConfig = {
+  matchId: string;
   levelId: string;
   seed: string;
   logicWidth: number;
@@ -39,6 +40,7 @@ export type CountdownState = {
 };
 
 export type SelfGameState = {
+  matchId?: string;
   progress: number;
   score?: number;
   status: GameStateStatus;
@@ -55,6 +57,7 @@ export type SelfGameState = {
 };
 
 export type GameResult = {
+  matchId?: string;
   score: number;
   passed: boolean;
   timeMs?: number;
@@ -75,6 +78,7 @@ export type NetReadyMessage = {
 export type NetStartMessage = {
   v: 1;
   kind: "start";
+  matchId: string;
   seed: string;
   startAt: number;
   sentAt: number;
@@ -86,6 +90,7 @@ export type NetStartMessage = {
 export type NetStateMessage = {
   v: 1;
   kind: "state";
+  matchId: string;
   progress: number;
   score?: number;
   status: GameStateStatus;
@@ -106,9 +111,16 @@ export type NetRematchMessage = {
   kind: "rematch";
 };
 
+export type NetForfeitMessage = {
+  v: 1;
+  kind: "forfeit";
+  matchId: string;
+};
+
 export type NetResultMessage = {
   v: 1;
   kind: "result";
+  matchId: string;
   score: number;
   passed: boolean;
   timeMs?: number;
@@ -127,6 +139,7 @@ export type NetMessage =
   | NetStateMessage
   | NetResultMessage
   | NetRematchMessage
+  | NetForfeitMessage
   | NetByeMessage;
 
 export type MultiplayerSnapshot = {

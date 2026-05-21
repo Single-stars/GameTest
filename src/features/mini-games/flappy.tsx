@@ -34,6 +34,8 @@ import {
 import {
   generateFlappyGateLayout,
   getFlappyGateScreenX,
+  getFlappyPlayerScreenX,
+  getFlappySignedProgress,
   selectVisibleFlappyGates,
   type GeneratedFlappyGate,
   type MiniGameLevelConfig,
@@ -166,10 +168,6 @@ function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): Flapp
   };
 }
 
-function resolveFlappySignedProgress(progress: number, reverseDirection: boolean) {
-  return reverseDirection ? -progress : progress;
-}
-
 function makeFlappyRuntimeState(
   frame: FlappyFrame,
   gateCount: number,
@@ -178,7 +176,7 @@ function makeFlappyRuntimeState(
   reverseDirection: boolean,
   speed: number,
 ): FlappyRuntimeState {
-  const absoluteWorldX = playerX + resolveFlappySignedProgress(frame.progress, reverseDirection);
+  const absoluteWorldX = playerX + getFlappySignedProgress(frame.progress, reverseDirection);
   return {
     cameraY: 0,
     direction,
@@ -434,12 +432,18 @@ export function FlappyPrototype({
       }
 
       if (playerShellRef.current) {
-        playerShellRef.current.style.transform = transformPoint3d(playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
+        const playerScreenX = getFlappyPlayerScreenX({
+          displayProgress: current.displayProgress,
+          playerX,
+          progress: current.progress,
+          reverseDirection,
+        });
+        playerShellRef.current.style.transform = transformPoint3d(playerScreenX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
       if (remotePlayerShellRef.current) {
         const sampledRemote = remoteSmootherRef.current.sample(performance.now());
         if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
-          const localSignedProgress = resolveFlappySignedProgress(current.displayProgress, reverseDirection);
+          const localSignedProgress = getFlappySignedProgress(current.displayProgress, reverseDirection);
           const remoteScreenX = sampledRemote.x - localSignedProgress;
           remotePlayerShellRef.current.style.display = "";
           remotePlayerShellRef.current.style.transform = transformPoint3d(
@@ -467,7 +471,15 @@ export function FlappyPrototype({
         return;
       }
       if (!current.started) {
+        const isRespawnCameraMoving = current.respawnProgressUntil > current.time;
+        if (isRespawnCameraMoving) {
+          current.time += delta;
+          current.displayProgress = resolveFlappyDisplayProgress(current);
+        }
         updateDom(current);
+        if (isRespawnCameraMoving || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+          syncFlappyView(time);
+        }
         syncFlappyRuntimeState(time);
         frameId = requestAnimationFrame(tick);
         return;
@@ -618,6 +630,12 @@ export function FlappyPrototype({
   }, [backgroundRefs, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, recordFrame, reverseDirection, reversedGravity, speed, stageHeight, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
+  const playerScreenX = getFlappyPlayerScreenX({
+    displayProgress: view.displayProgress,
+    playerX,
+    progress: view.progress,
+    reverseDirection,
+  });
   const showOverlay = mode === "prototype";
 
   useEffect(() => {
@@ -731,7 +749,7 @@ export function FlappyPrototype({
           <div
             className={`flappy-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
             ref={playerShellRef}
-            style={{ transform: transformPoint3d(playerX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
+            style={{ transform: transformPoint3d(playerScreenX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
           >
             <PlayerAvatar
               {...resolveFlappyPlayerAvatarView(view)}

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   generateFlappyGateLayout,
   getFlappyInitialPlacement,
+  getFlappyPlayerScreenX,
   getMiniGameLevel,
   selectVisibleFlappyGates,
 } from "./index.ts";
@@ -58,6 +59,36 @@ test("flappy visible selector culls gates outside the viewport for both directio
   assert.ok(reverseVisible.length < layout.gates.length);
   assert.ok(forwardVisible.every((gate) => 360 + gate.distance - 360 > -54 - 90 && 360 + gate.distance - 360 < 360 + 90));
   assert.ok(reverseVisible.every((gate) => -gate.distance + 360 > -54 - 90 && -gate.distance + 360 < 360 + 90));
+});
+
+test("flappy keeps the player anchored while the camera display eases to respawn", () => {
+  assert.equal(
+    getFlappyPlayerScreenX({
+      displayProgress: 360,
+      playerX: 92,
+      progress: 360,
+      reverseDirection: false,
+    }),
+    92,
+  );
+  assert.equal(
+    getFlappyPlayerScreenX({
+      displayProgress: 452,
+      playerX: 92,
+      progress: 360,
+      reverseDirection: false,
+    }),
+    92,
+  );
+  assert.equal(
+    getFlappyPlayerScreenX({
+      displayProgress: 452,
+      playerX: 308,
+      progress: 360,
+      reverseDirection: true,
+    }),
+    308,
+  );
 });
 
 test("flappy generated gates are seeded and encode initial placement", () => {
@@ -119,4 +150,19 @@ test("flappy maps its player visuals through the shared avatar without jump or f
   assert.match(renderSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(renderSource, /visualScale=\{1\.18\}/);
   assert.doesNotMatch(renderSource, /prototype-player-box flappy-player/);
+});
+
+test("flappy renders the local player anchored while the respawn camera moves", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+  const waitingSource = flappyRuntimeSource.slice(
+    flappyRuntimeSource.indexOf("if (!current.started) {", flappyRuntimeSource.indexOf("const tick = (time: number) =>")),
+    flappyRuntimeSource.indexOf("const nextTime = current.time + delta;", flappyRuntimeSource.indexOf("const tick = (time: number) =>")),
+  );
+
+  assert.match(flappyRuntimeSource, /getFlappyPlayerScreenX/);
+  assert.match(flappyRuntimeSource, /const playerScreenX = getFlappyPlayerScreenX\(\{/);
+  assert.match(waitingSource, /current\.time \+= delta;/);
+  assert.match(waitingSource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
+  assert.doesNotMatch(flappyRuntimeSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(playerX - PLAYER_SIZE \/ 2/);
 });

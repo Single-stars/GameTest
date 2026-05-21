@@ -49,7 +49,9 @@ test("multiplayer state protocol exposes map coordinates for same-map rendering"
   assert.match(typesSource, /elapsedMs\?: number;/);
   assert.match(typesSource, /seq\?: number;/);
   assert.match(typesSource, /sentAt\?: number;/);
+  assert.match(typesSource, /matchId: string;/);
   assert.match(messagesSource, /kind: "rematch"/);
+  assert.match(messagesSource, /kind: "forfeit"/);
 });
 
 test("multiplayer page restarts rounds without leaving the P2P session", () => {
@@ -59,6 +61,32 @@ test("multiplayer page restarts rounds without leaving the P2P session", () => {
   assert.match(pageSource, /requestRematch/);
   assert.match(sessionSource, /resetRound/);
   assert.doesNotMatch(pageSource, /再来一局[\s\S]{0,180}handleLeave/);
+});
+
+test("multiplayer game can be forfeited without leaving the P2P room", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+
+  assert.match(pageSource, /const handleForfeit = useCallback/);
+  assert.match(pageSource, /sessionRef\.current\?\.forfeit\(\);/);
+  assert.match(pageSource, /onForfeit=\{handleForfeit\}/);
+  assert.match(shellSource, /onForfeit/);
+  assert.match(shellSource, />\s*认输\s*</);
+  assert.match(sessionSource, /forfeit\(\)/);
+  assert.match(sessionSource, /createForfeitMessage/);
+  assert.doesNotMatch(sessionSource, /forfeit\(\)[\s\S]{0,240}createByeMessage/);
+});
+
+test("multiplayer drops stale round packets and clears opponent on guest bye", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+
+  assert.match(sessionSource, /private currentMatchId\(\)/);
+  assert.match(sessionSource, /private isCurrentMatchMessage/);
+  assert.match(sessionSource, /if \(!this\.isCurrentMatchMessage\(message\)\) return;/);
+  assert.match(sessionSource, /case "bye":[\s\S]*opponentPlayer:\s*null/);
+  assert.match(sessionSource, /case "bye":[\s\S]*opponentState:\s*null/);
+  assert.match(sessionSource, /case "bye":[\s\S]*opponentResult:\s*null/);
 });
 
 test("multiplayer page has a safe return-home action that leaves the P2P session", () => {
@@ -268,6 +296,15 @@ test("fall-down multiplayer renders a remote player avatar from shared state", (
   assert.match(fallDownSource, /remoteState\?: SelfGameState \| null;/);
   assert.match(fallDownSource, /RemoteStateSmoother/);
   assert.match(fallDownSource, /fall-down-remote-player-shell/);
+});
+
+test("fall-down multiplayer keeps rendering remote players after local settlement", () => {
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+
+  assert.match(fallDownSource, /keepRemoteRenderingAfterSettled/);
+  assert.match(fallDownSource, /current\.status !== "playing"/);
+  assert.match(fallDownSource, /syncRuntimeState\(time, true\);/);
+  assert.match(fallDownSource, /frameId = requestAnimationFrame\(tick\);/);
 });
 
 test("multiplayer stage keeps full viewport width and removes narrow-map width caps", () => {

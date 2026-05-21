@@ -52,6 +52,7 @@ export function MultiplayerGameShell({
   opponentPlayer,
   opponentResult,
   opponentState,
+  onForfeit,
   onLeave,
   onRematch,
   selfPlayer,
@@ -65,6 +66,7 @@ export function MultiplayerGameShell({
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
   opponentState: SelfGameState | null;
+  onForfeit: () => void;
   onLeave: () => void;
   onRematch: () => void;
   selfPlayer: PlayerInfo | null;
@@ -99,6 +101,11 @@ export function MultiplayerGameShell({
           <button type="button" onClick={requestNativeFullscreen}>
             进入全屏
           </button>
+          {(status === "countdown" || status === "playing") ? (
+            <button type="button" onClick={onForfeit}>
+              认输
+            </button>
+          ) : null}
           <button type="button" onClick={onLeave}>
             离开联机
           </button>

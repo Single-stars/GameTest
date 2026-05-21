@@ -35,6 +35,27 @@ export function getFlappyGateScreenX(
   return reverseDirection ? -gate.distance + progress : stageWidth + gate.distance - progress;
 }
 
+export function getFlappySignedProgress(progress: number, reverseDirection: boolean) {
+  return reverseDirection ? -progress : progress;
+}
+
+export function getFlappyPlayerScreenX({
+  displayProgress,
+  playerX,
+  progress,
+  reverseDirection,
+}: {
+  displayProgress: number;
+  playerX: number;
+  progress: number;
+  reverseDirection: boolean;
+}) {
+  void displayProgress;
+  void progress;
+  void reverseDirection;
+  return playerX;
+}
+
 export function selectVisibleFlappyGates<T extends { distance: number }>(
   gates: readonly T[],
   options: FlappyVisibleOptions,

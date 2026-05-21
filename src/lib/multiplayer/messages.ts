@@ -1,5 +1,6 @@
 import type {
   NetByeMessage,
+  NetForfeitMessage,
   NetHelloMessage,
   NetMessage,
   NetReadyMessage,
@@ -67,6 +68,7 @@ function isStartMessage(value: unknown): value is NetStartMessage {
   return (
     isProtocolV1(value.v) &&
     value.kind === "start" &&
+    isString(value.matchId) &&
     isString(value.seed) &&
     isNumber(value.startAt) &&
     isNumber(value.sentAt) &&
@@ -79,6 +81,7 @@ function isStartMessage(value: unknown): value is NetStartMessage {
 function isStateMessage(value: unknown): value is NetStateMessage {
   if (!isRecord(value)) return false;
   if (!isProtocolV1(value.v) || value.kind !== "state") return false;
+  if (!isString(value.matchId)) return false;
   if (!isNumber(value.progress)) return false;
   if (value.score !== undefined && !isNumber(value.score)) return false;
   if (value.x !== undefined && !isNumber(value.x)) return false;
@@ -99,6 +102,7 @@ function isResultMessage(value: unknown): value is NetResultMessage {
   return (
     isProtocolV1(value.v) &&
     value.kind === "result" &&
+    isString(value.matchId) &&
     isNumber(value.score) &&
     isBoolean(value.passed) &&
     (value.timeMs === undefined || isNumber(value.timeMs))
@@ -119,6 +123,11 @@ function isRematchMessage(value: unknown): value is NetRematchMessage {
   return isProtocolV1(value.v) && value.kind === "rematch";
 }
 
+function isForfeitMessage(value: unknown): value is NetForfeitMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "forfeit" && isString(value.matchId);
+}
+
 export function parseNetMessage(raw: unknown): NetMessage | null {
   let payload = raw;
   if (typeof raw === "string") {
@@ -136,6 +145,7 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isStateMessage(payload)) return payload;
   if (isResultMessage(payload)) return payload;
   if (isRematchMessage(payload)) return payload;
+  if (isForfeitMessage(payload)) return payload;
   if (isByeMessage(payload)) return payload;
 
   if (isRecord(payload) && payload.kind !== undefined) {
@@ -162,6 +172,7 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind">): N
   return {
     v: MULTIPLAYER_PROTOCOL_VERSION,
     kind: "state",
+    matchId: data.matchId,
     progress: data.progress,
     score: data.score,
     status: data.status,
@@ -182,6 +193,7 @@ export function createResultMessage(data: Omit<NetResultMessage, "v" | "kind">):
   return {
     v: MULTIPLAYER_PROTOCOL_VERSION,
     kind: "result",
+    matchId: data.matchId,
     score: data.score,
     passed: data.passed,
     timeMs: data.timeMs,
@@ -194,4 +206,8 @@ export function createByeMessage(reason?: string): NetByeMessage {
 
 export function createRematchMessage(): NetRematchMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "rematch" };
+}
+
+export function createForfeitMessage(matchId: string): NetForfeitMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "forfeit", matchId };
 }
