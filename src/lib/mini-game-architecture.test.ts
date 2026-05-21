@@ -370,9 +370,10 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(appPageSource, /readPersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /writePersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /const \[selectedAvatarSkin, setSelectedAvatarSkin\] = useState<PlayerAvatarSkin>\("cyan"\);/);
-  assert.match(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /setSelectedAvatarSkin\(readPersistedPlayerAvatarSkin\(\)\);/);
   assert.doesNotMatch(appPageSource, /useState<PlayerAvatarSkin>\(\(\) => readPersistedPlayerAvatarSkin\(\)\)/);
+  assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
+  assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
   assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
   assert.match(appPageSource, /setStage\("avatar-lab"\);/);

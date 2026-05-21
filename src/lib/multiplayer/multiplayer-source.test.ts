@@ -106,6 +106,21 @@ test("multiplayer gameplay uses an in-page fullscreen shell instead of a route s
   assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*MULTIPLAYER_STATE_SYNC_MS/);
 });
 
+test("multiplayer gameplay disables mobile long press browser affordances", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /blockMobileLongPress/);
+  assert.match(pageSource, /matchMedia\("\(pointer: coarse\)"\)/);
+  assert.match(pageSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
+  assert.match(pageSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(pageSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(pageSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(pageSource, /\.multiplayer-game-shell, \.play-screen, \.prototype-stage, \.game-area/);
+  assert.match(pageSource, /input, textarea, select, \[contenteditable='true'\]/);
+});
+
 test("multiplayer avatars use the shared player avatar skin resolver", () => {
   const skinUrl = new URL("../../features/player-avatar/player-avatar-skin.ts", import.meta.url);
   const playerAvatarSource = readSource("../../features/player-avatar/player-avatar.tsx");
@@ -142,11 +157,12 @@ test("multiplayer and result entry read the same persisted avatar skin before cr
   assert.match(appPageSource, /readPersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /writePersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /const \[selectedAvatarSkin, setSelectedAvatarSkin\] = useState<PlayerAvatarSkin>\("cyan"\)/);
-  assert.match(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /setSelectedAvatarSkin\(readPersistedPlayerAvatarSkin\(\)\);/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
   assert.match(appPageSource, /writePersistedPlayerAvatarSkin\(skin\);/);
   assert.match(appPageSource, /onSelectSkin=\{handleSelectAvatarSkin\}/);
+  assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
+  assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(multiplayerPageSource, /readPersistedPlayerAvatarSkin/);
   assert.match(multiplayerPageSource, /const \[selectedSkin, setSelectedSkin\] = useState<PlayerAvatarSkin>\("cyan"\)/);
   assert.match(multiplayerPageSource, /setSelectedSkin\(readPersistedPlayerAvatarSkin\(\)\);/);

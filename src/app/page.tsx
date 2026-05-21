@@ -103,7 +103,6 @@ export default function Home() {
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
   const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
-  const avatarSkinLoadedRef = useRef(false);
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
@@ -240,13 +239,7 @@ export default function Home() {
   useEffect(() => clearShareCopyToastTimer, [clearShareCopyToastTimer]);
 
   useEffect(() => {
-    if (!avatarSkinLoadedRef.current) return;
-    writePersistedPlayerAvatarSkin(selectedAvatarSkin);
-  }, [selectedAvatarSkin]);
-
-  useEffect(() => {
     setSelectedAvatarSkin(readPersistedPlayerAvatarSkin());
-    avatarSkinLoadedRef.current = true;
   }, []);
 
   const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
