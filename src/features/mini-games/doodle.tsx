@@ -653,17 +653,6 @@ export function DoodleJumpPrototype({
   }, [logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
-  const multiplayerStageMaxWidth = Math.max(260, Math.min(logicStageWidth, 760));
-  const wrapStyle = logicStageSizeOverride
-    ? { maxWidth: `${multiplayerStageMaxWidth}px`, width: "100%" }
-    : undefined;
-  const stageStyle = logicStageSizeOverride
-    ? {
-        aspectRatio: `${logicStageWidth} / ${logicStageHeight}`,
-        height: "auto",
-        width: `min(100%, ${multiplayerStageMaxWidth}px)`,
-      }
-    : undefined;
   const worldLayerStyle = {
     height: `${logicStageHeight}px`,
     transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
@@ -697,7 +686,7 @@ export function DoodleJumpPrototype({
   }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
   return (
-    <div className="prototype-game-wrap" style={wrapStyle}>
+    <div className="prototype-game-wrap">
       <div className="mini-score">
         <span>进度 {Math.round(view.progressPercent)}%</span>
         {riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}
@@ -712,7 +701,6 @@ export function DoodleJumpPrototype({
         onPointerDown={beginDoodleDirection}
         onPointerMove={updateDoodleDirection}
         onPointerUp={stopDoodleDirection}
-        style={stageStyle}
       >
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />

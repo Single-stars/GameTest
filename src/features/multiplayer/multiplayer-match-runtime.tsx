@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import { SimpleGameSync } from "@/features/game-sync/simple-game-sync";
 import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-games/doodle";
 import { FallDownPrototype, type FallDownRuntimeState } from "@/features/mini-games/fall-down";
+import { FlappyPrototype, type FlappyRuntimeState } from "@/features/mini-games/flappy";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
 import type { GameResult, SelfGameState } from "@/lib/multiplayer/types";
 
@@ -27,6 +28,23 @@ function resolveFallDownScore(runtime: FallDownRuntimeState) {
   const failurePenalty = runtime.failures * 28;
   return Math.max(0, Math.round(progressScore - failurePenalty));
 }
+
+function resolveFlappyScore(runtime: FlappyRuntimeState) {
+  const progressScore = runtime.progress * 1080;
+  const failurePenalty = runtime.failures * 30;
+  return Math.max(0, Math.round(progressScore - failurePenalty));
+}
+
+type MultiplayerRuntimeState = {
+  cameraY: number;
+  direction: SelfGameState["direction"];
+  elapsedMs: number;
+  failures: number;
+  progress: number;
+  status: "playing" | "passed" | "failed";
+  x: number;
+  y: number;
+};
 
 type MultiplayerMatchRuntimeProps = {
   level: MiniGameLevelConfig;
@@ -67,7 +85,19 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   }, [cleanupSync, reportState]);
 
   const publishRuntimeState = useCallback(
-    (nextState: SelfGameState, score: number, elapsedMs: number) => {
+    (runtime: MultiplayerRuntimeState, score: number) => {
+      const status = resolveRuntimeStatus(runtime.status);
+      const nextState: SelfGameState = {
+        cameraY: runtime.cameraY,
+        direction: runtime.direction,
+        elapsedMs: runtime.elapsedMs,
+        failures: runtime.failures,
+        progress: runtime.progress,
+        score,
+        status,
+        x: runtime.x,
+        y: runtime.y,
+      };
       syncRef.current?.update(nextState);
       if (nextState.status === "playing") return;
       syncRef.current?.flush();
@@ -76,57 +106,58 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
       reportResult({
         score,
         passed: nextState.status === "finished",
-        timeMs: elapsedMs,
+        timeMs: runtime.elapsedMs,
       });
     },
     [reportResult],
   );
 
-  const handleDoodleRuntimeState = useCallback(
-    (runtime: DoodleRuntimeState) => {
-      const status = resolveRuntimeStatus(runtime.status);
-      const score = resolveDoodleScore(runtime);
-      publishRuntimeState(
-        {
-          cameraY: runtime.cameraY,
-          direction: runtime.direction,
-          elapsedMs: runtime.elapsedMs,
-          failures: runtime.failures,
-          progress: runtime.progress,
-          score,
-          status,
-          x: runtime.x,
-          y: runtime.y,
-        },
-        score,
-        runtime.elapsedMs,
-      );
+  const handleRuntimeState = useCallback(
+    (runtime: MultiplayerRuntimeState, scoreResolver: (state: MultiplayerRuntimeState) => number) => {
+      const score = scoreResolver(runtime);
+      publishRuntimeState(runtime, score);
     },
     [publishRuntimeState],
   );
 
+  const handleDoodleRuntimeState = useCallback(
+    (runtime: DoodleRuntimeState) => {
+      handleRuntimeState(runtime, resolveDoodleScore);
+    },
+    [handleRuntimeState],
+  );
+
   const handleFallDownRuntimeState = useCallback(
     (runtime: FallDownRuntimeState) => {
-      const status = resolveRuntimeStatus(runtime.status);
-      const score = resolveFallDownScore(runtime);
-      publishRuntimeState(
-        {
-          cameraY: runtime.cameraY,
-          direction: runtime.direction,
-          elapsedMs: runtime.elapsedMs,
-          failures: runtime.failures,
-          progress: runtime.progress,
-          score,
-          status,
-          x: runtime.x,
-          y: runtime.y,
-        },
-        score,
-        runtime.elapsedMs,
-      );
+      handleRuntimeState(runtime, resolveFallDownScore);
     },
-    [publishRuntimeState],
+    [handleRuntimeState],
   );
+
+  const handleFlappyRuntimeState = useCallback(
+    (runtime: FlappyRuntimeState) => {
+      handleRuntimeState(runtime, resolveFlappyScore);
+    },
+    [handleRuntimeState],
+  );
+
+  if (level.gameId === "doodle") {
+    return (
+      <DoodleJumpPrototype
+        autoStart
+        level={level}
+        mode="advanced"
+        onBackToSelect={() => undefined}
+        onRestart={() => undefined}
+        onRuntimeState={handleDoodleRuntimeState}
+        remotePlayer={opponentPlayer}
+        remoteState={opponentState}
+        runSeed={runSeed}
+        logicStageSizeOverride={matchStageSize}
+        unlimitedRespawn
+      />
+    );
+  }
 
   if (level.gameId === "fall-down") {
     return (
@@ -136,6 +167,25 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onBackToSelect={() => undefined}
         onRestart={() => undefined}
         onRuntimeState={handleFallDownRuntimeState}
+        remotePlayer={opponentPlayer}
+        remoteState={opponentState}
+        runSeed={runSeed}
+        logicStageSizeOverride={matchStageSize}
+        unlimitedRespawn
+      />
+    );
+  }
+
+  if (level.gameId === "flappy") {
+    return (
+      <FlappyPrototype
+        level={level}
+        mode="advanced"
+        onBackToSelect={() => undefined}
+        onRestart={() => undefined}
+        onRuntimeState={handleFlappyRuntimeState}
+        remotePlayer={opponentPlayer}
+        remoteState={opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn

@@ -121,6 +121,19 @@
   z-index: 12;
 }
 
+.fall-down-remote-player-shell {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 11;
+  width: 32px;
+  height: 32px;
+  opacity: 0.78;
+  filter: drop-shadow(0 4px 10px rgba(24, 24, 24, 0.18));
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
 .fall-down-player {
   background: var(--cyan);
   box-shadow: var(--glow-accent);

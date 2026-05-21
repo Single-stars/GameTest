@@ -10,6 +10,8 @@ import {
 } from "react";
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -39,6 +41,7 @@ import {
   resolveFallDownCameraBounds,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
+import type { SelfGameState } from "@/lib/multiplayer/types";
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {
@@ -98,6 +101,12 @@ export type FallDownRuntimeState = {
   y: number;
 };
 
+type FallDownRemotePlayer = {
+  skinId?: string;
+};
+
+type FallDownRemoteState = SelfGameState;
+
 function resolveFallDownPlayerDirection(direction: FallDownRuntime["inputDirection"]): PlayerAvatarDirection {
   if (direction < 0) return "left";
   if (direction > 0) return "right";
@@ -110,6 +119,18 @@ function resolveFallDownPlayerAvatarView(view: FallDownRuntime): PlayerAvatarVie
   if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
   if (view.started && view.inputDirection !== 0) return { action: "move", expression: "neutral" };
   return { action: "idle", expression: "neutral" };
+}
+
+function resolveFallDownRemoteSkin(remotePlayer: FallDownRemotePlayer | null | undefined): PlayerAvatarSkin {
+  return resolvePlayerAvatarSkin(remotePlayer?.skinId);
+}
+
+function resolveFallDownRemoteAvatarView(remoteState: FallDownRemoteState): PlayerAvatarView {
+  if (remoteState.status === "failed") return { action: "hit", expression: "hurt" };
+  if (remoteState.status === "finished") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  return remoteState.direction && remoteState.direction !== "none"
+    ? { action: "move", expression: "neutral" }
+    : { action: "idle", expression: "neutral" };
 }
 
 function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number): FallDownRuntimeState {
@@ -391,6 +412,8 @@ export function FallDownPrototype({
   onComplete,
   onRuntimeState,
   onRestart,
+  remotePlayer,
+  remoteState,
   runSeed,
   unlimitedRespawn = false,
 }: {
@@ -401,6 +424,8 @@ export function FallDownPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: FallDownRuntimeState) => void;
   onRestart: () => void;
+  remotePlayer?: { skinId?: string } | null;
+  remoteState?: SelfGameState | null;
   runSeed: string;
   unlimitedRespawn?: boolean;
 }) {
@@ -413,14 +438,6 @@ export function FallDownPrototype({
   const worldLayerScale = Math.min(visualStageWidth / stageWidth, visualStageHeight / stageHeight);
   const worldLayerOffsetX = (visualStageWidth - stageWidth * worldLayerScale) / 2;
   const worldLayerOffsetY = (visualStageHeight - stageHeight * worldLayerScale) / 2;
-  const multiplayerStageMaxWidth = Math.max(260, Math.min(stageWidth, 760));
-  const stageStyle = logicStageSizeOverride
-    ? {
-        aspectRatio: `${stageWidth} / ${stageHeight}`,
-        height: "auto",
-        width: `min(100%, ${multiplayerStageMaxWidth}px)`,
-      }
-    : undefined;
   const worldLayerStyle = {
     height: `${stageHeight}px`,
     left: 0,
@@ -441,6 +458,8 @@ export function FallDownPrototype({
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
   const dangerLineRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
+  const remoteSmootherRef = useRef(new RemoteStateSmoother({ interpolationDelayMs: 100, maxExtrapolationMs: 80 }));
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
@@ -480,11 +499,26 @@ export function FallDownPrototype({
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    remoteSmootherRef.current.reset();
+    if (remotePlayerShellRef.current) {
+      remotePlayerShellRef.current.style.display = "none";
+    }
     const timer = window.setTimeout(() => {
       setView(makeFallDownView(initialRuntime));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [initialRuntime]);
+
+  useEffect(() => {
+    if (!remoteState) {
+      remoteSmootherRef.current.reset();
+      if (remotePlayerShellRef.current) {
+        remotePlayerShellRef.current.style.display = "none";
+      }
+      return;
+    }
+    remoteSmootherRef.current.push(remoteState, performance.now());
+  }, [remoteState]);
 
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime) => {
@@ -532,6 +566,18 @@ export function FallDownPrototype({
 
       if (playerShellRef.current) {
         playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
+      }
+      if (remotePlayerShellRef.current) {
+        const sampledRemote = remoteSmootherRef.current.sample(performance.now());
+        if (sampledRemote) {
+          remotePlayerShellRef.current.style.display = "";
+          remotePlayerShellRef.current.style.transform = transformPoint3d(
+            sampledRemote.x - PLAYER_SIZE / 2,
+            sampledRemote.y - current.cameraY - PLAYER_SIZE / 2,
+          );
+        } else {
+          remotePlayerShellRef.current.style.display = "none";
+        }
       }
     },
     [fragileTime, stageHeight, stageWidth],
@@ -803,7 +849,6 @@ export function FallDownPrototype({
         onPointerDown={beginFallDownDirection}
         onPointerMove={updateFallDownDirection}
         onPointerUp={stopDirection}
-        style={stageStyle}
       >
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
@@ -883,6 +928,16 @@ export function FallDownPrototype({
             visualScale={1.18}
           />
         </div>
+        {remoteState ? (
+          <div className="fall-down-remote-player-shell" ref={remotePlayerShellRef}>
+            <PlayerAvatar
+              {...resolveFallDownRemoteAvatarView(remoteState)}
+              direction={remoteState.direction ?? "none"}
+              skin={resolveFallDownRemoteSkin(remotePlayer)}
+              visualScale={1.18}
+            />
+          </div>
+        ) : null}
         </div>
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
