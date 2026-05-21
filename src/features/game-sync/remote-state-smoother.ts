@@ -1,6 +1,6 @@
 "use client";
 
-import type { SelfGameState } from "@/lib/multiplayer/types";
+import type { SelfGameState } from "@/features/game-sync/types";
 
 export type RemoteStateSmootherOptions = {
   interpolationDelayMs?: number;

@@ -42,7 +42,7 @@ import {
   type MiniGameLevelConfig,
   type MiniGameParams,
 } from "@/lib/mini-games";
-import type { SelfGameState } from "@/lib/multiplayer/types";
+import type { SelfGameState } from "@/features/game-sync/types";
 
 const FLAPPY_GATE_WIDTH = 54;
 const FLAPPY_START_PLATFORM_HEIGHT = 12;

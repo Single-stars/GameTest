@@ -583,9 +583,9 @@ test("advanced challenge configs and completion logic are split behind a stable 
 test("mini-game CSS is split into ordered common and per-game chunks", () => {
   const facadeSource = readFileSync(new URL("../app/styles/mini-games.css", import.meta.url), "utf8");
   const commonSource = readFileSync(new URL("../app/styles/mini-games/common.css", import.meta.url), "utf8");
+  const multiplayerLayoutUrl = new URL("../app/multiplayer/layout.tsx", import.meta.url);
   const expectedImports = [
     '@import "./mini-games/common.css";',
-    '@import "./mini-games/multiplayer.css";',
     '@import "./mini-games/doodle.css";',
     '@import "./mini-games/flappy.css";',
     '@import "./mini-games/knife.css";',
@@ -607,6 +607,8 @@ test("mini-game CSS is split into ordered common and per-game chunks", () => {
   assert.match(commonSource, /\.prototype-game-wrap \{/);
   assert.match(commonSource, /\.play-screen \.prototype-game-wrap \{[\s\S]*width: 100%;[\s\S]*height: 100%;/);
   assert.match(commonSource, /\.play-screen \.prototype-stage \{[\s\S]*width: 100%;[\s\S]*height: 100%;/);
+  assert.equal(existsSync(multiplayerLayoutUrl), true, multiplayerLayoutUrl.pathname);
+  assert.match(readFileSync(multiplayerLayoutUrl, "utf8"), /import "\.\.\/styles\/mini-games\/multiplayer\.css";/);
   assert.match(readFileSync(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url), "utf8"), /\.multiplayer-game-shell \{[\s\S]*position:\s*fixed;[\s\S]*height:\s*100dvh;/);
   assert.doesNotMatch(commonSource, /--prototype-stage-scale/);
   assert.doesNotMatch(commonSource, /zoom:/);
@@ -631,6 +633,33 @@ test("mini-game stages use native measured dimensions instead of visual scaling"
     const source = readFileSync(new URL(`../features/mini-games/${moduleName}.tsx`, import.meta.url), "utf8");
     assert.match(source, /useMiniGameStageSize/);
     assert.match(source, /stageSize/);
+  }
+});
+
+test("single-player game sync state types live outside multiplayer transport modules", () => {
+  const gameSyncTypesUrl = new URL("../features/game-sync/types.ts", import.meta.url);
+  const multiplayerTypesSource = readFileSync(new URL("./multiplayer/types.ts", import.meta.url), "utf8");
+  const singlePlayerTypeConsumers = [
+    "../features/game-sync/remote-state-smoother.ts",
+    "../features/game-sync/simple-game-sync.ts",
+    "../features/mini-games/doodle.tsx",
+    "../features/mini-games/fall-down.tsx",
+    "../features/mini-games/flappy.tsx",
+  ] as const;
+
+  assert.equal(existsSync(gameSyncTypesUrl), true, gameSyncTypesUrl.pathname);
+
+  const gameSyncTypesSource = readFileSync(gameSyncTypesUrl, "utf8");
+  assert.match(gameSyncTypesSource, /export type MultiplayerDirection = "left" \| "right" \| "none";/);
+  assert.match(gameSyncTypesSource, /export type GameStateStatus = "playing" \| "failed" \| "finished";/);
+  assert.match(gameSyncTypesSource, /export type SelfGameState = \{/);
+  assert.match(gameSyncTypesSource, /export type GameResult = \{/);
+  assert.match(multiplayerTypesSource, /from "@\/features\/game-sync\/types"/);
+
+  for (const sourcePath of singlePlayerTypeConsumers) {
+    const source = readFileSync(new URL(sourcePath, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /@\/lib\/multiplayer\/types/, sourcePath);
+    assert.match(source, /@\/features\/game-sync\/types/, sourcePath);
   }
 });
 

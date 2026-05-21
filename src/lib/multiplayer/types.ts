@@ -1,3 +1,17 @@
+import type {
+  GameResult,
+  GameStateStatus,
+  MultiplayerDirection,
+  SelfGameState,
+} from "@/features/game-sync/types";
+
+export type {
+  GameResult,
+  GameStateStatus,
+  MultiplayerDirection,
+  SelfGameState,
+} from "@/features/game-sync/types";
+
 export type MultiplayerStatus =
   | "idle"
   | "creating"
@@ -11,7 +25,6 @@ export type MultiplayerStatus =
   | "disconnected";
 
 export type SessionRole = "host" | "guest";
-export type MultiplayerDirection = "left" | "right" | "none";
 
 export type PlayerInfo = {
   id: string;
@@ -22,8 +35,6 @@ export type PlayerInfo = {
   viewportWidth?: number;
   viewportHeight?: number;
 };
-
-export type GameStateStatus = "playing" | "failed" | "finished";
 
 export type MatchConfig = {
   matchId: string;
@@ -37,30 +48,6 @@ export type MatchConfig = {
 export type CountdownState = {
   startAt: number;
   remainMs: number;
-};
-
-export type SelfGameState = {
-  matchId?: string;
-  progress: number;
-  score?: number;
-  status: GameStateStatus;
-  x?: number;
-  y?: number;
-  cameraY?: number;
-  vx?: number;
-  vy?: number;
-  direction?: MultiplayerDirection;
-  failures?: number;
-  elapsedMs?: number;
-  seq?: number;
-  sentAt?: number;
-};
-
-export type GameResult = {
-  matchId?: string;
-  score: number;
-  passed: boolean;
-  timeMs?: number;
 };
 
 export type NetHelloMessage = {

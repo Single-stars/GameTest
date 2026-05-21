@@ -41,7 +41,7 @@ import {
   resolveFallDownCameraBounds,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
-import type { SelfGameState } from "@/lib/multiplayer/types";
+import type { SelfGameState } from "@/features/game-sync/types";
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {

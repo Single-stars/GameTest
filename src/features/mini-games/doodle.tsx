@@ -51,7 +51,7 @@ import {
   type GeneratedDoodlePlatform,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
-import type { SelfGameState } from "@/lib/multiplayer/types";
+import type { SelfGameState } from "@/features/game-sync/types";
 
 const DOODLE_PLAYER_SPEED = 315;
 const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 33;

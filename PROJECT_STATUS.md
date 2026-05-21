@@ -15,10 +15,18 @@
 
 ```text
 /
+/multiplayer
 /_not-found
 ```
 
 当前没有账号、后端写入、数据库或在线排行榜。当前结果和进阶进度保存在浏览器 `localStorage`，清缓存或换设备会丢失。
+
+## 单机/联机边界
+
+- 首页 `/` 是纯单机入口；正式 8 轮、结果、进阶、运气和头像换肤不依赖 PeerJS、房间或联机 session。
+- `/multiplayer` 是联机实验入口；PeerJS 传输、房间/session、联机 HUD、投降、再来一局和返回房间流程只在该路由下使用。
+- 共享游戏运行状态类型位于 `src/features/game-sync/types.ts`；`src/lib/multiplayer/types.ts` 保留联机协议/session 类型和兼容 type re-export。
+- 联机样式位于 `src/app/styles/mini-games/multiplayer.css`，由 `src/app/multiplayer/layout.tsx` 路由段加载；`src/app/styles/mini-games.css` 不再全局导入联机样式。
 
 ## 技术栈
 
