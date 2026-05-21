@@ -96,6 +96,8 @@ export type FlappyRuntimeState = {
   failures: number;
   progress: number;
   status: PrototypeStatus;
+  vx: number;
+  vy: number;
   x: number;
   y: number;
 };
@@ -174,6 +176,7 @@ function makeFlappyRuntimeState(
   playerX: number,
   direction: PlayerAvatarDirection,
   reverseDirection: boolean,
+  speed: number,
 ): FlappyRuntimeState {
   const absoluteWorldX = playerX + resolveFlappySignedProgress(frame.progress, reverseDirection);
   return {
@@ -183,6 +186,8 @@ function makeFlappyRuntimeState(
     failures: frame.failures,
     progress: Number((frame.passed / Math.max(1, gateCount)).toFixed(4)),
     status: frame.status,
+    vx: reverseDirection ? -speed : speed,
+    vy: frame.playerVy,
     x: absoluteWorldX,
     y: frame.playerY,
   };
@@ -234,6 +239,7 @@ export function FlappyPrototype({
   onRuntimeState,
   onRestart,
   remotePlayer,
+  remoteStateSubscription,
   remoteState,
   runSeed,
   unlimitedRespawn = false,
@@ -246,6 +252,7 @@ export function FlappyPrototype({
   onRuntimeState?: (state: FlappyRuntimeState) => void;
   onRestart: () => void;
   remotePlayer?: FlappyRemotePlayer | null;
+  remoteStateSubscription?: ((listener: (state: FlappyRemoteState) => void) => (() => void)) | null;
   remoteState?: FlappyRemoteState | null;
   runSeed: string;
   unlimitedRespawn?: boolean;
@@ -298,7 +305,9 @@ export function FlappyPrototype({
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
-  const remoteSmootherRef = useRef(new RemoteStateSmoother({ interpolationDelayMs: 70, maxExtrapolationMs: 120 }));
+  const remoteSmootherRef = useRef(
+    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+  );
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
@@ -321,9 +330,16 @@ export function FlappyPrototype({
     if (!force && time - lastRuntimeSyncRef.current < FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS) return;
     lastRuntimeSyncRef.current = time;
     onRuntimeStateRef.current(
-      makeFlappyRuntimeState(runtimeRef.current, gateCount, playerX, resolveFlappyDirection(reverseDirection), reverseDirection),
+      makeFlappyRuntimeState(
+        runtimeRef.current,
+        gateCount,
+        playerX,
+        resolveFlappyDirection(reverseDirection),
+        reverseDirection,
+        speed,
+      ),
     );
-  }, [gateCount, playerX, reverseDirection]);
+  }, [gateCount, playerX, reverseDirection, speed]);
 
   useEffect(() => {
     runtimeRef.current = initialRuntime;
@@ -355,6 +371,13 @@ export function FlappyPrototype({
     }
     remoteSmootherRef.current.push(remoteState, performance.now());
   }, [remoteState]);
+
+  useEffect(() => {
+    if (!remoteStateSubscription) return;
+    return remoteStateSubscription((nextState) => {
+      remoteSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [remoteStateSubscription]);
 
   const pulse = useCallback(() => {
     const current = runtimeRef.current;
@@ -718,11 +741,11 @@ export function FlappyPrototype({
               visualScale={1.18}
             />
           </div>
-          {remoteState ? (
+          {remoteState || remoteStateSubscription ? (
             <div className="flappy-remote-player-shell" ref={remotePlayerShellRef}>
               <PlayerAvatar
-                {...resolveFlappyRemoteAvatarView(remoteState)}
-                direction={remoteState.direction ?? "none"}
+                {...(remoteState ? resolveFlappyRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
+                direction={remoteState?.direction ?? "none"}
                 gravity={reversedGravity ? "light" : "normal"}
                 skin={resolveFlappyRemoteSkin(remotePlayer)}
                 visualScale={1.18}

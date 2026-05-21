@@ -84,6 +84,8 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (value.x !== undefined && !isNumber(value.x)) return false;
   if (value.y !== undefined && !isNumber(value.y)) return false;
   if (value.cameraY !== undefined && !isNumber(value.cameraY)) return false;
+  if (value.vx !== undefined && !isNumber(value.vx)) return false;
+  if (value.vy !== undefined && !isNumber(value.vy)) return false;
   if (value.direction !== undefined && !isDirection(value.direction)) return false;
   if (value.failures !== undefined && !isNumber(value.failures)) return false;
   if (value.elapsedMs !== undefined && !isNumber(value.elapsedMs)) return false;
@@ -166,6 +168,8 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind">): N
     x: data.x,
     y: data.y,
     cameraY: data.cameraY,
+    vx: data.vx,
+    vy: data.vy,
     direction: data.direction,
     failures: data.failures,
     elapsedMs: data.elapsedMs,

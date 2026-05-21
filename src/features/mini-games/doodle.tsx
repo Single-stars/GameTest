@@ -54,7 +54,7 @@ import {
 import type { SelfGameState } from "@/lib/multiplayer/types";
 
 const DOODLE_PLAYER_SPEED = 315;
-const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 50;
+const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -105,6 +105,8 @@ export type DoodleRuntimeState = {
   playerDirection: PlayerAvatarDirection;
   progress: number;
   status: PrototypeStatus;
+  vx: number;
+  vy: number;
   x: number;
   y: number;
 };
@@ -220,6 +222,12 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
 
 function makeDoodleRuntimeState(frame: DoodleFrame, targetHeight: number): DoodleRuntimeState {
   const progressPercent = clamp((frame.playerY / targetHeight) * 100, 0, 100);
+  const vx =
+    frame.playerDirection === "left"
+      ? -DOODLE_PLAYER_SPEED
+      : frame.playerDirection === "right"
+        ? DOODLE_PLAYER_SPEED
+        : 0;
   return {
     cameraY: frame.cameraY,
     direction: frame.playerDirection,
@@ -228,6 +236,8 @@ function makeDoodleRuntimeState(frame: DoodleFrame, targetHeight: number): Doodl
     playerDirection: frame.playerDirection,
     progress: Number((progressPercent / 100).toFixed(4)),
     status: frame.status,
+    vx,
+    vy: frame.playerVy,
     x: frame.playerX,
     y: frame.playerY,
   };
@@ -256,6 +266,7 @@ export function DoodleJumpPrototype({
   mode,
   onRuntimeState,
   remotePlayer,
+  remoteStateSubscription,
   remoteState,
   runSeed,
   logicStageSizeOverride,
@@ -269,6 +280,7 @@ export function DoodleJumpPrototype({
   mode: MiniGameRunMode;
   onRuntimeState?: (state: DoodleRuntimeState) => void;
   remotePlayer?: DoodleRemotePlayer | null;
+  remoteStateSubscription?: ((listener: (state: DoodleRemoteState) => void) => (() => void)) | null;
   remoteState?: DoodleRemoteState | null;
   runSeed: string;
   logicStageSizeOverride?: MiniGameStageSize;
@@ -296,7 +308,9 @@ export function DoodleJumpPrototype({
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
-  const remoteSmootherRef = useRef(new RemoteStateSmoother({ interpolationDelayMs: 100, maxExtrapolationMs: 80 }));
+  const remoteSmootherRef = useRef(
+    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+  );
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
@@ -362,6 +376,13 @@ export function DoodleJumpPrototype({
     }
     remoteSmootherRef.current.push(remoteState, performance.now());
   }, [remoteState]);
+
+  useEffect(() => {
+    if (!remoteStateSubscription) return;
+    return remoteStateSubscription((nextState) => {
+      remoteSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [remoteStateSubscription]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => syncDoodleView(), 0);
@@ -763,11 +784,11 @@ export function DoodleJumpPrototype({
               visualScale={1.22}
             />
           </div>
-          {remoteState ? (
+          {remoteState || remoteStateSubscription ? (
             <div className="doodle-remote-player-shell" ref={remotePlayerShellRef}>
               <PlayerAvatar
-                {...resolveDoodleRemoteAvatarView(remoteState)}
-                direction={remoteState.direction ?? "none"}
+                {...(remoteState ? resolveDoodleRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
+                direction={remoteState?.direction ?? "none"}
                 gravity="normal"
                 skin={resolveDoodleRemoteSkin(remotePlayer)}
                 visualScale={1.22}

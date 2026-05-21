@@ -45,6 +45,8 @@ export type SelfGameState = {
   x?: number;
   y?: number;
   cameraY?: number;
+  vx?: number;
+  vy?: number;
   direction?: MultiplayerDirection;
   failures?: number;
   elapsedMs?: number;
@@ -90,6 +92,8 @@ export type NetStateMessage = {
   x?: number;
   y?: number;
   cameraY?: number;
+  vx?: number;
+  vy?: number;
   direction?: MultiplayerDirection;
   failures?: number;
   elapsedMs?: number;

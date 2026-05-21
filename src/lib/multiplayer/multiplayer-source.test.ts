@@ -96,7 +96,7 @@ test("Doodle multiplayer mode uses a fixed match stage and renders the remote av
 test("multiplayer match runtime sends high-rate state updates for smooth remote movement", () => {
   const source = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
 
-  assert.match(source, /MULTIPLAYER_STATE_SYNC_MS = 50/);
+  assert.match(source, /MULTIPLAYER_STATE_SYNC_MS = 33/);
   assert.match(source, /new SimpleGameSync\([\s\S]*MULTIPLAYER_STATE_SYNC_MS/);
 });
 
@@ -300,7 +300,7 @@ test("Doodle multiplayer runtime state is sampled from the animation frame, not 
   const viewSyncSource = source.slice(source.indexOf("const syncDoodleView = useCallback"), source.indexOf("useEffect(() => {", source.indexOf("const syncDoodleView = useCallback")));
   const tickSource = source.slice(source.indexOf("const tick = (time: number) =>"), source.indexOf("frameId = requestAnimationFrame(tick);", source.indexOf("const tick = (time: number) =>")));
 
-  assert.match(source, /const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 50;/);
+  assert.match(source, /const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 33;/);
   assert.match(source, /const lastRuntimeSyncRef = useRef\(0\);/);
   assert.match(source, /const syncDoodleRuntimeState = useCallback/);
   assert.doesNotMatch(viewSyncSource, /onRuntimeStateRef\.current\?\./);

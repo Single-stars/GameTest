@@ -88,7 +88,7 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
-const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = 50;
+const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
 
 export type FallDownRuntimeState = {
   cameraY: number;
@@ -97,6 +97,8 @@ export type FallDownRuntimeState = {
   failures: number;
   progress: number;
   status: PrototypeStatus;
+  vx: number;
+  vy: number;
   x: number;
   y: number;
 };
@@ -141,6 +143,8 @@ function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: numb
     failures: runtime.failures,
     progress: Number((runtime.layersReached / Math.max(1, requiredLayers)).toFixed(4)),
     status: runtime.status,
+    vx: runtime.vx,
+    vy: runtime.vy,
     x: runtime.playerX,
     y: runtime.playerY,
   };
@@ -413,6 +417,7 @@ export function FallDownPrototype({
   onRuntimeState,
   onRestart,
   remotePlayer,
+  remoteStateSubscription,
   remoteState,
   runSeed,
   unlimitedRespawn = false,
@@ -425,6 +430,7 @@ export function FallDownPrototype({
   onRuntimeState?: (state: FallDownRuntimeState) => void;
   onRestart: () => void;
   remotePlayer?: { skinId?: string } | null;
+  remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   remoteState?: SelfGameState | null;
   runSeed: string;
   unlimitedRespawn?: boolean;
@@ -459,7 +465,9 @@ export function FallDownPrototype({
   const dangerLineRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
-  const remoteSmootherRef = useRef(new RemoteStateSmoother({ interpolationDelayMs: 100, maxExtrapolationMs: 80 }));
+  const remoteSmootherRef = useRef(
+    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+  );
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
@@ -519,6 +527,13 @@ export function FallDownPrototype({
     }
     remoteSmootherRef.current.push(remoteState, performance.now());
   }, [remoteState]);
+
+  useEffect(() => {
+    if (!remoteStateSubscription) return;
+    return remoteStateSubscription((nextState) => {
+      remoteSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [remoteStateSubscription]);
 
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime) => {
@@ -928,11 +943,11 @@ export function FallDownPrototype({
             visualScale={1.18}
           />
         </div>
-        {remoteState ? (
+        {remoteState || remoteStateSubscription ? (
           <div className="fall-down-remote-player-shell" ref={remotePlayerShellRef}>
             <PlayerAvatar
-              {...resolveFallDownRemoteAvatarView(remoteState)}
-              direction={remoteState.direction ?? "none"}
+              {...(remoteState ? resolveFallDownRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
+              direction={remoteState?.direction ?? "none"}
               skin={resolveFallDownRemoteSkin(remotePlayer)}
               visualScale={1.18}
             />

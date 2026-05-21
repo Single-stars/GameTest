@@ -6,6 +6,7 @@ export type RemoteStateSmootherOptions = {
   interpolationDelayMs?: number;
   maxExtrapolationMs?: number;
   maxBufferMs?: number;
+  staleStopExtrapolationMs?: number;
 };
 
 type BufferedRemoteState = SelfGameState & {
@@ -15,9 +16,10 @@ type BufferedRemoteState = SelfGameState & {
   cameraY: number;
 };
 
-const DEFAULT_INTERPOLATION_DELAY_MS = 100;
-const DEFAULT_MAX_EXTRAPOLATION_MS = 80;
+const DEFAULT_INTERPOLATION_DELAY_MS = 80;
+const DEFAULT_MAX_EXTRAPOLATION_MS = 100;
 const DEFAULT_MAX_BUFFER_MS = 1_000;
+const DEFAULT_STALE_STOP_EXTRAPOLATION_MS = 250;
 
 function hasCoordinates(state: SelfGameState): state is SelfGameState & { x: number; y: number; cameraY: number } {
   return (
@@ -38,6 +40,7 @@ export class RemoteStateSmoother {
   private readonly interpolationDelayMs: number;
   private readonly maxExtrapolationMs: number;
   private readonly maxBufferMs: number;
+  private readonly staleStopExtrapolationMs: number;
   private buffer: BufferedRemoteState[] = [];
   private latestSeq = -1;
 
@@ -45,6 +48,7 @@ export class RemoteStateSmoother {
     this.interpolationDelayMs = options.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
     this.maxExtrapolationMs = options.maxExtrapolationMs ?? DEFAULT_MAX_EXTRAPOLATION_MS;
     this.maxBufferMs = options.maxBufferMs ?? DEFAULT_MAX_BUFFER_MS;
+    this.staleStopExtrapolationMs = options.staleStopExtrapolationMs ?? DEFAULT_STALE_STOP_EXTRAPOLATION_MS;
   }
 
   push(state: SelfGameState, receivedAt: number): boolean {
@@ -72,6 +76,7 @@ export class RemoteStateSmoother {
     const renderAt = now - this.interpolationDelayMs;
     const latest = this.buffer[this.buffer.length - 1];
     if (renderAt >= latest.receivedAt) {
+      if (now - latest.receivedAt > this.staleStopExtrapolationMs) return latest;
       if (this.buffer.length < 2 || latest.status !== "playing") return latest;
       const previous = this.buffer[this.buffer.length - 2];
       const duration = latest.receivedAt - previous.receivedAt;

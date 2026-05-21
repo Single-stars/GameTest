@@ -26,6 +26,7 @@ import type {
 } from "@/lib/multiplayer/types";
 
 const COUNTDOWN_TICK_MS = 100;
+const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 100;
 
 function now() {
   return Date.now();
@@ -67,8 +68,15 @@ export class MultiplayerSession {
   private readonly targetRoomId: string | null;
   private readonly peerOptions?: PeerTransportOptions["peerOptions"];
   private countdownTimer: number | null = null;
+  private opponentStateSnapshotTimer: number | null = null;
   private selfStateSeq = 0;
   private opponentStateSeq = -1;
+  private lastOpponentStateSnapshotAt = 0;
+  private pendingOpponentStateSnapshot: SelfGameState | null = null;
+  private readonly opponentStateListeners = new Set<(state: SelfGameState) => void>();
+  private opponentStateAcceptedPackets = 0;
+  private opponentStateDroppedOldPackets = 0;
+  private lastOpponentStateAcceptedAt: number | null = null;
 
   constructor(options: SessionOptions) {
     this.onChange = options.onChange;
@@ -86,6 +94,19 @@ export class MultiplayerSession {
   getSnapshot() {
     return this.snapshot;
   }
+
+  subscribeOpponentState = (listener: (state: SelfGameState) => void) => {
+    this.opponentStateListeners.add(listener);
+    return () => {
+      this.opponentStateListeners.delete(listener);
+    };
+  };
+
+  readOpponentStateMetrics = () => ({
+    acceptedPackets: this.opponentStateAcceptedPackets,
+    droppedOldPackets: this.opponentStateDroppedOldPackets,
+    lastAcceptedAt: this.lastOpponentStateAcceptedAt,
+  });
 
   async start() {
     this.transport = new PeerTransport({
@@ -172,6 +193,8 @@ export class MultiplayerSession {
     this.send(
       createStateMessage({
         cameraY: sequencedState.cameraY,
+        vx: sequencedState.vx,
+        vy: sequencedState.vy,
         direction: sequencedState.direction,
         elapsedMs: sequencedState.elapsedMs,
         failures: sequencedState.failures,
@@ -203,6 +226,14 @@ export class MultiplayerSession {
     this.transport?.dispose();
     this.transport = null;
     this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    this.pendingOpponentStateSnapshot = null;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.selfStateSeq = 0;
+    this.opponentStateSeq = -1;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "idle",
       errorMessage: null,
@@ -222,6 +253,12 @@ export class MultiplayerSession {
     this.transport?.dispose();
     this.transport = null;
     this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    this.pendingOpponentStateSnapshot = null;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
   }
 
   private send(message: NetMessage) {
@@ -241,11 +278,16 @@ export class MultiplayerSession {
         this.acceptStartMessage(message);
         break;
       case "state":
-        if (typeof message.seq === "number" && message.seq <= this.opponentStateSeq) return;
+        if (typeof message.seq === "number" && message.seq <= this.opponentStateSeq) {
+          this.opponentStateDroppedOldPackets += 1;
+          return;
+        }
         if (typeof message.seq === "number") this.opponentStateSeq = message.seq;
-        this.patchSnapshot({
-          opponentState: {
+        {
+          const opponentState: SelfGameState = {
             cameraY: message.cameraY,
+            vx: message.vx,
+            vy: message.vy,
             direction: message.direction,
             elapsedMs: message.elapsedMs,
             failures: message.failures,
@@ -256,8 +298,12 @@ export class MultiplayerSession {
             status: message.status,
             x: message.x,
             y: message.y,
-          },
-        });
+          };
+          this.opponentStateAcceptedPackets += 1;
+          this.lastOpponentStateAcceptedAt = now();
+          this.emitOpponentState(opponentState);
+          this.syncOpponentStateSnapshot(opponentState);
+        }
         break;
       case "result":
         this.patchSnapshot({
@@ -290,8 +336,14 @@ export class MultiplayerSession {
 
   private resetRound() {
     this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
     this.selfStateSeq = 0;
     this.opponentStateSeq = -1;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.pendingOpponentStateSnapshot = null;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "connected",
       errorMessage: null,
@@ -308,8 +360,14 @@ export class MultiplayerSession {
 
   private resetHostWaitingState() {
     this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
     this.selfStateSeq = 0;
     this.opponentStateSeq = -1;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.pendingOpponentStateSnapshot = null;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "waiting",
       errorMessage: null,
@@ -391,6 +449,41 @@ export class MultiplayerSession {
     if (this.countdownTimer === null) return;
     window.clearTimeout(this.countdownTimer);
     this.countdownTimer = null;
+  }
+
+  private emitOpponentState(state: SelfGameState) {
+    for (const listener of this.opponentStateListeners) {
+      listener(state);
+    }
+  }
+
+  private syncOpponentStateSnapshot(state: SelfGameState) {
+    const currentTime = now();
+    const shouldForcePublish = state.status !== "playing";
+    if (shouldForcePublish || currentTime - this.lastOpponentStateSnapshotAt >= OPPONENT_STATE_SNAPSHOT_SYNC_MS) {
+      this.lastOpponentStateSnapshotAt = currentTime;
+      this.pendingOpponentStateSnapshot = null;
+      this.stopOpponentStateSnapshotTimer();
+      this.patchSnapshot({ opponentState: state });
+      return;
+    }
+    this.pendingOpponentStateSnapshot = state;
+    if (this.opponentStateSnapshotTimer !== null) return;
+    const waitMs = Math.max(0, OPPONENT_STATE_SNAPSHOT_SYNC_MS - (currentTime - this.lastOpponentStateSnapshotAt));
+    this.opponentStateSnapshotTimer = window.setTimeout(() => {
+      this.opponentStateSnapshotTimer = null;
+      if (!this.pendingOpponentStateSnapshot) return;
+      this.lastOpponentStateSnapshotAt = now();
+      const snapshotState = this.pendingOpponentStateSnapshot;
+      this.pendingOpponentStateSnapshot = null;
+      this.patchSnapshot({ opponentState: snapshotState });
+    }, waitMs);
+  }
+
+  private stopOpponentStateSnapshotTimer() {
+    if (this.opponentStateSnapshotTimer === null) return;
+    window.clearTimeout(this.opponentStateSnapshotTimer);
+    this.opponentStateSnapshotTimer = null;
   }
 
   private patchSnapshot(patch: Partial<MultiplayerSnapshot>) {

@@ -499,6 +499,8 @@ function MultiplayerPageContent() {
                 level={battleLevel}
                 matchStageSize={matchStageSize}
                 opponentPlayer={snapshot.opponentPlayer}
+                opponentStateSubscription={sessionRef.current?.subscribeOpponentState ?? null}
+                readOpponentStateMetrics={sessionRef.current?.readOpponentStateMetrics ?? null}
                 opponentState={snapshot.opponentState}
                 reportResult={reportResult}
                 reportState={reportState}
