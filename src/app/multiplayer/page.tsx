@@ -1,16 +1,18 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-games/doodle";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ConnectionStatus } from "@/features/multiplayer/connection-status";
+import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
+import { MultiplayerMatchRuntime } from "@/features/multiplayer/multiplayer-match-runtime";
 import { HostRoom } from "@/features/multiplayer/host-room";
 import { JoinRoom } from "@/features/multiplayer/join-room";
 import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
 import { PlayerCard } from "@/features/multiplayer/player-card";
-import { PlayerAvatarSkinProvider, PLAYER_AVATAR_SKINS, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
-import { SimpleGameSync } from "@/features/game-sync/simple-game-sync";
+import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { readPersistedPlayerAvatarSkin } from "@/features/player-avatar/player-avatar-storage";
 import { getAdvancedStageConfig } from "@/lib/advanced-challenges";
 import { getMiniGameLevel } from "@/lib/mini-games";
 import {
@@ -26,10 +28,8 @@ import type {
   SessionRole,
 } from "@/lib/multiplayer/types";
 
-const AVATAR_SKIN_STORAGE_KEY = "game-rank-test/avatar-skin/v1";
 const COUNTDOWN_MS = 3_000;
 const MATCH_LOGIC_HEIGHT = 640;
-const MULTIPLAYER_STATE_SYNC_MS = 50;
 
 type CopyStatus = "idle" | "copied" | "manual";
 
@@ -42,12 +42,6 @@ function createSeed() {
 
 function createPlayerId(role: SessionRole) {
   return `${role}-${createSeed().slice(0, 8)}`;
-}
-
-function toSkinId(skin: string): PlayerAvatarSkin {
-  return PLAYER_AVATAR_SKINS.includes(skin as PlayerAvatarSkin)
-    ? (skin as PlayerAvatarSkin)
-    : "cyan";
 }
 
 function resolveLogicSize(selfPlayer: PlayerInfo | null, opponentPlayer: PlayerInfo | null) {
@@ -98,12 +92,6 @@ function resolvePeerOptions(): PeerJSOption | undefined {
   };
 }
 
-function resolveSelfScore(runtime: DoodleRuntimeState) {
-  const progressScore = runtime.progress * 1000;
-  const failurePenalty = runtime.failures * 35;
-  return Math.max(0, Math.round(progressScore - failurePenalty));
-}
-
 function resolveWinner(selfResult: GameResult | null, opponentResult: GameResult | null) {
   if (!selfResult || !opponentResult) return "等待结果";
   if (selfResult.score > opponentResult.score) return "你赢了";
@@ -139,23 +127,14 @@ function copyRoomLinkWithFallback(text: string) {
 }
 
 function MultiplayerPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const hostParam = (searchParams.get("host") ?? "").trim();
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
-  const [selectedSkin] = useState<PlayerAvatarSkin>(() => {
-    if (typeof window === "undefined") return "cyan";
-    try {
-      const storedSkin = window.localStorage.getItem(AVATAR_SKIN_STORAGE_KEY);
-      return storedSkin ? toSkinId(storedSkin) : "cyan";
-    } catch {
-      return "cyan";
-    }
-  });
+  const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
   const [joinInputVisible, setJoinInputVisible] = useState(Boolean(hostParam));
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const sessionRef = useRef<MultiplayerSession | null>(null);
-  const syncRef = useRef<SimpleGameSync | null>(null);
-  const localResultSentRef = useRef(false);
   const autoJoinHostRef = useRef<string | null>(null);
   const copyStatusTimerRef = useRef<number | null>(null);
 
@@ -164,7 +143,7 @@ function MultiplayerPageContent() {
   const peerOptions = useMemo(() => resolvePeerOptions(), []);
   const matchSeed = snapshot.match?.seed ?? "";
   const runSeed = `${battleLevelId}:${matchSeed}`;
-  const canStartGame = snapshot.status === "playing" && Boolean(snapshot.match);
+  const showGameShell = (snapshot.status === "playing" || snapshot.status === "finished") && Boolean(snapshot.match);
   const matchStageSize = useMemo(
     () =>
       snapshot.match
@@ -181,21 +160,14 @@ function MultiplayerPageContent() {
     return `${window.location.origin}/multiplayer?host=${query}`;
   }, [snapshot.roomId]);
 
-  const cleanupSync = useCallback(() => {
-    syncRef.current?.stop();
-    syncRef.current = null;
-  }, []);
-
   const cleanupSession = useCallback(() => {
-    cleanupSync();
     sessionRef.current?.dispose();
     sessionRef.current = null;
-  }, [cleanupSync]);
+  }, []);
 
   const bootstrapSession = useCallback(
     async (role: SessionRole, roomId?: string | null) => {
       cleanupSession();
-      localResultSentRef.current = false;
       setSnapshot(buildInitialSnapshot());
       const selfPlayer = createSelfPlayer(role, selectedSkin);
       const session = new MultiplayerSession({
@@ -273,11 +245,16 @@ function MultiplayerPageContent() {
     setSnapshot(buildInitialSnapshot());
   }, [cleanupSession]);
 
+  const handleReturnHome = useCallback(() => {
+    sessionRef.current?.leave("对方已离开房间");
+    cleanupSession();
+    setSnapshot(buildInitialSnapshot());
+    router.push("/");
+  }, [cleanupSession, router]);
+
   const handleRematch = useCallback(() => {
-    localResultSentRef.current = false;
-    cleanupSync();
     sessionRef.current?.requestRematch();
-  }, [cleanupSync]);
+  }, []);
 
   useEffect(
     () => () => {
@@ -288,6 +265,10 @@ function MultiplayerPageContent() {
     },
     [cleanupSession],
   );
+
+  useEffect(() => {
+    setSelectedSkin(readPersistedPlayerAvatarSkin());
+  }, []);
 
   useEffect(() => {
     if (!hostParam || autoJoinHostRef.current === hostParam) return;
@@ -323,52 +304,13 @@ function MultiplayerPageContent() {
     snapshot.status,
   ]);
 
-  useEffect(() => {
-    cleanupSync();
-    if (snapshot.status !== "playing" || !sessionRef.current) return;
-    localResultSentRef.current = false;
-    const sync = new SimpleGameSync((state: SelfGameState) => {
-      sessionRef.current?.reportState(state);
-    }, MULTIPLAYER_STATE_SYNC_MS);
-    syncRef.current = sync;
-    sync.start();
-    return cleanupSync;
-  }, [cleanupSync, snapshot.status]);
+  const reportState = useCallback((state: SelfGameState) => {
+    sessionRef.current?.reportState(state);
+  }, []);
 
-  const handleRuntimeState = useCallback(
-    (runtime: DoodleRuntimeState) => {
-      if (snapshot.status !== "playing") return;
-      const status: SelfGameState["status"] =
-        runtime.status === "passed"
-          ? "finished"
-          : runtime.status === "failed"
-            ? "failed"
-            : "playing";
-      const score = resolveSelfScore(runtime);
-      const nextState: SelfGameState = {
-        cameraY: runtime.cameraY,
-        direction: runtime.direction,
-        elapsedMs: runtime.elapsedMs,
-        failures: runtime.failures,
-        progress: runtime.progress,
-        score,
-        status,
-        x: runtime.x,
-        y: runtime.y,
-      };
-      syncRef.current?.update(nextState);
-      if (status === "playing") return;
-      syncRef.current?.flush();
-      if (localResultSentRef.current) return;
-      localResultSentRef.current = true;
-      sessionRef.current?.reportResult({
-        score,
-        passed: status === "finished",
-        timeMs: runtime.elapsedMs,
-      });
-    },
-    [snapshot.status],
-  );
+  const reportResult = useCallback((result: GameResult) => {
+    sessionRef.current?.reportResult(result);
+  }, []);
 
   const showEntry = snapshot.status === "idle";
   const showJoinForm = showEntry && joinInputVisible;
@@ -382,7 +324,12 @@ function MultiplayerPageContent() {
   return (
     <PlayerAvatarSkinProvider skin={selectedSkin}>
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "24px 16px 40px" }}>
-        <h1 style={{ marginTop: 0 }}>1v1 P2P 联机实验</h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h1 style={{ margin: 0 }}>1v1 P2P 联机实验</h1>
+          <button type="button" onClick={handleReturnHome}>
+            返回首页
+          </button>
+        </div>
         <p style={{ marginTop: 0, color: "#666" }}>
           固定实验场景：一路向上进阶7（{battleLevel.levelId}）
         </p>
@@ -409,6 +356,7 @@ function MultiplayerPageContent() {
           <PlayerCard
             title="你"
             player={snapshot.selfPlayer}
+            fallbackSkin={selectedSkin}
             ready={snapshot.selfReady}
             state={snapshot.selfState}
             result={snapshot.selfResult}
@@ -450,48 +398,36 @@ function MultiplayerPageContent() {
           </section>
         ) : null}
 
-        {canStartGame ? (
-          <section style={{ marginTop: 16 }}>
-            <DoodleJumpPrototype
-              autoStart
-              level={battleLevel}
-              mode="advanced"
-              onBackToSelect={() => undefined}
-              onRestart={() => undefined}
-              onRuntimeState={handleRuntimeState}
-              remotePlayer={snapshot.opponentPlayer}
-              remoteState={snapshot.opponentState}
-              runSeed={runSeed}
-              logicStageSizeOverride={matchStageSize}
-              unlimitedRespawn
-            />
-          </section>
-        ) : null}
-
-        {snapshot.status === "finished" ? (
-          <section
-            style={{
-              marginTop: 16,
-              border: "1px solid #d6d6d6",
-              borderRadius: 12,
-              padding: 16,
-              background: "#fff",
-            }}
+        {showGameShell ? (
+          <MultiplayerGameShell
+            opponentPlayer={snapshot.opponentPlayer}
+            opponentResult={snapshot.opponentResult}
+            opponentState={snapshot.opponentState}
+            onLeave={handleLeave}
+            onRematch={handleRematch}
+            selfPlayer={snapshot.selfPlayer}
+            selfResult={snapshot.selfResult}
+            selfState={snapshot.selfState}
+            status={snapshot.status}
+            winnerText={winnerText}
           >
-            <h2 style={{ marginTop: 0 }}>挑战结束</h2>
-            <p style={{ marginBottom: 0, fontWeight: 700 }}>{winnerText}</p>
-            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <button type="button" onClick={handleRematch}>
-                再来一局
-              </button>
-              <Link href="/">返回单人模式</Link>
-            </div>
-          </section>
+            {snapshot.status === "playing" ? (
+              <MultiplayerMatchRuntime
+                level={battleLevel}
+                matchStageSize={matchStageSize}
+                opponentPlayer={snapshot.opponentPlayer}
+                opponentState={snapshot.opponentState}
+                reportResult={reportResult}
+                reportState={reportState}
+                runSeed={runSeed}
+              />
+            ) : null}
+          </MultiplayerGameShell>
         ) : null}
 
         {(snapshot.status === "failed" || snapshot.status === "disconnected") ? (
           <section style={{ marginTop: 16, display: "flex", gap: 10 }}>
-            <button type="button" onClick={handleLeave}>
+            <button type="button" onClick={handleReturnHome}>
               返回首页
             </button>
             <button type="button" onClick={handleCreate}>

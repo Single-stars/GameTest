@@ -12,12 +12,12 @@ import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText,
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
-import { RestartIcon, ResetDataIcon, ShareIcon, ShirtIcon } from "@/features/results/result-icons";
+import { AvatarLabIcon, MultiplayerIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type AvatarMenuItem = {
-  id: "share" | "restart" | "reset" | "skin";
+  id: "share" | "restart" | "reset" | "multiplayer" | "skin";
   label: string;
   icon: ReactNode;
   onSelect: () => void;
@@ -126,6 +126,12 @@ export function ResultScreen({
       label: "重新测试",
       icon: <RestartIcon />,
       onSelect: onRestart,
+    },
+    {
+      id: "multiplayer",
+      label: "联机挑战",
+      icon: <MultiplayerIcon />,
+      onSelect: () => window.location.assign("/multiplayer"),
     },
     ...(debugToolsVisible
       ? [
@@ -240,15 +246,15 @@ export function ResultScreen({
                 className="rank-avatar-menu-surface"
                 focusable="false"
                 preserveAspectRatio="none"
-                viewBox="0 0 192 64"
+                viewBox="0 0 248 122"
               >
                 <path
                   className="rank-avatar-menu-surface-path center"
-                  d="M19 11H86L96 1.5L106 11H173C182.94 11 191 19.06 191 29V45C191 54.94 182.94 63 173 63H19C9.06 63 1 54.94 1 45V29C1 19.06 9.06 11 19 11Z"
+                  d="M18 13H112L124 2L136 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
                 />
                 <path
                   className="rank-avatar-menu-surface-path edge"
-                  d="M19 11H143L153 1.5L163 11H173C182.94 11 191 19.06 191 29V45C191 54.94 182.94 63 173 63H19C9.06 63 1 54.94 1 45V29C1 19.06 9.06 11 19 11Z"
+                  d="M18 13H191L203 2L215 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
                 />
               </svg>
               <div className="rank-avatar-bubble">
@@ -262,7 +268,7 @@ export function ResultScreen({
                     type="button"
                     onClick={() => runAvatarMenuAction(item.onSelect)}
                   >
-                    {item.id === "skin" ? <ShirtIcon /> : item.icon}
+                    {item.id === "skin" ? <AvatarLabIcon /> : item.icon}
                   </button>
                 ))}
               </div>

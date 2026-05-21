@@ -59,7 +59,8 @@ import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
 import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
-import { PLAYER_AVATAR_SKINS, PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { readPersistedPlayerAvatarSkin, writePersistedPlayerAvatarSkin } from "@/features/player-avatar/player-avatar-storage";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
 import { ShareImageScreen } from "@/features/results/share-image-screen";
@@ -70,7 +71,6 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
-const AVATAR_SKIN_STORAGE_KEY = "game-rank-test/avatar-skin/v1";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -240,26 +240,18 @@ export default function Home() {
   useEffect(() => clearShareCopyToastTimer, [clearShareCopyToastTimer]);
 
   useEffect(() => {
-    if (!avatarSkinLoadedRef.current || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(AVATAR_SKIN_STORAGE_KEY, selectedAvatarSkin);
-    } catch {
-      // Storage can be unavailable; the in-session skin still updates.
-    }
+    if (!avatarSkinLoadedRef.current) return;
+    writePersistedPlayerAvatarSkin(selectedAvatarSkin);
   }, [selectedAvatarSkin]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const storedSkin = window.localStorage.getItem(AVATAR_SKIN_STORAGE_KEY);
-      if (PLAYER_AVATAR_SKINS.includes(storedSkin as PlayerAvatarSkin)) {
-        setSelectedAvatarSkin(storedSkin as PlayerAvatarSkin);
-      }
-    } catch {
-      // Cosmetic preferences should never block the game.
-    } finally {
-      avatarSkinLoadedRef.current = true;
-    }
+    setSelectedAvatarSkin(readPersistedPlayerAvatarSkin());
+    avatarSkinLoadedRef.current = true;
+  }, []);
+
+  const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
+    setSelectedAvatarSkin(skin);
+    writePersistedPlayerAvatarSkin(skin);
   }, []);
 
   useEffect(() => {
@@ -694,7 +686,7 @@ export default function Home() {
       ) : stage === "avatar-lab" ? (
         <AvatarLabScreen
           selectedSkin={selectedAvatarSkin}
-          onSelectSkin={setSelectedAvatarSkin}
+          onSelectSkin={handleSelectAvatarSkin}
           onBack={requestAppBack}
         />
       ) : stage === "luck" ? (

@@ -5,14 +5,16 @@ import { useMemo, useState } from "react";
 import {
   PLAYER_AVATAR_ACTIONS,
   PLAYER_AVATAR_EXPRESSIONS,
-  PLAYER_AVATAR_SKIN_LABELS,
-  PLAYER_AVATAR_SKINS,
   PlayerAvatar,
   type PlayerAvatarAction,
   type PlayerAvatarEffect,
   type PlayerAvatarExpression,
-  type PlayerAvatarSkin,
 } from "@/features/player-avatar/player-avatar";
+import {
+  PLAYER_AVATAR_SKIN_LABELS,
+  PLAYER_AVATAR_SKINS,
+  type PlayerAvatarSkin,
+} from "@/features/player-avatar/player-avatar-skin";
 
 type AvatarScene = {
   id: string;

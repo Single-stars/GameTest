@@ -1,23 +1,11 @@
 "use client";
 
-import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
+import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
 import type { GameResult, PlayerInfo, SelfGameState } from "@/lib/multiplayer/types";
 
-function resolveSkinId(player: PlayerInfo | null): PlayerAvatarSkin {
-  const fallback: PlayerAvatarSkin = "cyan";
-  if (!player) return fallback;
-  const validSkins: PlayerAvatarSkin[] = [
-    "cyan",
-    "mint",
-    "amber",
-    "rose",
-    "slate",
-    "basketball",
-    "pig",
-  ];
-  return validSkins.includes(player.skinId as PlayerAvatarSkin)
-    ? (player.skinId as PlayerAvatarSkin)
-    : fallback;
+function resolveSkinId(player: PlayerInfo | null, fallbackSkin?: PlayerAvatarSkin) {
+  return resolvePlayerAvatarSkin(player?.skinId ?? fallbackSkin);
 }
 
 function formatState(state: SelfGameState | null) {
@@ -39,12 +27,14 @@ export function PlayerCard({
   ready,
   state,
   result,
+  fallbackSkin,
 }: {
   title: string;
   player: PlayerInfo | null;
   ready: boolean;
   state: SelfGameState | null;
   result: GameResult | null;
+  fallbackSkin?: PlayerAvatarSkin;
 }) {
   return (
     <div
@@ -58,7 +48,7 @@ export function PlayerCard({
     >
       <p style={{ margin: 0, color: "#666", fontSize: 13 }}>{title}</p>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-        <PlayerAvatar skin={resolveSkinId(player)} size={44} action="idle" expression="neutral" />
+        <PlayerAvatar skin={resolveSkinId(player, fallbackSkin)} size={44} action="idle" expression="neutral" />
         <div>
           <p style={{ margin: 0, fontWeight: 600 }}>{player?.name ?? "等待中"}</p>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: ready ? "#087443" : "#934f00" }}>

@@ -28,11 +28,25 @@ export function ResetDataIcon() {
   );
 }
 
-export function ShirtIcon() {
+export function MultiplayerIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 28 24" width="26">
-      <path d="M10 4h8l2.6 2.8 4.1 1.6-2.2 4.6-3.5-1.2V20H9V11.8L5.5 13 3.3 8.4l4.1-1.6L10 4Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="M10 4c.8 1.8 2.1 2.7 4 2.7s3.2-.9 4-2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <rect height="7" rx="2.2" stroke="currentColor" strokeWidth="2" width="7" x="3.5" y="6" />
+      <rect height="7" rx="2.2" stroke="currentColor" strokeWidth="2" width="7" x="13.5" y="11" />
+      <path d="M10.5 10.2h2.1M11.4 13.8h2.1" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="m8.4 17.5 1.8-2.4M15.6 6.5l-1.8 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+export function AvatarLabIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <path d="M12 5.5c2.35 0 4.25 1.9 4.25 4.25v3.5c0 2.35-1.9 4.25-4.25 4.25s-4.25-1.9-4.25-4.25v-3.5c0-2.35 1.9-4.25 4.25-4.25Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M8 16.5c1.1 1 2.4 1.5 4 1.5s2.9-.5 4-1.5" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="M8 14.5 6.5 16 5 14.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M16 14.5 17.5 16 19 14.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M10 9.5h.01M14 9.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
     </svg>
   );
 }

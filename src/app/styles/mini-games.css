@@ -1,4 +1,5 @@
 @import "./mini-games/common.css";
+@import "./mini-games/multiplayer.css";
 @import "./mini-games/doodle.css";
 @import "./mini-games/flappy.css";
 @import "./mini-games/knife.css";

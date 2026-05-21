@@ -11,11 +11,11 @@ import {
 
 import {
   PlayerAvatar,
-  PLAYER_AVATAR_SKINS,
   type PlayerAvatarDirection,
   type PlayerAvatarSkin,
   type PlayerAvatarView,
 } from "@/features/player-avatar/player-avatar";
+import { resolvePlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
 import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
 import {
   BASE_FAILURE_LIMIT,
@@ -241,8 +241,7 @@ function resolveDoodlePlayerAvatarView(view: DoodleViewFrame): PlayerAvatarView 
 }
 
 function resolveDoodleRemoteSkin(remotePlayer: DoodleRemotePlayer | null | undefined): PlayerAvatarSkin {
-  const skinId = remotePlayer?.skinId;
-  return PLAYER_AVATAR_SKINS.includes(skinId as PlayerAvatarSkin) ? (skinId as PlayerAvatarSkin) : "cyan";
+  return resolvePlayerAvatarSkin(remotePlayer?.skinId);
 }
 
 function resolveDoodleRemoteAvatarView(remoteState: DoodleRemoteState): PlayerAvatarView {

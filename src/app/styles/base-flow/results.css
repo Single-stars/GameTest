@@ -80,7 +80,9 @@
 .rank-avatar-menu {
   --rank-avatar-menu-bg: rgba(255, 253, 248, 0.96);
   --rank-avatar-menu-border: rgba(24, 24, 24, 0.11);
-  width: min(192px, calc(100vw - 24px));
+  --rank-avatar-action-size: 42px;
+  --rank-avatar-action-gap: 8px;
+  width: min(248px, calc(100vw - 24px));
   position: absolute;
   z-index: 12;
   top: calc(100% + 10px);
@@ -114,15 +116,15 @@
 .rank-avatar-bubble {
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, var(--rank-avatar-action-size));
+  grid-auto-rows: var(--rank-avatar-action-size);
+  place-content: center;
+  gap: var(--rank-avatar-action-gap);
   width: 100%;
-  overflow-x: auto;
-  padding: 11px 16px 7px;
+  overflow: visible;
+  padding: 18px 24px 14px;
   background: transparent;
-  scrollbar-width: none;
 }
 
 .rank-avatar-bubble::-webkit-scrollbar {
@@ -132,16 +134,23 @@
 .rank-avatar-menu-action {
   position: relative;
   z-index: 1;
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: var(--rank-avatar-action-size);
+  height: var(--rank-avatar-action-size);
   display: inline-grid;
   place-items: center;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
+  box-shadow: none;
+  transition:
+    color 140ms ease,
+    scale 120ms ease;
+}
+
+.rank-avatar-menu-action:hover {
+  color: var(--cyan);
 }
 
 .rank-avatar-menu-action:disabled {
@@ -156,6 +165,7 @@
 .rank-avatar-menu-action.danger {
   color: #b42318;
   background: #fff0ee;
+  box-shadow: inset 0 0 0 1px rgba(180, 35, 24, 0.09);
 }
 
 .rank-avatar-menu-action.danger:active {
@@ -505,6 +515,13 @@
   }
 
   .rank-avatar-menu {
+    --rank-avatar-action-size: 40px;
+    --rank-avatar-action-gap: 6px;
+    width: min(224px, calc(100vw - 20px));
     top: calc(100% + 8px);
+  }
+
+  .rank-avatar-bubble {
+    padding: 17px 16px 12px;
   }
 }

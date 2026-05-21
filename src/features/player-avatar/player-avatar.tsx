@@ -2,7 +2,19 @@
 
 import { createContext, useContext, type CSSProperties, type Ref, type ReactNode } from "react";
 
+import {
+  PLAYER_AVATAR_FACELESS_SKINS,
+  type PlayerAvatarSkin,
+} from "./player-avatar-skin";
 import styles from "./player-avatar.module.css";
+
+export {
+  PLAYER_AVATAR_FACELESS_SKINS,
+  PLAYER_AVATAR_SKIN_LABELS,
+  PLAYER_AVATAR_SKINS,
+  resolvePlayerAvatarSkin,
+  type PlayerAvatarSkin,
+} from "./player-avatar-skin";
 
 export type PlayerAvatarAction =
   | "idle"
@@ -25,63 +37,12 @@ export type PlayerAvatarEffect = "none" | "shield" | "sparkles" | "question";
 export type PlayerAvatarGravity = "normal" | "light" | "heavy";
 export type PlayerAvatarSize = "sm" | "md" | "lg" | number;
 export type PlayerAvatarDirection = "left" | "right" | "none";
-export type PlayerAvatarSkin =
-  | "cyan"
-  | "mint"
-  | "amber"
-  | "rose"
-  | "slate"
-  | "basketball"
-  | "pig"
-  | "aqua"
-  | "cocoa"
-  | "sand"
-  | "pine"
-  | "ivory"
-  | "arcade"
-  | "paw";
 
 export type PlayerAvatarView = {
   action: PlayerAvatarAction;
   expression: PlayerAvatarExpression;
   effect?: PlayerAvatarEffect;
 };
-
-export const PLAYER_AVATAR_SKINS = [
-  "cyan",
-  "mint",
-  "amber",
-  "rose",
-  "slate",
-  "basketball",
-  "pig",
-  "aqua",
-  "cocoa",
-  "sand",
-  "pine",
-  "ivory",
-  "arcade",
-  "paw",
-] as const satisfies readonly PlayerAvatarSkin[];
-
-export const PLAYER_AVATAR_SKIN_LABELS = {
-  arcade: "手柄",
-  amber: "琥珀",
-  aqua: "海沫",
-  basketball: "篮球",
-  cocoa: "可可",
-  cyan: "青蓝",
-  ivory: "象牙",
-  mint: "薄荷",
-  paw: "猫爪",
-  pig: "猪猪",
-  pine: "松绿",
-  rose: "玫瑰",
-  sand: "沙丘",
-  slate: "石板",
-} as const satisfies Record<PlayerAvatarSkin, string>;
-
-export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw"] as readonly PlayerAvatarSkin[];
 export const PLAYER_AVATAR_ACTIONS = ["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"] as const satisfies readonly PlayerAvatarAction[];
 export const PLAYER_AVATAR_EXPRESSIONS = ["neutral", "happy", "sleepy", "scared", "hurt"] as const satisfies readonly PlayerAvatarExpression[];
 export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question"] as const satisfies readonly PlayerAvatarEffect[];

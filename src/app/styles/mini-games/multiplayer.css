@@ -1,0 +1,165 @@
+.multiplayer-game-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 207, 87, 0.2), transparent 30%),
+    linear-gradient(180deg, #fff9eb 0%, #f8fbff 100%);
+}
+
+.multiplayer-game-shell-main {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.multiplayer-game-hud {
+  position: absolute;
+  z-index: 60;
+  top: calc(env(safe-area-inset-top) + 8px);
+  left: calc(env(safe-area-inset-left) + 8px);
+  right: calc(env(safe-area-inset-right) + 8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.multiplayer-game-hud-scoreboard {
+  display: grid;
+  gap: 6px;
+  min-width: min(58vw, 300px);
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 16px;
+  padding: 8px;
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: 0 12px 28px rgba(24, 24, 24, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.multiplayer-game-hud-line {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  color: rgba(24, 24, 24, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.multiplayer-game-hud-line strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.multiplayer-game-hud-line small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.multiplayer-game-hud-actions {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.multiplayer-game-hud-actions button,
+.multiplayer-game-result-actions button {
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: rgba(255, 253, 248, 0.86);
+  color: var(--ink);
+  box-shadow: 0 10px 22px rgba(24, 24, 24, 0.1);
+  font-size: 12px;
+  font-weight: 950;
+  touch-action: manipulation;
+}
+
+.multiplayer-game-result-panel {
+  position: absolute;
+  z-index: 80;
+  left: 50%;
+  top: 50%;
+  width: min(360px, calc(100vw - 28px));
+  translate: -50% -50%;
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 26px;
+  padding: 20px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 24px 60px rgba(24, 24, 24, 0.18);
+  text-align: center;
+  backdrop-filter: blur(18px);
+}
+
+.multiplayer-game-result-panel h2,
+.multiplayer-game-result-panel p {
+  margin: 0;
+}
+
+.multiplayer-game-winner {
+  color: var(--green);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.multiplayer-game-result-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.multiplayer-game-result-grid p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(24, 24, 24, 0.05);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.multiplayer-game-result-grid strong {
+  color: var(--ink);
+}
+
+.multiplayer-game-result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .multiplayer-game-hud {
+    align-items: stretch;
+  }
+
+  .multiplayer-game-hud-scoreboard {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .multiplayer-game-hud-actions {
+    flex-direction: column;
+  }
+
+  .multiplayer-game-hud-actions button {
+    padding-inline: 9px;
+  }
+}
