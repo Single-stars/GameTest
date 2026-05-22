@@ -14,9 +14,8 @@ import {
 import {
   MULTIPLAYER_DISCONNECTED_MESSAGE,
   MULTIPLAYER_FAILED_MESSAGE,
-  PeerTransport,
-  type PeerTransportOptions,
-} from "@/lib/multiplayer/peer-transport";
+  RoomSignalTransport,
+} from "@/lib/multiplayer/webrtc-transport";
 import type {
   CountdownState,
   GameResult,
@@ -70,17 +69,15 @@ export type SessionOptions = {
   roomId?: string | null;
   selfPlayer: PlayerInfo;
   onChange: (snapshot: MultiplayerSnapshot) => void;
-  peerOptions?: PeerTransportOptions["peerOptions"];
 };
 
 export class MultiplayerSession {
   private snapshot: MultiplayerSnapshot = buildInitialSnapshot();
-  private transport: PeerTransport | null = null;
+  private transport: RoomSignalTransport | null = null;
   private readonly onChange: (snapshot: MultiplayerSnapshot) => void;
   private readonly selfPlayer: PlayerInfo;
   private readonly role: SessionRole;
   private readonly targetRoomId: string | null;
-  private readonly peerOptions?: PeerTransportOptions["peerOptions"];
   private countdownTimer: number | null = null;
   private opponentStateSnapshotTimer: number | null = null;
   private selfStateSeq = 0;
@@ -99,7 +96,6 @@ export class MultiplayerSession {
     this.selfPlayer = options.selfPlayer;
     this.role = options.role;
     this.targetRoomId = options.roomId ?? null;
-    this.peerOptions = options.peerOptions;
     this.patchSnapshot({
       role: this.role,
       selfPlayer: this.selfPlayer,
@@ -125,14 +121,13 @@ export class MultiplayerSession {
   });
 
   async start() {
-    this.transport = new PeerTransport({
+    this.transport = new RoomSignalTransport({
       role: this.role,
       roomId: this.targetRoomId,
-      peerOptions: this.peerOptions,
       events: {
-        onPeerOpen: (peerId) => {
+        onPeerOpen: (roomCode) => {
           this.patchSnapshot({
-            roomId: this.role === "host" ? peerId : this.targetRoomId,
+            roomId: roomCode,
             status: this.role === "host" ? "waiting" : "joining",
           });
         },

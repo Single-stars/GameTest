@@ -23,8 +23,8 @@
 
 ## 单机/联机边界
 
-- 首页 `/` 是纯单机入口；正式 8 轮、结果、进阶、运气和头像换肤不依赖 PeerJS、房间或联机 session。
-- `/multiplayer` 是联机实验入口；PeerJS 传输、房间/session、联机 HUD、投降、再来一局和返回房间流程只在该路由下使用。
+- 首页 `/` 是纯单机入口；正式 8 轮、结果、进阶、运气和头像换肤不依赖房间、联机 session、Worker 或 WebRTC 传输。
+- `/multiplayer` 是联机实验入口；Cloudflare Worker + Durable Object 负责短房间码和 WebRTC 信令，浏览器原生 WebRTC DataChannel 负责联机消息，联机 HUD、投降、再来一局和返回房间流程只在该路由下使用。TURN 和 Durable Object 游戏中继默认关闭。
 - 共享游戏运行状态类型位于 `src/features/game-sync/types.ts`；`src/lib/multiplayer/types.ts` 保留联机协议/session 类型和兼容 type re-export。
 - 联机样式位于 `src/app/styles/mini-games/multiplayer.css`，由 `src/app/multiplayer/layout.tsx` 路由段加载；`src/app/styles/mini-games.css` 不再全局导入联机样式。
 
@@ -116,7 +116,7 @@ src/lib/
 2. `copyTextToClipboard` 尝试复制链接。
 3. `createShareImage` 用 Canvas 生成分享图。
 4. 分享图包含段位、维度表现和二维码。
-5. `layout.tsx` 使用 `https://gametest.p8.ink/` 与 `public/share-card.png` 作为社交卡片 metadata。
+5. `layout.tsx` 使用 `https://208848.xyz/` 与 `public/share-card.png` 作为社交卡片 metadata。
 
 `public/0b0c1b49b51d7b67b10daa0aedd35f0e.txt` 暂时保留。它没有被代码引用，但形态像站点验证文件；删除前必须确认不再用于域名、部署平台或搜索引擎验证。
 

@@ -18,7 +18,7 @@ export function HostRoom({
         background: "#fff",
       }}
     >
-      <p style={{ margin: 0, fontWeight: 600 }}>房主房间链接</p>
+      <p style={{ margin: 0, fontWeight: 600 }}>房间链接</p>
       <input
         aria-label="房间链接"
         readOnly

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-const siteUrl = "https://gametest.p8.ink";
+const siteUrl = "https://208848.xyz";
 const title = "测测你的游戏段位";
 const description = "8个小游戏测测你的段位";
 const shareImage = "/share-card.png";

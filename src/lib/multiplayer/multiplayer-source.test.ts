@@ -15,34 +15,35 @@ function cssRule(source: string, selector: string) {
   return source.slice(start, end + 1);
 }
 
-test("PeerJS expected connection failures do not trigger the Next dev error overlay", () => {
-  const source = readSource("./peer-transport.ts");
+test("Cloudflare WebRTC transport expected failures do not trigger the Next dev error overlay", () => {
+  const source = readSource("./webrtc-transport.ts");
 
-  assert.match(source, /console\.warn\("\[multiplayer\] peer error"/);
-  assert.doesNotMatch(source, /console\.error\("\[multiplayer\] peer error"/);
+  assert.match(source, /handleFailure/);
+  assert.match(source, /events\.onFailed/);
+  assert.doesNotMatch(source, /console\.error/);
 });
 
-test("multiplayer transport keeps room join alive across short signalling disconnects", () => {
-  const source = readSource("./peer-transport.ts");
+test("Cloudflare WebRTC transport attempts ICE restart before surfacing direct-connect failure", () => {
+  const source = readSource("./webrtc-transport.ts");
 
-  assert.match(source, /SERVER_RECOVERY_WINDOW_MS = 30_000/);
-  assert.match(source, /scheduleServerReconnectAttempt/);
-  assert.match(source, /\.reconnect\(\)/);
-  assert.match(source, /isRecoverablePeerErrorType/);
-  assert.match(source, /type === "network"/);
-  assert.match(source, /type === "server-error"/);
-  assert.match(source, /type === "socket-error"/);
-  assert.match(source, /type === "socket-closed"/);
+  assert.match(source, /ICE_RESTART_DELAY_MS/);
+  assert.match(source, /scheduleIceRestart/);
+  assert.match(source, /restartIce\(\)/);
+  assert.match(source, /type: "restart-request"/);
+  assert.match(source, /createOffer\(true\)/);
 });
 
-test("multiplayer guest retries host join before surfacing direct-connect failure", () => {
-  const source = readSource("./peer-transport.ts");
+test("Cloudflare migration removes the old PeerJS transport and dependency", () => {
+  const packageSource = readSource("../../../package.json");
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const peerTransportUrl = new URL("./peer-transport.ts", import.meta.url);
 
-  assert.match(source, /MAX_GUEST_RECONNECT_ATTEMPTS = 8/);
-  assert.match(source, /scheduleGuestReconnectAttempt/);
-  assert.match(source, /window\.setTimeout\(\(\) => \{/);
-  assert.match(source, /this\.connectToHost\(hostId\)/);
-  assert.match(source, /if \(error\.type === "peer-unavailable"/);
+  assert.equal(existsSync(peerTransportUrl), false);
+  assert.doesNotMatch(packageSource, /"peerjs"/);
+  assert.doesNotMatch(pageSource, /NEXT_PUBLIC_PEER_/);
+  assert.doesNotMatch(pageSource, /PeerJSOption/);
+  assert.doesNotMatch(sessionSource, /PeerTransport/);
 });
 
 test("multiplayer state protocol exposes map coordinates for same-map rendering", () => {
@@ -389,12 +390,15 @@ test("multiplayer stage keeps full viewport width and removes narrow-map width c
 });
 
 test("host keeps room reusable when guests leave and clears opponent snapshot for new joins", () => {
-  const transportSource = readSource("./peer-transport.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const workerSource = readSource("../../../cloudflare/worker.ts");
   const sessionSource = readSource("./multiplayer-session.ts");
 
   assert.match(transportSource, /onPeerDisconnected\?: \(reason: string\) => void;/);
-  assert.match(transportSource, /if \(this\.role === "host"\) \{/);
-  assert.match(transportSource, /this\.events\.onPeerDisconnected\?\.\(MULTIPLAYER_DISCONNECTED_MESSAGE\);/);
+  assert.match(transportSource, /case "peer-left":/);
+  assert.match(transportSource, /events\.onPeerDisconnected/);
+  assert.match(workerSource, /closeExistingRoleSocket\(role\)/);
+  assert.match(workerSource, /type: "peer-left"/);
   assert.match(sessionSource, /onPeerDisconnected: \(message\) => \{/);
   assert.match(sessionSource, /status:\s*"waiting"/);
   assert.match(sessionSource, /opponentPlayer:\s*null/);
@@ -404,7 +408,8 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
 });
 
 test("host clears half-open guest slots with heartbeat stale detection so rooms can be rejoined", () => {
-  const transportSource = readSource("./peer-transport.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const workerSource = readSource("../../../cloudflare/worker.ts");
   const sessionSource = readSource("./multiplayer-session.ts");
   const messagesSource = readSource("./messages.ts");
   const typesSource = readSource("./types.ts");
@@ -426,10 +431,9 @@ test("host clears half-open guest slots with heartbeat stale detection so rooms 
   assert.match(connectedHandlerSource, /selfReady:\s*false/);
   assert.match(connectedHandlerSource, /opponentReady:\s*false/);
   assert.match(connectedHandlerSource, /match:\s*null/);
-  assert.match(transportSource, /HOST_STALE_CONNECTION_REPLACE_MS/);
-  assert.match(transportSource, /lastConnectionActivityAt/);
   assert.match(transportSource, /disconnectActiveConnection\(\)/);
-  assert.match(transportSource, /Date\.now\(\) - this\.lastConnectionActivityAt > HOST_STALE_CONNECTION_REPLACE_MS/);
+  assert.match(transportSource, /closePeerConnection\(\)/);
+  assert.match(workerSource, /closeExistingRoleSocket\(role\)/);
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {
@@ -443,4 +447,63 @@ test("Doodle multiplayer runtime state is sampled from the animation frame, not 
   assert.doesNotMatch(viewSyncSource, /onRuntimeStateRef\.current\?\./);
   assert.match(tickSource, /syncDoodleRuntimeState\(time\);/);
   assert.match(tickSource, /syncDoodleRuntimeState\(time, true\);/);
+});
+
+test("Cloudflare static migration metadata uses the new production domain", () => {
+  const layoutSource = readSource("../../app/layout.tsx");
+
+  assert.match(layoutSource, /const siteUrl = "https:\/\/208848\.xyz";/);
+  assert.doesNotMatch(layoutSource, /gametest\.p8\.ink/);
+});
+
+test("Cloudflare multiplayer uses short room codes and native WebRTC transport", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const webRtcTransportUrl = new URL("./webrtc-transport.ts", import.meta.url);
+  const roomApiUrl = new URL("./room-api.ts", import.meta.url);
+
+  assert.equal(existsSync(webRtcTransportUrl), true);
+  assert.equal(existsSync(roomApiUrl), true);
+
+  const webRtcSource = readFileSync(webRtcTransportUrl, "utf8");
+  const roomApiSource = readFileSync(roomApiUrl, "utf8");
+
+  assert.match(pageSource, /searchParams\.get\("room"\)/);
+  assert.match(pageSource, /\/multiplayer\?room=/);
+  assert.match(sessionSource, /RoomSignalTransport/);
+  assert.match(webRtcSource, /new RTCPeerConnection/);
+  assert.match(webRtcSource, /stun:stun\.cloudflare\.com:3478/);
+  assert.match(webRtcSource, /createDataChannel\("control"/);
+  assert.match(webRtcSource, /createDataChannel\("state"/);
+  assert.match(webRtcSource, /createOffer\(true\)/);
+  assert.match(roomApiSource, /NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL/);
+  assert.match(roomApiSource, /normalizeRoomCode/);
+  assert.doesNotMatch(pageSource, /NEXT_PUBLIC_PEER_/);
+  assert.doesNotMatch(pageSource, /PeerJSOption/);
+  assert.doesNotMatch(sessionSource, /PeerTransport/);
+});
+
+test("Cloudflare Worker Durable Object signaling is present with paid fallbacks disabled by default", () => {
+  const workerUrl = new URL("../../../cloudflare/worker.ts", import.meta.url);
+  const wranglerUrl = new URL("../../../wrangler.toml", import.meta.url);
+
+  assert.equal(existsSync(workerUrl), true);
+  assert.equal(existsSync(wranglerUrl), true);
+
+  const workerSource = readFileSync(workerUrl, "utf8");
+  const wranglerSource = readFileSync(wranglerUrl, "utf8");
+
+  assert.match(workerSource, /export class RoomDurableObject/);
+  assert.match(workerSource, /POST[\s\S]*\/api\/rooms/);
+  assert.match(workerSource, /\/api\/rooms\/:code\/ws/);
+  assert.match(workerSource, /webSocketMessage/);
+  assert.match(workerSource, /peer-joined/);
+  assert.match(workerSource, /signal/);
+  assert.match(workerSource, /ALLOWED_ORIGIN/);
+  assert.match(workerSource, /isRequestOriginAllowed/);
+  assert.match(workerSource, /origin-forbidden/);
+  assert.match(workerSource, /ENABLE_TURN = false/);
+  assert.match(workerSource, /ENABLE_RELAY = false/);
+  assert.match(wranglerSource, /class_name = "RoomDurableObject"/);
+  assert.match(wranglerSource, /new_sqlite_classes = \["RoomDurableObject"\]/);
 });

@@ -19,7 +19,6 @@ import {
   buildInitialSnapshot,
   MultiplayerSession,
 } from "@/lib/multiplayer/multiplayer-session";
-import type { PeerJSOption } from "peerjs";
 import type {
   GameResult,
   MultiplayerSnapshot,
@@ -81,23 +80,6 @@ function resolveBattleLevelOption(levelId: string | null | undefined): Multiplay
   return selected ?? MULTIPLAYER_LEVEL_OPTIONS.find((item) => item.levelId === DEFAULT_MULTIPLAYER_LEVEL_ID) ?? MULTIPLAYER_LEVEL_OPTIONS[0];
 }
 
-function resolvePeerOptions(): PeerJSOption | undefined {
-  const host = process.env.NEXT_PUBLIC_PEER_HOST?.trim();
-  const portRaw = process.env.NEXT_PUBLIC_PEER_PORT?.trim();
-  const path = process.env.NEXT_PUBLIC_PEER_PATH?.trim();
-  const secureRaw = process.env.NEXT_PUBLIC_PEER_SECURE?.trim().toLowerCase();
-
-  if (!host) return undefined;
-  const port = portRaw ? Number.parseInt(portRaw, 10) : undefined;
-  const secure = secureRaw === "true";
-  return {
-    host,
-    port: Number.isFinite(port) ? port : undefined,
-    path: path && path.length > 0 ? path : "/",
-    secure,
-  };
-}
-
 function copyRoomLinkWithFallback(text: string) {
   if (typeof document === "undefined" || !document.body) return false;
 
@@ -124,15 +106,15 @@ function copyRoomLinkWithFallback(text: string) {
 function MultiplayerPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const hostParam = (searchParams.get("host") ?? "").trim();
+  const roomParam = (searchParams.get("room") ?? "").trim();
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
   const [hostSelectedLevelId, setHostSelectedLevelId] = useState(DEFAULT_MULTIPLAYER_LEVEL_ID);
-  const [joinInputVisible, setJoinInputVisible] = useState(Boolean(hostParam));
+  const [joinInputVisible, setJoinInputVisible] = useState(Boolean(roomParam));
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const [skinHydrated, setSkinHydrated] = useState(false);
   const sessionRef = useRef<MultiplayerSession | null>(null);
-  const autoJoinHostRef = useRef<string | null>(null);
+  const autoJoinRoomRef = useRef<string | null>(null);
   const copyStatusTimerRef = useRef<number | null>(null);
 
   const battleLevelOption = useMemo(
@@ -143,7 +125,6 @@ function MultiplayerPageContent() {
     () => getMiniGameLevel(battleLevelOption.gameId, battleLevelOption.levelId),
     [battleLevelOption.gameId, battleLevelOption.levelId],
   );
-  const peerOptions = useMemo(() => resolvePeerOptions(), []);
   const matchSeed = snapshot.match?.seed ?? "";
   const runSeed = `${battleLevelOption.levelId}:${matchSeed}`;
   const showGameShell =
@@ -162,7 +143,7 @@ function MultiplayerPageContent() {
   const roomLink = useMemo(() => {
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
-    return `${window.location.origin}/multiplayer?host=${query}`;
+    return `${window.location.origin}/multiplayer?room=${query}`;
   }, [snapshot.roomId]);
 
   const cleanupSession = useCallback(() => {
@@ -181,7 +162,6 @@ function MultiplayerPageContent() {
         roomId,
         selfPlayer,
         onChange: (next) => setSnapshot({ ...next }),
-        peerOptions,
       });
       sessionRef.current = session;
       try {
@@ -195,7 +175,7 @@ function MultiplayerPageContent() {
         }));
       }
     },
-    [cleanupSession, peerOptions, selectedSkin, skinHydrated],
+    [cleanupSession, selectedSkin, skinHydrated],
   );
 
   const handleCreate = useCallback(() => {
@@ -203,9 +183,9 @@ function MultiplayerPageContent() {
   }, [bootstrapSession]);
 
   const handleJoin = useCallback(
-    (hostId: string) => {
-      if (!hostId) return;
-      void bootstrapSession("guest", hostId);
+    (roomCode: string) => {
+      if (!roomCode) return;
+      void bootstrapSession("guest", roomCode);
     },
     [bootstrapSession],
   );
@@ -326,11 +306,11 @@ function MultiplayerPageContent() {
 
   useEffect(() => {
     if (!skinHydrated) return;
-    if (!hostParam || autoJoinHostRef.current === hostParam) return;
-    autoJoinHostRef.current = hostParam;
+    if (!roomParam || autoJoinRoomRef.current === roomParam) return;
+    autoJoinRoomRef.current = roomParam;
     setJoinInputVisible(true);
-    void bootstrapSession("guest", hostParam);
-  }, [bootstrapSession, hostParam, skinHydrated]);
+    void bootstrapSession("guest", roomParam);
+  }, [bootstrapSession, roomParam, skinHydrated]);
 
   useEffect(() => {
     const session = sessionRef.current;
@@ -449,7 +429,7 @@ function MultiplayerPageContent() {
               onCreate={handleCreate}
               onOpenJoin={() => setJoinInputVisible((current) => !current)}
             />
-            {showJoinForm ? <JoinRoom defaultHostId={hostParam} onJoin={handleJoin} /> : null}
+            {showJoinForm ? <JoinRoom defaultRoomCode={roomParam} onJoin={handleJoin} /> : null}
           </section>
         ) : null}
 

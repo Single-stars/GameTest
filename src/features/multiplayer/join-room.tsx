@@ -3,15 +3,15 @@
 import { useState } from "react";
 
 export function JoinRoom({
-  defaultHostId = "",
+  defaultRoomCode = "",
   onJoin,
   disabled,
 }: {
-  defaultHostId?: string;
-  onJoin: (hostId: string) => void;
+  defaultRoomCode?: string;
+  onJoin: (roomCode: string) => void;
   disabled?: boolean;
 }) {
-  const [hostId, setHostId] = useState(defaultHostId);
+  const [roomCode, setRoomCode] = useState(defaultRoomCode);
 
   return (
     <div
@@ -24,17 +24,17 @@ export function JoinRoom({
     >
       <p style={{ margin: 0, fontWeight: 600 }}>加入房间</p>
       <input
-        value={hostId}
+        value={roomCode}
         disabled={disabled}
-        onChange={(event) => setHostId(event.currentTarget.value)}
-        placeholder="输入房主ID"
+        onChange={(event) => setRoomCode(event.currentTarget.value)}
+        placeholder="输入房间码"
         style={{ width: "100%", marginTop: 8, padding: "8px" }}
       />
       <button
         type="button"
-        disabled={disabled || hostId.trim().length === 0}
+        disabled={disabled || roomCode.trim().length === 0}
         style={{ marginTop: 8 }}
-        onClick={() => onJoin(hostId.trim())}
+        onClick={() => onJoin(roomCode.trim())}
       >
         加入
       </button>
