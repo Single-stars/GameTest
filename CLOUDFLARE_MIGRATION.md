@@ -36,13 +36,23 @@ npx.cmd wrangler login
 npm.cmd run deploy:worker
 ```
 
-部署成功后，记录 Worker 地址，通常类似：
+`wrangler.toml` 已把正式域名的房间 API 路由到 Worker：
 
-```text
-https://game-rank-multiplayer.<你的账号子域>.workers.dev
+```toml
+routes = [
+  { pattern = "208848.xyz/api/rooms", zone_name = "208848.xyz" },
+  { pattern = "208848.xyz/api/rooms/*", zone_name = "208848.xyz" },
+]
 ```
 
-Worker 只负责房间和 WebRTC 信令，不承载游戏帧同步。游戏消息走浏览器之间的 WebRTC DataChannel。
+正式环境推荐使用同域信令：
+
+```text
+https://208848.xyz/api/rooms
+wss://208848.xyz/api/rooms/<房间码>/ws
+```
+
+这样静态页面、房间 API、WebSocket 信令都走 `208848.xyz`，不用依赖 `workers.dev` 子域名，兼容性更好。Worker 只负责房间和 WebRTC 信令，不承载游戏帧同步。游戏消息走浏览器之间的 WebRTC DataChannel。
 
 ## 3. 配置 Worker 允许来源
 
@@ -90,10 +100,9 @@ out
 
 ```text
 NODE_VERSION=22
-NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL=https://game-rank-multiplayer.<你的账号子域>.workers.dev
 ```
 
-`NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL` 会被打进前端静态包；如果以后换成 Worker 自定义域名，需要修改这个变量并重新部署 Pages。
+不要给正式 Pages 设置 `NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL`，让前端默认使用当前页面同源地址。也就是 `https://208848.xyz/multiplayer` 会自动请求 `https://208848.xyz/api/rooms`。
 
 ## 5. 绑定 `208848.xyz`
 
@@ -120,7 +129,7 @@ https://208848.xyz
 
 ## 6. 可选：给 Worker 绑定自定义子域
 
-推荐把信令服务绑定到：
+当前正式推荐是上面的同域 `/api/rooms` 路由。只有在你明确想把信令服务拆到独立域名时，才考虑绑定：
 
 ```text
 https://signal.208848.xyz
@@ -129,7 +138,7 @@ https://signal.208848.xyz
 Cloudflare Dashboard:
 
 1. 进入 `Workers & Pages`。
-2. 打开 `game-rank-multiplayer` Worker。
+2. 打开 `208848` Worker。
 3. 进入 `Settings`。
 4. 找到 `Domains & Routes`。
 5. 添加 Custom Domain:

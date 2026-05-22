@@ -506,4 +506,6 @@ test("Cloudflare Worker Durable Object signaling is present with paid fallbacks 
   assert.match(workerSource, /ENABLE_RELAY = false/);
   assert.match(wranglerSource, /class_name = "RoomDurableObject"/);
   assert.match(wranglerSource, /new_sqlite_classes = \["RoomDurableObject"\]/);
+  assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
+  assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
 });
