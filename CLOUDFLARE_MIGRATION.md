@@ -36,7 +36,7 @@ npx.cmd wrangler login
 npm.cmd run deploy:worker
 ```
 
-`wrangler.toml` 已把正式域名的房间 API 路由到 Worker：
+`wrangler.worker.toml` 已把正式域名的房间 API 路由到 Worker：
 
 ```toml
 routes = [
@@ -75,6 +75,11 @@ ALLOWED_ORIGIN=https://www.208848.xyz
 或者暂时不设置 `ALLOWED_ORIGIN`，等确认最终主域名策略后再收紧。当前代码是单个允许来源，不是多来源列表。
 
 ## 4. 部署 Cloudflare Pages 静态站点
+
+推荐使用 Cloudflare Pages 的 Git Integration。当前仓库已经把配置拆开：
+
+- `wrangler.toml`: Pages 专用，只包含静态输出配置。
+- `wrangler.worker.toml`: Worker 专用，包含 Durable Object、routes、migrations。
 
 Cloudflare Dashboard:
 

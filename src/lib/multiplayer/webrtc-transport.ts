@@ -311,12 +311,6 @@ export class RoomSignalTransport {
       this.stateChannel = channel;
     }
 
-    this.clearDataChannelOpenTimer();
-    this.dataChannelOpenTimer = window.setTimeout(() => {
-      if (this.destroyed || this.connected) return;
-      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
-    }, DATA_CHANNEL_OPEN_TIMEOUT_MS);
-
     channel.onopen = () => {
       if (label === "control") this.markConnected();
     };
@@ -338,6 +332,14 @@ export class RoomSignalTransport {
     };
   }
 
+  private startDataChannelOpenTimer() {
+    this.clearDataChannelOpenTimer();
+    this.dataChannelOpenTimer = window.setTimeout(() => {
+      if (this.destroyed || this.connected) return;
+      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+    }, DATA_CHANNEL_OPEN_TIMEOUT_MS);
+  }
+
   private markConnected() {
     if (this.connected) return;
     this.connected = true;
@@ -347,6 +349,7 @@ export class RoomSignalTransport {
 
   private async createOffer(iceRestart: boolean) {
     const peerConnection = this.preparePeerConnection();
+    this.startDataChannelOpenTimer();
     const offer = await peerConnection.createOffer({ iceRestart });
     await peerConnection.setLocalDescription(offer);
     if (!peerConnection.localDescription) return;
@@ -363,6 +366,7 @@ export class RoomSignalTransport {
     const peerConnection = this.preparePeerConnection();
 
     if (signal.type === "offer") {
+      this.startDataChannelOpenTimer();
       await peerConnection.setRemoteDescription(signal.description);
       await this.flushPendingIceCandidates();
       const answer = await peerConnection.createAnswer();

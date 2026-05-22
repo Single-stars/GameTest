@@ -33,6 +33,18 @@ test("Cloudflare WebRTC transport attempts ICE restart before surfacing direct-c
   assert.match(source, /createOffer\(true\)/);
 });
 
+test("Cloudflare WebRTC host waits for a guest before starting direct-connect timeout", () => {
+  const source = readSource("./webrtc-transport.ts");
+  const bindDataChannel = source.slice(source.indexOf("private bindDataChannel"), source.indexOf("private startDataChannelOpenTimer"));
+  const createOffer = source.slice(source.indexOf("private async createOffer"), source.indexOf("private async handleSignal"));
+  const offerHandler = source.slice(source.indexOf('if (signal.type === "offer")'), source.indexOf('if (signal.type === "answer")'));
+
+  assert.doesNotMatch(bindDataChannel, /DATA_CHANNEL_OPEN_TIMEOUT_MS/);
+  assert.match(source, /private startDataChannelOpenTimer\(\)/);
+  assert.match(createOffer, /this\.startDataChannelOpenTimer\(\)/);
+  assert.match(offerHandler, /this\.startDataChannelOpenTimer\(\)/);
+});
+
 test("Cloudflare migration removes the old PeerJS transport and dependency", () => {
   const packageSource = readSource("../../../package.json");
   const pageSource = readSource("../../app/multiplayer/page.tsx");
@@ -456,6 +468,25 @@ test("Cloudflare static migration metadata uses the new production domain", () =
   assert.doesNotMatch(layoutSource, /gametest\.p8\.ink/);
 });
 
+test("Cloudflare Pages and Worker configs are split for native Pages Git integration", () => {
+  const pagesWranglerUrl = new URL("../../../wrangler.toml", import.meta.url);
+  const workerWranglerUrl = new URL("../../../wrangler.worker.toml", import.meta.url);
+
+  assert.equal(existsSync(pagesWranglerUrl), true);
+  assert.equal(existsSync(workerWranglerUrl), true);
+
+  const pagesWranglerSource = readFileSync(pagesWranglerUrl, "utf8");
+  const workerWranglerSource = readFileSync(workerWranglerUrl, "utf8");
+
+  assert.match(pagesWranglerSource, /pages_build_output_dir = "out"/);
+  assert.doesNotMatch(pagesWranglerSource, /^main\s*=/m);
+  assert.doesNotMatch(pagesWranglerSource, /^routes\s*=/m);
+  assert.doesNotMatch(pagesWranglerSource, /\[\[migrations\]\]/);
+  assert.match(workerWranglerSource, /^main = "cloudflare\/worker\.ts"/m);
+  assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
+  assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
+});
+
 test("Cloudflare multiplayer uses short room codes and native WebRTC transport", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const sessionSource = readSource("./multiplayer-session.ts");
@@ -485,7 +516,7 @@ test("Cloudflare multiplayer uses short room codes and native WebRTC transport",
 
 test("Cloudflare Worker Durable Object signaling is present with paid fallbacks disabled by default", () => {
   const workerUrl = new URL("../../../cloudflare/worker.ts", import.meta.url);
-  const wranglerUrl = new URL("../../../wrangler.toml", import.meta.url);
+  const wranglerUrl = new URL("../../../wrangler.worker.toml", import.meta.url);
 
   assert.equal(existsSync(workerUrl), true);
   assert.equal(existsSync(wranglerUrl), true);
