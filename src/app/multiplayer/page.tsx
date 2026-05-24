@@ -777,7 +777,9 @@ function MultiplayerPageContent() {
           ) : levelSelectOpen ? (
             <MultiplayerLevelSelectRoom
               opponentName={snapshot.opponentPlayer?.name}
+              opponentPresence={snapshot.opponentLevelSelectPresence}
               opponentReady={snapshot.opponentReady}
+              opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
               selfReady={snapshot.selfReady}
               selfSkin={selectedSkin}
               selection={activeLevelSelectState}

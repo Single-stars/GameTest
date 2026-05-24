@@ -114,7 +114,16 @@
 
 .homeworld-furniture.reachable {
   opacity: 1;
-  filter: drop-shadow(0 0 2px rgba(112, 116, 118, 0.42));
+  filter: drop-shadow(0 0 4px rgba(255, 253, 248, 0.54));
+}
+
+.homeworld-furniture.reachable::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px rgba(255, 253, 248, 0.78), 0 0 18px rgba(255, 253, 248, 0.52);
+  pointer-events: none;
 }
 
 .homeworld-object-image {
@@ -139,14 +148,14 @@
 .homeworld-exit-door.reachable .homeworld-object-image {
   filter:
     drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
-    drop-shadow(0 0 2px rgba(112, 116, 118, 0.42));
+    drop-shadow(0 0 8px rgba(255, 253, 248, 0.82));
 }
 
 .homeworld-furniture.reachable .homeworld-object-image {
   filter:
     saturate(0.92) contrast(1.03) sepia(0.08) hue-rotate(-3deg)
     drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
-    drop-shadow(0 0 2px rgba(112, 116, 118, 0.42));
+    drop-shadow(0 0 8px rgba(255, 253, 248, 0.82));
 }
 
 .homeworld-door-status-badge {
@@ -314,6 +323,10 @@
   box-shadow: 0 12px 22px rgba(72, 57, 43, 0.13);
 }
 
+.homeworld-room-entry-panel.collapsed {
+  display: none;
+}
+
 .homeworld-room-entry-choice {
   position: relative;
   display: grid;
@@ -323,18 +336,12 @@
 
 .homeworld-room-entry-choice section {
   display: grid;
-  gap: 6px;
+  gap: 0;
   align-content: start;
   border: 1px solid rgba(103, 70, 39, 0.14);
   border-radius: 8px;
-  padding: 8px;
+  padding: 0;
   background: rgba(255, 253, 248, 0.72);
-}
-
-.homeworld-room-entry-choice strong {
-  color: #5f3b20;
-  font-size: 12px;
-  line-height: 1.1;
 }
 
 .homeworld-room-entry-choice .primary-button,
@@ -342,16 +349,16 @@
   height: 44px;
   min-width: 0;
   border-color: rgba(24, 24, 24, 0.18);
-  background: #191919;
-  color: #fffdf8;
+  background: #fffdf8;
+  color: #191919;
   font-size: 14px;
   box-shadow: none;
 }
 
-.homeworld-room-entry-close {
+.homeworld-room-entry-toggle {
   position: absolute;
-  right: -3px;
-  top: -34px;
+  right: 10px;
+  top: -36px;
   width: 28px;
   height: 28px;
   display: grid;
@@ -362,6 +369,21 @@
   color: #5f3b20;
   font-size: 18px;
   font-weight: 900;
+}
+
+.homeworld-room-entry-toggle.collapsed {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  top: auto;
+  z-index: 9;
+  width: 42px;
+  height: 32px;
+  translate: -50% 0;
+  background: rgba(255, 253, 248, 0.96);
+  color: #191919;
+  box-shadow: 0 10px 20px rgba(72, 57, 43, 0.14);
 }
 
 .homeworld-room-entry-panel input,

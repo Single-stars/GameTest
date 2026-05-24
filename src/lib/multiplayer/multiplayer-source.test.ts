@@ -308,12 +308,16 @@ test("homeworld level-select start flow waits in the room before sending startMa
   assert.match(pageSource, /countdownMs: COUNTDOWN_MS/);
 
   assert.match(roomSource, /opponentReady/);
+  assert.match(roomSource, /opponentPresence\?: MultiplayerLevelSelectPresence \| null/);
+  assert.match(roomSource, /opponentSkin\?: PlayerAvatarSkin/);
+  assert.match(roomSource, /resolvePlayerAvatarSkin\(opponentPresence\?\.skinId \?\? opponentSkin\)/);
   assert.match(roomSource, /selectionLocked = selfReady \|\| opponentReady/);
   assert.match(roomSource, /if \(!slot \|\| selectionLocked\) return;/);
   assert.match(roomSource, /disabled=\{selectionLocked \|\| reachableSlot !== slot\}/);
   assert.match(roomSource, /skinId: selfSkin/);
-  assert.doesNotMatch(roomSource, /opponentSkin/);
-  assert.doesNotMatch(roomSource, /className="multiplayer-level-room-player remote"/);
+  assert.match(roomSource, /className="multiplayer-level-room-player remote"/);
+  assert.match(pageSource, /opponentPresence=\{snapshot\.opponentLevelSelectPresence\}/);
+  assert.match(pageSource, /opponentSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
   assert.match(roomSource, /← 回到家园/);
   assert.match(roomSource, /准备开始 →/);
   assert.match(roomSource, /\{complete \? <div className="multiplayer-level-guide right">/);
@@ -364,12 +368,11 @@ test("homeworld reachable furniture uses a gray bold edge highlight", () => {
   const reachableImageRule = cssRule(cssSource, ".homeworld-furniture.reachable .homeworld-object-image");
   const reachableDoorRule = cssRule(cssSource, ".homeworld-exit-door.reachable .homeworld-object-image");
 
-  assert.match(reachableRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
-  assert.match(reachableImageRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
-  assert.match(reachableDoorRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
+  assert.match(cssSource, /\.homeworld-furniture\.reachable::after\s*\{/);
+  assert.match(cssSource, /\.homeworld-furniture\.reachable::after[\s\S]*0 0 0 3px rgba\(255,\s*253,\s*248,\s*0\.78\)/);
+  assert.match(reachableImageRule, /drop-shadow\(0 0 8px rgba\(255,\s*253,\s*248,\s*0\.82\)\)/);
+  assert.match(reachableDoorRule, /drop-shadow\(0 0 8px rgba\(255,\s*253,\s*248,\s*0\.82\)\)/);
   assert.doesNotMatch(reachableRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
-  assert.doesNotMatch(reachableImageRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
-  assert.doesNotMatch(reachableDoorRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
 });
 
 test("multiplayer gameplay disables mobile long press browser affordances", () => {

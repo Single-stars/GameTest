@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
-import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, resolvePlayerAvatarSkin, type PlayerAvatarDirection, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import {
   areMultiplayerLevelSelectSlotsConfirmed,
   getMultiplayerLevelSelectRightLimit,
@@ -23,7 +23,9 @@ const EXIT_LEFT = -9;
 
 type LevelSelectRoomProps = {
   opponentName?: string;
+  opponentPresence?: MultiplayerLevelSelectPresence | null;
   opponentReady: boolean;
+  opponentSkin?: PlayerAvatarSkin;
   selfReady: boolean;
   selfSkin: PlayerAvatarSkin;
   selection: MultiplayerLevelSelectState;
@@ -72,7 +74,9 @@ function isControlTarget(target: EventTarget | null) {
 
 export function MultiplayerLevelSelectRoom({
   opponentName = "对方",
+  opponentPresence = null,
   opponentReady,
+  opponentSkin,
   selfSkin,
   selfReady,
   selection,
@@ -95,6 +99,13 @@ export function MultiplayerLevelSelectRoom({
   const roomTone = getMultiplayerLevelSelectRoomTone(selection);
   const complete = areMultiplayerLevelSelectSlotsConfirmed(selection);
   const selectionLocked = selfReady || opponentReady;
+  const remotePlayerX = opponentPresence?.inRoom
+    ? Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), opponentPresence.x ?? 50))
+    : null;
+  const remotePlayerDirection: PlayerAvatarDirection =
+    opponentPresence?.direction === "left" || opponentPresence?.direction === "right" ? opponentPresence.direction : "right";
+  const remotePlayerAction = opponentPresence?.action === "move" ? "move" : "idle";
+  const remotePlayerSkin = resolvePlayerAvatarSkin(opponentPresence?.skinId ?? opponentSkin);
 
   const interactWithSlot = useCallback(
     (slot: MultiplayerLevelSelectSlot | null = reachableSlot) => {
@@ -312,6 +323,19 @@ export function MultiplayerLevelSelectRoom({
             visualScale={1.08}
           />
         </div>
+
+        {remotePlayerX !== null ? (
+          <div className="multiplayer-level-room-player remote" style={{ left: `${remotePlayerX}%` }}>
+            <PlayerAvatar
+              action={remotePlayerAction}
+              direction={remotePlayerDirection}
+              expression="neutral"
+              skin={remotePlayerSkin}
+              size={ROOM_PLAYER_SIZE}
+              visualScale={1.08}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );
