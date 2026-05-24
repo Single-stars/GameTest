@@ -1,4 +1,5 @@
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
+const LOCAL_DEV_SIGNALING_FALLBACK = "https://208848.xyz";
 
 export type SignalingRole = "host" | "guest";
 
@@ -22,6 +23,15 @@ function resolveOrigin(explicitOrigin?: string) {
   return "http://localhost";
 }
 
+function isLocalDevelopmentOrigin(origin: string) {
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
+  }
+}
+
 export function normalizeRoomCode(value: string) {
   return value.trim().toUpperCase().replace(/[\s-]+/g, "");
 }
@@ -32,7 +42,10 @@ export function isRoomCode(value: string) {
 
 export function resolveSignalingHttpBase(explicitOrigin?: string) {
   const configured = readConfiguredBaseUrl();
-  return configured ? trimTrailingSlash(configured) : resolveOrigin(explicitOrigin);
+  if (configured) return trimTrailingSlash(configured);
+  const origin = resolveOrigin(explicitOrigin);
+  if (isLocalDevelopmentOrigin(origin)) return LOCAL_DEV_SIGNALING_FALLBACK;
+  return origin;
 }
 
 export function buildRoomApiUrl(path: string, explicitOrigin?: string) {

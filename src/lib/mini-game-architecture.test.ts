@@ -249,11 +249,12 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(luckCss, /luck-avatar-entry/);
 
   assert.match(resultSource, /PlayerAvatar, type PlayerAvatarSkin/);
-  assert.match(resultSource, /MultiplayerIcon/);
+  assert.match(resultSource, /HomeworldIcon/);
   assert.match(resultSource, /AvatarLabIcon/);
   assert.match(resultSource, /const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;/);
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
+  assert.match(resultSource, /onOpenHomeworld:\s*\(\) => void;/);
   assert.match(resultSource, /const \[avatarMenuOpen, setAvatarMenuOpen\] = useState\(false\);/);
   assert.match(resultSource, /const \[avatarMenuFeedback, setAvatarMenuFeedback\] = useState\(false\);/);
   assert.match(resultSource, /window\.setTimeout\(\(\) => \{/);
@@ -265,8 +266,11 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /const avatarMenuItems = \[/);
   assert.match(resultSource, /onSelect: onShareImage/);
   assert.match(resultSource, /onSelect: onRestart/);
-  assert.match(resultSource, /id: "multiplayer"/);
-  assert.match(resultSource, /window\.location\.assign\("\/multiplayer"\)/);
+  assert.match(resultSource, /id: "homeworld"/);
+  assert.match(resultSource, /icon: <HomeworldIcon \/>/);
+  assert.match(resultSource, /onSelect: onOpenHomeworld/);
+  assert.doesNotMatch(resultSource, /id: "multiplayer"/);
+  assert.doesNotMatch(resultSource, /window\.location\.assign\("\/multiplayer"\)/);
   assert.match(resultSource, /onSelect: onOpenAvatarLab/);
   assert.match(resultSource, /debugToolsVisible/);
   assert.match(resultSource, /onSelect: onResetTestData/);
@@ -299,7 +303,8 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /<RadarChart axis=\{result\.axis\} \/>/);
   assert.doesNotMatch(resultSource, /<div className="rank-actions"/);
   assert.match(resultIconsSource, /export function AvatarLabIcon/);
-  assert.match(resultIconsSource, /export function MultiplayerIcon/);
+  assert.match(resultIconsSource, /export function HomeworldIcon/);
+  assert.doesNotMatch(resultIconsSource, /export function MultiplayerIcon/);
   assert.match(resultIconsSource, /M12 5\.5/);
   assert.match(resultIconsSource, /M8 16\.5c1\.1 1 2\.4 1\.5 4 1\.5/);
   assert.match(resultIconsSource, /M8 14\.5 6\.5 16 5 14\.5/);
@@ -357,6 +362,10 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(avatarLabSource, /id: "wonder"[\s\S]*action: "wonder"[\s\S]*effect: "question"/);
   assert.match(avatarLabSource, /wonder:/);
   assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{38\} \/>/);
+  assert.match(avatarLabSource, /playerName/);
+  assert.match(avatarLabSource, /onPlayerNameChange/);
+  assert.match(avatarLabSource, /className="avatar-lab-name-form"/);
+  assert.match(avatarLabSource, /maxLength=\{16\}/);
   const avatarLabScenesSource = avatarLabSource.slice(
     avatarLabSource.indexOf("const AVATAR_LAB_SCENES"),
     avatarLabSource.indexOf("const ACTION_LABELS"),
@@ -369,18 +378,26 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(appPageSource, /PlayerAvatarSkinProvider/);
   assert.match(appPageSource, /readPersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /writePersistedPlayerAvatarSkin/);
+  assert.match(appPageSource, /readPersistedPlayerName/);
+  assert.match(appPageSource, /writePersistedPlayerName/);
   assert.match(appPageSource, /const \[selectedAvatarSkin, setSelectedAvatarSkin\] = useState<PlayerAvatarSkin>\("cyan"\);/);
+  assert.match(appPageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
   assert.match(appPageSource, /setSelectedAvatarSkin\(readPersistedPlayerAvatarSkin\(\)\);/);
+  assert.match(appPageSource, /setPlayerName\(readPersistedPlayerName\(\)\);/);
   assert.doesNotMatch(appPageSource, /useState<PlayerAvatarSkin>\(\(\) => readPersistedPlayerAvatarSkin\(\)\)/);
   assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
   assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
+  assert.match(appPageSource, /const handleChangePlayerName = useCallback/);
+  assert.match(appPageSource, /writePersistedPlayerName\(name\);/);
   assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
   assert.match(appPageSource, /setStage\("avatar-lab"\);/);
   assert.match(appPageSource, /stage === "avatar-lab"/);
-  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
-  assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}/);
-  assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*scrollResultToTop\(\);[\s\S]*setStage\("result"\);[\s\S]*\}, \[releaseHistoryGuard, scrollResultToTop\]\);/);
+  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
+  assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
+  assert.match(appPageSource, /const \[avatarLabReturnStage, setAvatarLabReturnStage\] = useState<"result" \| "homeworld">\("result"\);/);
+  assert.match(appPageSource, /setAvatarLabReturnStage\("result"\);[\s\S]*setStage\("avatar-lab"\);/);
+  assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*setStage\(avatarLabReturnStage\);[\s\S]*\}, \[avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop\]\);/);
   assert.match(appPageSource, /if \(stage === "avatar-lab"\) \{[\s\S]*closeAvatarLab\(\);[\s\S]*return navigation;[\s\S]*\}/);
   assert.doesNotMatch(appPageSource, /if \(stage === "avatar-lab"\) \{\s*setStage\("luck"\);/);
   const luckDrawInvocations = appPageSource.match(/<LuckDrawScreen[\s\S]*?\/>/g) ?? [];
@@ -393,29 +410,51 @@ test("app page delegates round rendering and remaining screen shells to feature 
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const roundPlayerUrl = new URL("../features/rounds/round-player.tsx", import.meta.url);
   const homeScreenUrl = new URL("../features/game-flow/home-screen.tsx", import.meta.url);
+  const homeworldScreenUrl = new URL("../features/homeworld/homeworld-screen.tsx", import.meta.url);
+  const homeworldStateUrl = new URL("../features/homeworld/homeworld-state.ts", import.meta.url);
   const roundIntroUrl = new URL("../features/game-flow/round-intro.tsx", import.meta.url);
   const playFrameUrl = new URL("../features/game-flow/play-frame.tsx", import.meta.url);
   const shareImageScreenUrl = new URL("../features/results/share-image-screen.tsx", import.meta.url);
 
   assert.equal(existsSync(roundPlayerUrl), true);
   assert.equal(existsSync(homeScreenUrl), true);
+  assert.equal(existsSync(homeworldScreenUrl), true);
+  assert.equal(existsSync(homeworldStateUrl), true);
   assert.equal(existsSync(roundIntroUrl), true);
   assert.equal(existsSync(playFrameUrl), true);
   assert.equal(existsSync(shareImageScreenUrl), true);
 
   const roundPlayerSource = readFileSync(roundPlayerUrl, "utf8");
   const homeScreenSource = readFileSync(homeScreenUrl, "utf8");
+  const homeworldScreenSource = readFileSync(homeworldScreenUrl, "utf8");
+  const homeworldStateSource = readFileSync(homeworldStateUrl, "utf8");
   const roundIntroSource = readFileSync(roundIntroUrl, "utf8");
   const playFrameSource = readFileSync(playFrameUrl, "utf8");
   const shareImageScreenSource = readFileSync(shareImageScreenUrl, "utf8");
 
   assert.match(appPageSource, /from "@\/features\/rounds\/round-player"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/home-screen"/);
+  assert.match(appPageSource, /from "@\/features\/homeworld\/homeworld-screen"/);
+  assert.match(appPageSource, /from "@\/features\/homeworld\/homeworld-state"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-intro"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/play-frame"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image-screen"/);
+  assert.match(appPageSource, /stage === "homeworld" \|\|/);
   assert.match(appPageSource, /advancedChallenge\?\.mode === "playing" \|\| advancedChallenge\?\.mode === "base-playing"/);
   assert.match(appPageSource, /className=\{playShellActive \? "app-shell app-shell-play" : "app-shell"\}/);
+  assert.match(appPageSource, /useState<Stage>\("home"\)/);
+  assert.doesNotMatch(appPageSource, /useState<Stage>\("homeworld"\)/);
+  assert.match(appPageSource, /stage === "homeworld"/);
+  assert.match(appPageSource, /const openHomeworld = useCallback/);
+  assert.match(appPageSource, /setStage\("homeworld"\);/);
+  assert.match(appPageSource, /new URLSearchParams\(window\.location\.search\)\.get\("homeworld"\) === "1"/);
+  assert.match(appPageSource, /const closeHomeworldToHome = useCallback/);
+  assert.match(appPageSource, /const openHomeworldMultiplayerEntry = useCallback/);
+  assert.match(appPageSource, /const joinHomeworldPortalRoom = useCallback/);
+  assert.match(appPageSource, /window\.location\.assign\("\/multiplayer\?homeworld=1&host=1"\)/);
+  assert.match(appPageSource, /window\.location\.assign\(`\/multiplayer\?homeworld=1&room=\$\{encodeURIComponent\(roomCode\)\}`\)/);
+  assert.match(appPageSource, /<HomeworldScreen[\s\S]*doorMode="single-player"[\s\S]*homeOwnerName=\{playerName\}[\s\S]*mode="owner"[\s\S]*onCreateRoom=\{openHomeworldPortalRoom\}[\s\S]*onJoinRoom=\{joinHomeworldPortalRoom\}[\s\S]*onOpenMultiplayerEntry=\{openHomeworldMultiplayerEntry\}[\s\S]*onReturnHome=\{closeHomeworldToHome\}/);
+  assert.doesNotMatch(appPageSource, /<HomeworldScreen[\s\S]*onStartTest=\{beginTest\}/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/game-flow\/mini-game-rounds"/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/registry"/);
   assert.doesNotMatch(appPageSource, /from "@\/features\/rounds\/native-rounds"/);
@@ -436,6 +475,26 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(roundPlayerSource, /implementation\.type === "mini-game"[\s\S]*MiniGameBaseRound/);
   assert.match(roundPlayerSource, /switch \(implementation\.componentId\)/);
   assert.match(homeScreenSource, /export function HomeScreen/);
+  assert.match(homeworldScreenSource, /export function HomeworldScreen/);
+  assert.match(homeworldScreenSource, /PlayerAvatar/);
+  assert.match(homeworldScreenSource, /onOpenAvatarLab/);
+  assert.match(homeworldScreenSource, /onOpenCustomization/);
+  assert.match(homeworldScreenSource, /onOpenMultiplayerEntry/);
+  assert.match(homeworldScreenSource, /onJoinRoom/);
+  assert.match(homeworldScreenSource, /onCreateRoom/);
+  assert.match(homeworldScreenSource, /onReturnHome/);
+  assert.match(homeworldScreenSource, /onLeaveRoom/);
+  assert.match(homeworldScreenSource, /HOMEWORLD_DOOR/);
+  assert.match(homeworldScreenSource, /doorReachable/);
+  assert.match(homeworldScreenSource, /homeworld-exit-door/);
+  assert.match(homeworldScreenSource, /homeworld-door-menu/);
+  assert.match(homeworldScreenSource, /homeworld-customization-panel/);
+  assert.match(homeworldScreenSource, /homeworld-room-entry-panel/);
+  assert.match(homeworldScreenSource, /floorTransition/);
+  assert.match(homeworldScreenSource, /bedWasSleeping/);
+  assert.doesNotMatch(homeworldScreenSource, /homeworld-topbar/);
+  assert.match(homeworldStateSource, /export const HOMEWORLD_FURNITURE/);
+  assert.match(homeworldStateSource, /export const HOMEWORLD_DOOR/);
   assert.match(roundIntroSource, /export function RoundIntro/);
   assert.match(playFrameSource, /export function PlayFrame/);
   assert.match(shareImageScreenSource, /export function ShareImageScreen/);
@@ -934,6 +993,7 @@ test("base flow CSS is split into ordered focused chunks", () => {
     '@import "./base-flow/tokens.css";',
     '@import "./base-flow/shell.css";',
     '@import "./base-flow/home-intro.css";',
+    '@import "./base-flow/homeworld.css";',
     '@import "./base-flow/shared-controls.css";',
     '@import "./base-flow/play-frame.css";',
     '@import "./base-flow/native-reaction.css";',
@@ -958,6 +1018,48 @@ test("base flow CSS is split into ordered focused chunks", () => {
 
   assert.match(readFileSync(new URL("../app/styles/base-flow/tokens.css", import.meta.url), "utf8"), /:root \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/home-intro.css", import.meta.url), "utf8"), /\.home-screen \{/);
+  const homeworldCss = readFileSync(new URL("../app/styles/base-flow/homeworld.css", import.meta.url), "utf8");
+  const homeworldScreenSource = readFileSync(new URL("../features/homeworld/homeworld-screen.tsx", import.meta.url), "utf8");
+  assert.match(homeworldCss, /\.homeworld-screen \{/);
+  assert.match(homeworldCss, /\.homeworld-screen\s*\{[\s\S]*min-height:\s*100dvh;[\s\S]*grid-template-rows:\s*minmax\(0, 1fr\);/);
+  assert.match(homeworldCss, /\.homeworld-stage\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border:\s*0;[\s\S]*border-radius:\s*0;[\s\S]*box-shadow:\s*none;/);
+  assert.match(homeworldCss, /\.homeworld-stage::before\s*\{[\s\S]*background-image:\s*url\("\/homeworld\/skins\/oak\/room\.png"\)/);
+  assert.match(homeworldCss, /\.homeworld-stage\s*\{[\s\S]*#b88755/);
+  assert.match(homeworldCss, /\.homeworld-scene-background\s*\{[\s\S]*filter:\s*saturate\(0\.9\) contrast\(1\.04\) sepia\(0\.1\) hue-rotate\(-4deg\)/);
+  assert.match(homeworldCss, /\.homeworld-exit-door/);
+  assert.match(homeworldCss, /\.homeworld-scene-fixed/);
+  assert.match(homeworldCss, /\.homeworld-scene-background/);
+  assert.match(homeworldCss, /\.homeworld-object-image/);
+  assert.match(homeworldCss, /\.homeworld-door-menu/);
+  assert.match(homeworldCss, /\.homeworld-door-menu-panel/);
+  assert.match(homeworldCss, /\.homeworld-room-entry-panel/);
+  assert.match(homeworldCss, /\.homeworld-customization-panel/);
+  assert.match(homeworldCss, /@keyframes homeworld-floor-jump/);
+  assert.match(homeworldCss, /--floor-jump-from-y/);
+  assert.match(homeworldCss, /--floor-jump-to-y/);
+  assert.doesNotMatch(homeworldCss, /\.homeworld-scene-art|\.homeworld-trampoline/);
+  assert.doesNotMatch(homeworldCss, /\.homeworld-topbar/);
+  assert.match(homeworldScreenSource, /function HomeworldBitmapScene/);
+  assert.match(homeworldScreenSource, /const PLAYER_SIZE = 70;/);
+  assert.match(homeworldScreenSource, /const MOVE_SPEED = 360;/);
+  assert.match(homeworldScreenSource, /HOMEWORLD_INITIAL_PLAYER/);
+  assert.match(homeworldScreenSource, /const HOMEWORLD_FLOORS/);
+  assert.match(homeworldScreenSource, /HOMEWORLD_SCENE\.floorY\.upper/);
+  assert.match(homeworldScreenSource, /const inputDirectionRef = useRef<HomeworldPresenceDirection>\("none"\);/);
+  assert.match(homeworldScreenSource, /const inputPointerIdRef = useRef<number \| null>\(null\);/);
+  assert.match(homeworldScreenSource, /function chooseHomeworldDirection\(event: PointerEvent<HTMLDivElement>\)/);
+  assert.match(homeworldScreenSource, /const updateHomeworldDirection = useCallback/);
+  assert.match(homeworldScreenSource, /if \(inputPointerIdRef\.current !== event\.pointerId\) return;/);
+  assert.match(homeworldScreenSource, /inputPointerIdRef\.current = event\.pointerId;/);
+  assert.match(homeworldScreenSource, /const stopHomeworldDirection = useCallback/);
+  assert.match(homeworldScreenSource, /onPointerDown=\{beginHomeworldDirection\}/);
+  assert.match(homeworldScreenSource, /onPointerMove=\{updateHomeworldDirection\}/);
+  assert.match(homeworldScreenSource, /onPointerUp=\{stopHomeworldDirection\}/);
+  assert.doesNotMatch(homeworldScreenSource, /TAP_MOVE_HOLD_MS|JUMP_VELOCITY|GRAVITY|TRAMPOLINE_BOUNCE_VELOCITY|handleStagePointerUp|function jump|const jump/);
+  assert.doesNotMatch(homeworldScreenSource, /onOpenPortalRoom|homeworld-furniture-portal/);
+  assert.match(homeworldScreenSource, /isHomeworldFurnitureReachable/);
+  assert.match(homeworldScreenSource, /homeworld-player local floor-\$\{floorTransition\?\.targetFloor \?\? player\.floor\}/);
+  assert.doesNotMatch(homeworldScreenSource, /homeworld-move-zone/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/play-frame.css", import.meta.url), "utf8"), /\.play-screen \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url), "utf8"), /\.advanced-reaction-grid \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/native-aim.css", import.meta.url), "utf8"), /\.advanced-aim-target \{/);
@@ -966,6 +1068,60 @@ test("base flow CSS is split into ordered focused chunks", () => {
   assert.match(readFileSync(new URL("../app/styles/base-flow/results.css", import.meta.url), "utf8"), /\.result-screen \{/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8"), /\.advanced-screen/);
   assert.match(readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8"), /\.luck-draw-panel \{/);
+});
+
+test("homeworld uses fixed bitmap room assets with extensible object definitions", () => {
+  const projectRoot = new URL("../../", import.meta.url);
+  const requiredAssets = [
+    "public/homeworld/skins/oak/room.png",
+    "public/homeworld/skins/oak/mirror.png",
+    "public/homeworld/skins/oak/bed.png",
+    "public/homeworld/skins/oak/door.png",
+    "public/homeworld/skins/oak/ladder.png",
+    "public/homeworld/skins/oak/cabinet.png",
+  ];
+  const homeworldStateSource = readFileSync(new URL("../features/homeworld/homeworld-state.ts", import.meta.url), "utf8");
+  const homeworldScreenSource = readFileSync(new URL("../features/homeworld/homeworld-screen.tsx", import.meta.url), "utf8");
+  const homeworldCss = readFileSync(new URL("../app/styles/base-flow/homeworld.css", import.meta.url), "utf8");
+  const messagesSource = readFileSync(new URL("./multiplayer/messages.ts", import.meta.url), "utf8");
+
+  for (const assetPath of requiredAssets) {
+    assert.equal(existsSync(new URL(assetPath, projectRoot)), true, assetPath);
+  }
+
+  assert.match(homeworldStateSource, /export const HOMEWORLD_SCENE/);
+  assert.match(homeworldStateSource, /background:\s*\{[\s\S]*src: "\/homeworld\/skins\/oak\/room\.png"/);
+  assert.match(homeworldStateSource, /id: "mirror"[\s\S]*interaction: "open-skin"/);
+  assert.match(homeworldStateSource, /id: "bed"[\s\S]*interaction: "sleep"/);
+  assert.match(homeworldStateSource, /id: "door"[\s\S]*interaction: "door-menu"/);
+  assert.match(homeworldStateSource, /id: "ladder"[\s\S]*interaction: "floor-transfer"/);
+  assert.match(homeworldStateSource, /id: "cabinet"[\s\S]*interaction: "open-customization"/);
+  assert.match(homeworldStateSource, /HOMEWORLD_CUSTOMIZATION_CATEGORIES/);
+  assert.match(homeworldStateSource, /HOMEWORLD_ROOM_VARIANTS/);
+  assert.match(homeworldStateSource, /room:\s*\{\s*variantId/);
+  assert.match(homeworldStateSource, /sourceFurniture\.table/);
+  assert.doesNotMatch(homeworldStateSource, /trampoline|dye-vat|open-dye-vat|id: "table"/);
+
+  assert.match(homeworldScreenSource, /function HomeworldBitmapScene/);
+  assert.match(homeworldScreenSource, /HOMEWORLD_SCENE/);
+  assert.match(homeworldScreenSource, /homeworld-scene-fixed/);
+  assert.match(homeworldScreenSource, /homeworld-object-image/);
+  assert.match(homeworldScreenSource, /onOpenCustomization/);
+  assert.match(homeworldScreenSource, /homeworld-customization-panel/);
+  assert.match(homeworldScreenSource, /homeworld-room-entry-panel/);
+  assert.match(homeworldScreenSource, /doorMode === "single-player"/);
+  assert.match(homeworldScreenSource, /doorMode === "room"/);
+  assert.doesNotMatch(homeworldScreenSource, /function HomeworldSceneArt|function FurnitureArt|cameraX|translate3d\(\$\{-cameraX|homeworld-trampoline/);
+
+  assert.match(homeworldCss, /\.homeworld-scene-fixed/);
+  assert.match(homeworldCss, /\.homeworld-scene-background/);
+  assert.match(homeworldCss, /\.homeworld-object-image/);
+  assert.match(homeworldCss, /object-fit:\s*contain/);
+  assert.match(homeworldCss, /\.homeworld-customization-panel/);
+  assert.match(homeworldCss, /\.homeworld-room-entry-panel/);
+  assert.doesNotMatch(homeworldCss, /\.homeworld-trampoline|\.homeworld-scene-art/);
+  assert.doesNotMatch(messagesSource, /furniture\.trampoline|furniture\["dye-vat"\]|isHomeworldFurnitureState\(value\.furniture\.bed, 2\)/);
+  assert.match(messagesSource, /isHomeworldState\(value\.homeworld\)/);
 });
 
 test("hidden mini game performance panel is URL-gated and ref-backed", () => {

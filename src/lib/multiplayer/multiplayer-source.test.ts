@@ -137,6 +137,59 @@ test("multiplayer drops stale round packets and clears opponent on guest bye", (
   assert.match(sessionSource, /case "bye":[\s\S]*opponentResult:\s*null/);
 });
 
+test("homeworld multiplayer enters the host home directly through the existing room session", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const messagesSource = readSource("./messages.ts");
+  const typesSource = readSource("./types.ts");
+
+  assert.match(typesSource, /NetHomeworldStateMessage/);
+  assert.match(typesSource, /NetHomeworldPresenceMessage/);
+  assert.match(messagesSource, /kind: "homeworld-state"/);
+  assert.match(messagesSource, /kind: "homeworld-presence"/);
+  assert.match(sessionSource, /reportHomeworldState/);
+  assert.match(sessionSource, /reportHomeworldPresence/);
+  assert.match(sessionSource, /case "homeworld-state":/);
+  assert.match(sessionSource, /case "homeworld-presence":/);
+  assert.match(pageSource, /searchParams\.get\("homeworld"\)/);
+  assert.match(pageSource, /readPersistedPlayerName/);
+  assert.match(pageSource, /writePersistedPlayerName/);
+  assert.match(pageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
+  assert.match(pageSource, /createSelfPlayer\(role, resolvedSkin, resolvedName\)/);
+  assert.match(pageSource, /autoCreateHomeworldHostRef/);
+  assert.match(pageSource, /hostHomeworldParam !== "1"/);
+  assert.match(pageSource, /homeworldEntryVisible/);
+  assert.match(pageSource, /homeworldRoomLink/);
+  assert.match(pageSource, /const handleOpenHomeworldMultiplayerEntry = useCallback/);
+  assert.match(pageSource, /const handleJoinHomeworldRoom = useCallback/);
+  assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
+  assert.match(pageSource, /router\.push\("\/\?homeworld=1"\);/);
+  assert.match(pageSource, /<main className="app-shell app-shell-play">/);
+  assert.match(pageSource, /<HomeworldScreen[\s\S]*doorMode=\{snapshot\.status === "idle" \? "single-player" : "room"\}[\s\S]*homeOwnerName=\{homeworldOwnerName\}[\s\S]*mode=\{homeworldMode\}/);
+  assert.match(pageSource, /onJoinRoom=\{handleJoinHomeworldRoom\}/);
+  assert.match(pageSource, /onLeaveRoom=\{handleExitHomeworldRoom\}/);
+  assert.doesNotMatch(pageSource, /onExitHomeworld=\{handleExitHomeworldRoom\}/);
+  assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldState/);
+  assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldPresence/);
+  assert.doesNotMatch(pageSource, /homeworldMode[\s\S]{0,500}<MultiplayerEntry/);
+});
+
+test("homeworld presence and round reset preserve profile sync after exercise rounds", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const stateSource = readSource("../../features/homeworld/homeworld-state.ts");
+  const resetRoundSource = sessionSource.slice(
+    sessionSource.indexOf("private resetRound()"),
+    sessionSource.indexOf("private resetHostWaitingState()"),
+  );
+
+  assert.match(stateSource, /displayName\?: string;/);
+  assert.match(stateSource, /displayName: sanitizeHomeworldDisplayName\(input\.displayName\)/);
+  assert.doesNotMatch(resetRoundSource, /selfHomeworldPresence:\s*null/);
+  assert.doesNotMatch(resetRoundSource, /opponentHomeworldPresence:\s*null/);
+  assert.match(resetRoundSource, /selfState:\s*null/);
+  assert.match(resetRoundSource, /opponentState:\s*null/);
+});
+
 test("multiplayer page has a safe return-home action that leaves the P2P session", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
 
@@ -241,6 +294,84 @@ test("multiplayer progress avatars render as bare squares with a self pointer", 
   assert.doesNotMatch(cssSource, /\.multiplayer-progress-marker\.opponent \.multiplayer-progress-avatar::before/);
 });
 
+test("homeworld level-select start flow waits in the room before sending startMatch", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(pageSource, /LEVEL_SELECT_START_COUNTDOWN_MS = 3_000/);
+  assert.match(pageSource, /levelSelectStartCountdownEndsAt/);
+  assert.match(pageSource, /setLevelSelectStartCountdownEndsAt\(null\)/);
+  assert.match(pageSource, /levelSelectStartCountdownSeconds/);
+  assert.match(pageSource, /startCountdownSeconds=\{levelSelectStartCountdownSeconds\}/);
+  assert.match(pageSource, /countdownMs: COUNTDOWN_MS/);
+
+  assert.match(roomSource, /opponentReady/);
+  assert.match(roomSource, /selectionLocked = selfReady \|\| opponentReady/);
+  assert.match(roomSource, /if \(!slot \|\| selectionLocked\) return;/);
+  assert.match(roomSource, /disabled=\{selectionLocked \|\| reachableSlot !== slot\}/);
+  assert.match(roomSource, /skinId: selfSkin/);
+  assert.doesNotMatch(roomSource, /opponentSkin/);
+  assert.doesNotMatch(roomSource, /className="multiplayer-level-room-player remote"/);
+  assert.match(roomSource, /← 回到家园/);
+  assert.match(roomSource, /准备开始 →/);
+  assert.match(roomSource, /\{complete \? <div className="multiplayer-level-guide right">/);
+  assert.match(roomSource, /你已准备/);
+  assert.match(roomSource, /已准备/);
+  assert.match(roomSource, /startCountdownSeconds/);
+
+  assert.match(cssSource, /\.multiplayer-level-ready-hints/);
+  assert.match(cssSource, /\.multiplayer-level-countdown/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-level-guide[\s\S]{0,180}border-radius:\s*999px/);
+
+  assert.match(sessionSource, /current\?\.action === presence\.action/);
+  assert.match(sessionSource, /current\?\.readyToStart === presence\.readyToStart/);
+  assert.match(sessionSource, /current\?\.skinId === presence\.skinId/);
+});
+
+test("homeworld multiplayer preserves selected skin before movement and returns forfeits to level select", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const homeworldSource = readSource("../../features/homeworld/homeworld-screen.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.doesNotMatch(pageSource, /autoReturnedMatchRef/);
+  assert.match(pageSource, /const handleForfeit = useCallback/);
+  assert.doesNotMatch(pageSource, /setLevelSelectOpen\(true\);[\s\S]{0,120}sessionRef\.current\?\.forfeit\(\);/);
+  assert.match(pageSource, /const handleReturnRoom = useCallback/);
+  assert.match(pageSource, /wasInHomeworldMatchRef/);
+  assert.match(pageSource, /setLevelSelectOpen\(true\);[\s\S]{0,180}wasInHomeworldMatchRef\.current = false/);
+  assert.match(pageSource, /didExitLevelSelectToHomeworldRef/);
+  assert.match(pageSource, /didExitLevelSelectToHomeworldRef\.current = true/);
+  assert.match(pageSource, /if \(!didExitLevelSelectToHomeworldRef\.current\) return;/);
+  assert.match(pageSource, /didExitLevelSelectToHomeworldRef\.current = false/);
+  assert.match(pageSource, /const nextPresence: HomeworldPresence = \{[\s\S]{0,500}skinId: skin/);
+  assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldPresence\(nextPresence\)/);
+  assert.match(pageSource, /sessionRef\.current\?\.reportLevelSelectPresence\(\{[\s\S]{0,260}skinId: skin/);
+  assert.match(homeworldSource, /remoteSkin\?: PlayerAvatarSkin/);
+  assert.match(homeworldSource, /resolvePlayerAvatarSkin\(remotePresence\?\.skinId \?\? remoteSkin\)/);
+  assert.match(pageSource, /remoteSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
+  assert.match(sessionSource, /private settleForfeit/);
+  assert.match(sessionSource, /status:\s*"finished"/);
+  assert.match(sessionSource, /case "forfeit":[\s\S]{0,180}settleForfeit\("opponent"\)/);
+  assert.match(cssSource, /\.multiplayer-level-ready-hints[\s\S]{0,160}top:\s*calc\(max\(14px, env\(safe-area-inset-top\)\) \+ 42px\)/);
+});
+
+test("homeworld reachable furniture uses a gray bold edge highlight", () => {
+  const cssSource = readSource("../../app/styles/base-flow/homeworld.css");
+  const reachableRule = cssRule(cssSource, ".homeworld-furniture.reachable");
+  const reachableImageRule = cssRule(cssSource, ".homeworld-furniture.reachable .homeworld-object-image");
+  const reachableDoorRule = cssRule(cssSource, ".homeworld-exit-door.reachable .homeworld-object-image");
+
+  assert.match(reachableRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
+  assert.match(reachableImageRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
+  assert.match(reachableDoorRule, /drop-shadow\(0 0 2px rgba\(112,\s*116,\s*118,\s*0\.42\)\)/);
+  assert.doesNotMatch(reachableRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
+  assert.doesNotMatch(reachableImageRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
+  assert.doesNotMatch(reachableDoorRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
+});
+
 test("multiplayer gameplay disables mobile long press browser affordances", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
 
@@ -332,13 +463,16 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
 
 test("multiplayer host can choose the battle level before match start", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const levelSelectSource = readSource("./level-select.ts");
 
   assert.match(pageSource, /hostSelectedLevelId/);
   assert.match(pageSource, /setHostSelectedLevelId/);
-  assert.match(pageSource, /fall-down-final/);
+  assert.match(pageSource, /hostSelectedLevelGroup\.levels\.map/);
   assert.match(pageSource, /<select/);
   assert.match(pageSource, /session\.startMatch\(\{/);
   assert.match(pageSource, /levelId: hostSelectedLevelId/);
+  assert.match(levelSelectSource, /MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup\[\] = MINI_GAME_DEFINITIONS\.map/);
+  assert.doesNotMatch(pageSource, /MULTIPLAYER_LEVEL_OPTIONS|fall-down-final|flappy-7/);
 });
 
 test("multiplayer runtime supports fall-down with synced state and unlimited respawn", () => {
@@ -356,12 +490,12 @@ test("multiplayer runtime supports fall-down with synced state and unlimited res
   assert.match(fallDownSource, /unlimitedRespawn = false/);
 });
 
-test("multiplayer runtime supports flappy-7 with synced state and unlimited respawn", () => {
-  const pageSource = readSource("../../app/multiplayer/page.tsx");
+test("multiplayer runtime supports flappy levels with synced state and unlimited respawn", () => {
+  const levelSelectSource = readSource("./level-select.ts");
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const flappySource = readSource("../../features/mini-games/flappy.tsx");
 
-  assert.match(pageSource, /flappy-7/);
+  assert.match(levelSelectSource, /MINI_GAME_DEFINITIONS\.map/);
   assert.match(runtimeSource, /FlappyPrototype/);
   assert.match(runtimeSource, /level\.gameId === "flappy"/);
   assert.match(runtimeSource, /handleFlappyRuntimeState/);
@@ -508,6 +642,9 @@ test("Cloudflare multiplayer uses short room codes and native WebRTC transport",
   assert.match(webRtcSource, /createDataChannel\("state"/);
   assert.match(webRtcSource, /createOffer\(true\)/);
   assert.match(roomApiSource, /NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL/);
+  assert.match(roomApiSource, /LOCAL_DEV_SIGNALING_FALLBACK = "https:\/\/208848\.xyz"/);
+  assert.match(roomApiSource, /isLocalDevelopmentOrigin/);
+  assert.match(roomApiSource, /return LOCAL_DEV_SIGNALING_FALLBACK;/);
   assert.match(roomApiSource, /normalizeRoomCode/);
   assert.doesNotMatch(pageSource, /NEXT_PUBLIC_PEER_/);
   assert.doesNotMatch(pageSource, /PeerJSOption/);

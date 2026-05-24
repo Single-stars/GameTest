@@ -28,13 +28,13 @@ export function ResetDataIcon() {
   );
 }
 
-export function MultiplayerIcon() {
+export function HomeworldIcon() {
   return (
     <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
-      <rect height="7" rx="2.2" stroke="currentColor" strokeWidth="2" width="7" x="3.5" y="6" />
-      <rect height="7" rx="2.2" stroke="currentColor" strokeWidth="2" width="7" x="13.5" y="11" />
-      <path d="M10.5 10.2h2.1M11.4 13.8h2.1" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path d="m8.4 17.5 1.8-2.4M15.6 6.5l-1.8 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <path d="M4 11.5 12 5l8 6.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M6.5 10.5V19h11v-8.5" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M10 19v-5.2a2 2 0 0 1 4 0V19" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M8.8 12.2h1.9M13.3 12.2h1.9" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
     </svg>
   );
 }
