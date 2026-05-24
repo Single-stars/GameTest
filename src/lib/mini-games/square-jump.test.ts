@@ -848,3 +848,20 @@ test("square jump base advance keeps two platforms visible and advances by camer
   assert.doesNotMatch(componentSource, /current\.nextPlatform\.x =/);
   assert.doesNotMatch(componentSource, /current\.playerX = current\.advancePlan\.playerEndX/);
 });
+
+test("square jump base and multiplayer misses respawn on the current platform with smooth camera recovery", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const squareJumpSource = componentSource.slice(componentSource.indexOf("function recoverSquareJumpBaseMiss"), componentSource.indexOf("export function SquareJumpPrototype"));
+
+  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\([\s\S]*unlimitedRespawn = false/);
+  assert.match(squareJumpSource, /const respawnPlatform = \{ \.\.\.current\.currentPlatform \};/);
+  assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(respawnPlatform, current\.time\);/);
+  assert.match(squareJumpSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
+  assert.match(squareJumpSource, /current\.advancePlan = createSquareJumpBaseAdvancePlan\(\{/);
+  assert.match(squareJumpSource, /cameraEnd: fitSquareBaseCamera\(respawnPlatform, current\.nextPlatform, current\.playerX, stageSize\)/);
+  assert.match(squareJumpSource, /const nextVisualOffsetY = current\.nextVisualOffsetY;/);
+  assert.match(squareJumpSource, /current\.nextVisualOffsetY = nextVisualOffsetY;/);
+  assert.doesNotMatch(squareJumpSource, /current\.nextVisualOffsetY = current\.advancePlan\.nextPlatformStartVisualOffsetY;/);
+  assert.doesNotMatch(squareJumpSource, /const nextJumps = current\.jumps \+ 1;[\s\S]*current\.currentPlatform = landedPlatform;/);
+  assert.match(componentSource, /mode === "base" \|\| unlimitedRespawn/);
+});

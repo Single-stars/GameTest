@@ -18,8 +18,9 @@ export type MultiplayerLevelGroup = {
   levels: MiniGameLevelConfig[];
 };
 
-export const DEFAULT_MULTIPLAYER_LEVEL_ID = "doodle-3";
+export const DEFAULT_MULTIPLAYER_LEVEL_ID = "square-jump-base";
 export const DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "co-op";
+const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId[] = ["square-jump", "doodle", "fall-down"];
 
 export const MULTIPLAYER_PLAY_MODES: Array<{
   id: MultiplayerPlayMode;
@@ -38,13 +39,17 @@ export const MULTIPLAYER_PLAY_MODES: Array<{
   },
 ];
 
-export const MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup[] = MINI_GAME_DEFINITIONS.map((game) => ({
-  gameId: game.id,
-  levels: game.levels,
-  shortTitle: game.shortTitle,
-  summary: game.summary,
-  title: game.title,
-}));
+export const MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup[] = MULTIPLAYER_ENABLED_GAME_IDS.map((gameId) => {
+  const game = MINI_GAME_DEFINITIONS.find((item) => item.id === gameId);
+  if (!game) throw new Error(`Missing multiplayer mini-game ${gameId}`);
+  return {
+    gameId: game.id,
+    levels: game.levels,
+    shortTitle: game.shortTitle,
+    summary: game.summary,
+    title: game.title,
+  };
+});
 
 export type MultiplayerLevelSelectState = {
   confirmedSlots: Record<MultiplayerLevelSelectSlot, boolean>;
@@ -82,7 +87,7 @@ export function createDefaultMultiplayerLevelSelectState(): MultiplayerLevelSele
       mode: false,
       type: false,
     },
-    gameId: "doodle",
+    gameId: "square-jump",
     levelId: DEFAULT_MULTIPLAYER_LEVEL_ID,
     playMode: DEFAULT_MULTIPLAYER_PLAY_MODE,
     slotTones: {
@@ -222,7 +227,7 @@ export function resolveMultiplayerLevelSelection(levelId: string | null | undefi
     .find((level) => level.levelId === levelId);
 
   if (selected) return selected;
-  return getMiniGameLevel("doodle", DEFAULT_MULTIPLAYER_LEVEL_ID);
+  return getMiniGameLevel("square-jump", DEFAULT_MULTIPLAYER_LEVEL_ID);
 }
 
 export function resolveMultiplayerLevelGroup(gameId: MiniGameId | null | undefined) {

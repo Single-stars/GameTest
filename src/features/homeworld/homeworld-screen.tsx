@@ -44,7 +44,7 @@ import {
   type HomeworldPresenceDirection,
   type HomeworldRole,
   type HomeworldState,
-} from "./homeworld-state";
+} from "@/lib/homeworld/homeworld-state";
 
 const PLAYER_SIZE = 70;
 const MOVE_SPEED = 360;
@@ -86,6 +86,7 @@ export type HomeworldScreenProps = {
   inviteLink?: string;
   initialPlayerPose?: HomeworldPlayerPoseState | null;
   mode: HomeworldRole;
+  roomEntryHidden?: boolean;
   onCopyInvite?: () => void;
   onCreateRoom?: () => void;
   onJoinRoom?: (roomCode: string) => void;
@@ -204,6 +205,7 @@ export function HomeworldScreen({
   inviteLink = "",
   initialPlayerPose,
   mode,
+  roomEntryHidden = false,
   onCopyInvite,
   onCreateRoom,
   onJoinRoom,
@@ -230,6 +232,7 @@ export function HomeworldScreen({
   const inputDirectionRef = useRef<HomeworldPresenceDirection>("none");
   const inputPointerIdRef = useRef<number | null>(null);
   const lastPresenceSentRef = useRef(-Infinity);
+  const lastUrgentPresenceSignatureRef = useRef("");
   const floorTransitionTimerRef = useRef<number | null>(null);
   const [stageSize, setStageSize] = useState<{ width: number; height: number }>({
     width: HOMEWORLD_SCENE.width,
@@ -237,7 +240,7 @@ export function HomeworldScreen({
   });
   const [doorMenuOpen, setDoorMenuOpen] = useState(false);
   const [roomEntryOpen, setRoomEntryOpen] = useState(false);
-  const [roomEntryPanelCollapsed, setRoomEntryPanelCollapsed] = useState(false);
+  const [roomEntryPanelCollapsed, setRoomEntryPanelCollapsed] = useState(true);
   const [joinRoomDialogOpen, setJoinRoomDialogOpen] = useState(false);
   const [joinRoomCode, setJoinRoomCode] = useState("");
   const [customizationOpen, setCustomizationOpen] = useState(false);
@@ -268,7 +271,10 @@ export function HomeworldScreen({
   const canCreateRoom = doorMode === "single-player" && canUseHomeworldDoorAction(role, "create-room") && Boolean(onCreateRoom);
   const canLeaveRoom = doorMode === "room" && canUseHomeworldDoorAction(role, "leave-room") && Boolean(onLeaveRoom);
   const canOpenLevelSelectRoom = doorMode === "room" && Boolean(onOpenLevelSelectRoom);
-  const roomEntryVisible = roomEntryOpen || Boolean(inviteLink);
+  const roomEntryVisible = useMemo(() => {
+    if (roomEntryHidden) return false;
+    return roomEntryOpen || Boolean(inviteLink);
+  }, [inviteLink, roomEntryHidden, roomEntryOpen]);
   const activeCategory = HOMEWORLD_CUSTOMIZATION_CATEGORIES.find((category) => category.id === activeCustomizationCategory) ?? HOMEWORLD_CUSTOMIZATION_CATEGORIES[0]!;
 
   const wake = useCallback(() => {
@@ -377,7 +383,7 @@ export function HomeworldScreen({
     setDoorMenuOpen(false);
     setCustomizationOpen(false);
     setRoomEntryOpen(true);
-    setRoomEntryPanelCollapsed(false);
+    setRoomEntryPanelCollapsed(true);
     onOpenMultiplayerEntry?.();
   }, [canCreateRoom, onOpenMultiplayerEntry]);
 
@@ -578,16 +584,20 @@ export function HomeworldScreen({
     if (!onPresenceChange) return;
     const currentTime = performance.now();
     const forceSleepSync = player.action === "sleep";
-    if (!forceSleepSync && currentTime - lastPresenceSentRef.current < PRESENCE_SYNC_MS) return;
-    lastPresenceSentRef.current = currentTime;
-    onPresenceChange(createHomeworldPresence({
+    const nextPresence = createHomeworldPresence({
       action: player.action === "sleep" ? "sleep" : player.action === "move" ? "move" : "idle",
       direction: presenceDirection(player.direction),
       displayName: selfDisplayName ?? homeOwnerName,
       skinId: selfSkin,
       x: Math.round(player.x),
       y: Math.round(player.y),
-    }));
+    });
+    const urgentPresenceSignature = `${nextPresence.action}:${nextPresence.direction}:${nextPresence.skinId}:${nextPresence.displayName}`;
+    const urgentPresenceChanged = urgentPresenceSignature !== lastUrgentPresenceSignatureRef.current;
+    if (!forceSleepSync && !urgentPresenceChanged && currentTime - lastPresenceSentRef.current < PRESENCE_SYNC_MS) return;
+    lastPresenceSentRef.current = currentTime;
+    lastUrgentPresenceSignatureRef.current = urgentPresenceSignature;
+    onPresenceChange(nextPresence);
   }, [homeOwnerName, onPresenceChange, player.action, player.direction, player.x, player.y, selfDisplayName, selfSkin]);
 
   useEffect(() => {
@@ -898,53 +908,44 @@ export function HomeworldScreen({
           ) : null}
 
           {roomEntryVisible ? (
-            roomEntryPanelCollapsed ? (
-              <button
-                className="homeworld-room-entry-toggle collapsed"
-                type="button"
-                aria-label="Open multiplayer panel"
-                onPointerDown={toggleRoomEntryPanel}
-              >
-                ^
-              </button>
-            ) : (
-              <div className="homeworld-room-entry-panel" onPointerDown={(event) => event.stopPropagation()}>
+            <div className={`homeworld-room-entry-shell${roomEntryPanelCollapsed ? " collapsed" : ""}`} onPointerDown={(event) => event.stopPropagation()}>
+              <div className="homeworld-room-entry-panel">
                 <button
-                  className="homeworld-room-entry-toggle"
+                  className={`homeworld-room-entry-toggle${roomEntryPanelCollapsed ? " collapsed" : ""}`}
                   type="button"
-                  aria-label="Collapse multiplayer panel"
+                  aria-label={roomEntryPanelCollapsed ? "Open multiplayer panel" : "Collapse multiplayer panel"}
                   onPointerDown={toggleRoomEntryPanel}
                 >
-                  v
+                  {roomEntryPanelCollapsed ? "^" : "v"}
                 </button>
-              {inviteLink ? (
-                <>
-                  <span>好友邀请</span>
-                  <input aria-label="家园联机邀请链接" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
-                  <button className="secondary-button" type="button" onPointerDown={onCopyInvite}>
-                    {copyStatus === "copied" ? "已复制" : "复制"}
-                  </button>
-                  {copyStatus === "manual" ? <small>请手动复制链接。</small> : null}
-                </>
-              ) : (
-                <div className="homeworld-room-entry-choice">
-                  <section>
-                    <button className="primary-button" disabled={!canCreateRoom} type="button" onPointerDown={handleCreateRoom}>
-                      创建房间
+                {inviteLink ? (
+                  <>
+                    <span>好友邀请</span>
+                    <input aria-label="家园联机邀请链接" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
+                    <button className="secondary-button" type="button" onPointerDown={onCopyInvite}>
+                      {copyStatus === "copied" ? "已复制" : "复制"}
                     </button>
-                  </section>
-                  <section>
-                    <button className="secondary-button" type="button" onPointerDown={handleJoinRoom}>
-                      加入房间
-                    </button>
-                  </section>
-                </div>
-              )}
+                    {copyStatus === "manual" ? <small>请手动复制链接。</small> : null}
+                  </>
+                ) : (
+                  <div className="homeworld-room-entry-choice">
+                    <section>
+                      <button className="primary-button" disabled={!canCreateRoom} type="button" onPointerDown={handleCreateRoom}>
+                        创建房间
+                      </button>
+                    </section>
+                    <section>
+                      <button className="secondary-button" type="button" onPointerDown={handleJoinRoom}>
+                        加入房间
+                      </button>
+                    </section>
+                  </div>
+                )}
               </div>
-            )
+            </div>
           ) : null}
 
-          {joinRoomDialogOpen ? (
+          {joinRoomDialogOpen && !roomEntryHidden ? (
             <div className="homeworld-room-code-dialog" onPointerDown={(event) => event.stopPropagation()}>
               <div className="homeworld-room-code-card">
                 <input

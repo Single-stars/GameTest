@@ -114,16 +114,7 @@
 
 .homeworld-furniture.reachable {
   opacity: 1;
-  filter: drop-shadow(0 0 4px rgba(255, 253, 248, 0.54));
-}
-
-.homeworld-furniture.reachable::after {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: 10px;
-  box-shadow: 0 0 0 3px rgba(255, 253, 248, 0.78), 0 0 18px rgba(255, 253, 248, 0.52);
-  pointer-events: none;
+  filter: drop-shadow(0 0 7px rgba(255, 253, 248, 0.66));
 }
 
 .homeworld-object-image {
@@ -148,14 +139,14 @@
 .homeworld-exit-door.reachable .homeworld-object-image {
   filter:
     drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
-    drop-shadow(0 0 8px rgba(255, 253, 248, 0.82));
+    drop-shadow(0 0 12px rgba(255, 253, 248, 0.9));
 }
 
 .homeworld-furniture.reachable .homeworld-object-image {
   filter:
     saturate(0.92) contrast(1.03) sepia(0.08) hue-rotate(-3deg)
     drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
-    drop-shadow(0 0 8px rgba(255, 253, 248, 0.82));
+    drop-shadow(0 0 12px rgba(255, 253, 248, 0.9));
 }
 
 .homeworld-door-status-badge {
@@ -302,12 +293,27 @@
   pointer-events: none;
 }
 
-.homeworld-room-entry-panel {
+.homeworld-room-entry-shell {
   position: absolute;
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 9;
+  min-height: 42px;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  transition: transform 180ms ease;
+}
+
+.homeworld-room-entry-shell.collapsed {
+  transform: translate3d(0, calc(100% - 40px), 0);
+}
+
+.homeworld-room-entry-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
@@ -321,10 +327,15 @@
   font-size: 13px;
   font-weight: 820;
   box-shadow: 0 12px 22px rgba(72, 57, 43, 0.13);
+  opacity: 1;
+  transition: opacity 180ms ease;
+  pointer-events: auto;
 }
 
-.homeworld-room-entry-panel.collapsed {
-  display: none;
+.homeworld-room-entry-shell.collapsed .homeworld-room-entry-panel > :not(.homeworld-room-entry-toggle) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
 }
 
 .homeworld-room-entry-choice {
@@ -332,35 +343,39 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
 }
 
 .homeworld-room-entry-choice section {
-  display: grid;
-  gap: 0;
-  align-content: start;
-  border: 1px solid rgba(103, 70, 39, 0.14);
-  border-radius: 8px;
-  padding: 0;
-  background: rgba(255, 253, 248, 0.72);
+  display: contents;
 }
 
 .homeworld-room-entry-choice .primary-button,
 .homeworld-room-entry-choice .secondary-button {
+  width: 100%;
   height: 44px;
   min-width: 0;
+  display: grid;
+  place-items: center;
   border-color: rgba(24, 24, 24, 0.18);
   background: #fffdf8;
   color: #191919;
   font-size: 14px;
+  text-align: center;
   box-shadow: none;
+}
+
+.homeworld-room-entry-choice .secondary-button {
+  border-color: transparent;
 }
 
 .homeworld-room-entry-toggle {
   position: absolute;
-  right: 10px;
-  top: -36px;
-  width: 28px;
-  height: 28px;
+  left: 50%;
+  top: -40px;
+  z-index: 1;
+  width: 42px;
+  height: 32px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(103, 70, 39, 0.18);
@@ -369,21 +384,15 @@
   color: #5f3b20;
   font-size: 18px;
   font-weight: 900;
+  translate: -50% 0;
+  box-shadow: 0 10px 20px rgba(72, 57, 43, 0.14);
+  pointer-events: auto;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
 
 .homeworld-room-entry-toggle.collapsed {
-  position: absolute;
-  left: 50%;
-  right: auto;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  top: auto;
-  z-index: 9;
-  width: 42px;
-  height: 32px;
-  translate: -50% 0;
   background: rgba(255, 253, 248, 0.96);
   color: #191919;
-  box-shadow: 0 10px 20px rgba(72, 57, 43, 0.14);
 }
 
 .homeworld-room-entry-panel input,

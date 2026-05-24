@@ -13,15 +13,15 @@ import {
   resolveMultiplayerLevelSelection,
 } from "./level-select.ts";
 
-test("multiplayer level selection exposes every formal mini-game level", () => {
-  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 5);
+test("multiplayer level selection temporarily exposes only jump, up, and down levels", () => {
+  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 3);
   assert.deepEqual(
     MULTIPLAYER_LEVEL_GROUPS.map((group) => group.gameId),
-    ["doodle", "flappy", "knife", "square-jump", "fall-down"],
+    ["square-jump", "doodle", "fall-down"],
   );
   assert.equal(
     MULTIPLAYER_LEVEL_GROUPS.reduce((total, group) => total + group.levels.length, 0),
-    55,
+    33,
   );
   for (const group of MULTIPLAYER_LEVEL_GROUPS) {
     assert.equal(group.levels.filter((level) => level.kind === "advanced").length, 10);
@@ -33,15 +33,15 @@ test("multiplayer level selection resolves invalid ids to the default playable l
   const selection = resolveMultiplayerLevelSelection("missing-level");
 
   assert.equal(selection.levelId, DEFAULT_MULTIPLAYER_LEVEL_ID);
-  assert.equal(selection.gameId, "doodle");
+  assert.equal(selection.gameId, "square-jump");
 });
 
-test("multiplayer level selection can resolve single-player-origin games for two-player rules", () => {
+test("multiplayer level selection only resolves currently exposed two-player games", () => {
   const knife = resolveMultiplayerLevelSelection("knife-7");
   const squareJump = resolveMultiplayerLevelSelection("square-jump-final");
 
-  assert.equal(knife.gameId, "knife");
-  assert.equal(knife.levelId, "knife-7");
+  assert.equal(knife.gameId, "square-jump");
+  assert.equal(knife.levelId, DEFAULT_MULTIPLAYER_LEVEL_ID);
   assert.equal(squareJump.gameId, "square-jump");
   assert.equal(squareJump.levelId, "square-jump-final");
 });

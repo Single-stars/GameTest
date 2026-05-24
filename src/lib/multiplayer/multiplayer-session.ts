@@ -33,7 +33,7 @@ import type {
 import type {
   HomeworldPresence,
   HomeworldState,
-} from "@/features/homeworld/homeworld-state";
+} from "@/lib/homeworld/homeworld-state";
 import {
   resolveMultiplayerPlayMode,
   type MultiplayerLevelSelectPresence,

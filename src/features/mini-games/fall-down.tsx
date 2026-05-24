@@ -78,8 +78,13 @@ type FallDownRuntime = {
   inputDirection: -1 | 0 | 1;
   layersReached: number;
   currentPlatformId: number;
+  lastSafePlatformId: number;
   failures: number;
   respawnUntil: number;
+  respawnCameraStartY: number;
+  respawnCameraEndY: number;
+  respawnCameraStartedAt: number;
+  respawnCameraUntil: number;
   status: PrototypeStatus;
   reason: string;
   platforms: FallDownPlatform[];
@@ -125,6 +130,10 @@ function resolveFallDownPlayerAvatarView(view: FallDownRuntime): PlayerAvatarVie
 
 function resolveFallDownRemoteSkin(remotePlayer: FallDownRemotePlayer | null | undefined): PlayerAvatarSkin {
   return resolvePlayerAvatarSkin(remotePlayer?.skinId);
+}
+
+function resolveFallDownCoOpSkin(coOpSkinId: string | null | undefined): PlayerAvatarSkin | undefined {
+  return coOpSkinId ? resolvePlayerAvatarSkin(coOpSkinId) : undefined;
 }
 
 function resolveFallDownRemoteAvatarView(remoteState: FallDownRemoteState): PlayerAvatarView {
@@ -331,6 +340,23 @@ function fallPlatformX(platform: FallDownPlatform, time: number, stageWidth: num
   return clamp(platform.x + Math.sin(time * platform.speed + platform.phase) * platform.range, platform.width / 2 + 14, stageWidth - platform.width / 2 - 14);
 }
 
+function smoothFallDownRespawnCamera(startY: number, endY: number, progress: number) {
+  const t = clamp(progress, 0, 1);
+  const eased = t * t * (3 - 2 * t);
+  return startY + (endY - startY) * eased;
+}
+
+function resolveFallDownLastSafePlatform(current: FallDownRuntime) {
+  return current.platforms.find((platform) => platform.id === current.lastSafePlatformId && platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile" && !platform.broken) ?? current.platforms[0];
+}
+
+function resolveFallDownCoOpInputDirection(localDirection: FallDownRuntime["inputDirection"], coOpRole: "left" | "right" | null | undefined, coOpInputState: FallDownRemoteState | null | undefined): FallDownRuntime["inputDirection"] {
+  if (!coOpRole) return localDirection;
+  const localCoOpDirection = localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
+  const remoteCoOpDirection = coOpInputState?.direction === "left" ? -1 : coOpInputState?.direction === "right" ? 1 : 0;
+  return clamp(localCoOpDirection + remoteCoOpDirection, -1, 1) as FallDownRuntime["inputDirection"];
+}
+
 function recoverFallDownBaseFailure(
   current: FallDownRuntime,
   reason: string,
@@ -351,26 +377,18 @@ function recoverFallDownBaseFailure(
     return false;
   }
 
-  const platformY = current.cameraY + stageSize.height * 0.5;
-  const platformWidth = 132;
-  const platformX = clamp(current.playerX, platformWidth / 2 + 14, stageSize.width - platformWidth / 2 - 14);
-  const respawnPlatform: FallDownPlatform = {
-    id: -2000 - failures,
-    x: platformX,
-    y: platformY,
-    width: platformWidth,
-    kind: "normal",
-    shape: "flat",
-    range: 0,
-    speed: 0,
-    phase: 0,
-    steppedAt: null,
-    broken: false,
-  };
-  current.platforms.unshift(respawnPlatform);
+  const respawnPlatform = resolveFallDownLastSafePlatform(current);
   current.currentPlatformId = respawnPlatform.id;
-  current.playerX = respawnPlatform.x;
+  current.lastSafePlatformId = respawnPlatform.id;
+  current.playerX = fallPlatformX(respawnPlatform, current.time, stageSize.width);
   current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
+  const respawnCameraY = Math.max(0, current.playerY - stageSize.height * 0.5);
+  current.respawnCameraStartY = current.cameraY;
+  current.respawnCameraEndY = respawnCameraY;
+  current.respawnCameraStartedAt = current.time;
+  current.respawnCameraUntil = current.time + 0.38;
+  current.cameraY = smoothFallDownRespawnCamera(current.respawnCameraStartY, current.respawnCameraEndY, 0);
+  current.pressureWorldY = current.respawnCameraStartY - PLAYER_SIZE;
   current.respawnUntil = current.time + 1.1;
   current.status = "playing";
   return true;
@@ -391,8 +409,13 @@ function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stag
     inputDirection: 0,
     layersReached: 0,
     currentPlatformId: 0,
+    lastSafePlatformId: startPlatform.id,
     failures: 0,
     respawnUntil: 0,
+    respawnCameraStartY: 0,
+    respawnCameraEndY: 0,
+    respawnCameraStartedAt: 0,
+    respawnCameraUntil: 0,
     status: "playing",
     reason: "",
     platforms,
@@ -421,6 +444,9 @@ export function FallDownPrototype({
   remoteState,
   runSeed,
   unlimitedRespawn = false,
+  coOpInputState = null,
+  coOpRole = null,
+  coOpSkinId = null,
 }: {
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
@@ -434,6 +460,9 @@ export function FallDownPrototype({
   remoteState?: SelfGameState | null;
   runSeed: string;
   unlimitedRespawn?: boolean;
+  coOpInputState?: SelfGameState | null;
+  coOpRole?: "left" | "right" | null;
+  coOpSkinId?: string | null;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -612,9 +641,6 @@ export function FallDownPrototype({
       const current = runtimeRef.current;
       if ((mode === "base" || unlimitedRespawn) && recoverFallDownBaseFailure(current, reason, logicStageSize, unlimitedRespawn)) {
         triggerScreenShake();
-        if (fallDownInputDirectionRef.current !== 0) {
-          resumeFallDownInput(current, fallDownInputDirectionRef.current);
-        }
         syncView();
         return true;
       }
@@ -630,7 +656,7 @@ export function FallDownPrototype({
       syncView();
       return false;
     },
-    [logicStageSize, mode, resumeFallDownInput, syncView, triggerScreenShake, unlimitedRespawn],
+    [logicStageSize, mode, syncView, triggerScreenShake, unlimitedRespawn],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -643,10 +669,15 @@ export function FallDownPrototype({
     if (fallDownPointerIdRef.current !== event.pointerId) return;
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
-    const direction = chooseFallDownDirection(event);
+    const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseFallDownDirection(event);
     fallDownInputDirectionRef.current = direction;
+    if (current.time < current.respawnCameraUntil) {
+      current.inputDirection = 0;
+      current.vx = 0;
+      return;
+    }
     resumeFallDownInput(current, direction);
-  }, [resumeFallDownInput]);
+  }, [coOpRole, resumeFallDownInput]);
 
   const beginFallDownDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -709,6 +740,34 @@ export function FallDownPrototype({
         const previousTime = current.time;
         current.time += delta;
 
+        if (current.time < current.respawnCameraUntil) {
+          current.cameraY = smoothFallDownRespawnCamera(
+            current.respawnCameraStartY,
+            current.respawnCameraEndY,
+            (current.time - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
+          );
+          current.inputDirection = 0;
+          current.vx = 0;
+          current.vy = 0;
+          paintFallDownFrame(current);
+          syncRuntimeState(time);
+          frameId = requestAnimationFrame(tick);
+          return;
+        }
+
+        if (!current.started && previousTime < current.respawnCameraUntil) {
+          current.cameraY = current.respawnCameraEndY;
+          current.pressureWorldY = current.cameraY - PLAYER_SIZE;
+          if (fallDownInputDirectionRef.current !== 0) {
+            resumeFallDownInput(current, fallDownInputDirectionRef.current);
+          }
+          paintFallDownFrame(current);
+          syncRuntimeState(time, true);
+          syncView(time);
+          frameId = requestAnimationFrame(tick);
+          return;
+        }
+
         if (current.started) {
           let platformCarryX = 0;
           const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
@@ -726,12 +785,21 @@ export function FallDownPrototype({
           const previousY = current.playerY;
           const previousBottom = previousY + PLAYER_SIZE / 2;
           const previousPlayerX = current.playerX;
-          current.cameraY = advanceFallDownCamera({
+          const pressureCameraY = advanceFallDownCamera({
             cameraY: current.cameraY,
             delta,
             speed: topPressureSpeed,
           });
+          current.cameraY =
+            current.time < current.respawnCameraUntil
+              ? smoothFallDownRespawnCamera(
+                  current.respawnCameraStartY,
+                  current.respawnCameraEndY,
+                  (current.time - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
+                )
+              : pressureCameraY;
           current.pressureWorldY = current.cameraY - PLAYER_SIZE;
+          current.inputDirection = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, coOpInputState);
           current.vx = current.inputDirection * fallDownPlayerSpeed;
           current.vy = clamp(current.vy + 980 * delta, -220, 520);
           current.playerX = clamp(current.playerX + current.inputDirection * fallDownPlayerSpeed * delta + platformCarryX, PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
@@ -771,6 +839,7 @@ export function FallDownPrototype({
             current.vy = 0;
             current.currentPlatformId = platform.id;
             current.layersReached = Math.max(current.layersReached, platform.id);
+            if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
             eventChanged = true;
             if (platform.kind === "finish") {
@@ -832,7 +901,7 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
+  }, [coOpInputState, coOpRole, fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -953,6 +1022,7 @@ export function FallDownPrototype({
           <PlayerAvatar
             {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
+            skin={resolveFallDownCoOpSkin(coOpSkinId)}
             visualScale={1.18}
           />
         </div>

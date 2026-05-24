@@ -5,7 +5,6 @@ export function MultiplayerEntry({
   disabled,
 }: {
   onCreate: () => void;
-  onOpenJoin: () => void;
   disabled?: boolean;
 }) {
   return (

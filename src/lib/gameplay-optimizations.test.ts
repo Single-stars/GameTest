@@ -265,19 +265,22 @@ test("advanced completion header merges the round and challenge titles after set
 });
 
 test("mobile long press browser affordances are disabled across game surfaces", () => {
-  const pageSource = read(new URL("../app/page.tsx", import.meta.url));
+  const layoutSource = read(new URL("../app/layout.tsx", import.meta.url));
+  const guardSource = read(new URL("../features/input/mobile-long-press-guard.tsx", import.meta.url));
   const tokenCss = read(new URL("../app/styles/base-flow/tokens.css", import.meta.url));
   const overlayCss = read(new URL("../app/styles/overlays-responsive.css", import.meta.url));
 
-  assert.match(pageSource, /blockMobileLongPress/);
-  assert.match(pageSource, /matchMedia\("\(pointer: coarse\)"\)/);
-  assert.match(pageSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
-  assert.match(pageSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
-  assert.match(pageSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
-  assert.match(pageSource, /\.share-image-preview/);
+  assert.match(layoutSource, /<MobileLongPressGuard \/>/);
+  assert.match(guardSource, /blockMobileLongPress/);
+  assert.match(guardSource, /matchMedia\("\(pointer: coarse\)"\)/);
+  assert.match(guardSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
+  assert.match(guardSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(guardSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(guardSource, /\.share-image-preview/);
+  assert.match(guardSource, /\.multiplayer-level-room/);
   assert.match(tokenCss, /-webkit-user-drag: none;/);
   assert.match(tokenCss, /body \*:not\(input\):not\(textarea\):not\(\.share-image-preview\)/);
   assert.match(tokenCss, /\.share-image-preview\s*\{[\s\S]*-webkit-touch-callout:\s*default;/);
@@ -362,7 +365,7 @@ test("requested base and advanced mini-games trigger screen shake only on discre
   assert.match(doodleSource, /if \(status === "failed"\) triggerScreenShake\(\);/);
   assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?triggerScreenShake\(\);/);
   assert.match(fallDownSource, /if \(mode === "base" \|\| unlimitedRespawn\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return false;/);
-  assert.match(squareJumpSource, /if \(mode === "base" && recoverSquareJumpBaseMiss\(current, ".*?", stageSize\)\) \{[\s\S]*?triggerScreenShake\(\);/);
+  assert.match(squareJumpSource, /if \(canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss\(current, ".*?", stageSize, unlimitedRespawn\)\) \{[\s\S]*?triggerScreenShake\(\);/);
   assert.match(flappySource, /if \(mode === "base" && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
   assert.match(flappySource, /if \(status === "failed"\) triggerScreenShake\(\);/);
 });

@@ -29,7 +29,7 @@ import {
   type HomeworldPlayerPoseState,
   type HomeworldPresence,
   type HomeworldState,
-} from "@/features/homeworld/homeworld-state";
+} from "@/lib/homeworld/homeworld-state";
 import type { MiniGameId } from "@/lib/mini-games";
 import {
   DEFAULT_MULTIPLAYER_LEVEL_ID,
@@ -136,7 +136,7 @@ function MultiplayerPageContent() {
   const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
   const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
   const [avatarLabOpen, setAvatarLabOpen] = useState(false);
-  const [hostSelectedGameId, setHostSelectedGameId] = useState<MiniGameId>("doodle");
+  const [hostSelectedGameId, setHostSelectedGameId] = useState<MiniGameId>("square-jump");
   const [hostSelectedLevelId, setHostSelectedLevelId] = useState(DEFAULT_MULTIPLAYER_LEVEL_ID);
   const [hostPlayMode, setHostPlayMode] = useState<MultiplayerPlayMode>(DEFAULT_MULTIPLAYER_PLAY_MODE);
   const [levelSelectOpen, setLevelSelectOpen] = useState(false);
@@ -196,6 +196,10 @@ function MultiplayerPageContent() {
     const query = encodeURIComponent(snapshot.roomId);
     return `${window.location.origin}/multiplayer?homeworld=1&room=${query}`;
   }, [snapshot.roomId]);
+  const homeworldInviteLink = snapshot.role === "host" && snapshot.roomId && snapshot.status !== "idle"
+    ? homeworldRoomLink
+    : "";
+  const homeworldRoomEntryHidden = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);
   const activeRoomLink = isHomeworldRoute ? homeworldRoomLink : roomLink;
 
   const cleanupSession = useCallback(() => {
@@ -460,45 +464,6 @@ function MultiplayerPageContent() {
     latestHomeworldPresenceRef.current = nextPresence;
     sessionRef.current?.reportHomeworldPresence(nextPresence);
   }, [selectedSkin]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.matchMedia("(pointer: coarse)").matches) return;
-
-    const mobileLongPressTouchOptions = { capture: true, passive: false } as const;
-    const mobileLongPressBlockedSurface = ".homeworld-stage, .multiplayer-game-shell, .play-screen, .prototype-stage, .game-area";
-    const mobileLongPressAllowedSurface = "button, a, input, textarea, select, [contenteditable='true'], [role='button']";
-
-    const getEventElement = (target: EventTarget | null) => (target instanceof Element ? target : null);
-    const shouldBlockEarlyMobileLongPress = (target: EventTarget | null) => {
-      const element = getEventElement(target);
-      return !element || Boolean(element.closest(mobileLongPressBlockedSurface));
-    };
-
-    const shouldAllowMobileLongPress = (target: EventTarget | null) => {
-      const element = getEventElement(target);
-      return Boolean(element?.closest(mobileLongPressAllowedSurface));
-    };
-
-    const blockMobileLongPress = (event: Event) => {
-      if (shouldAllowMobileLongPress(event.target)) return;
-      if (event.type === "touchstart" && !shouldBlockEarlyMobileLongPress(event.target)) return;
-      if (!event.cancelable) return;
-      event.preventDefault();
-    };
-
-    document.addEventListener("contextmenu", blockMobileLongPress, { capture: true });
-    document.addEventListener("selectstart", blockMobileLongPress, { capture: true });
-    document.addEventListener("dragstart", blockMobileLongPress, { capture: true });
-    document.addEventListener("touchstart", blockMobileLongPress, mobileLongPressTouchOptions);
-
-    return () => {
-      document.removeEventListener("contextmenu", blockMobileLongPress, { capture: true });
-      document.removeEventListener("selectstart", blockMobileLongPress, { capture: true });
-      document.removeEventListener("dragstart", blockMobileLongPress, { capture: true });
-      document.removeEventListener("touchstart", blockMobileLongPress, mobileLongPressTouchOptions);
-    };
-  }, []);
 
   useEffect(() => {
     if (!skinHydrated) return;
@@ -768,9 +733,12 @@ function MultiplayerPageContent() {
                   opponentStateSubscription={subscribeOpponentState}
                   readOpponentStateMetrics={readOpponentStateMetrics}
                   opponentState={snapshot.opponentState}
+                  playMode={activePlayMode}
                   reportResult={reportResult}
                   reportState={reportState}
                   runSeed={runSeed}
+                  selfRole={snapshot.role ?? "host"}
+                  selfSkinId={selectedSkin}
                 />
               ) : null}
             </MultiplayerGameShell>
@@ -805,8 +773,9 @@ function MultiplayerPageContent() {
               homeOwnerName={homeworldOwnerName}
               homeworldState={homeworldStateForScreen}
               initialPlayerPose={homeworldReturnPose}
-              inviteLink={homeworldMode === "owner" ? homeworldRoomLink : ""}
+              inviteLink={homeworldInviteLink}
               mode={homeworldMode}
+              roomEntryHidden={homeworldRoomEntryHidden}
               onCopyInvite={handleCopyLink}
               onCreateRoom={handleCreate}
               onJoinRoom={handleJoinHomeworldRoom}
@@ -910,7 +879,6 @@ function MultiplayerPageContent() {
           <section className="multiplayer-entry-grid" style={{ marginTop: 14 }}>
             <MultiplayerEntry
               onCreate={handleCreate}
-              onOpenJoin={() => undefined}
             />
             <JoinRoom defaultRoomCode={roomParam} onJoin={handleJoin} />
           </section>
@@ -978,9 +946,12 @@ function MultiplayerPageContent() {
                 opponentStateSubscription={subscribeOpponentState}
                 readOpponentStateMetrics={readOpponentStateMetrics}
                 opponentState={snapshot.opponentState}
+                playMode={activePlayMode}
                 reportResult={reportResult}
                 reportState={reportState}
                 runSeed={runSeed}
+                selfRole={snapshot.role ?? "host"}
+                selfSkinId={selectedSkin}
               />
             ) : null}
           </MultiplayerGameShell>

@@ -72,8 +72,14 @@ type DoodleFrame = {
   playerTurns: number;
   playerDirection: PlayerAvatarDirection;
   jumpTurnAvailable: boolean;
+  lastSafePlatformId: number | null;
   failures: number;
   invincibleUntil: number;
+  respawnAwaitingInput: boolean;
+  respawnCameraStartY: number;
+  respawnCameraEndY: number;
+  respawnCameraStartedAt: number;
+  respawnCameraUntil: number;
   status: PrototypeStatus;
   reason: string;
 };
@@ -184,11 +190,34 @@ function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>, stageWid
     playerTurns: 0,
     playerDirection: "none",
     jumpTurnAvailable: false,
+    lastSafePlatformId: world.platforms[0]?.id ?? null,
     failures: 0,
     invincibleUntil: 0,
+    respawnAwaitingInput: false,
+    respawnCameraStartY: 0,
+    respawnCameraEndY: 0,
+    respawnCameraStartedAt: 0,
+    respawnCameraUntil: 0,
     status: "playing",
     reason: "",
   };
+}
+
+function smoothDoodleRespawnCamera(startY: number, endY: number, progress: number) {
+  const t = clamp(progress, 0, 1);
+  const eased = t * t * (3 - 2 * t);
+  return startY + (endY - startY) * eased;
+}
+
+function resolveDoodleLastSafePlatform(frame: DoodleFrame) {
+  return frame.platforms.find((platform) => platform.id === frame.lastSafePlatformId && !platform.risk && !platform.finish) ?? frame.platforms.find((platform) => platform.start) ?? frame.platforms[0];
+}
+
+function resolveDoodleCoOpInputDirection(localDirection: number, coOpRole: "left" | "right" | null | undefined, coOpInputState: DoodleRemoteState | null | undefined) {
+  if (!coOpRole) return localDirection;
+  const localCoOpDirection = localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
+  const remoteCoOpDirection = coOpInputState?.direction === "left" ? -1 : coOpInputState?.direction === "right" ? 1 : 0;
+  return clamp(localCoOpDirection + remoteCoOpDirection, -1, 1);
 }
 
 function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number, stageHeight: number): DoodleViewFrame {
@@ -254,6 +283,10 @@ function resolveDoodleRemoteSkin(remotePlayer: DoodleRemotePlayer | null | undef
   return resolvePlayerAvatarSkin(remotePlayer?.skinId);
 }
 
+function resolveDoodleCoOpSkin(coOpSkinId: string | null | undefined): PlayerAvatarSkin | undefined {
+  return coOpSkinId ? resolvePlayerAvatarSkin(coOpSkinId) : undefined;
+}
+
 function resolveDoodleRemoteAvatarView(remoteState: DoodleRemoteState): PlayerAvatarView {
   if (remoteState.status === "failed") return { action: "hit", expression: "hurt" };
   if (remoteState.status === "finished") return { action: "celebrate", expression: "happy", effect: "sparkles" };
@@ -271,6 +304,9 @@ export function DoodleJumpPrototype({
   runSeed,
   logicStageSizeOverride,
   unlimitedRespawn = false,
+  coOpInputState = null,
+  coOpRole = null,
+  coOpSkinId = null,
   onBackToSelect,
   onComplete,
   onRestart,
@@ -285,6 +321,9 @@ export function DoodleJumpPrototype({
   runSeed: string;
   logicStageSizeOverride?: MiniGameStageSize;
   unlimitedRespawn?: boolean;
+  coOpInputState?: DoodleRemoteState | null;
+  coOpRole?: "left" | "right" | null;
+  coOpSkinId?: string | null;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
@@ -394,6 +433,7 @@ export function DoodleJumpPrototype({
     const timer = window.setTimeout(() => {
       const current = runtimeRef.current;
       if (current.started || current.status !== "playing") return;
+      if (current.respawnAwaitingInput) return;
       current.started = true;
       current.playerVy = DOODLE_JUMP_VELOCITY;
       current.jumpTurnAvailable = true;
@@ -406,6 +446,8 @@ export function DoodleJumpPrototype({
   const startDoodle = useCallback(() => {
     const current = runtimeRef.current;
     if (current.started || current.status !== "playing") return;
+    if (current.respawnAwaitingInput && current.time < current.respawnCameraUntil) return;
+    current.respawnAwaitingInput = false;
     current.started = true;
     current.playerVy = DOODLE_JUMP_VELOCITY;
     current.jumpTurnAvailable = true;
@@ -422,17 +464,19 @@ export function DoodleJumpPrototype({
     event.preventDefault();
     if (inputPointerIdRef.current !== event.pointerId) return;
     const direction = chooseDoodleDirection(event);
-    inputDirectionRef.current = direction;
-  }, []);
+    if (coOpRole) inputDirectionRef.current = coOpRole === "left" ? -1 : 1;
+    else inputDirectionRef.current = direction;
+  }, [coOpRole]);
 
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     inputPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     const direction = chooseDoodleDirection(event);
-    inputDirectionRef.current = direction;
+    if (coOpRole) inputDirectionRef.current = coOpRole === "left" ? -1 : 1;
+    else inputDirectionRef.current = direction;
     startDoodle();
-  }, [startDoodle]);
+  }, [coOpRole, startDoodle]);
 
   const stopDoodleDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
@@ -516,6 +560,15 @@ export function DoodleJumpPrototype({
         return;
       }
       if (!current.started) {
+        if (current.respawnAwaitingInput && current.time < current.respawnCameraUntil) {
+          current.time += delta;
+          current.cameraY = smoothDoodleRespawnCamera(
+            current.respawnCameraStartY,
+            current.respawnCameraEndY,
+            (current.time - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
+          );
+          if (current.time >= current.respawnCameraUntil) current.cameraY = current.respawnCameraEndY;
+        }
         paintDoodleFrame(current);
         syncDoodleRuntimeState(time);
         frameId = requestAnimationFrame(tick);
@@ -523,7 +576,7 @@ export function DoodleJumpPrototype({
       }
 
       const nextTime = current.time + delta;
-      const inputDirection = inputDirectionRef.current;
+      const inputDirection = resolveDoodleCoOpInputDirection(inputDirectionRef.current, coOpRole, coOpInputState);
       current.playerDirection = resolveDoodlePlayerDirection(inputDirection);
       current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
@@ -558,6 +611,7 @@ export function DoodleJumpPrototype({
             nextVy = getDoodleBounceVelocity({ risk: platform.risk, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
+            if (!platform.risk && !platform.finish) current.lastSafePlatformId = platform.id;
             if (platform.risk) riskHit += 1;
             jumpTurnAvailable = true;
             eventChanged = true;
@@ -566,7 +620,15 @@ export function DoodleJumpPrototype({
         }
       }
 
-      const cameraY = Math.max(current.cameraY, nextY - logicStageHeight * 0.45);
+      const naturalCameraY = Math.max(current.cameraY, nextY - logicStageHeight * 0.45);
+      const cameraY =
+        nextTime < current.respawnCameraUntil
+          ? smoothDoodleRespawnCamera(
+              current.respawnCameraStartY,
+              current.respawnCameraEndY,
+              (nextTime - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
+            )
+          : naturalCameraY;
       if (status === "playing" && riskHit < riskTotal) {
         let missedRisk = false;
         for (const platform of current.platforms) {
@@ -626,26 +688,20 @@ export function DoodleJumpPrototype({
         const failures = current.failures + 1;
         if (unlimitedRespawn || failures <= BASE_FAILURE_LIMIT) {
           triggerScreenShake();
-          const respawnY = cameraY + logicStageHeight * 0.34;
-          const respawnX = clamp(nextX, 70, logicStageWidth - 70);
-          const respawnPlatform: DoodlePlatform = {
-            id: -1000 - failures,
-            x: respawnX,
-            y: respawnY - PLAYER_SIZE / 2,
-            width: 116,
-            start: false,
-            moving: false,
-            risk: false,
-            phase: 0,
-            range: 0,
-            speed: 0,
-            used: false,
-          };
-          current.playerX = respawnX;
-          current.playerY = respawnY;
-          current.playerVy = DOODLE_JUMP_VELOCITY;
-          current.jumpTurnAvailable = true;
-          current.platforms.unshift(respawnPlatform);
+          const safeRespawnPlatform = resolveDoodleLastSafePlatform(current);
+          safeRespawnPlatform.used = false;
+          current.playerX = movingPlatformX(safeRespawnPlatform, nextTime, logicStageWidth);
+          current.playerY = safeRespawnPlatform.y + PLAYER_SIZE / 2;
+          current.playerVy = 0;
+          current.started = false;
+          current.jumpTurnAvailable = false;
+          current.respawnAwaitingInput = true;
+          const respawnCameraY = Math.max(0, current.playerY - logicStageHeight * 0.45);
+          current.respawnCameraStartY = current.cameraY;
+          current.respawnCameraEndY = respawnCameraY;
+          current.respawnCameraStartedAt = nextTime;
+          current.respawnCameraUntil = nextTime + 0.38;
+          current.cameraY = smoothDoodleRespawnCamera(current.respawnCameraStartY, current.respawnCameraEndY, 0);
           current.failures = failures;
           current.invincibleUntil = nextTime + 1.1;
           current.status = "playing";
@@ -678,7 +734,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, world.targetHeight]);
+  }, [coOpInputState, coOpRole, logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
   const worldLayerStyle = {
@@ -781,6 +837,7 @@ export function DoodleJumpPrototype({
               direction={view.playerDirection}
               gravity="normal"
               rotationTurns={view.playerTurns}
+              skin={resolveDoodleCoOpSkin(coOpSkinId)}
               visualScale={1.22}
             />
           </div>

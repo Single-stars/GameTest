@@ -118,8 +118,6 @@ src/lib/
 4. 分享图包含段位、维度表现和二维码。
 5. `layout.tsx` 使用 `https://208848.xyz/` 与 `public/share-card.png` 作为社交卡片 metadata。
 
-`public/0b0c1b49b51d7b67b10daa0aedd35f0e.txt` 暂时保留。它没有被代码引用，但形态像站点验证文件；删除前必须确认不再用于域名、部署平台或搜索引擎验证。
-
 ## 已删除且不应恢复
 
 ```text

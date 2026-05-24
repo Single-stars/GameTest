@@ -358,17 +358,22 @@ test("homeworld furniture hitboxes follow visual object width", () => {
 
 test("homeworld unreachable furniture stays solid and only reachable furniture is highlighted", () => {
   assert.doesNotMatch(homeworldCssSource, /\.homeworld-furniture\.out-of-reach\s*\{[\s\S]*?opacity:\s*0\.[0-9]/);
-  assert.match(homeworldCssSource, /\.homeworld-furniture\.reachable::after\s*\{/);
-  assert.match(homeworldCssSource, /\.homeworld-furniture\.reachable::after\s*\{[\s\S]*?box-shadow:\s*0 0 0 3px rgba\(255,\s*253,\s*248,\s*0\.78\)/);
-  assert.match(homeworldCssSource, /\.homeworld-furniture\.reachable \.homeworld-object-image[\s\S]*?drop-shadow\(0 0 8px rgba\(255,\s*253,\s*248,\s*0\.82\)\)/);
+  assert.doesNotMatch(homeworldCssSource, /\.homeworld-furniture\.reachable::after/);
+  assert.match(homeworldCssSource, /\.homeworld-furniture\.reachable \.homeworld-object-image[\s\S]*?drop-shadow\(0 0 12px rgba\(255,\s*253,\s*248,\s*0\.9\)\)/);
   assert.doesNotMatch(homeworldScreenSource, /homeworld-furniture-label/);
   assert.doesNotMatch(homeworldCssSource, /\.homeworld-furniture-label/);
 });
 
 test("homeworld room entry uses compact side-by-side actions and a join-code dialog", () => {
-  assert.match(homeworldScreenSource, /roomEntryPanelCollapsed/);
-  assert.match(homeworldScreenSource, /homeworld-room-entry-toggle collapsed/);
+  assert.match(homeworldScreenSource, /roomEntryHidden\?: boolean;/);
+  assert.match(homeworldScreenSource, /const \[roomEntryPanelCollapsed, setRoomEntryPanelCollapsed\] = useState\(true\)/);
+  assert.match(homeworldScreenSource, /if \(roomEntryHidden\) return false;/);
+  assert.match(homeworldScreenSource, /homeworld-room-entry-shell/);
+  assert.match(homeworldScreenSource, /className=\{`homeworld-room-entry-shell\$\{roomEntryPanelCollapsed \? " collapsed" : ""\}`\}/);
+  assert.match(homeworldScreenSource, /className="homeworld-room-entry-panel"/);
+  assert.match(homeworldScreenSource, /className=\{`homeworld-room-entry-toggle\$\{roomEntryPanelCollapsed \? " collapsed" : ""\}`\}/);
   assert.match(homeworldScreenSource, /setRoomEntryPanelCollapsed\(\(current\) => !current\)/);
+  assert.match(homeworldScreenSource, /setRoomEntryPanelCollapsed\(true\);[\s\S]*onOpenMultiplayerEntry\?\.\(\)/);
   assert.match(homeworldScreenSource, /setJoinRoomDialogOpen\(false\);[\s\S]*setRoomEntryPanelCollapsed\(true\);[\s\S]*onJoinRoom\?\.\(roomCode\)/);
   assert.match(homeworldScreenSource, /joinRoomDialogOpen/);
   assert.match(homeworldScreenSource, /setJoinRoomDialogOpen\(true\)/);
@@ -378,9 +383,27 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.doesNotMatch(homeworldScreenSource, /<strong>加入房间<\/strong>/);
   assert.doesNotMatch(homeworldScreenSource, /<input[\s\S]*placeholder="输入房间码"[\s\S]*<button className="secondary-button" disabled=\{!joinRoomCode\.trim\(\)\}/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(homeworldCssSource, /\.homeworld-room-entry-panel\.collapsed\s*\{/);
-  assert.match(homeworldCssSource, /\.homeworld-room-entry-toggle\.collapsed\s*\{/);
-  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*height: 44px[\s\S]*background:\s*#fffdf8/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-shell\s*\{/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-shell\.collapsed\s*\{/);
+  assert.match(homeworldCssSource, /transform:\s*translate3d\(0,\s*calc\(100% - 40px\),\s*0\)/);
+  assert.doesNotMatch(homeworldCssSource, /\.homeworld-room-entry-panel\.collapsed\s*\{[\s\S]*opacity:\s*0/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-shell\.collapsed \.homeworld-room-entry-panel > :not\(\.homeworld-room-entry-toggle\)\s*\{[\s\S]*opacity:\s*0/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-toggle\s*\{[\s\S]*left:\s*50%[\s\S]*top:\s*-40px/);
+  assert.doesNotMatch(homeworldCssSource, /\.homeworld-room-entry-toggle\s*\{[\s\S]*bottom:\s*0/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice section\s*\{[\s\S]*display:\s*contents/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.secondary-button\s*\{[\s\S]*border-color:\s*transparent/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*width:\s*100%[\s\S]*height: 44px[\s\S]*background:\s*#fffdf8/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*display:\s*grid[\s\S]*place-items:\s*center/);
+});
+
+test("homeworld presence sends action changes immediately while keeping movement positions throttled", () => {
+  assert.match(homeworldScreenSource, /const lastUrgentPresenceSignatureRef = useRef\(""\);/);
+  assert.match(homeworldScreenSource, /const nextPresence = createHomeworldPresence/);
+  assert.match(homeworldScreenSource, /const urgentPresenceSignature = `\$\{nextPresence\.action\}:\$\{nextPresence\.direction\}/);
+  assert.doesNotMatch(homeworldScreenSource, /urgentPresenceSignature = `[^`]*\$\{nextPresence\.x\}/);
+  assert.match(homeworldScreenSource, /const urgentPresenceChanged = urgentPresenceSignature !== lastUrgentPresenceSignatureRef\.current;/);
+  assert.match(homeworldScreenSource, /!urgentPresenceChanged && currentTime - lastPresenceSentRef\.current < PRESENCE_SYNC_MS/);
+  assert.match(homeworldScreenSource, /lastUrgentPresenceSignatureRef\.current = urgentPresenceSignature;/);
 });
 
 test("homeworld floor transfer animates between floors before landing", () => {

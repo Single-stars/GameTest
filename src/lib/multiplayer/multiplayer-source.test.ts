@@ -160,6 +160,8 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /hostHomeworldParam !== "1"/);
   assert.match(pageSource, /homeworldEntryVisible/);
   assert.match(pageSource, /homeworldRoomLink/);
+  assert.match(pageSource, /const homeworldInviteLink = snapshot\.role === "host" && snapshot\.roomId && snapshot\.status !== "idle"\s*\?\s*homeworldRoomLink\s*:\s*"";/);
+  assert.match(pageSource, /const homeworldRoomEntryHidden = snapshot\.status === "connected" && Boolean\(snapshot\.opponentPlayer\);/);
   assert.match(pageSource, /const handleOpenHomeworldMultiplayerEntry = useCallback/);
   assert.match(pageSource, /const handleJoinHomeworldRoom = useCallback/);
   assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
@@ -176,12 +178,20 @@ test("homeworld multiplayer enters the host home directly through the existing r
 
 test("homeworld presence and round reset preserve profile sync after exercise rounds", () => {
   const sessionSource = readSource("./multiplayer-session.ts");
-  const stateSource = readSource("../../features/homeworld/homeworld-state.ts");
+  const stateSource = readSource("../homeworld/homeworld-state.ts");
+  const featureStateSource = readSource("../../features/homeworld/homeworld-state.ts");
+  const typesSource = readSource("./types.ts");
+  const messagesSource = readSource("./messages.ts");
   const resetRoundSource = sessionSource.slice(
     sessionSource.indexOf("private resetRound()"),
     sessionSource.indexOf("private resetHostWaitingState()"),
   );
 
+  assert.doesNotMatch(typesSource, /@\/features\/homeworld\/homeworld-state/);
+  assert.doesNotMatch(messagesSource, /features\/homeworld\/homeworld-state/);
+  assert.match(typesSource, /@\/lib\/homeworld\/homeworld-state/);
+  assert.match(messagesSource, /\.\.\/homeworld\/homeworld-state\.ts/);
+  assert.match(featureStateSource, /\.\.\/\.\.\/lib\/homeworld\/homeworld-state\.ts/);
   assert.match(stateSource, /displayName\?: string;/);
   assert.match(stateSource, /displayName: sanitizeHomeworldDisplayName\(input\.displayName\)/);
   assert.doesNotMatch(resetRoundSource, /selfHomeworldPresence:\s*null/);
@@ -354,7 +364,10 @@ test("homeworld multiplayer preserves selected skin before movement and returns 
   assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldPresence\(nextPresence\)/);
   assert.match(pageSource, /sessionRef\.current\?\.reportLevelSelectPresence\(\{[\s\S]{0,260}skinId: skin/);
   assert.match(homeworldSource, /remoteSkin\?: PlayerAvatarSkin/);
+  assert.match(homeworldSource, /roomEntryHidden\?: boolean;/);
   assert.match(homeworldSource, /resolvePlayerAvatarSkin\(remotePresence\?\.skinId \?\? remoteSkin\)/);
+  assert.match(pageSource, /inviteLink=\{homeworldInviteLink\}/);
+  assert.match(pageSource, /roomEntryHidden=\{homeworldRoomEntryHidden\}/);
   assert.match(pageSource, /remoteSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
   assert.match(sessionSource, /private settleForfeit/);
   assert.match(sessionSource, /status:\s*"finished"/);
@@ -368,26 +381,34 @@ test("homeworld reachable furniture uses a gray bold edge highlight", () => {
   const reachableImageRule = cssRule(cssSource, ".homeworld-furniture.reachable .homeworld-object-image");
   const reachableDoorRule = cssRule(cssSource, ".homeworld-exit-door.reachable .homeworld-object-image");
 
-  assert.match(cssSource, /\.homeworld-furniture\.reachable::after\s*\{/);
-  assert.match(cssSource, /\.homeworld-furniture\.reachable::after[\s\S]*0 0 0 3px rgba\(255,\s*253,\s*248,\s*0\.78\)/);
-  assert.match(reachableImageRule, /drop-shadow\(0 0 8px rgba\(255,\s*253,\s*248,\s*0\.82\)\)/);
-  assert.match(reachableDoorRule, /drop-shadow\(0 0 8px rgba\(255,\s*253,\s*248,\s*0\.82\)\)/);
+  assert.doesNotMatch(cssSource, /\.homeworld-furniture\.reachable::after/);
+  assert.match(reachableImageRule, /drop-shadow\(0 0 12px rgba\(255,\s*253,\s*248,\s*0\.9\)\)/);
+  assert.match(reachableDoorRule, /drop-shadow\(0 0 12px rgba\(255,\s*253,\s*248,\s*0\.9\)\)/);
   assert.doesNotMatch(reachableRule, /255,\s*238,\s*150|158,\s*214,\s*171/);
 });
 
 test("multiplayer gameplay disables mobile long press browser affordances", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const layoutSource = readSource("../../app/layout.tsx");
+  const guardSource = readSource("../../features/input/mobile-long-press-guard.tsx");
 
-  assert.match(pageSource, /blockMobileLongPress/);
-  assert.match(pageSource, /matchMedia\("\(pointer: coarse\)"\)/);
-  assert.match(pageSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
-  assert.match(pageSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
-  assert.match(pageSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
-  assert.match(pageSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
-  assert.match(pageSource, /\.multiplayer-game-shell, \.play-screen, \.prototype-stage, \.game-area/);
-  assert.match(pageSource, /button, a, input, textarea, select, \[contenteditable='true'\], \[role='button'\]/);
+  assert.match(layoutSource, /<MobileLongPressGuard \/>/);
+  assert.doesNotMatch(pageSource, /blockMobileLongPress/);
+  assert.match(guardSource, /blockMobileLongPress/);
+  assert.match(guardSource, /matchMedia\("\(pointer: coarse\)"\)/);
+  assert.match(guardSource, /const mobileLongPressTouchOptions = \{ capture: true, passive: false \} as const;/);
+  assert.match(guardSource, /document\.addEventListener\("contextmenu", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /document\.addEventListener\("selectstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /document\.addEventListener\("dragstart", blockMobileLongPress, \{ capture: true \}\);/);
+  assert.match(guardSource, /document\.addEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(guardSource, /document\.removeEventListener\("touchstart", blockMobileLongPress, mobileLongPressTouchOptions\);/);
+  assert.match(guardSource, /\.multiplayer-level-room/);
+  assert.match(guardSource, /\.multiplayer-game-shell/);
+  assert.match(guardSource, /\.play-screen/);
+  assert.match(guardSource, /\.prototype-stage/);
+  assert.match(guardSource, /\.game-area/);
+  assert.match(guardSource, /button/);
+  assert.match(guardSource, /\[role='button'\]/);
 });
 
 test("multiplayer avatars use the shared player avatar skin resolver", () => {
@@ -474,7 +495,8 @@ test("multiplayer host can choose the battle level before match start", () => {
   assert.match(pageSource, /<select/);
   assert.match(pageSource, /session\.startMatch\(\{/);
   assert.match(pageSource, /levelId: hostSelectedLevelId/);
-  assert.match(levelSelectSource, /MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup\[\] = MINI_GAME_DEFINITIONS\.map/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down"\]/);
+  assert.match(levelSelectSource, /MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup\[\] = MULTIPLAYER_ENABLED_GAME_IDS\.map/);
   assert.doesNotMatch(pageSource, /MULTIPLAYER_LEVEL_OPTIONS|fall-down-final|flappy-7/);
 });
 
@@ -493,12 +515,60 @@ test("multiplayer runtime supports fall-down with synced state and unlimited res
   assert.match(fallDownSource, /unlimitedRespawn = false/);
 });
 
-test("multiplayer runtime supports flappy levels with synced state and unlimited respawn", () => {
+test("multiplayer runtime passes play mode into shared co-op mini-game controls", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
+
+  assert.match(pageSource, /playMode=\{activePlayMode\}/);
+  assert.match(pageSource, /selfRole=\{snapshot\.role \?\? "host"\}/);
+  assert.match(runtimeSource, /playMode: MultiplayerPlayMode;/);
+  assert.match(runtimeSource, /selfRole: SessionRole;/);
+  assert.match(runtimeSource, /const coOpMode = playMode === "co-op";/);
+  assert.match(runtimeSource, /function resolveCoOpHostLeft\(runSeed: string\)/);
+  assert.match(runtimeSource, /function resolveCoOpRole\(selfRole: SessionRole, hostLeft: boolean\)/);
+  assert.match(runtimeSource, /function resolveSquareJumpCoOpRole\(selfRole: SessionRole, hostFirst: boolean\)/);
+  assert.match(runtimeSource, /resolveCoOpHostLeft\(runSeed\)/);
+  assert.match(runtimeSource, /resolveSquareJumpHostFirst\(runSeed\)/);
+  assert.doesNotMatch(runtimeSource, /selfRole === "host" \? "left" : "right"/);
+  assert.doesNotMatch(runtimeSource, /selfRole === "host" \? "first" : "second"/);
+  assert.match(runtimeSource, /coOpRole=\{coOpRole\}/);
+  assert.match(runtimeSource, /coOpInputState=\{coOpMode \? opponentState : null\}/);
+  assert.match(doodleSource, /coOpRole\?: "left" \| "right" \| null;/);
+  assert.match(doodleSource, /resolveDoodleCoOpInputDirection/);
+  assert.match(fallDownSource, /coOpRole\?: "left" \| "right" \| null;/);
+  assert.match(fallDownSource, /resolveFallDownCoOpInputDirection/);
+  assert.match(squareJumpSource, /coOpRole\?: "first" \| "second" \| null;/);
+  assert.match(squareJumpSource, /canControlSquareJumpCoOpTurn/);
+});
+
+test("co-op multiplayer uses one shared avatar skin selected from both players by seed", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
+
+  assert.match(runtimeSource, /function resolveCoOpSharedSkinId\(/);
+  assert.match(runtimeSource, /opponentPlayer: \{ skinId\?: string \} \| null/);
+  assert.match(runtimeSource, /const coOpSharedSkinId = coOpMode \? resolveCoOpSharedSkinId/);
+  assert.match(runtimeSource, /coOpSkinId=\{coOpSharedSkinId\}/);
+  assert.match(doodleSource, /coOpSkinId\?: string \| null;/);
+  assert.match(doodleSource, /skin=\{resolveDoodleCoOpSkin\(coOpSkinId\)\}/);
+  assert.match(fallDownSource, /coOpSkinId\?: string \| null;/);
+  assert.match(fallDownSource, /skin=\{resolveFallDownCoOpSkin\(coOpSkinId\)\}/);
+  assert.match(squareJumpSource, /coOpSkinId\?: string \| null;/);
+  assert.match(squareJumpSource, /skin=\{resolveSquareJumpCoOpSkin\(coOpSkinId\)\}/);
+});
+
+test("multiplayer runtime keeps flappy sync support while level select gates exposed games", () => {
   const levelSelectSource = readSource("./level-select.ts");
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const flappySource = readSource("../../features/mini-games/flappy.tsx");
 
-  assert.match(levelSelectSource, /MINI_GAME_DEFINITIONS\.map/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down"\]/);
+  assert.doesNotMatch(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \[[^\]]*"flappy"/);
   assert.match(runtimeSource, /FlappyPrototype/);
   assert.match(runtimeSource, /level\.gameId === "flappy"/);
   assert.match(runtimeSource, /handleFlappyRuntimeState/);

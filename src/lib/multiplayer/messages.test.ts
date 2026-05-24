@@ -136,8 +136,8 @@ test("level-select room messages carry independent presence and shared selected 
   })));
   const state = parseNetMessage(serializeNetMessage(createLevelSelectStateMessage({
     confirmedSlots: { level: true, mode: true, type: true },
-    gameId: "knife",
-    levelId: "knife-7",
+    gameId: "fall-down",
+    levelId: "fall-down-7",
     playMode: "versus",
     slotTones: { level: "green", mode: "red", type: "green" },
   })));
@@ -156,7 +156,7 @@ test("level-select room messages carry independent presence and shared selected 
   assert.ok(state);
   assert.equal(state.kind, "level-select-state");
   if (state.kind === "level-select-state") {
-    assert.equal(state.selection.levelId, "knife-7");
+    assert.equal(state.selection.levelId, "fall-down-7");
     assert.equal(state.selection.playMode, "versus");
     assert.equal(state.selection.slotTones.mode, "red");
   }

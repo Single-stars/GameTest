@@ -7,10 +7,11 @@ import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-ga
 import { FallDownPrototype, type FallDownRuntimeState } from "@/features/mini-games/fall-down";
 import { FlappyPrototype, type FlappyRuntimeState } from "@/features/mini-games/flappy";
 import { KnifeHitPrototype } from "@/features/mini-games/knife";
-import { SquareJumpPrototype } from "@/features/mini-games/square-jump";
+import { SquareJumpPrototype, type SquareJumpStateSnapshot } from "@/features/mini-games/square-jump";
 import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
-import type { GameResult, SelfGameState } from "@/lib/multiplayer/types";
+import type { GameResult, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
+import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
 
 const MULTIPLAYER_STATE_SYNC_MS = 33;
 
@@ -35,6 +36,12 @@ function resolveFallDownScore(runtime: FallDownRuntimeState) {
 function resolveFlappyScore(runtime: FlappyRuntimeState) {
   const progressScore = runtime.progress * 1080;
   const failurePenalty = runtime.failures * 30;
+  return Math.max(0, Math.round(progressScore - failurePenalty));
+}
+
+function resolveSquareJumpScore(runtime: SquareJumpStateSnapshot) {
+  const progressScore = runtime.progress * 1040;
+  const failurePenalty = runtime.failures * 32;
   return Math.max(0, Math.round(progressScore - failurePenalty));
 }
 
@@ -78,10 +85,54 @@ type MultiplayerMatchRuntimeProps = {
     lastAcceptedAt: number | null;
   }) | null;
   opponentState: SelfGameState | null;
+  playMode: MultiplayerPlayMode;
   reportResult: (result: GameResult) => void;
   reportState: (state: SelfGameState) => void;
   runSeed: string;
+  selfRole: SessionRole;
+  selfSkinId?: string;
 };
+
+function hashMultiplayerSeed(seed: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function resolveCoOpHostLeft(runSeed: string) {
+  return hashMultiplayerSeed(`${runSeed}:co-op-left`) % 2 === 0;
+}
+
+function resolveSquareJumpHostFirst(runSeed: string) {
+  return hashMultiplayerSeed(`${runSeed}:co-op-square-jump-first`) % 2 === 0;
+}
+
+function resolveCoOpRole(selfRole: SessionRole, hostLeft: boolean): "left" | "right" {
+  if (selfRole === "host") return hostLeft ? "left" : "right";
+  return hostLeft ? "right" : "left";
+}
+
+function resolveSquareJumpCoOpRole(selfRole: SessionRole, hostFirst: boolean): "first" | "second" {
+  if (selfRole === "host") return hostFirst ? "first" : "second";
+  return hostFirst ? "second" : "first";
+}
+
+function resolveCoOpSharedSkinId({
+  opponentPlayer,
+  runSeed,
+  selfSkinId,
+}: {
+  opponentPlayer?: { skinId?: string } | null;
+  runSeed: string;
+  selfSkinId?: string;
+}) {
+  const skinIds = [selfSkinId, opponentPlayer?.skinId].filter((skinId): skinId is string => typeof skinId === "string" && skinId.length > 0);
+  if (skinIds.length === 0) return null;
+  return skinIds[hashMultiplayerSeed(`${runSeed}:co-op-shared-skin`) % skinIds.length];
+}
 
 export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   level,
@@ -90,9 +141,12 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   opponentStateSubscription,
   readOpponentStateMetrics,
   opponentState,
+  playMode,
   reportResult,
   reportState,
   runSeed,
+  selfRole,
+  selfSkinId,
 }: MultiplayerMatchRuntimeProps) {
   const syncRef = useRef<SimpleGameSync | null>(null);
   const localResultSentRef = useRef(false);
@@ -231,6 +285,13 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     [handleRuntimeState],
   );
 
+  const handleSquareJumpRuntimeState = useCallback(
+    (runtime: SquareJumpStateSnapshot) => {
+      handleRuntimeState(runtime, resolveSquareJumpScore);
+    },
+    [handleRuntimeState],
+  );
+
   const handleCompletion = useCallback(
     (outcome: MiniGameCompletion) => {
       const score = resolveCompletionScore(outcome);
@@ -268,6 +329,11 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     );
   }, [level.gameId, publishRuntimeState, runSeed]);
 
+  const coOpMode = playMode === "co-op";
+  const coOpRole = coOpMode ? resolveCoOpRole(selfRole, resolveCoOpHostLeft(runSeed)) : null;
+  const squareJumpCoOpRole = coOpMode ? resolveSquareJumpCoOpRole(selfRole, resolveSquareJumpHostFirst(runSeed)) : null;
+  const coOpSharedSkinId = coOpMode ? resolveCoOpSharedSkinId({ opponentPlayer, runSeed, selfSkinId }) : null;
+
   const runtimeNode =
     level.gameId === "doodle" ? (
       <DoodleJumpPrototype
@@ -277,12 +343,15 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onBackToSelect={() => undefined}
         onRestart={() => undefined}
         onRuntimeState={handleDoodleRuntimeState}
-        remotePlayer={opponentPlayer}
-        remoteStateSubscription={opponentStateSubscription}
-        remoteState={opponentState}
+        remotePlayer={coOpMode ? null : opponentPlayer}
+        remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
+        remoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
-        unlimitedRespawn
+        unlimitedRespawn={!coOpMode}
+        coOpInputState={coOpMode ? opponentState : null}
+        coOpRole={coOpRole}
+        coOpSkinId={coOpSharedSkinId}
       />
     ) : level.gameId === "fall-down" ? (
       <FallDownPrototype
@@ -291,12 +360,15 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onBackToSelect={() => undefined}
         onRestart={() => undefined}
         onRuntimeState={handleFallDownRuntimeState}
-        remotePlayer={opponentPlayer}
-        remoteStateSubscription={opponentStateSubscription}
-        remoteState={opponentState}
+        remotePlayer={coOpMode ? null : opponentPlayer}
+        remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
+        remoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
-        unlimitedRespawn
+        unlimitedRespawn={!coOpMode}
+        coOpInputState={coOpMode ? opponentState : null}
+        coOpRole={coOpRole}
+        coOpSkinId={coOpSharedSkinId}
       />
     ) : level.gameId === "flappy" ? (
       <FlappyPrototype
@@ -305,12 +377,12 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onBackToSelect={() => undefined}
         onRestart={() => undefined}
         onRuntimeState={handleFlappyRuntimeState}
-        remotePlayer={opponentPlayer}
-        remoteStateSubscription={opponentStateSubscription}
-        remoteState={opponentState}
+        remotePlayer={coOpMode ? null : opponentPlayer}
+        remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
+        remoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
-        unlimitedRespawn
+        unlimitedRespawn={!coOpMode}
       />
     ) : level.gameId === "knife" ? (
       <KnifeHitPrototype
@@ -327,8 +399,13 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         mode="advanced"
         onBackToSelect={() => undefined}
         onComplete={handleCompletion}
+        onRuntimeState={handleSquareJumpRuntimeState}
         onRestart={() => undefined}
         runSeed={runSeed}
+        unlimitedRespawn={!coOpMode}
+        coOpInputState={coOpMode ? opponentState : null}
+        coOpRole={squareJumpCoOpRole}
+        coOpSkinId={coOpSharedSkinId}
       />
     ) : (
       <DoodleJumpPrototype
@@ -338,12 +415,15 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onBackToSelect={() => undefined}
         onRestart={() => undefined}
         onRuntimeState={handleDoodleRuntimeState}
-        remotePlayer={opponentPlayer}
-        remoteStateSubscription={opponentStateSubscription}
-        remoteState={opponentState}
+        remotePlayer={coOpMode ? null : opponentPlayer}
+        remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
+        remoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
-        unlimitedRespawn
+        unlimitedRespawn={!coOpMode}
+        coOpInputState={coOpMode ? opponentState : null}
+        coOpRole={coOpRole}
+        coOpSkinId={coOpSharedSkinId}
       />
     );
 

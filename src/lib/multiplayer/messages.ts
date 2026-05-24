@@ -21,7 +21,7 @@ import {
   isHomeworldState,
   type HomeworldPresence,
   type HomeworldState,
-} from "../../features/homeworld/homeworld-state.ts";
+} from "../homeworld/homeworld-state.ts";
 import {
   isMultiplayerLevelSelectPresence,
   isMultiplayerLevelSelectState,

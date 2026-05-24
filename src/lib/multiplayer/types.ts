@@ -7,7 +7,7 @@ import type {
 import type {
   HomeworldPresence,
   HomeworldState,
-} from "@/features/homeworld/homeworld-state";
+} from "@/lib/homeworld/homeworld-state";
 import type {
   MultiplayerLevelSelectPresence,
   MultiplayerLevelSelectState,

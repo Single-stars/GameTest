@@ -249,26 +249,36 @@ test("fall down base recovery keeps the animation loop alive after a recoverable
   assert.doesNotMatch(resumeInputSource, /respawnUntil\s*=\s*0/);
 });
 
-test("fall down base failures respawn on a safe platform at the current camera midpoint", () => {
+test("fall down base and multiplayer failures respawn on the last safe platform with smooth camera recovery", () => {
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+  const fallDownFailSource = fallDownSource.slice(fallDownSource.indexOf("const fail = useCallback"), fallDownSource.indexOf("function chooseFallDownDirection"));
 
   assert.match(fallDownSource, /failures: number;/);
   assert.match(fallDownSource, /respawnUntil: number;/);
+  assert.match(fallDownSource, /lastSafePlatformId: number;/);
   assert.match(fallDownSource, /function recoverFallDownBaseFailure\([\s\S]*current: FallDownRuntime,[\s\S]*reason: string,[\s\S]*stageSize: MiniGameStageSize,[\s\S]*unlimitedRespawn = false,[\s\S]*\)/);
   assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
   assert.match(fallDownSource, /if \(!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT\)/);
   assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
-  assert.match(fallDownSource, /const platformY = current\.cameraY \+ stageSize\.height \* 0\.5;/);
-  assert.match(fallDownSource, /id: -2000 - failures,/);
-  assert.match(fallDownSource, /kind: "normal",/);
-  assert.match(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
+  assert.match(fallDownSource, /const respawnPlatform = resolveFallDownLastSafePlatform\(current\);/);
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
+  assert.match(fallDownSource, /const respawnCameraY = Math\.max\(0, current\.playerY - stageSize\.height \* 0\.5\);/);
+  assert.match(fallDownSource, /current\.cameraY = smoothFallDownRespawnCamera/);
+  assert.match(fallDownSource, /current\.pressureWorldY = current\.respawnCameraStartY - PLAYER_SIZE;/);
+  assert.match(fallDownSource, /if \(current\.time < current\.respawnCameraUntil\) \{/);
+  assert.match(fallDownSource, /current\.pressureWorldY = current\.cameraY - PLAYER_SIZE;/);
+  assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{/);
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(fallDownSource, /current\.started = false;/);
+  assert.doesNotMatch(fallDownFailSource, /resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
   assert.match(fallDownSource, /\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)/);
   assert.match(fallDownSource, /failures: latest\.failures,/);
   assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
+  assert.doesNotMatch(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);
+  assert.match(fallDownSource, /platform\.kind !== "danger" && platform\.kind !== "finish" && platform\.kind !== "fragile"/);
+  assert.doesNotMatch(fallDownSource, /respawnPlatform\.broken = false;/);
+  assert.doesNotMatch(fallDownSource, /respawnPlatform\.steppedAt = null;/);
 });
 
 test("fall down platform layout varies by run seed", () => {

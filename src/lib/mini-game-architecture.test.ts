@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -227,7 +227,7 @@ test("luck draw rule tooltip uses readable copy instead of placeholder question 
   assert.doesNotMatch(luckDrawScreenSource, /LUCK_RULE_TEXT\s*=\s*"[^"]*\?{4,}[^"]*"/);
   assert.match(luckDrawScreenSource, /完成进阶挑战/);
   assert.match(luckDrawScreenSource, /0-100/);
-  assert.match(luckDrawScreenSource, /历史最高/);
+  assert.match(luckDrawScreenSource, /历史最高值/);
 });
 
 test("result screen opens the avatar lab through a compact rank-side avatar entry", () => {
@@ -411,7 +411,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   const roundPlayerUrl = new URL("../features/rounds/round-player.tsx", import.meta.url);
   const homeScreenUrl = new URL("../features/game-flow/home-screen.tsx", import.meta.url);
   const homeworldScreenUrl = new URL("../features/homeworld/homeworld-screen.tsx", import.meta.url);
-  const homeworldStateUrl = new URL("../features/homeworld/homeworld-state.ts", import.meta.url);
+  const homeworldStateUrl = new URL("./homeworld/homeworld-state.ts", import.meta.url);
   const roundIntroUrl = new URL("../features/game-flow/round-intro.tsx", import.meta.url);
   const playFrameUrl = new URL("../features/game-flow/play-frame.tsx", import.meta.url);
   const shareImageScreenUrl = new URL("../features/results/share-image-screen.tsx", import.meta.url);
@@ -435,7 +435,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(appPageSource, /from "@\/features\/rounds\/round-player"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/home-screen"/);
   assert.match(appPageSource, /from "@\/features\/homeworld\/homeworld-screen"/);
-  assert.match(appPageSource, /from "@\/features\/homeworld\/homeworld-state"/);
+  assert.match(appPageSource, /from "@\/lib\/homeworld\/homeworld-state"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/round-intro"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/play-frame"/);
   assert.match(appPageSource, /from "@\/features\/results\/share-image-screen"/);
@@ -498,6 +498,36 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(roundIntroSource, /export function RoundIntro/);
   assert.match(playFrameSource, /export function PlayFrame/);
   assert.match(shareImageScreenSource, /export function ShareImageScreen/);
+});
+
+test("mobile long-press blocking is installed once from the root layout", () => {
+  const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const multiplayerPageSource = readFileSync(new URL("../app/multiplayer/page.tsx", import.meta.url), "utf8");
+  const guardUrl = new URL("../features/input/mobile-long-press-guard.tsx", import.meta.url);
+
+  assert.equal(existsSync(guardUrl), true);
+  const guardSource = readFileSync(guardUrl, "utf8");
+
+  assert.match(layoutSource, /from "@\/features\/input\/mobile-long-press-guard"/);
+  assert.match(layoutSource, /<MobileLongPressGuard \/>/);
+  assert.match(guardSource, /export function useBlockMobileLongPress/);
+  assert.match(guardSource, /export function MobileLongPressGuard/);
+  assert.match(guardSource, /matchMedia\("\(pointer: coarse\)"\)/);
+  assert.match(guardSource, /document\.addEventListener\("contextmenu"/);
+  assert.match(guardSource, /document\.addEventListener\("selectstart"/);
+  assert.match(guardSource, /document\.addEventListener\("dragstart"/);
+  assert.match(guardSource, /document\.addEventListener\("touchstart"/);
+  assert.match(guardSource, /\.multiplayer-level-room/);
+  assert.match(guardSource, /\.homeworld-stage/);
+  assert.match(guardSource, /\.play-screen/);
+  assert.match(guardSource, /\.prototype-stage/);
+  assert.match(guardSource, /\.game-area/);
+  for (const selector of ["button", "a", "input", "textarea", "select"]) {
+    assert.match(guardSource, new RegExp(`"${selector}"`));
+  }
+  assert.doesNotMatch(appPageSource, /blockMobileLongPress/);
+  assert.doesNotMatch(multiplayerPageSource, /blockMobileLongPress/);
 });
 
 test("native rounds are split by gameplay without the legacy native-rounds facade", () => {
@@ -1080,7 +1110,7 @@ test("homeworld uses fixed bitmap room assets with extensible object definitions
     "public/homeworld/skins/oak/ladder.png",
     "public/homeworld/skins/oak/cabinet.png",
   ];
-  const homeworldStateSource = readFileSync(new URL("../features/homeworld/homeworld-state.ts", import.meta.url), "utf8");
+  const homeworldStateSource = readFileSync(new URL("./homeworld/homeworld-state.ts", import.meta.url), "utf8");
   const homeworldScreenSource = readFileSync(new URL("../features/homeworld/homeworld-screen.tsx", import.meta.url), "utf8");
   const homeworldCss = readFileSync(new URL("../app/styles/base-flow/homeworld.css", import.meta.url), "utf8");
   const messagesSource = readFileSync(new URL("./multiplayer/messages.ts", import.meta.url), "utf8");
@@ -1174,6 +1204,7 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
 
   assert.match(doodleSource, /onPointerMove=\{updateDoodleDirection\}/);
   assert.match(doodlePointerMoveSource, /const direction = chooseDoodleDirection\(event\);/);
+  assert.match(doodlePointerMoveSource, /if \(coOpRole\) inputDirectionRef\.current = coOpRole === "left" \? -1 : 1;/);
   assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = direction;/);
   assert.doesNotMatch(doodlePointerMoveSource, /playerTurns|jumpTurnAvailable|syncDoodleView|setView/);
   assert.doesNotMatch(doodlePointerMoveSource, /syncDoodleView|setView/);
@@ -1207,21 +1238,22 @@ test("performance-sensitive prototype ticks cache level params outside RAF loops
   assert.doesNotMatch(doodleTickSource, /numberParam\(level\.params/);
 });
 
-test("square jump base misses respawn on the original next platform before forced advance", () => {
+test("square jump base misses can respawn on the current platform before retry", () => {
   const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = componentSource.slice(componentSource.indexOf("type SquareJumpUnifiedState"), componentSource.indexOf("function fallDownPlatformKindBag"));
 
   assert.match(squareJumpSource, /failures: number;/);
   assert.match(squareJumpSource, /respawnUntil: number;/);
-  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize\)/);
+  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize, unlimitedRespawn = false\)/);
   assert.match(squareJumpSource, /const failures = current\.failures \+ 1;/);
-  assert.match(squareJumpSource, /if \(failures >= BASE_FAILURE_LIMIT\)/);
-  assert.match(squareJumpSource, /失败达到 3 次，进入下一关/);
-  assert.match(squareJumpSource, /const landedPlatform = \{ \.\.\.current\.nextPlatform \};/);
-  assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(landedPlatform, current\.time\);/);
-  assert.match(squareJumpSource, /current\.currentPlatform = landedPlatform;/);
+  assert.match(squareJumpSource, /if \(!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(squareJumpSource, /BASE_FAILURE_LIMIT/);
+  assert.match(squareJumpSource, /const respawnPlatform = \{ \.\.\.current\.currentPlatform \};/);
+  assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(respawnPlatform, current\.time\);/);
+  assert.match(squareJumpSource, /current\.currentPlatform = respawnPlatform;/);
   assert.match(squareJumpSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
-  assert.match(squareJumpSource, /mode === "base" && recoverSquareJumpBaseMiss\(current, "掉下去了", stageSize\)/);
+  assert.match(squareJumpSource, /mode === "base" \|\| unlimitedRespawn/);
+  assert.match(squareJumpSource, /recoverSquareJumpBaseMiss\(current, "[^"/]+", stageSize, unlimitedRespawn\)/);
   assert.match(squareJumpSource, /failures: latest\.failures,/);
   assert.match(squareJumpSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });

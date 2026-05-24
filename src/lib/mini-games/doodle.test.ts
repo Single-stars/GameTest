@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -19,7 +20,8 @@ import {
 
 test("doodle jump moves only while pressing the left or right half of the screen", () => {
   const componentSource = readMiniGameRuntimeSource();
-  const doodleSource = componentSource.slice(componentSource.indexOf("function DoodleJumpPrototype"), componentSource.indexOf("function movingGateY"));
+  const doodleComponentSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const doodleSource = doodleComponentSource;
 
   assert.match(componentSource, /const DOODLE_PLAYER_SPEED = 315;/);
   assert.doesNotMatch(doodleSource, /controlXRef/);
@@ -38,7 +40,7 @@ test("doodle jump moves only while pressing the left or right half of the screen
   assert.match(doodleSource, /const stopDoodleDirection = useCallback/);
   assert.match(doodleSource, /inputDirectionRef\.current = 0;/);
   assert.match(doodleSource, /inputPointerIdRef\.current = null;/);
-  assert.match(doodleSource, /const inputDirection = inputDirectionRef\.current;/);
+  assert.match(doodleSource, /const inputDirection = resolveDoodleCoOpInputDirection\(inputDirectionRef\.current, coOpRole, coOpInputState\);/);
   assert.match(doodleSource, /if \(inputDirection !== 0 && jumpTurnAvailable\)/);
   assert.match(doodleSource, /const turnDirection = inputDirection < 0 \? -1 : 1;/);
   assert.match(doodleSource, /jumpTurnAvailable = false;/);
@@ -235,7 +237,7 @@ test("doodle completion uses a highest finish platform instead of a height line"
 test("finish platforms are not hidden after landing in fall down or square jump", () => {
   const runtimeSource = readMiniGameRuntimeSource();
   const fallDownSource = runtimeSource.slice(runtimeSource.indexOf("function FallDownPrototype"), runtimeSource.indexOf("function makeDoodleWorld"));
-  const squareJumpSource = runtimeSource.slice(runtimeSource.indexOf("function squareGravityMultiplier"), runtimeSource.indexOf("export function SquareJumpPrototype"));
+  const squareJumpSource = runtimeSource.slice(runtimeSource.indexOf("export function SquareJumpPrototype"));
   const fallDownDomSource = fallDownSource.slice(
     fallDownSource.indexOf("for (const [id, node] of fallPlatformRefs.current)"),
     fallDownSource.indexOf("for (const [id, node] of fallHazardRefs.current)"),
@@ -268,4 +270,26 @@ test("doodle only moving obstacle variants enable moving hazards", () => {
   const hardMovingCount = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-9"), "moving-obstacles").hazards.filter((hazard) => hazard.movementEnabled).length;
   const finalMovingCount = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-10"), "moving-obstacles").hazards.filter((hazard) => hazard.movementEnabled).length;
   assert.ok(finalMovingCount > hardMovingCount, `expected final moving hazards > 1-9, got ${finalMovingCount}/${hardMovingCount}`);
+});
+
+test("doodle base and multiplayer respawn on the last safe platform and ease the camera back", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+
+  assert.match(componentSource, /lastSafePlatformId: number \| null;/);
+  assert.match(componentSource, /function resolveDoodleLastSafePlatform/);
+  assert.match(doodleSource, /const safeRespawnPlatform = resolveDoodleLastSafePlatform\(current\);/);
+  assert.match(doodleSource, /current\.playerX = movingPlatformX\(safeRespawnPlatform, nextTime, logicStageWidth\);/);
+  assert.match(doodleSource, /current\.playerY = safeRespawnPlatform\.y \+ PLAYER_SIZE \/ 2;/);
+  assert.match(doodleSource, /safeRespawnPlatform\.used = false;/);
+  assert.match(doodleSource, /current\.cameraY = smoothDoodleRespawnCamera/);
+  assert.match(doodleSource, /respawnAwaitingInput: boolean;/);
+  assert.match(doodleSource, /current\.respawnAwaitingInput = true;/);
+  assert.match(doodleSource, /if \(current\.respawnAwaitingInput && current\.time < current\.respawnCameraUntil\) return;/);
+  assert.match(doodleSource, /current\.playerVy = 0;/);
+  assert.match(doodleSource, /current\.started = false;/);
+  assert.match(doodleSource, /current\.jumpTurnAvailable = false;/);
+  assert.doesNotMatch(doodleSource, /current\.playerVy = DOODLE_JUMP_VELOCITY;\s*current\.jumpTurnAvailable = true;\s*const respawnCameraY/);
+  assert.doesNotMatch(doodleSource, /const respawnY = cameraY \+ logicStageHeight \* 0\.34;/);
+  assert.doesNotMatch(doodleSource, /current\.platforms\.unshift\(respawnPlatform\);/);
 });

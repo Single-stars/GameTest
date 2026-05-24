@@ -10,7 +10,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import type { SelfGameState } from "@/features/game-sync/types";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -59,6 +61,16 @@ import {
 const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
 type SquareGravityState = PlayerAvatarGravity & NonNullable<SquareJumpBasePlatform["gravity"]>;
+export type SquareJumpStateSnapshot = {
+  cameraY: number;
+  direction: PlayerAvatarDirection;
+  elapsedMs: number;
+  failures: number;
+  progress: number;
+  status: PrototypeStatus;
+  x: number;
+  y: number;
+};
 
 const SQUARE_BASE_MAX_HOLD_MS = 900;
 
@@ -75,9 +87,9 @@ function squareGravityLabel(gravity: SquareGravityState) {
 }
 
 function squareGravityMark(gravity: SquareGravityState) {
-  if (gravity === "light") return "↑";
-  if (gravity === "heavy") return "↓";
-  return "•";
+  if (gravity === "light") return "^";
+  if (gravity === "heavy") return "v";
+  return ".";
 }
 
 function squarePlatformMark(platform: SquareJumpBasePlatform): string | null {
@@ -137,6 +149,7 @@ type SquareJumpUnifiedRuntime = {
   exitingPlatform: SquareJumpBasePlatform | null;
   exitingVisualOffsetY: number;
   nextVisualOffsetY: number;
+  lockedNextVisualOffsetY: number | null;
   feedback: "Good" | "提醒" | "";
   feedbackUntil: number;
   respawnUntil: number;
@@ -146,6 +159,7 @@ type SquareJumpUnifiedRuntime = {
 };
 
 const SQUARE_JUMP_ADVANCE_DELAY = 0.16;
+const SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
 
 function getSquareJumpPlatformY(stageHeight: number) {
   return stageHeight * 0.72;
@@ -159,6 +173,29 @@ function resolveSquareJumpPlayerAvatarView(view: SquareJumpUnifiedRuntime): Play
   if (view.state === "jumping") return { action: "idle", expression: "neutral" };
   if (view.state === "falling") return { action: "idle", expression: "scared" };
   return { action: "idle", expression: "neutral" };
+}
+
+function resolveSquareJumpCoOpSkin(coOpSkinId: string | null | undefined): PlayerAvatarSkin | undefined {
+  return coOpSkinId ? resolvePlayerAvatarSkin(coOpSkinId) : undefined;
+}
+
+function makeSquareJumpRuntimeState(runtime: SquareJumpUnifiedRuntime): SquareJumpStateSnapshot {
+  return {
+    cameraY: runtime.camera.cameraY,
+    direction: runtime.state === "charging" || runtime.state === "airCharging" ? "right" : "none",
+    elapsedMs: Math.round(runtime.time * 1000),
+    failures: runtime.failures,
+    progress: Number((runtime.jumps / Math.max(1, runtime.platforms.length - 1)).toFixed(4)),
+    status: runtime.status,
+    x: runtime.playerX,
+    y: runtime.playerY,
+  };
+}
+
+function canControlSquareJumpCoOpTurn(coOpTurnIndex: number, coOpRole: "first" | "second" | null | undefined) {
+  if (!coOpRole) return true;
+  const firstTurn = coOpTurnIndex % 2 === 0;
+  return firstTurn ? coOpRole === "first" : coOpRole === "second";
 }
 
 function toSquareJumpAvatarVar(value: number) {
@@ -246,6 +283,7 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
     jumpPlan: null,
     jumpStartedAt: 0,
     jumps: 0,
+    lockedNextVisualOffsetY: null,
     nextIndex: 1,
     nextPlatform,
     nextVisualOffsetY: 0,
@@ -282,12 +320,13 @@ function updateSquareJumpAdvanceAnimation(current: SquareJumpUnifiedRuntime) {
   const advanceProgress = clamp((current.time - current.advanceStartedAt) / (current.advancePlan.durationMs / 1000), 0, 1);
   const riseProgress = clamp((current.time - current.advanceStartedAt) / (current.advancePlan.riseDurationMs / 1000), 0, 1);
   current.camera = sampleSquareJumpBaseAdvanceCamera(current.advancePlan, advanceProgress);
-  current.nextVisualOffsetY = sampleSquareJumpBaseRiseIn(current.advancePlan, riseProgress);
+  current.nextVisualOffsetY = current.lockedNextVisualOffsetY ?? sampleSquareJumpBaseRiseIn(current.advancePlan, riseProgress);
   current.exitingVisualOffsetY = current.advancePlan.nextPlatformStartVisualOffsetY * 2.1 * (1 - sampleSquareJumpBaseRiseIn(current.advancePlan, riseProgress) / current.advancePlan.nextPlatformStartVisualOffsetY);
 
   if (advanceProgress >= 1 && riseProgress >= 1) {
     current.camera = { ...current.advancePlan.cameraEnd };
     current.nextVisualOffsetY = 0;
+    current.lockedNextVisualOffsetY = null;
     current.exitingPlatform = null;
     current.exitingVisualOffsetY = 0;
     current.advancePlan = null;
@@ -295,7 +334,7 @@ function updateSquareJumpAdvanceAnimation(current: SquareJumpUnifiedRuntime) {
   }
 }
 
-function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize) {
+function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize, unlimitedRespawn = false) {
   const failures = current.failures + 1;
   current.failures = failures;
   current.reason = reason;
@@ -305,50 +344,33 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   current.chargeElapsedMs = 0;
   current.doubleJumpUsed = false;
 
-  if (failures >= BASE_FAILURE_LIMIT) {
-    current.reason = "失败达到 3 次，进入下一关";
+  if (!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT) {
+    current.reason = "???? 3 ???????";
     current.state = "failed";
     current.status = "failed";
     return true;
   }
 
-  const nextJumps = current.jumps + 1;
-  const requiredJumps = current.platforms.length - 1;
-  const leavingPlatform = { ...current.currentPlatform };
-  const landedPlatform = { ...current.nextPlatform };
-  const landedPlatformX = getSquareJumpBasePlatformX(landedPlatform, current.time);
+  const respawnPlatform = { ...current.currentPlatform };
+  const nextVisualOffsetY = current.nextVisualOffsetY;
   current.respawnUntil = current.time + 1.1;
-  current.jumps = nextJumps;
-  current.playerX = getSquareJumpBasePlatformX(landedPlatform, current.time);
-  current.playerY = landedPlatform.y - PLAYER_SIZE / 2;
-  current.playerOffsetOnCurrent = current.playerX - landedPlatformX;
-  current.currentIndex = current.nextIndex;
-  current.currentPlatform = landedPlatform;
-  current.activeGravity = resolveSquareJumpActiveGravity(current.activeGravity, landedPlatform.gravity);
-
-  if (nextJumps >= requiredJumps) {
-    current.reason = `到达终点平台，失误 ${failures} 次`;
-    current.state = "success";
-    current.status = "passed";
-    return true;
-  }
+  current.playerX = getSquareJumpBasePlatformX(respawnPlatform, current.time);
+  current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
+  current.playerOffsetOnCurrent = 0;
+  current.currentPlatform = respawnPlatform;
 
   const cameraStart = { ...current.camera };
-  const futureIndex = current.nextIndex + 1;
-  const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
-  const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, stageSize);
-  current.nextIndex = futureIndex;
-  current.nextPlatform = futurePlatform;
   current.timer = null;
-  current.exitingPlatform = leavingPlatform;
+  current.exitingPlatform = null;
   current.exitingVisualOffsetY = 0;
   current.advancePlan = createSquareJumpBaseAdvancePlan({
-    cameraEnd,
+    cameraEnd: fitSquareBaseCamera(respawnPlatform, current.nextPlatform, current.playerX, stageSize),
     cameraStart,
     stageHeight: stageSize.height,
   });
   current.advanceStartedAt = current.time + SQUARE_JUMP_ADVANCE_DELAY;
-  current.nextVisualOffsetY = current.advancePlan.nextPlatformStartVisualOffsetY;
+  current.lockedNextVisualOffsetY = nextVisualOffsetY;
+  current.nextVisualOffsetY = nextVisualOffsetY;
   current.state = "advancing";
   current.status = "playing";
   return true;
@@ -360,14 +382,24 @@ export function SquareJumpPrototype({
   runSeed,
   onBackToSelect,
   onComplete,
+  onRuntimeState,
   onRestart,
+  unlimitedRespawn = false,
+  coOpInputState = null,
+  coOpRole = null,
+  coOpSkinId = null,
 }: {
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode;
   runSeed: string;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
+  onRuntimeState?: (state: SquareJumpStateSnapshot) => void;
   onRestart: () => void;
+  unlimitedRespawn?: boolean;
+  coOpInputState?: SelfGameState | null;
+  coOpRole?: "first" | "second" | null;
+  coOpSkinId?: string | null;
 }) {
   const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
   const stageWidth = stageSize.width;
@@ -387,12 +419,19 @@ export function SquareJumpPrototype({
   const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
+  const lastRuntimeSyncRef = useRef(0);
+  const previousCoOpInputDirectionRef = useRef<PlayerAvatarDirection>("none");
   const completedRef = useRef(false);
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Square Jump");
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<SquareJumpUnifiedRuntime>(() => makeSquareJumpUnifiedView(initialRuntime));
+  const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+
+  useEffect(() => {
+    onRuntimeStateRef.current = onRuntimeState;
+  }, [onRuntimeState]);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -400,9 +439,19 @@ export function SquareJumpPrototype({
     setView(makeSquareJumpUnifiedView(runtimeRef.current));
   }, [recordReactSync]);
 
+  const syncRuntimeState = useCallback((time = performance.now(), force = false) => {
+    if (!onRuntimeStateRef.current) return;
+    if (!force && time - lastRuntimeSyncRef.current < SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS) return;
+    lastRuntimeSyncRef.current = time;
+    onRuntimeStateRef.current(makeSquareJumpRuntimeState(runtimeRef.current));
+  }, []);
+  const canRecoverSquareJumpMiss = mode === "base" || unlimitedRespawn;
+
   useEffect(() => {
     runtimeRef.current = initialRuntime;
     lastUiSyncRef.current = 0;
+    lastRuntimeSyncRef.current = 0;
+    previousCoOpInputDirectionRef.current = "none";
     completedRef.current = false;
     const timer = window.setTimeout(() => {
       setView(makeSquareJumpUnifiedView(initialRuntime));
@@ -511,6 +560,7 @@ export function SquareJumpPrototype({
       current.timer = null;
       current.exitingPlatform = leavingPlatform;
       current.exitingVisualOffsetY = 0;
+      current.lockedNextVisualOffsetY = null;
       current.advancePlan = createSquareJumpBaseAdvancePlan({
         cameraEnd,
         cameraStart,
@@ -543,6 +593,8 @@ export function SquareJumpPrototype({
       event.preventDefault();
       const current = runtimeRef.current;
       if (current.status !== "playing") return;
+      const coOpTurnIndex = current.jumps;
+      if (!canControlSquareJumpCoOpTurn(coOpTurnIndex, coOpRole)) return;
       if (!current.started) {
         current.started = true;
         current.timer = null;
@@ -560,7 +612,7 @@ export function SquareJumpPrototype({
       current.state = canAirCharge ? "airCharging" : "charging";
       syncView();
     },
-    [doubleJumpEnabled, syncView],
+    [coOpRole, doubleJumpEnabled, syncView],
   );
 
   const releaseJump = useCallback(
@@ -583,6 +635,34 @@ export function SquareJumpPrototype({
     current.state = "idle";
     syncView();
   }, [launchChargedJump, syncView]);
+
+  useEffect(() => {
+    if (!coOpRole || !coOpInputState) return;
+    const nextDirection = coOpInputState.direction ?? "none";
+    const previousDirection = previousCoOpInputDirectionRef.current;
+    previousCoOpInputDirectionRef.current = nextDirection;
+    const current = runtimeRef.current;
+    if (current.status !== "playing") return;
+    const coOpTurnIndex = current.jumps;
+    if (canControlSquareJumpCoOpTurn(coOpTurnIndex, coOpRole)) return;
+    if (previousDirection === "none" && nextDirection !== "none") {
+      if (!current.started) {
+        current.started = true;
+        current.timer = null;
+      }
+      const canGroundCharge = current.state === "idle" || current.state === "advancing";
+      const canAirCharge = doubleJumpEnabled && (current.state === "jumping" || current.state === "falling") && current.jumpPlan !== null && !current.doubleJumpUsed;
+      if (!canGroundCharge && !canAirCharge) return;
+      current.charge = 0;
+      current.chargeElapsedMs = 0;
+      current.state = canAirCharge ? "airCharging" : "charging";
+      syncView();
+      return;
+    }
+    if (previousDirection !== "none" && nextDirection === "none") {
+      launchChargedJump();
+    }
+  }, [coOpInputState, coOpRole, doubleJumpEnabled, launchChargedJump, syncView]);
 
   useEffect(() => {
     let frameId = 0;
@@ -624,7 +704,7 @@ export function SquareJumpPrototype({
         if (current.started && (current.state === "idle" || current.state === "charging") && current.timer !== null) {
           current.timer -= delta;
           if (current.timer <= 0) {
-            fail("时间耗尽，平台碎裂");
+            fail("?????????");
             return;
           }
         }
@@ -664,7 +744,7 @@ export function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
-            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
+            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
               syncView(time);
@@ -700,7 +780,7 @@ export function SquareJumpPrototype({
           const screenX = stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
-            if (mode === "base" && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize)) {
+            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
               syncView(time);
@@ -714,6 +794,11 @@ export function SquareJumpPrototype({
       }
 
       paintSquareFrame();
+      if (current.status !== "playing" || eventChanged) {
+        syncRuntimeState(time, true);
+      } else {
+        syncRuntimeState(time);
+      }
       if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
         syncView(time);
       }
@@ -722,7 +807,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncView, targetLandingPadding, triggerScreenShake, updateSquareJumpDom]);
+  }, [advanceToNextPlatform, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -767,7 +852,7 @@ export function SquareJumpPrototype({
       <div className="mini-score">
         <span>进度 {view.jumps}/{requiredJumps}</span>
         {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
-        {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
+        {view.timer !== null ? <span>倒计�?{Math.max(0, view.timer).toFixed(1)}s</span> : null}
       </div>
       <div
         className={`prototype-stage square-jump-stage gravity-${gravity} ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
@@ -835,6 +920,7 @@ export function SquareJumpPrototype({
               gravity={view.activeGravity}
               rotationTurns={view.playerTurns}
               rootRef={playerAvatarRef}
+              skin={resolveSquareJumpCoOpSkin(coOpSkinId)}
               visualScale={1.18}
             />
           </div>

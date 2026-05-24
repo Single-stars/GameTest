@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MobileLongPressGuard } from "@/features/input/mobile-long-press-guard";
 import "./globals.css";
 
 const siteUrl = "https://208848.xyz";
@@ -42,7 +43,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <MobileLongPressGuard />
+        {children}
+      </body>
     </html>
   );
 }
