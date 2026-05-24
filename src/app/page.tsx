@@ -53,6 +53,14 @@ import {
 import { rounds } from "@/features/game-flow/round-config";
 import { AdvancedChallengeScreen, type AdvancedChallengeState } from "@/features/advanced/advanced-challenge-screen";
 import { HomeScreen } from "@/features/game-flow/home-screen";
+import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
+import {
+  createDefaultHomeworldState,
+  readPersistedHomeworldState,
+  writePersistedHomeworldState,
+  type HomeworldPlayerPoseState,
+  type HomeworldState,
+} from "@/features/homeworld/homeworld-state";
 import { PlayFrame } from "@/features/game-flow/play-frame";
 import { RoundIntro } from "@/features/game-flow/round-intro";
 import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
@@ -60,7 +68,12 @@ import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
 import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
-import { readPersistedPlayerAvatarSkin, writePersistedPlayerAvatarSkin } from "@/features/player-avatar/player-avatar-storage";
+import {
+  readPersistedPlayerAvatarSkin,
+  readPersistedPlayerName,
+  writePersistedPlayerAvatarSkin,
+  writePersistedPlayerName,
+} from "@/features/player-avatar/player-avatar-storage";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
 import { ShareImageScreen } from "@/features/results/share-image-screen";
@@ -85,6 +98,7 @@ export default function Home() {
   const [shareImageResult, setShareImageResult] = useState<GameRankResult | null>(null);
   const [shareImageTitle, setShareImageTitle] = useState<string | null>(null);
   const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
+  const [avatarLabReturnStage, setAvatarLabReturnStage] = useState<"result" | "homeworld">("result");
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
   const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
@@ -92,11 +106,16 @@ export default function Home() {
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
   const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
+  const [playerName, setPlayerName] = useState("");
+  const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
+  const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const trialsRef = useRef<TrialEvent[]>([]);
   const advancedProgressRef = useRef(advancedProgress);
+  const homeworldStateRef = useRef(homeworldState);
+  const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
@@ -108,6 +127,7 @@ export default function Home() {
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
   const playShellActive =
+    stage === "homeworld" ||
     stage === "playing" ||
     (stage === "advanced" && (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing"));
 
@@ -170,6 +190,15 @@ export default function Home() {
     }
   }, []);
 
+  const persistHomeworldState = useCallback((state: HomeworldState) => {
+    if (typeof window === "undefined") return;
+    try {
+      writePersistedHomeworldState(window.localStorage, state);
+    } catch {
+      // Storage can be unavailable in private mode; the homeworld should still run.
+    }
+  }, []);
+
   const resetCurrentRunState = useCallback(() => {
     clearShareCopyToastTimer();
     trialsRef.current = [];
@@ -229,6 +258,10 @@ export default function Home() {
   }, [advancedProgress]);
 
   useEffect(() => {
+    homeworldStateRef.current = homeworldState;
+  }, [homeworldState]);
+
+  useEffect(() => {
     advancedChallengeRef.current = advancedChallenge;
   }, [advancedChallenge]);
 
@@ -240,6 +273,13 @@ export default function Home() {
 
   useEffect(() => {
     setSelectedAvatarSkin(readPersistedPlayerAvatarSkin());
+    setPlayerName(readPersistedPlayerName());
+    if (typeof window !== "undefined") {
+      setHomeworldState(readPersistedHomeworldState(window.localStorage));
+      if (new URLSearchParams(window.location.search).get("homeworld") === "1") {
+        setStage("homeworld");
+      }
+    }
   }, []);
 
   const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
@@ -247,12 +287,17 @@ export default function Home() {
     writePersistedPlayerAvatarSkin(skin);
   }, []);
 
+  const handleChangePlayerName = useCallback((name: string) => {
+    setPlayerName(name);
+    writePersistedPlayerName(name);
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
 
     const mobileLongPressTouchOptions = { capture: true, passive: false } as const;
-    const mobileLongPressBlockedSurface = ".app-shell-play, .play-screen, .prototype-stage, .test-pad, .game-area, .braking-panel";
+    const mobileLongPressBlockedSurface = ".app-shell-play, .homeworld-stage, .play-screen, .prototype-stage, .test-pad, .game-area, .braking-panel";
     const mobileLongPressAllowedSurface = "input, textarea, select, [contenteditable='true'], .share-image-preview";
 
     const getEventElement = (target: EventTarget | null) => (target instanceof Element ? target : null);
@@ -289,12 +334,13 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
+    const shouldOpenHomeworldFromQuery = new URLSearchParams(window.location.search).get("homeworld") === "1";
 
     const stored = readPersistedGameState(window.localStorage);
     const storedTrials = stored.currentResult?.trials ?? [];
     let nextProgress = stored.advancedProgress;
 
-    if (storedTrials.length > 0) {
+    if (!shouldOpenHomeworldFromQuery && storedTrials.length > 0) {
       const storedResult = getGameRankResult(storedTrials);
       if (storedResult.name === "最强王者" && !nextProgress.unlocked) {
         nextProgress = markAdvancedUnlocked(nextProgress);
@@ -422,14 +468,30 @@ export default function Home() {
   }, []);
 
   const openAvatarLab = useCallback(() => {
+    setAvatarLabReturnStage("result");
     setStage("avatar-lab");
+  }, []);
+
+  const openHomeworld = useCallback(() => {
+    releaseHistoryGuard();
+    setStage("homeworld");
+  }, [releaseHistoryGuard]);
+
+  const openHomeworldAvatarLab = useCallback(() => {
+    setHomeworldReturnPose(homeworldPlayerPoseRef.current);
+    setAvatarLabReturnStage("homeworld");
+    setStage("avatar-lab");
+  }, []);
+
+  const closeHomeworldToHome = useCallback(() => {
+    setStage("home");
   }, []);
 
   const closeAvatarLab = useCallback(() => {
     releaseHistoryGuard();
-    scrollResultToTop();
-    setStage("result");
-  }, [releaseHistoryGuard, scrollResultToTop]);
+    if (avatarLabReturnStage === "result") scrollResultToTop();
+    setStage(avatarLabReturnStage);
+  }, [avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop]);
 
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
@@ -573,6 +635,30 @@ export default function Home() {
     setStage("home");
   }, [persistGameState, resetCurrentRunState]);
 
+  const handleHomeworldStateChange = useCallback((state: HomeworldState) => {
+    homeworldStateRef.current = state;
+    setHomeworldState(state);
+    persistHomeworldState(state);
+  }, [persistHomeworldState]);
+
+  const openHomeworldPortalRoom = useCallback(() => {
+    persistHomeworldState(homeworldStateRef.current);
+    if (typeof window !== "undefined") {
+      window.location.assign("/multiplayer?homeworld=1&host=1");
+    }
+  }, [persistHomeworldState]);
+
+  const joinHomeworldPortalRoom = useCallback((rawRoomCode: string) => {
+    const roomCode = rawRoomCode.trim();
+    if (!roomCode || typeof window === "undefined") return;
+    persistHomeworldState(homeworldStateRef.current);
+    window.location.assign(`/multiplayer?homeworld=1&room=${encodeURIComponent(roomCode)}`);
+  }, [persistHomeworldState]);
+
+  const openHomeworldMultiplayerEntry = useCallback(() => {
+    persistHomeworldState(homeworldStateRef.current);
+  }, [persistHomeworldState]);
+
   const handleAppBack = useCallback((): AppBackNavigation => {
     const navigation = resolveAppBackNavigation({
       stage,
@@ -678,7 +764,9 @@ export default function Home() {
         />
       ) : stage === "avatar-lab" ? (
         <AvatarLabScreen
+          playerName={playerName}
           selectedSkin={selectedAvatarSkin}
+          onPlayerNameChange={handleChangePlayerName}
           onSelectSkin={handleSelectAvatarSkin}
           onBack={requestAppBack}
         />
@@ -712,6 +800,25 @@ export default function Home() {
             />
           )}
         />
+      ) : stage === "homeworld" ? (
+        <HomeworldScreen
+          doorMode="single-player"
+          homeOwnerName={playerName}
+          homeworldState={homeworldState}
+          initialPlayerPose={homeworldReturnPose}
+          mode="owner"
+          onCreateRoom={openHomeworldPortalRoom}
+          onJoinRoom={joinHomeworldPortalRoom}
+          onOpenMultiplayerEntry={openHomeworldMultiplayerEntry}
+          onOpenAvatarLab={openHomeworldAvatarLab}
+          onPlayerPoseChange={(pose) => {
+            homeworldPlayerPoseRef.current = pose;
+          }}
+          onReturnHome={closeHomeworldToHome}
+          onStateChange={handleHomeworldStateChange}
+          selfDisplayName={playerName}
+          selfSkin={selectedAvatarSkin}
+        />
       ) : stage === "home" ? (
         <HomeScreen onShareImage={openDefaultShareImage} onStart={beginTest} title={APP_TITLE} />
       ) : !currentRound || stage === "result" ? (
@@ -723,6 +830,7 @@ export default function Home() {
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenAvatarLab={openAvatarLab}
+          onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
@@ -750,6 +858,7 @@ export default function Home() {
           imageShareState={imageShareState}
           onOpenAdvancedChallenge={openAdvancedChallenge}
           onOpenAvatarLab={openAvatarLab}
+          onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}

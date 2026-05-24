@@ -551,6 +551,7 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   assert.equal(shouldGuardAppBack("advanced", false), true);
   assert.equal(shouldGuardAppBack("avatar-lab", false), true);
   assert.equal(shouldGuardAppBack("home", false), false);
+  assert.equal(shouldGuardAppBack("homeworld", false), false);
   assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: false }), 0);
   assert.equal(getAppBackHistoryLayer({ stage: "result", restartConfirmOpen: true }), 1);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "select" }), 1);
@@ -611,7 +612,7 @@ test("current result can be cleared while preserving advanced progress", () => {
   assert.equal(cleared.advancedProgress.unlocked, true);
 });
 
-test("restart after clearing the current result returns to the home screen", () => {
+test("restart after clearing the current result returns to the normal home flow", () => {
   assert.equal(getRestartDestinationAfterClearingCurrentResult(), "home");
 });
 

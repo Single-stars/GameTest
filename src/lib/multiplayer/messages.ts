@@ -3,6 +3,10 @@ import type {
   NetForfeitMessage,
   NetHeartbeatMessage,
   NetHelloMessage,
+  NetHomeworldPresenceMessage,
+  NetHomeworldStateMessage,
+  NetLevelSelectPresenceMessage,
+  NetLevelSelectStateMessage,
   NetMessage,
   NetReadyMessage,
   NetRematchMessage,
@@ -12,6 +16,18 @@ import type {
   NetStateMessage,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
+import {
+  isHomeworldPresence,
+  isHomeworldState,
+  type HomeworldPresence,
+  type HomeworldState,
+} from "../../features/homeworld/homeworld-state.ts";
+import {
+  isMultiplayerLevelSelectPresence,
+  isMultiplayerLevelSelectState,
+  type MultiplayerLevelSelectPresence,
+  type MultiplayerLevelSelectState,
+} from "./level-select.ts";
 
 export const MULTIPLAYER_PROTOCOL_VERSION = 1 as const;
 
@@ -75,6 +91,7 @@ function isStartMessage(value: unknown): value is NetStartMessage {
     isNumber(value.startAt) &&
     isNumber(value.sentAt) &&
     isString(value.levelId) &&
+    (value.playMode === undefined || value.playMode === "versus" || value.playMode === "co-op") &&
     isNumber(value.logicWidth) &&
     isNumber(value.logicHeight)
   );
@@ -140,6 +157,26 @@ function isHeartbeatMessage(value: unknown): value is NetHeartbeatMessage {
   return isProtocolV1(value.v) && value.kind === "heartbeat" && isNumber(value.sentAt);
 }
 
+function isHomeworldStateMessage(value: unknown): value is NetHomeworldStateMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "homeworld-state" && isHomeworldState(value.homeworld);
+}
+
+function isHomeworldPresenceMessage(value: unknown): value is NetHomeworldPresenceMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "homeworld-presence" && isHomeworldPresence(value.presence);
+}
+
+function isLevelSelectPresenceMessage(value: unknown): value is NetLevelSelectPresenceMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "level-select-presence" && isMultiplayerLevelSelectPresence(value.presence);
+}
+
+function isLevelSelectStateMessage(value: unknown): value is NetLevelSelectStateMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "level-select-state" && isMultiplayerLevelSelectState(value.selection);
+}
+
 export function parseNetMessage(raw: unknown): NetMessage | null {
   let payload = raw;
   if (typeof raw === "string") {
@@ -160,6 +197,10 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isForfeitMessage(payload)) return payload;
   if (isReturnRoomMessage(payload)) return payload;
   if (isHeartbeatMessage(payload)) return payload;
+  if (isHomeworldStateMessage(payload)) return payload;
+  if (isHomeworldPresenceMessage(payload)) return payload;
+  if (isLevelSelectPresenceMessage(payload)) return payload;
+  if (isLevelSelectStateMessage(payload)) return payload;
   if (isByeMessage(payload)) return payload;
 
   if (isRecord(payload) && payload.kind !== undefined) {
@@ -232,4 +273,20 @@ export function createReturnRoomMessage(matchId: string): NetReturnRoomMessage {
 
 export function createHeartbeatMessage(sentAt: number): NetHeartbeatMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "heartbeat", sentAt };
+}
+
+export function createHomeworldStateMessage(homeworld: HomeworldState): NetHomeworldStateMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "homeworld-state", homeworld };
+}
+
+export function createHomeworldPresenceMessage(presence: HomeworldPresence): NetHomeworldPresenceMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "homeworld-presence", presence };
+}
+
+export function createLevelSelectPresenceMessage(presence: MultiplayerLevelSelectPresence): NetLevelSelectPresenceMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "level-select-presence", presence };
+}
+
+export function createLevelSelectStateMessage(selection: MultiplayerLevelSelectState): NetLevelSelectStateMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "level-select-state", selection };
 }

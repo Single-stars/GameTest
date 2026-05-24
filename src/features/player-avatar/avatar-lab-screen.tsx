@@ -57,11 +57,15 @@ const EXPRESSION_LABELS: Record<PlayerAvatarExpression, string> = {
 
 export function AvatarLabScreen({
   onBack,
+  onPlayerNameChange,
   onSelectSkin,
+  playerName,
   selectedSkin,
 }: {
   onBack: () => void;
+  onPlayerNameChange?: (name: string) => void;
   onSelectSkin: (skin: PlayerAvatarSkin) => void;
+  playerName?: string;
   selectedSkin: PlayerAvatarSkin;
 }) {
   const [activeAction, setActiveAction] = useState<PlayerAvatarAction>("idle");
@@ -109,6 +113,20 @@ export function AvatarLabScreen({
       </div>
 
       <div className="avatar-lab-controls">
+        <section className="avatar-lab-name-form">
+          <h2>名字</h2>
+          <label>
+            <span>家园显示名</span>
+            <input
+              aria-label="家园显示名"
+              maxLength={16}
+              onChange={(event) => onPlayerNameChange?.(event.currentTarget.value)}
+              placeholder="给你的小方块取个名吧"
+              value={playerName ?? ""}
+            />
+          </label>
+        </section>
+
         <section className="avatar-lab-section">
           <h2>皮肤</h2>
           <div className="avatar-lab-skin-grid">

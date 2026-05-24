@@ -6,6 +6,9 @@ import { SimpleGameSync } from "@/features/game-sync/simple-game-sync";
 import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-games/doodle";
 import { FallDownPrototype, type FallDownRuntimeState } from "@/features/mini-games/fall-down";
 import { FlappyPrototype, type FlappyRuntimeState } from "@/features/mini-games/flappy";
+import { KnifeHitPrototype } from "@/features/mini-games/knife";
+import { SquareJumpPrototype } from "@/features/mini-games/square-jump";
+import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
 import type { GameResult, SelfGameState } from "@/lib/multiplayer/types";
 
@@ -33,6 +36,22 @@ function resolveFlappyScore(runtime: FlappyRuntimeState) {
   const progressScore = runtime.progress * 1080;
   const failurePenalty = runtime.failures * 30;
   return Math.max(0, Math.round(progressScore - failurePenalty));
+}
+
+function numberStat(stats: MiniGameCompletion["stats"], key: string) {
+  const value = stats[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function resolveCompletionScore(outcome: MiniGameCompletion) {
+  const elapsedMs = Math.max(0, outcome.elapsedMs);
+  const failurePenalty = numberStat(outcome.stats, "failures") * 40;
+  const progressScore = numberStat(outcome.stats, "progressPercent") * 8;
+  const hitScore = numberStat(outcome.stats, "hits") * 90;
+  const jumpScore = numberStat(outcome.stats, "jumps") * 75;
+  const baseScore = outcome.status === "passed" ? 1000 : 160;
+  const timeBonus = outcome.status === "passed" ? Math.max(0, 300 - elapsedMs / 1000) : 0;
+  return Math.max(0, Math.round(baseScore + timeBonus + progressScore + hitScore + jumpScore - failurePenalty));
 }
 
 type MultiplayerRuntimeState = {
@@ -212,6 +231,43 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     [handleRuntimeState],
   );
 
+  const handleCompletion = useCallback(
+    (outcome: MiniGameCompletion) => {
+      const score = resolveCompletionScore(outcome);
+      publishRuntimeState(
+        {
+          cameraY: 0,
+          direction: "none",
+          elapsedMs: outcome.elapsedMs,
+          failures: numberStat(outcome.stats, "failures"),
+          progress: outcome.status === "passed" ? 1 : Math.max(0, Math.min(1, numberStat(outcome.stats, "progressPercent") / 100)),
+          status: outcome.status,
+          x: 0,
+          y: 0,
+        },
+        score,
+      );
+    },
+    [publishRuntimeState],
+  );
+
+  useEffect(() => {
+    if (level.gameId !== "knife" && level.gameId !== "square-jump") return;
+    publishRuntimeState(
+      {
+        cameraY: 0,
+        direction: "none",
+        elapsedMs: 0,
+        failures: 0,
+        progress: 0,
+        status: "playing",
+        x: 0,
+        y: 0,
+      },
+      0,
+    );
+  }, [level.gameId, publishRuntimeState, runSeed]);
+
   const runtimeNode =
     level.gameId === "doodle" ? (
       <DoodleJumpPrototype
@@ -255,6 +311,24 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn
+      />
+    ) : level.gameId === "knife" ? (
+      <KnifeHitPrototype
+        level={level}
+        mode="advanced"
+        onBackToSelect={() => undefined}
+        onComplete={handleCompletion}
+        onRestart={() => undefined}
+        runSeed={runSeed}
+      />
+    ) : level.gameId === "square-jump" ? (
+      <SquareJumpPrototype
+        level={level}
+        mode="advanced"
+        onBackToSelect={() => undefined}
+        onComplete={handleCompletion}
+        onRestart={() => undefined}
+        runSeed={runSeed}
       />
     ) : (
       <DoodleJumpPrototype

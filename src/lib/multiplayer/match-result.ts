@@ -1,7 +1,16 @@
 import type { GameResult } from "./types.ts";
+import type { MultiplayerPlayMode } from "./level-select.ts";
 
-export function resolveMultiplayerWinnerText(selfResult: GameResult | null, opponentResult: GameResult | null) {
+export function resolveMultiplayerWinnerText(
+  selfResult: GameResult | null,
+  opponentResult: GameResult | null,
+  playMode: MultiplayerPlayMode = "versus",
+) {
   if (!selfResult || !opponentResult) return "等待结果";
+
+  if (playMode === "co-op") {
+    return selfResult.passed && opponentResult.passed ? "合作成功" : "合作失败";
+  }
 
   if (selfResult.passed && !opponentResult.passed) return "你赢了";
   if (!selfResult.passed && opponentResult.passed) return "你输了";

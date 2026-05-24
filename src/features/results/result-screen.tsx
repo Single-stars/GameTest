@@ -12,12 +12,12 @@ import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText,
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
-import { AvatarLabIcon, MultiplayerIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
+import { AvatarLabIcon, HomeworldIcon, MultiplayerIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type AvatarMenuItem = {
-  id: "share" | "restart" | "reset" | "multiplayer" | "skin";
+  id: "share" | "restart" | "reset" | "homeworld" | "multiplayer" | "skin";
   label: string;
   icon: ReactNode;
   onSelect: () => void;
@@ -36,6 +36,7 @@ export function ResultScreen({
   debugToolsVisible,
   onOpenAdvancedChallenge,
   onOpenAvatarLab,
+  onOpenHomeworld,
   onOpenLuckDraw,
   onResetTestData,
   onShareImage,
@@ -49,6 +50,7 @@ export function ResultScreen({
   debugToolsVisible: boolean;
   onOpenAdvancedChallenge: (roundId: RoundId) => void;
   onOpenAvatarLab: () => void;
+  onOpenHomeworld: () => void;
   onOpenLuckDraw: () => void;
   onResetTestData: () => void;
   onShareImage: () => void;
@@ -126,6 +128,12 @@ export function ResultScreen({
       label: "重新测试",
       icon: <RestartIcon />,
       onSelect: onRestart,
+    },
+    {
+      id: "homeworld",
+      label: "家园",
+      icon: <HomeworldIcon />,
+      onSelect: onOpenHomeworld,
     },
     {
       id: "multiplayer",

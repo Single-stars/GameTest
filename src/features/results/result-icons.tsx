@@ -39,6 +39,17 @@ export function MultiplayerIcon() {
   );
 }
 
+export function HomeworldIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+      <path d="M4 11.5 12 5l8 6.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M6.5 10.5V19h11v-8.5" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M10 19v-5.2a2 2 0 0 1 4 0V19" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M8.8 12.2h1.9M13.3 12.2h1.9" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
 export function AvatarLabIcon() {
   return (
     <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">

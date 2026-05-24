@@ -5,6 +5,10 @@ import {
   createForfeitMessage,
   createHeartbeatMessage,
   createHelloMessage,
+  createHomeworldPresenceMessage,
+  createHomeworldStateMessage,
+  createLevelSelectPresenceMessage,
+  createLevelSelectStateMessage,
   createReadyMessage,
   createRematchMessage,
   createResultMessage,
@@ -26,6 +30,15 @@ import type {
   SelfGameState,
   SessionRole,
 } from "@/lib/multiplayer/types";
+import type {
+  HomeworldPresence,
+  HomeworldState,
+} from "@/features/homeworld/homeworld-state";
+import {
+  resolveMultiplayerPlayMode,
+  type MultiplayerLevelSelectPresence,
+  type MultiplayerLevelSelectState,
+} from "@/lib/multiplayer/level-select";
 
 const COUNTDOWN_TICK_MS = 100;
 const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 100;
@@ -60,6 +73,12 @@ export function buildInitialSnapshot(): MultiplayerSnapshot {
     opponentState: null,
     selfResult: null,
     opponentResult: null,
+    homeworldState: null,
+    selfHomeworldPresence: null,
+    opponentHomeworldPresence: null,
+    levelSelectState: null,
+    selfLevelSelectPresence: null,
+    opponentLevelSelectPresence: null,
     errorMessage: null,
   };
 }
@@ -75,7 +94,7 @@ export class MultiplayerSession {
   private snapshot: MultiplayerSnapshot = buildInitialSnapshot();
   private transport: RoomSignalTransport | null = null;
   private readonly onChange: (snapshot: MultiplayerSnapshot) => void;
-  private readonly selfPlayer: PlayerInfo;
+  private selfPlayer: PlayerInfo;
   private readonly role: SessionRole;
   private readonly targetRoomId: string | null;
   private countdownTimer: number | null = null;
@@ -132,6 +151,10 @@ export class MultiplayerSession {
           });
         },
         onConnected: () => {
+          const currentHomeworldPresence = this.snapshot.selfHomeworldPresence;
+          const currentHomeworldState = this.snapshot.homeworldState;
+          const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
+          const currentLevelSelectState = this.snapshot.levelSelectState;
           this.stopCountdown();
           this.stopOpponentStateSnapshotTimer();
           this.pendingOpponentStateSnapshot = null;
@@ -152,8 +175,15 @@ export class MultiplayerSession {
             opponentState: null,
             selfResult: null,
             opponentResult: null,
+            homeworldState: currentHomeworldState,
+            selfHomeworldPresence: currentHomeworldPresence,
+            opponentHomeworldPresence: null,
+            levelSelectState: currentLevelSelectState,
+            selfLevelSelectPresence: currentLevelSelectPresence,
+            opponentLevelSelectPresence: null,
           });
           this.send(createHelloMessage(this.selfPlayer));
+          this.sendCurrentRoomSnapshots();
         },
         onPeerDisconnected: (message) => {
           void message;
@@ -176,6 +206,12 @@ export class MultiplayerSession {
             opponentState: null,
             selfResult: null,
             opponentResult: null,
+            homeworldState: null,
+            selfHomeworldPresence: null,
+            opponentHomeworldPresence: null,
+            levelSelectState: null,
+            selfLevelSelectPresence: null,
+            opponentLevelSelectPresence: null,
             opponentReady: false,
           });
         },
@@ -194,6 +230,10 @@ export class MultiplayerSession {
             opponentState: null,
             selfResult: null,
             opponentResult: null,
+            homeworldState: null,
+            opponentHomeworldPresence: null,
+            levelSelectState: null,
+            opponentLevelSelectPresence: null,
             opponentReady: false,
           });
         },
@@ -209,6 +249,12 @@ export class MultiplayerSession {
     this.maybeStartMatch();
   }
 
+  updateSelfPlayerProfile(patch: Pick<PlayerInfo, "skinId"> | Pick<PlayerInfo, "name"> | Pick<PlayerInfo, "name" | "skinId">) {
+    this.selfPlayer = { ...this.selfPlayer, ...patch };
+    this.patchSnapshot({ selfPlayer: this.selfPlayer });
+    this.send(createHelloMessage(this.selfPlayer));
+  }
+
   startMatch(config: Omit<MatchConfig, "matchId" | "startAt"> & { countdownMs: number; matchId?: string }) {
     if (this.role !== "host") return;
     const sentAt = now();
@@ -221,6 +267,7 @@ export class MultiplayerSession {
     const match: MatchConfig = {
       matchId: config.matchId || createMatchId(config.seed),
       levelId: config.levelId,
+      playMode: config.playMode,
       seed: config.seed,
       logicWidth: config.logicWidth,
       logicHeight: config.logicHeight,
@@ -245,6 +292,7 @@ export class MultiplayerSession {
       startAt: match.startAt,
       sentAt,
       levelId: match.levelId,
+      playMode: match.playMode,
       logicWidth: match.logicWidth,
       logicHeight: match.logicHeight,
     });
@@ -291,11 +339,54 @@ export class MultiplayerSession {
     this.tryFinishSession();
   }
 
+  reportHomeworldState(homeworld: HomeworldState) {
+    this.patchSnapshot({ homeworldState: homeworld });
+    this.send(createHomeworldStateMessage(homeworld));
+  }
+
+  reportHomeworldPresence(presence: HomeworldPresence) {
+    const current = this.snapshot.selfHomeworldPresence;
+    if (
+      current?.action === presence.action &&
+      current?.direction === presence.direction &&
+      current?.displayName === presence.displayName &&
+      current?.skinId === presence.skinId &&
+      current?.x === presence.x &&
+      current?.y === presence.y
+    ) {
+      return;
+    }
+    this.patchSnapshot({ selfHomeworldPresence: presence });
+    this.send(createHomeworldPresenceMessage(presence));
+  }
+
+  reportLevelSelectState(selection: MultiplayerLevelSelectState) {
+    this.patchSnapshot({ levelSelectState: selection, selfReady: false, opponentReady: false });
+    this.send(createLevelSelectStateMessage(selection));
+    this.send(createReadyMessage(false));
+  }
+
+  reportLevelSelectPresence(presence: MultiplayerLevelSelectPresence) {
+    const current = this.snapshot.selfLevelSelectPresence;
+    if (
+      current?.action === presence.action &&
+      current?.inRoom === presence.inRoom &&
+      current?.direction === presence.direction &&
+      current?.readyToStart === presence.readyToStart &&
+      current?.skinId === presence.skinId &&
+      current?.x === presence.x
+    ) {
+      return;
+    }
+    this.patchSnapshot({ selfLevelSelectPresence: presence });
+    this.send(createLevelSelectPresenceMessage(presence));
+  }
+
   forfeit() {
     const matchId = this.currentMatchId();
     if (!matchId) return;
     this.send(createForfeitMessage(matchId));
-    this.resetRound();
+    this.settleForfeit("self");
   }
 
   requestRematch() {
@@ -339,6 +430,12 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      homeworldState: null,
+      selfHomeworldPresence: null,
+      opponentHomeworldPresence: null,
+      levelSelectState: null,
+      selfLevelSelectPresence: null,
+      opponentLevelSelectPresence: null,
     });
   }
 
@@ -367,17 +464,45 @@ export class MultiplayerSession {
     this.transport?.send(message);
   }
 
+  private sendCurrentRoomSnapshots() {
+    if (this.snapshot.homeworldState) {
+      this.send(createHomeworldStateMessage(this.snapshot.homeworldState));
+    }
+    if (this.snapshot.selfHomeworldPresence) {
+      this.send(createHomeworldPresenceMessage(this.snapshot.selfHomeworldPresence));
+    }
+    if (this.snapshot.levelSelectState) {
+      this.send(createLevelSelectStateMessage(this.snapshot.levelSelectState));
+    }
+    if (this.snapshot.selfLevelSelectPresence) {
+      this.send(createLevelSelectPresenceMessage(this.snapshot.selfLevelSelectPresence));
+    }
+  }
+
   private handleMessage(message: NetMessage) {
     this.notePeerMessage();
     switch (message.kind) {
       case "hello":
         this.patchSnapshot({ opponentPlayer: message.player });
+        this.sendCurrentRoomSnapshots();
         break;
       case "heartbeat":
         break;
       case "ready":
         this.patchSnapshot({ opponentReady: message.ready });
         this.maybeStartMatch();
+        break;
+      case "homeworld-state":
+        this.patchSnapshot({ homeworldState: message.homeworld });
+        break;
+      case "homeworld-presence":
+        this.patchSnapshot({ opponentHomeworldPresence: message.presence });
+        break;
+      case "level-select-presence":
+        this.patchSnapshot({ opponentLevelSelectPresence: message.presence });
+        break;
+      case "level-select-state":
+        this.patchSnapshot({ levelSelectState: message.selection, selfReady: false, opponentReady: false });
         break;
       case "start":
         this.acceptStartMessage(message);
@@ -426,7 +551,7 @@ export class MultiplayerSession {
         break;
       case "forfeit":
         if (!this.isCurrentMatchMessage(message)) return;
-        this.resetRound();
+        this.settleForfeit("opponent");
         break;
       case "rematch":
         if (!this.isCurrentMatchMessage(message)) return;
@@ -454,6 +579,12 @@ export class MultiplayerSession {
             opponentState: null,
             selfResult: null,
             opponentResult: null,
+            homeworldState: null,
+            selfHomeworldPresence: null,
+            opponentHomeworldPresence: null,
+            levelSelectState: null,
+            selfLevelSelectPresence: null,
+            opponentLevelSelectPresence: null,
             opponentReady: false,
           });
         }
@@ -487,7 +618,35 @@ export class MultiplayerSession {
     });
   }
 
+  private settleForfeit(source: "self" | "opponent") {
+    const matchId = this.currentMatchId();
+    if (!matchId) return;
+    this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    const selfPassed = source === "opponent";
+    this.patchSnapshot({
+      status: "finished",
+      countdown: null,
+      selfReady: false,
+      opponentReady: false,
+      selfResult: {
+        matchId,
+        passed: selfPassed,
+        score: selfPassed ? Math.round(this.snapshot.selfState?.score ?? 0) : 0,
+      },
+      opponentResult: {
+        matchId,
+        passed: !selfPassed,
+        score: !selfPassed ? Math.round(this.snapshot.opponentState?.score ?? 0) : 0,
+      },
+    });
+  }
+
   private resetHostWaitingState() {
+    const currentHomeworldPresence = this.snapshot.selfHomeworldPresence;
+    const currentHomeworldState = this.snapshot.homeworldState;
+    const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
+    const currentLevelSelectState = this.snapshot.levelSelectState;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopPeerPresence();
@@ -510,6 +669,12 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      homeworldState: currentHomeworldState,
+      selfHomeworldPresence: currentHomeworldPresence,
+      opponentHomeworldPresence: null,
+      levelSelectState: currentLevelSelectState,
+      selfLevelSelectPresence: currentLevelSelectPresence,
+      opponentLevelSelectPresence: null,
     });
   }
 
@@ -525,6 +690,7 @@ export class MultiplayerSession {
     const match: MatchConfig = {
       matchId: message.matchId,
       levelId: message.levelId,
+      playMode: resolveMultiplayerPlayMode(message.playMode),
       seed: message.seed,
       logicWidth: message.logicWidth,
       logicHeight: message.logicHeight,
@@ -559,6 +725,7 @@ export class MultiplayerSession {
     if (!match || !selfReady || !opponentReady) return;
     this.startMatch({
       levelId: match.levelId,
+      playMode: match.playMode,
       seed: createRematchSeed(match.seed),
       logicWidth: match.logicWidth,
       logicHeight: match.logicHeight,
@@ -619,6 +786,12 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      homeworldState: null,
+      selfHomeworldPresence: null,
+      opponentHomeworldPresence: null,
+      levelSelectState: null,
+      selfLevelSelectPresence: null,
+      opponentLevelSelectPresence: null,
       opponentReady: false,
     });
   }
