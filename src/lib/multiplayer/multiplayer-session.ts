@@ -187,9 +187,8 @@ export class MultiplayerSession {
           this.sendCurrentRoomSnapshots();
         },
         onPeerDisconnected: (message) => {
-          void message;
           if (this.role !== "host") return;
-          this.resetHostWaitingState();
+          this.resetHostWaitingState(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
         },
         onMessage: (message) => this.handleMessage(message),
         onFailed: (message) => {
@@ -701,7 +700,7 @@ export class MultiplayerSession {
     });
   }
 
-  private resetHostWaitingState() {
+  private resetHostWaitingState(errorMessage: string | null = null) {
     const currentHomeworldPresence = this.snapshot.selfHomeworldPresence;
     const currentHomeworldState = this.snapshot.homeworldState;
     const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
@@ -718,7 +717,7 @@ export class MultiplayerSession {
     this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "waiting",
-      errorMessage: null,
+      errorMessage,
       selfReady: false,
       opponentReady: false,
       match: null,
@@ -843,7 +842,7 @@ export class MultiplayerSession {
     this.pendingOpponentStateSnapshot = null;
     this.lastOpponentStateSnapshotAt = 0;
     this.patchSnapshot({
-      status: this.role === "host" ? "waiting" : "connected",
+      status: this.role === "host" ? "waiting" : "disconnected",
       errorMessage: message,
       match: null,
       countdown: null,
@@ -851,6 +850,8 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      opponentPlayer: null,
+      homeworldState: this.role === "host" ? this.snapshot.homeworldState : null,
       opponentHomeworldPresence: null,
       selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,

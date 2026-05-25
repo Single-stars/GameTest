@@ -101,6 +101,7 @@ function RematchHint({
 export function MultiplayerGameShell({
   children,
   countdownSeconds,
+  coOpAssignmentText,
   opponentPlayer,
   opponentResult,
   opponentState,
@@ -118,6 +119,7 @@ export function MultiplayerGameShell({
 }: {
   children?: ReactNode;
   countdownSeconds: number | null;
+  coOpAssignmentText?: string | null;
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
   opponentState: SelfGameState | null;
@@ -192,7 +194,8 @@ export function MultiplayerGameShell({
 
       {status === "countdown" && countdownSeconds !== null ? (
         <div className="multiplayer-game-countdown-panel" aria-live="polite">
-          {countdownSeconds}
+          <strong>{countdownSeconds}</strong>
+          {coOpMode && coOpAssignmentText ? <span>{coOpAssignmentText}</span> : null}
         </div>
       ) : null}
 

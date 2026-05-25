@@ -114,20 +114,20 @@ function hashMultiplayerSeed(seed: string) {
   return hash >>> 0;
 }
 
-function resolveCoOpHostLeft(runSeed: string) {
+export function resolveCoOpHostLeft(runSeed: string) {
   return hashMultiplayerSeed(`${runSeed}:co-op-left`) % 2 === 0;
 }
 
-function resolveSquareJumpHostFirst(runSeed: string) {
+export function resolveSquareJumpHostFirst(runSeed: string) {
   return hashMultiplayerSeed(`${runSeed}:co-op-square-jump-first`) % 2 === 0;
 }
 
-function resolveCoOpRole(selfRole: SessionRole, hostLeft: boolean): "left" | "right" {
+export function resolveCoOpRole(selfRole: SessionRole, hostLeft: boolean): "left" | "right" {
   if (selfRole === "host") return hostLeft ? "left" : "right";
   return hostLeft ? "right" : "left";
 }
 
-function resolveSquareJumpCoOpRole(selfRole: SessionRole, hostFirst: boolean): "first" | "second" {
+export function resolveSquareJumpCoOpRole(selfRole: SessionRole, hostFirst: boolean): "first" | "second" {
   if (selfRole === "host") return hostFirst ? "first" : "second";
   return hostFirst ? "second" : "first";
 }

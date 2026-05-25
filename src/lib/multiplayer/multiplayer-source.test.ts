@@ -266,7 +266,7 @@ test("homeworld presence and round reset preserve profile sync after exercise ro
   const messagesSource = readSource("./messages.ts");
   const resetRoundSource = sessionSource.slice(
     sessionSource.indexOf("private resetRound()"),
-    sessionSource.indexOf("private resetHostWaitingState()"),
+    sessionSource.indexOf("private resetHostWaitingState"),
   );
 
   assert.doesNotMatch(typesSource, /@\/features\/homeworld\/homeworld-state/);
@@ -786,6 +786,50 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   assert.doesNotMatch(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,500}status:\s*"disconnected"/);
   assert.doesNotMatch(sessionSource, /onFailed: \(message\) => \{[\s\S]{0,500}status:\s*"failed"/);
   assert.doesNotMatch(pageSource, /snapshot\.status !== "disconnected" && snapshot\.status !== "failed"[\s\S]{0,260}cleanupSession\(\)/);
+});
+
+test("host peer failures keep signaling alive so the displayed room code remains joinable", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const peerFailureHandlerSource = transportSource.slice(
+    transportSource.indexOf("private handlePeerConnectionFailure"),
+    transportSource.indexOf("private clearSignalOpenTimer"),
+  );
+  const hostPeerFailureBranchSource = peerFailureHandlerSource.slice(
+    peerFailureHandlerSource.indexOf('if (this.role === "host")'),
+    peerFailureHandlerSource.indexOf("this.events.onDisconnected"),
+  );
+
+  assert.match(transportSource, /handlePeerConnectionFailure/);
+  assert.match(peerFailureHandlerSource, /if \(this\.role === "host"\) \{[\s\S]{0,160}events\.onPeerDisconnected\?\.\(message\);[\s\S]{0,80}return;/);
+  assert.doesNotMatch(hostPeerFailureBranchSource, /this\.dispose\(\)/);
+  assert.match(transportSource, /createOffer\(\{ resetPeer: true \}\)/);
+  assert.match(transportSource, /if \(resetPeer\) this\.closePeerConnection\(\);/);
+  assert.match(sessionSource, /this\.resetHostWaitingState\(message \|\| MULTIPLAYER_DISCONNECTED_MESSAGE\)/);
+  assert.match(sessionSource, /private resetHostWaitingState\(errorMessage: string \| null = null\)/);
+  assert.match(sessionSource, /status: this\.role === "host" \? "waiting" : "disconnected"/);
+  assert.match(sessionSource, /homeworldState: this\.role === "host" \? this\.snapshot\.homeworldState : null/);
+});
+
+test("co-op countdown explains the player's split control assignment", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const multiplayerCss = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(runtimeSource, /export function resolveCoOpHostLeft/);
+  assert.match(runtimeSource, /export function resolveSquareJumpHostFirst/);
+  assert.match(runtimeSource, /export function resolveCoOpRole/);
+  assert.match(runtimeSource, /export function resolveSquareJumpCoOpRole/);
+  assert.match(pageSource, /const coOpAssignmentText = useMemo/);
+  assert.match(pageSource, /你先蓄力起跳/);
+  assert.match(pageSource, /你负责左方向/);
+  assert.match(pageSource, /coOpAssignmentText=\{coOpAssignmentText\}/);
+  assert.match(shellSource, /coOpAssignmentText\?: string \| null;/);
+  assert.match(shellSource, /<strong>\{countdownSeconds\}<\/strong>/);
+  assert.match(shellSource, /coOpMode && coOpAssignmentText \? <span>\{coOpAssignmentText\}<\/span> : null/);
+  assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel strong/);
+  assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel span/);
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {

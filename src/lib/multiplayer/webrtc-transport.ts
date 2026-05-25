@@ -242,7 +242,7 @@ export class RoomSignalTransport {
         break;
       case "peer-joined":
         if (this.role === "host") {
-          await this.createOffer();
+          await this.createOffer({ resetPeer: true });
         }
         break;
       case "peer-left":
@@ -282,8 +282,7 @@ export class RoomSignalTransport {
         return;
       }
       if (peerConnection.connectionState === "failed") {
-        if (this.connected) return;
-        this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+        this.handlePeerConnectionFailure(MULTIPLAYER_FAILED_MESSAGE);
       }
       if (peerConnection.connectionState === "closed") {
         this.connected = false;
@@ -343,7 +342,7 @@ export class RoomSignalTransport {
 
     channel.onerror = () => {
       if (this.destroyed) return;
-      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+      this.handlePeerConnectionFailure(MULTIPLAYER_FAILED_MESSAGE);
     };
   }
 
@@ -351,7 +350,7 @@ export class RoomSignalTransport {
     this.clearDataChannelOpenTimer();
     this.dataChannelOpenTimer = window.setTimeout(() => {
       if (this.destroyed || this.connected) return;
-      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+      this.handlePeerConnectionFailure(MULTIPLAYER_FAILED_MESSAGE);
     }, DATA_CHANNEL_OPEN_TIMEOUT_MS);
   }
 
@@ -363,7 +362,8 @@ export class RoomSignalTransport {
     this.events.onConnected?.(this.role === "host" ? "guest" : "host");
   }
 
-  private async createOffer() {
+  private async createOffer({ resetPeer = false }: { resetPeer?: boolean } = {}) {
+    if (resetPeer) this.closePeerConnection();
     const peerConnection = this.preparePeerConnection();
     this.startDataChannelOpenTimer();
     const offer = await peerConnection.createOffer();
@@ -450,6 +450,17 @@ export class RoomSignalTransport {
 
   private handleDisconnected(message: string) {
     if (this.destroyed) return;
+    this.events.onDisconnected?.(message);
+    this.dispose();
+  }
+
+  private handlePeerConnectionFailure(message: string) {
+    if (this.destroyed) return;
+    this.closePeerConnection();
+    if (this.role === "host") {
+      this.events.onPeerDisconnected?.(message);
+      return;
+    }
     this.events.onDisconnected?.(message);
     this.dispose();
   }

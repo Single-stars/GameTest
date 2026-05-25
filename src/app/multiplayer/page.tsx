@@ -7,7 +7,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConnectionStatus } from "@/features/multiplayer/connection-status";
 import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
 import { MultiplayerLevelSelectRoom } from "@/features/multiplayer/multiplayer-level-select-room";
-import { MultiplayerMatchRuntime } from "@/features/multiplayer/multiplayer-match-runtime";
+import {
+  MultiplayerMatchRuntime,
+  resolveCoOpHostLeft,
+  resolveCoOpRole,
+  resolveSquareJumpCoOpRole,
+  resolveSquareJumpHostFirst,
+} from "@/features/multiplayer/multiplayer-match-runtime";
 import { HostRoom } from "@/features/multiplayer/host-room";
 import { JoinRoom } from "@/features/multiplayer/join-room";
 import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
@@ -722,7 +728,7 @@ function MultiplayerPageContent() {
     router.replace("/multiplayer?homeworld=1");
   }, [cleanupSession, isHomeworldRoute, router, snapshot.errorMessage, snapshot.status]);
 
-  const homeworldMode = snapshot.role === "guest" ? "visitor" : "owner";
+  const homeworldMode = snapshot.role === "guest" && snapshot.status !== "failed" && snapshot.status !== "disconnected" ? "visitor" : "owner";
   const homeworldStateForScreen = homeworldMode === "visitor" && snapshot.homeworldState ? snapshot.homeworldState : homeworldState;
   const homeworldOwnerName = homeworldMode === "visitor"
     ? snapshot.opponentHomeworldPresence?.displayName || snapshot.opponentPlayer?.name || ""
@@ -745,6 +751,15 @@ function MultiplayerPageContent() {
     snapshot.countdown && snapshot.countdown.remainMs > 0
       ? Math.ceil(snapshot.countdown.remainMs / 1000)
       : null;
+  const coOpAssignmentText = useMemo(() => {
+    if (activePlayMode !== "co-op" || !snapshot.match || !snapshot.role) return null;
+    if (battleLevel.gameId === "square-jump") {
+      const turnRole = resolveSquareJumpCoOpRole(snapshot.role, resolveSquareJumpHostFirst(runSeed));
+      return turnRole === "first" ? "你先蓄力起跳" : "对方先蓄力起跳";
+    }
+    const moveRole = resolveCoOpRole(snapshot.role, resolveCoOpHostLeft(runSeed));
+    return moveRole === "left" ? "你负责左方向" : "你负责右方向";
+  }, [activePlayMode, battleLevel.gameId, runSeed, snapshot.match, snapshot.role]);
 
   if (isHomeworldRoute) {
     return (
@@ -753,6 +768,7 @@ function MultiplayerPageContent() {
           {showGameShell ? (
             <MultiplayerGameShell
               countdownSeconds={countdownSeconds}
+              coOpAssignmentText={coOpAssignmentText}
               opponentPlayer={snapshot.opponentPlayer}
               opponentResult={snapshot.opponentResult}
               opponentState={snapshot.opponentState}
@@ -972,6 +988,7 @@ function MultiplayerPageContent() {
         {showGameShell ? (
           <MultiplayerGameShell
             countdownSeconds={countdownSeconds}
+            coOpAssignmentText={coOpAssignmentText}
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}
