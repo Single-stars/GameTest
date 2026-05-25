@@ -385,10 +385,12 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.match(homeworldScreenSource, /className="homeworld-room-invite"/);
   assert.match(homeworldScreenSource, /aria-label="家园联机房间码"/);
   assert.match(homeworldScreenSource, /onPointerDown=\{onCopyRoomCode\}/);
-  assert.match(homeworldScreenSource, /roomCodeCopyStatus === "copied" \? "已复制" : "复制房间码"/);
-  assert.match(homeworldScreenSource, /复制房间码/);
+  assert.match(homeworldScreenSource, /roomCodeCopyStatus === "copied" \? "已复制" : "复制码"/);
   assert.match(homeworldScreenSource, /复制链接/);
+  assert.match(homeworldScreenSource, /aria-label=\{`复制家园联机邀请链接 \$\{inviteLink\}`\}/);
   assert.match(homeworldScreenSource, /roomCodeCopyStatus === "manual" \? <small>请手动复制房间码。<\/small> : null/);
+  assert.match(homeworldScreenSource, /房间已失效，已刷新房间码和邀请链接。/);
+  assert.doesNotMatch(homeworldScreenSource, /aria-label="家园联机邀请链接" readOnly value=\{inviteLink\}/);
   assert.doesNotMatch(homeworldScreenSource, /<strong>创建房间<\/strong>/);
   assert.doesNotMatch(homeworldScreenSource, /<strong>加入房间<\/strong>/);
   assert.doesNotMatch(homeworldScreenSource, /<input[\s\S]*placeholder="输入房间码"[\s\S]*<button className="secondary-button" disabled=\{!joinRoomCode\.trim\(\)\}/);
@@ -406,8 +408,9 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*width:\s*100%[\s\S]*height: 50px[\s\S]*background:\s*#fffdf8/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*display:\s*grid[\s\S]*place-items:\s*center/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*display:\s*grid/);
-  assert.match(homeworldCssSource, /\.homeworld-room-invite-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(68px, auto\) minmax\(0, 1fr\) minmax\(92px, auto\)/);
-  assert.match(homeworldCssSource, /\.homeworld-room-invite-row output\s*\{[\s\S]*letter-spacing:\s*0\.08em/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(7ch, 1fr\) auto auto/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite output\s*\{[\s\S]*letter-spacing:\s*0\.08em[\s\S]*white-space:\s*nowrap/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite \.secondary-button\s*\{[\s\S]*white-space:\s*nowrap/);
   assert.match(homeworldCssSource, /\.homeworld-door-menu\s*\{[\s\S]*width:\s*min\(320px, calc\(100vw - 24px\)\)/);
   assert.match(homeworldCssSource, /\.homeworld-door-menu-panel button\s*\{[\s\S]*height:\s*50px[\s\S]*min-height:\s*50px/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-dialog\s*\{[\s\S]*align-items:\s*end/);

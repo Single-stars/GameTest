@@ -9,6 +9,14 @@ export type CreateRoomResponse = {
   expiresAt: number;
 };
 
+export type RoomStatusResponse = {
+  exists: boolean;
+  roomCode?: string;
+  expiresAt?: number;
+  hostConnected?: boolean;
+  guestConnected?: boolean;
+};
+
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
@@ -105,6 +113,28 @@ export async function createSignalingRoom(fetchImpl: typeof fetch = fetch) {
   return {
     ...payload,
     roomCode: normalizeRoomCode(payload.roomCode),
+  };
+}
+
+export async function getSignalingRoomStatus(roomCode: string, fetchImpl: typeof fetch = fetch): Promise<RoomStatusResponse> {
+  const response = await fetchImpl(buildRoomApiUrl(`/api/rooms/${encodeURIComponent(normalizeRoomCode(roomCode))}`), {
+    method: "GET",
+    headers: {
+      "cache-control": "no-store",
+    },
+  });
+
+  if (response.status === 404) return { exists: false };
+  if (!response.ok) throw new Error(`room-status-failed:${response.status}`);
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("room-status-invalid-response");
+  const record = payload as Record<string, unknown>;
+  return {
+    exists: record.exists === true,
+    roomCode: typeof record.roomCode === "string" ? normalizeRoomCode(record.roomCode) : undefined,
+    expiresAt: typeof record.expiresAt === "number" ? record.expiresAt : undefined,
+    hostConnected: typeof record.hostConnected === "boolean" ? record.hostConnected : undefined,
+    guestConnected: typeof record.guestConnected === "boolean" ? record.guestConnected : undefined,
   };
 }
 

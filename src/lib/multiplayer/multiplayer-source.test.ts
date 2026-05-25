@@ -23,14 +23,17 @@ test("Cloudflare WebRTC transport expected failures do not trigger the Next dev 
   assert.doesNotMatch(source, /console\.error/);
 });
 
-test("Cloudflare WebRTC transport fails direct connection without ICE restart or TURN fallback", () => {
+test("Cloudflare WebRTC transport retries direct connection with bounded ICE restart and no TURN fallback", () => {
   const source = readSource("./webrtc-transport.ts");
 
-  assert.doesNotMatch(source, /ICE_RESTART_DELAY_MS/);
-  assert.doesNotMatch(source, /scheduleIceRestart/);
+  assert.match(source, /ICE_RESTART_DELAY_MS = 1_200/);
+  assert.match(source, /MAX_ICE_RESTART_ATTEMPTS = 3/);
+  assert.match(source, /scheduleIceRestart/);
+  assert.match(source, /type: "restart-request"/);
+  assert.match(source, /createOffer\(\{ iceRestart: true \}\)/);
   assert.doesNotMatch(source, /restartIce\(\)/);
-  assert.doesNotMatch(source, /type: "restart-request"/);
   assert.doesNotMatch(source, /createOffer\(true\)/);
+  assert.doesNotMatch(source, /turn:/i);
   assert.match(source, /MULTIPLAYER_FAILED_MESSAGE/);
 });
 
@@ -241,7 +244,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /const homeworldInviteLink = snapshot\.role === "host" && snapshot\.roomId && snapshot\.status !== "idle"\s*\?\s*homeworldRoomLink\s*:\s*"";/);
   assert.match(pageSource, /const homeworldRoomEntryHidden = snapshot\.status === "connected" && Boolean\(snapshot\.opponentPlayer\);/);
   assert.match(pageSource, /const handleCopyRoomCode = useCallback/);
-  assert.match(pageSource, /const \[roomCodeCopyStatus, setRoomCodeCopyStatus\] = useState<CopyStatus>\("idle"\);/);
+  assert.match(pageSource, /const \[roomCodeCopyStatus, setRoomCodeCopyStatus\] = useState<RoomShareCopyStatus>\("idle"\);/);
   assert.match(pageSource, /const setTransientRoomCodeCopyStatus = useCallback/);
   assert.match(pageSource, /navigator\.clipboard\?\.writeText\) \{[\s\S]*await navigator\.clipboard\.writeText\(snapshot\.roomId\)/);
   assert.match(pageSource, /const handleOpenHomeworldMultiplayerEntry = useCallback/);
@@ -567,9 +570,14 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
 
   assert.match(pageSource, /copyRoomLinkWithFallback/);
   assert.match(pageSource, /document\.execCommand\("copy"\)/);
+  assert.match(pageSource, /getSignalingRoomStatus/);
+  assert.match(pageSource, /refreshExpiredHostRoom/);
+  assert.match(pageSource, /status\.exists && status\.hostConnected !== false/);
   assert.match(pageSource, /copyStatus/);
   assert.match(hostRoomSource, /copyStatus/);
-  assert.match(hostRoomSource, /readOnly/);
+  assert.match(hostRoomSource, /roomCodeCopyStatus\?: "idle" \| "copied" \| "manual" \| "expired"/);
+  assert.match(hostRoomSource, /aria-label=\{`复制邀请链接 \$\{roomLink\}`\}/);
+  assert.match(hostRoomSource, /房间已失效，已刷新房间码和邀请链接。/);
 });
 
 test("multiplayer host can choose the battle level before match start", () => {
@@ -727,7 +735,7 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(transportSource, /ignoreNextControlClose/);
   assert.match(transportSource, /this\.ignoreNextControlClose = true;/);
   assert.match(transportSource, /if \(label === MULTIPLAYER_DATA_CHANNELS\.control && this\.ignoreNextControlClose\)/);
-  assert.match(transportSource, /if \(this\.role === "host"\) \{[\s\S]{0,140}this\.closePeerConnection\(\);[\s\S]{0,140}this\.events\.onPeerDisconnected/);
+  assert.match(transportSource, /case "peer-left":[\s\S]{0,260}this\.closePeerConnection\(\);[\s\S]{0,180}this\.events\.onPeerDisconnected/);
   assert.match(workerSource, /closeExistingRoleSocket\(role\)/);
   assert.match(workerSource, /type: "peer-left"/);
   assert.match(workerSource, /clearGuestToken\(\)/);
@@ -778,8 +786,8 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   const transportSource = readSource("./webrtc-transport.ts");
 
   assert.match(transportSource, /socket\.onclose = \(\) => \{[\s\S]*if \(this\.connected\) return;/);
-  assert.match(transportSource, /connectionState === "disconnected"[\s\S]*return;/);
-  assert.match(transportSource, /connectionState === "failed"[\s\S]*if \(this\.connected\) return;/);
+  assert.match(transportSource, /connectionState === "disconnected"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_DISCONNECTED_MESSAGE\);[\s\S]*return;/);
+  assert.match(transportSource, /connectionState === "failed"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_FAILED_MESSAGE\);/);
   assert.match(transportSource, /case "peer-left":[\s\S]*if \(message\.reason !== "host-disbanded-room" && message\.reason !== "peer-left-room"\) return;/);
   assert.doesNotMatch(transportSource, /label !== MULTIPLAYER_DATA_CHANNELS\.control \|\| !this\.connected\) return;[\s\S]{0,220}this\.handleDisconnected/);
   assert.match(sessionSource, /private preserveRoomAfterConnectionIssue/);
@@ -890,11 +898,16 @@ test("Cloudflare multiplayer uses short room codes and native WebRTC transport",
   assert.match(sessionSource, /RoomSignalTransport/);
   assert.match(webRtcSource, /new RTCPeerConnection/);
   assert.match(webRtcSource, /stun:stun\.cloudflare\.com:3478/);
+  assert.match(webRtcSource, /stun:stun\.l\.google\.com:19302/);
+  assert.match(webRtcSource, /stun:stun1\.l\.google\.com:19302/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.control/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.input/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state/);
+  assert.match(webRtcSource, /createOffer\(\{ iceRestart: true \}\)/);
   assert.doesNotMatch(webRtcSource, /createOffer\(true\)/);
   assert.match(roomApiSource, /NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL/);
+  assert.match(roomApiSource, /getSignalingRoomStatus/);
+  assert.match(roomApiSource, /room-status-failed/);
   assert.match(roomApiSource, /LOCAL_DEV_SIGNALING_FALLBACK = "https:\/\/208848\.xyz"/);
   assert.match(roomApiSource, /isLocalDevelopmentOrigin/);
   assert.match(roomApiSource, /return LOCAL_DEV_SIGNALING_FALLBACK;/);
@@ -925,6 +938,9 @@ test("Cloudflare Worker Durable Object signaling is present with paid fallbacks 
   assert.match(workerSource, /origin-forbidden/);
   assert.match(workerSource, /ENABLE_TURN = false/);
   assert.match(workerSource, /ENABLE_RELAY = false/);
+  assert.match(workerSource, /EMPTY_ROOM_TTL_MS = 15 \* 60 \* 1000/);
+  assert.match(workerSource, /lastEmptyAt/);
+  assert.match(workerSource, /isRoomExpired/);
   assert.match(wranglerSource, /class_name = "RoomDurableObject"/);
   assert.match(wranglerSource, /new_sqlite_classes = \["RoomDurableObject"\]/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);

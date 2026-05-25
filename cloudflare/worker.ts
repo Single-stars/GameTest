@@ -13,9 +13,11 @@ type RoomMetadata = {
   expiresAt: number;
   hostToken: string;
   guestToken: string | null;
+  lastEmptyAt: number;
 };
 
 const ROOM_TTL_MS = 30 * 60 * 1000;
+const EMPTY_ROOM_TTL_MS = 15 * 60 * 1000;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
@@ -215,6 +217,7 @@ export class RoomDurableObject {
       expiresAt: now + ROOM_TTL_MS,
       hostToken: randomToken(),
       guestToken: null,
+      lastEmptyAt: now,
     };
     this.metadata = metadata;
     await this.state.storage.put("metadata", metadata);
@@ -232,7 +235,7 @@ export class RoomDurableObject {
 
   private status() {
     const metadata = this.metadata;
-    if (!metadata || metadata.expiresAt <= Date.now()) {
+    if (!metadata || this.isRoomExpired(metadata)) {
       return jsonResponse({ exists: false }, { status: 404 });
     }
     return jsonResponse({
@@ -252,7 +255,7 @@ export class RoomDurableObject {
     }
 
     const metadata = this.metadata;
-    if (!metadata || metadata.expiresAt <= Date.now()) {
+    if (!metadata || this.isRoomExpired(metadata)) {
       return jsonResponse({ error: "room-expired" }, { status: 404 });
     }
 
@@ -306,6 +309,13 @@ export class RoomDurableObject {
     });
   }
 
+  private isRoomExpired(metadata: RoomMetadata) {
+    const now = Date.now();
+    if (metadata.expiresAt <= now) return true;
+    const emptySince = metadata.lastEmptyAt ?? metadata.createdAt;
+    return !this.hasRole("guest") && now - emptySince > EMPTY_ROOM_TTL_MS;
+  }
+
   private sendToRole(role: SignalingRole, payload: unknown) {
     const serialized = JSON.stringify(payload);
     for (const socket of this.state.getWebSockets()) {
@@ -325,6 +335,7 @@ export class RoomDurableObject {
     const metadata = this.metadata;
     if (!metadata?.guestToken) return;
     metadata.guestToken = null;
+    metadata.lastEmptyAt = Date.now();
     await this.state.storage.put("metadata", metadata);
   }
 

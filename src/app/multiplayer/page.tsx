@@ -55,6 +55,7 @@ import {
   buildInitialSnapshot,
   MultiplayerSession,
 } from "@/lib/multiplayer/multiplayer-session";
+import { getSignalingRoomStatus } from "@/lib/multiplayer/room-api";
 import type {
   GameResult,
   MultiplayerSnapshot,
@@ -68,6 +69,8 @@ const LEVEL_SELECT_START_COUNTDOWN_MS = 3_000;
 const LEVEL_SELECT_COUNTDOWN_TICK_MS = 100;
 const MATCH_LOGIC_HEIGHT = 640;
 type CopyStatus = "idle" | "copied" | "manual";
+type RoomShareCopyStatus = CopyStatus | "expired";
+const HOST_EMPTY_ROOM_TIMEOUT_MS = 15 * 60 * 1000;
 
 function createSeed() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -150,8 +153,8 @@ function MultiplayerPageContent() {
   const [levelSelectStartCountdownNow, setLevelSelectStartCountdownNow] = useState(0);
   const [levelSelectState, setLevelSelectState] = useState<MultiplayerLevelSelectState>(() => createDefaultMultiplayerLevelSelectState());
   const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
-  const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<CopyStatus>("idle");
+  const [copyStatus, setCopyStatus] = useState<RoomShareCopyStatus>("idle");
+  const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [skinHydrated, setSkinHydrated] = useState(false);
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
@@ -163,6 +166,7 @@ function MultiplayerPageContent() {
   const didExitLevelSelectToHomeworldRef = useRef(false);
   const copyStatusTimerRef = useRef<number | null>(null);
   const roomCodeCopyStatusTimerRef = useRef<number | null>(null);
+  const roomRefreshInFlightRef = useRef(false);
 
   const hostSelectedLevelGroup = useMemo(
     () => resolveMultiplayerLevelGroup(hostSelectedGameId),
@@ -215,6 +219,19 @@ function MultiplayerPageContent() {
     sessionRef.current = null;
   }, []);
 
+  useEffect(() => {
+    if (snapshot.role !== "host") return;
+    if (snapshot.status !== "waiting") return;
+    if (!snapshot.roomId || snapshot.opponentPlayer) return;
+    const timer = window.setTimeout(() => {
+      sessionRef.current?.leave("host-disbanded-room");
+      cleanupSession();
+      setSnapshot(buildInitialSnapshot());
+      setHomeworldEntryVisible(true);
+    }, HOST_EMPTY_ROOM_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [cleanupSession, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.status]);
+
   const bootstrapSession = useCallback(
     async (role: SessionRole, roomId?: string | null) => {
       cleanupSession();
@@ -258,7 +275,7 @@ function MultiplayerPageContent() {
     [bootstrapSession],
   );
 
-  const setTransientCopyStatus = useCallback((status: CopyStatus) => {
+  const setTransientCopyStatus = useCallback((status: RoomShareCopyStatus) => {
     setCopyStatus(status);
     if (copyStatusTimerRef.current !== null) {
       window.clearTimeout(copyStatusTimerRef.current);
@@ -269,7 +286,7 @@ function MultiplayerPageContent() {
     }, 1800);
   }, []);
 
-  const setTransientRoomCodeCopyStatus = useCallback((status: CopyStatus) => {
+  const setTransientRoomCodeCopyStatus = useCallback((status: RoomShareCopyStatus) => {
     setRoomCodeCopyStatus(status);
     if (roomCodeCopyStatusTimerRef.current !== null) {
       window.clearTimeout(roomCodeCopyStatusTimerRef.current);
@@ -280,8 +297,34 @@ function MultiplayerPageContent() {
     }, 1800);
   }, []);
 
+  const refreshExpiredHostRoom = useCallback(async () => {
+    if (roomRefreshInFlightRef.current) return;
+    roomRefreshInFlightRef.current = true;
+    setTransientCopyStatus("expired");
+    setTransientRoomCodeCopyStatus("expired");
+    try {
+      sessionRef.current?.leave("host-disbanded-room");
+      await bootstrapSession("host");
+    } finally {
+      roomRefreshInFlightRef.current = false;
+    }
+  }, [bootstrapSession, setTransientCopyStatus, setTransientRoomCodeCopyStatus]);
+
+  const ensureShareRoomIsLive = useCallback(async () => {
+    if (snapshot.role !== "host" || !snapshot.roomId) return true;
+    try {
+      const status = await getSignalingRoomStatus(snapshot.roomId);
+      if (status.exists && status.hostConnected !== false) return true;
+      await refreshExpiredHostRoom();
+      return false;
+    } catch {
+      return true;
+    }
+  }, [refreshExpiredHostRoom, snapshot.role, snapshot.roomId]);
+
   const handleCopyLink = useCallback(async () => {
     if (!activeRoomLink) return;
+    if (!(await ensureShareRoomIsLive())) return;
     let copied = false;
 
     try {
@@ -297,10 +340,11 @@ function MultiplayerPageContent() {
       copied = copyRoomLinkWithFallback(activeRoomLink);
     }
     setTransientCopyStatus(copied ? "copied" : "manual");
-  }, [activeRoomLink, setTransientCopyStatus]);
+  }, [activeRoomLink, ensureShareRoomIsLive, setTransientCopyStatus]);
 
   const handleCopyRoomCode = useCallback(async () => {
     if (!snapshot.roomId) return;
+    if (!(await ensureShareRoomIsLive())) return;
     let copied = false;
 
     try {
@@ -316,7 +360,7 @@ function MultiplayerPageContent() {
       copied = copyRoomLinkWithFallback(snapshot.roomId);
     }
     setTransientRoomCodeCopyStatus(copied ? "copied" : "manual");
-  }, [setTransientRoomCodeCopyStatus, snapshot.roomId]);
+  }, [ensureShareRoomIsLive, setTransientRoomCodeCopyStatus, snapshot.roomId]);
 
   const toggleReady = useCallback(() => {
     if (!sessionRef.current) return;
@@ -950,7 +994,14 @@ function MultiplayerPageContent() {
 
         {showRoom && roomLink ? (
           <section style={{ marginTop: 14 }}>
-            <HostRoom roomLink={roomLink} onCopy={handleCopyLink} copyStatus={copyStatus} />
+            <HostRoom
+              roomCode={snapshot.roomId ?? ""}
+              roomCodeCopyStatus={roomCodeCopyStatus}
+              roomLink={roomLink}
+              onCopy={handleCopyLink}
+              onCopyRoomCode={handleCopyRoomCode}
+              copyStatus={copyStatus}
+            />
           </section>
         ) : null}
 

@@ -397,23 +397,19 @@
 
 .homeworld-room-invite {
   display: grid;
-  gap: 10px;
-}
-
-.homeworld-room-invite-row {
-  display: grid;
-  grid-template-columns: minmax(68px, auto) minmax(0, 1fr) minmax(92px, auto);
+  grid-template-columns: auto minmax(7ch, 1fr) auto auto;
   gap: 8px;
   align-items: center;
 }
 
-.homeworld-room-invite-row span {
+.homeworld-room-invite span {
   color: #6f4a2a;
   font-size: 12px;
   font-weight: 900;
+  white-space: nowrap;
 }
 
-.homeworld-room-invite-row output {
+.homeworld-room-invite output {
   min-width: 0;
   height: 34px;
   display: grid;
@@ -426,13 +422,22 @@
   font-size: 16px;
   font-weight: 950;
   letter-spacing: 0.08em;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-.homeworld-room-invite-row .secondary-button {
+.homeworld-room-invite .secondary-button {
+  min-width: 58px;
   min-height: 36px;
   border-color: transparent;
   background: #191919;
   color: #fffdf8;
+  padding-inline: 9px;
+  white-space: nowrap;
+}
+
+.homeworld-room-invite small {
+  grid-column: 1 / -1;
 }
 
 .homeworld-room-entry-toggle.collapsed {
