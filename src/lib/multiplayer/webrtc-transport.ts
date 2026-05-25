@@ -2,6 +2,12 @@
 
 import { parseNetMessage, serializeNetMessage } from "@/lib/multiplayer/messages";
 import {
+  MULTIPLAYER_DATA_CHANNELS,
+  MULTIPLAYER_DISCONNECTED_MESSAGE,
+  MULTIPLAYER_FAILED_MESSAGE,
+  type MultiplayerDataChannelLabel,
+} from "@/lib/multiplayer/protocol";
+import {
   buildRoomWebSocketUrl,
   createSignalingRoom,
   isRoomCode,
@@ -12,12 +18,10 @@ import {
 } from "@/lib/multiplayer/room-api";
 import type { NetMessage } from "@/lib/multiplayer/types";
 
-export const MULTIPLAYER_FAILED_MESSAGE = "当前网络无法建立联机，请换个网络或重新创建房间。";
-export const MULTIPLAYER_DISCONNECTED_MESSAGE = "对方已断开，联机已结束。";
+export { MULTIPLAYER_DISCONNECTED_MESSAGE, MULTIPLAYER_FAILED_MESSAGE } from "@/lib/multiplayer/protocol";
 
 const SIGNAL_OPEN_TIMEOUT_MS = 12_000;
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
-const ICE_RESTART_DELAY_MS = 1_200;
 const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.cloudflare.com:3478" }];
 
 export const ENABLE_TURN = false;
@@ -41,8 +45,7 @@ export type RoomSignalTransportOptions = {
 type SignalPayload =
   | { type: "offer"; description: RTCSessionDescriptionInit }
   | { type: "answer"; description: RTCSessionDescriptionInit }
-  | { type: "ice"; candidate: RTCIceCandidateInit }
-  | { type: "restart-request" };
+  | { type: "ice"; candidate: RTCIceCandidateInit };
 
 type ServerMessage =
   | { type: "ready"; role: SignalingRole; roomCode: string; token: string; expiresAt: number }
@@ -57,7 +60,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSignalPayload(value: unknown): value is SignalPayload {
   if (!isRecord(value) || typeof value.type !== "string") return false;
-  if (value.type === "restart-request") return true;
   if (value.type === "offer" || value.type === "answer") return isRecord(value.description);
   if (value.type === "ice") return isRecord(value.candidate);
   return false;
@@ -104,6 +106,7 @@ export class RoomSignalTransport {
   private socket: WebSocket | null = null;
   private peerConnection: RTCPeerConnection | null = null;
   private controlChannel: RTCDataChannel | null = null;
+  private inputChannel: RTCDataChannel | null = null;
   private stateChannel: RTCDataChannel | null = null;
   private destroyed = false;
   private connected = false;
@@ -111,8 +114,8 @@ export class RoomSignalTransport {
   private roleToken: string | null = null;
   private signalOpenTimer: number | null = null;
   private dataChannelOpenTimer: number | null = null;
-  private iceRestartTimer: number | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private ignoreNextControlClose = false;
 
   constructor(options: RoomSignalTransportOptions) {
     this.role = options.role;
@@ -121,7 +124,7 @@ export class RoomSignalTransport {
   }
 
   get isConnected() {
-    return this.connected && channelIsOpen(this.controlChannel);
+    return this.connected && channelIsOpen(this.controlChannel) && channelIsOpen(this.inputChannel) && channelIsOpen(this.stateChannel);
   }
 
   async start() {
@@ -150,20 +153,15 @@ export class RoomSignalTransport {
 
   send(message: NetMessage) {
     const serialized = serializeNetMessage(message);
-    const preferredChannel = message.kind === "state" ? this.stateChannel : this.controlChannel;
+    const preferredChannel = message.kind === "input" ? this.inputChannel : message.kind === "state" ? this.stateChannel : this.controlChannel;
     if (channelIsOpen(preferredChannel)) {
       preferredChannel.send(serialized);
-      return;
-    }
-    const fallbackChannel = this.controlChannel;
-    if (channelIsOpen(fallbackChannel)) {
-      fallbackChannel.send(serialized);
     }
   }
 
   close(reason?: string) {
     if (reason && channelIsOpen(this.controlChannel)) {
-      this.controlChannel?.send(serializeNetMessage({ v: 1, kind: "bye", reason }));
+      this.controlChannel.send(serializeNetMessage({ v: 1, kind: "bye", reason }));
     }
     this.dispose();
   }
@@ -172,7 +170,6 @@ export class RoomSignalTransport {
     this.destroyed = true;
     this.clearSignalOpenTimer();
     this.clearDataChannelOpenTimer();
-    this.clearIceRestartTimer();
     this.closePeerConnection();
     this.socket?.close();
     this.socket = null;
@@ -228,7 +225,6 @@ export class RoomSignalTransport {
     socket.onclose = () => {
       if (this.destroyed) return;
       if (this.connected) {
-        this.handleDisconnected(MULTIPLAYER_DISCONNECTED_MESSAGE);
         return;
       }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
@@ -246,15 +242,17 @@ export class RoomSignalTransport {
         break;
       case "peer-joined":
         if (this.role === "host") {
-          await this.createOffer(false);
+          await this.createOffer();
         }
         break;
       case "peer-left":
+        if (message.reason !== "host-disbanded-room" && message.reason !== "peer-left-room") return;
+        this.ignoreNextControlClose = true;
         this.closePeerConnection();
         if (this.role === "host") {
-          this.events.onPeerDisconnected?.(message.reason ?? MULTIPLAYER_DISCONNECTED_MESSAGE);
+          this.events.onPeerDisconnected?.(message.reason);
         } else {
-          this.handleDisconnected(message.reason ?? MULTIPLAYER_DISCONNECTED_MESSAGE);
+          this.handleDisconnected(message.reason);
         }
         break;
       case "signal":
@@ -280,8 +278,12 @@ export class RoomSignalTransport {
     };
 
     peerConnection.onconnectionstatechange = () => {
-      if (peerConnection.connectionState === "failed" || peerConnection.connectionState === "disconnected") {
-        this.scheduleIceRestart();
+      if (peerConnection.connectionState === "disconnected") {
+        return;
+      }
+      if (peerConnection.connectionState === "failed") {
+        if (this.connected) return;
+        this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
       }
       if (peerConnection.connectionState === "closed") {
         this.connected = false;
@@ -289,30 +291,33 @@ export class RoomSignalTransport {
     };
 
     if (this.role === "host") {
-      this.bindDataChannel(peerConnection.createDataChannel("control", { ordered: true }), "control");
-      this.bindDataChannel(peerConnection.createDataChannel("state", { ordered: false, maxRetransmits: 0 }), "state");
+      this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.control, { ordered: true }), MULTIPLAYER_DATA_CHANNELS.control);
+      this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.input, { ordered: false, maxRetransmits: 0 }), MULTIPLAYER_DATA_CHANNELS.input);
+      this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.state, { ordered: false, maxRetransmits: 0 }), MULTIPLAYER_DATA_CHANNELS.state);
     } else {
       peerConnection.ondatachannel = (event) => {
-        if (event.channel.label === "state") {
-          this.bindDataChannel(event.channel, "state");
-        } else {
-          this.bindDataChannel(event.channel, "control");
+        if (event.channel.label === MULTIPLAYER_DATA_CHANNELS.input || event.channel.label === MULTIPLAYER_DATA_CHANNELS.state) {
+          this.bindDataChannel(event.channel, event.channel.label);
+          return;
         }
+        this.bindDataChannel(event.channel, MULTIPLAYER_DATA_CHANNELS.control);
       };
     }
 
     return peerConnection;
   }
 
-  private bindDataChannel(channel: RTCDataChannel, label: "control" | "state") {
-    if (label === "control") {
+  private bindDataChannel(channel: RTCDataChannel, label: MultiplayerDataChannelLabel) {
+    if (label === MULTIPLAYER_DATA_CHANNELS.control) {
       this.controlChannel = channel;
+    } else if (label === MULTIPLAYER_DATA_CHANNELS.input) {
+      this.inputChannel = channel;
     } else {
       this.stateChannel = channel;
     }
 
     channel.onopen = () => {
-      if (label === "control") this.markConnected();
+      this.markConnectedWhenReady();
     };
 
     channel.onmessage = (event) => {
@@ -323,12 +328,22 @@ export class RoomSignalTransport {
 
     channel.onclose = () => {
       if (this.destroyed) return;
-      if (label === "control" && this.connected) this.handleDisconnected(MULTIPLAYER_DISCONNECTED_MESSAGE);
+      if (label === MULTIPLAYER_DATA_CHANNELS.control && this.ignoreNextControlClose) {
+        this.ignoreNextControlClose = false;
+        return;
+      }
+      if (label !== MULTIPLAYER_DATA_CHANNELS.control || !this.connected) return;
+      if (this.role === "host") {
+        this.closePeerConnection();
+        this.events.onPeerDisconnected?.(MULTIPLAYER_DISCONNECTED_MESSAGE);
+        return;
+      }
+      this.events.onDisconnected?.(MULTIPLAYER_DISCONNECTED_MESSAGE);
     };
 
     channel.onerror = () => {
       if (this.destroyed) return;
-      if (label === "control") this.scheduleIceRestart();
+      this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
     };
   }
 
@@ -340,17 +355,18 @@ export class RoomSignalTransport {
     }, DATA_CHANNEL_OPEN_TIMEOUT_MS);
   }
 
-  private markConnected() {
+  private markConnectedWhenReady() {
     if (this.connected) return;
+    if (!channelIsOpen(this.controlChannel) || !channelIsOpen(this.inputChannel) || !channelIsOpen(this.stateChannel)) return;
     this.connected = true;
     this.clearDataChannelOpenTimer();
     this.events.onConnected?.(this.role === "host" ? "guest" : "host");
   }
 
-  private async createOffer(iceRestart: boolean) {
+  private async createOffer() {
     const peerConnection = this.preparePeerConnection();
     this.startDataChannelOpenTimer();
-    const offer = await peerConnection.createOffer({ iceRestart });
+    const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
     if (!peerConnection.localDescription) return;
     this.sendSignal({
@@ -394,11 +410,6 @@ export class RoomSignalTransport {
         return;
       }
       await peerConnection.addIceCandidate(signal.candidate);
-      return;
-    }
-
-    if (signal.type === "restart-request" && this.role === "host") {
-      await this.createOffer(true);
     }
   }
 
@@ -411,21 +422,6 @@ export class RoomSignalTransport {
     }
   }
 
-  private scheduleIceRestart() {
-    if (this.destroyed || this.iceRestartTimer !== null) return;
-    this.iceRestartTimer = window.setTimeout(() => {
-      this.iceRestartTimer = null;
-      if (this.destroyed) return;
-      const peerConnection = this.peerConnection;
-      peerConnection?.restartIce();
-      if (this.role === "host") {
-        void this.createOffer(true);
-      } else {
-        this.sendSignal({ type: "restart-request" });
-      }
-    }, ICE_RESTART_DELAY_MS);
-  }
-
   private sendSignal(signal: SignalPayload) {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -435,11 +431,12 @@ export class RoomSignalTransport {
   private closePeerConnection() {
     this.connected = false;
     this.clearDataChannelOpenTimer();
-    this.clearIceRestartTimer();
     this.controlChannel?.close();
+    this.inputChannel?.close();
     this.stateChannel?.close();
     this.peerConnection?.close();
     this.controlChannel = null;
+    this.inputChannel = null;
     this.stateChannel = null;
     this.peerConnection = null;
     this.pendingIceCandidates = [];
@@ -467,11 +464,5 @@ export class RoomSignalTransport {
     if (this.dataChannelOpenTimer === null) return;
     window.clearTimeout(this.dataChannelOpenTimer);
     this.dataChannelOpenTimer = null;
-  }
-
-  private clearIceRestartTimer() {
-    if (this.iceRestartTimer === null) return;
-    window.clearTimeout(this.iceRestartTimer);
-    this.iceRestartTimer = null;
   }
 }

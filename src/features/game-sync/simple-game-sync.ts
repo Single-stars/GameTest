@@ -13,8 +13,9 @@ export class SimpleGameSync {
     this.intervalMs = intervalMs;
   }
 
-  update(state: SelfGameState) {
+  update(state: SelfGameState, options: { immediate?: boolean } = {}) {
     this.latestState = state;
+    if (options.immediate) this.flush();
   }
 
   flush() {

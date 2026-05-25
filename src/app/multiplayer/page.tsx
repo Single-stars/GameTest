@@ -145,6 +145,7 @@ function MultiplayerPageContent() {
   const [levelSelectState, setLevelSelectState] = useState<MultiplayerLevelSelectState>(() => createDefaultMultiplayerLevelSelectState());
   const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<CopyStatus>("idle");
   const [skinHydrated, setSkinHydrated] = useState(false);
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
@@ -155,6 +156,7 @@ function MultiplayerPageContent() {
   const wasInHomeworldMatchRef = useRef(false);
   const didExitLevelSelectToHomeworldRef = useRef(false);
   const copyStatusTimerRef = useRef<number | null>(null);
+  const roomCodeCopyStatusTimerRef = useRef<number | null>(null);
 
   const hostSelectedLevelGroup = useMemo(
     () => resolveMultiplayerLevelGroup(hostSelectedGameId),
@@ -261,6 +263,17 @@ function MultiplayerPageContent() {
     }, 1800);
   }, []);
 
+  const setTransientRoomCodeCopyStatus = useCallback((status: CopyStatus) => {
+    setRoomCodeCopyStatus(status);
+    if (roomCodeCopyStatusTimerRef.current !== null) {
+      window.clearTimeout(roomCodeCopyStatusTimerRef.current);
+    }
+    roomCodeCopyStatusTimerRef.current = window.setTimeout(() => {
+      setRoomCodeCopyStatus("idle");
+      roomCodeCopyStatusTimerRef.current = null;
+    }, 1800);
+  }, []);
+
   const handleCopyLink = useCallback(async () => {
     if (!activeRoomLink) return;
     let copied = false;
@@ -279,6 +292,25 @@ function MultiplayerPageContent() {
     }
     setTransientCopyStatus(copied ? "copied" : "manual");
   }, [activeRoomLink, setTransientCopyStatus]);
+
+  const handleCopyRoomCode = useCallback(async () => {
+    if (!snapshot.roomId) return;
+    let copied = false;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(snapshot.roomId);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      copied = copyRoomLinkWithFallback(snapshot.roomId);
+    }
+    setTransientRoomCodeCopyStatus(copied ? "copied" : "manual");
+  }, [setTransientRoomCodeCopyStatus, snapshot.roomId]);
 
   const toggleReady = useCallback(() => {
     if (!sessionRef.current) return;
@@ -301,24 +333,27 @@ function MultiplayerPageContent() {
   }, []);
 
   const handleLeave = useCallback(() => {
-    sessionRef.current?.leave("对方已离开房间");
+    const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
+    sessionRef.current?.leave(leaveReason);
     cleanupSession();
     setSnapshot(buildInitialSnapshot());
-  }, [cleanupSession]);
+  }, [cleanupSession, snapshot.role]);
 
   const handleReturnHome = useCallback(() => {
-    sessionRef.current?.leave("对方已离开房间");
+    const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
+    sessionRef.current?.leave(leaveReason);
     cleanupSession();
     setSnapshot(buildInitialSnapshot());
     router.push("/");
-  }, [cleanupSession, router]);
+  }, [cleanupSession, router, snapshot.role]);
 
   const handleExitHomeworldRoom = useCallback(() => {
-    sessionRef.current?.leave("对方已离开房间");
+    const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
+    sessionRef.current?.leave(leaveReason);
     cleanupSession();
     setSnapshot(buildInitialSnapshot());
     router.push("/?homeworld=1");
-  }, [cleanupSession, router]);
+  }, [cleanupSession, router, snapshot.role]);
 
   const handleOpenHomeworldMultiplayerEntry = useCallback(() => {
     setHomeworldEntryVisible(true);
@@ -407,6 +442,9 @@ function MultiplayerPageContent() {
     () => () => {
       if (copyStatusTimerRef.current !== null) {
         window.clearTimeout(copyStatusTimerRef.current);
+      }
+      if (roomCodeCopyStatusTimerRef.current !== null) {
+        window.clearTimeout(roomCodeCopyStatusTimerRef.current);
       }
       cleanupSession();
     },
@@ -601,8 +639,8 @@ function MultiplayerPageContent() {
     if (!snapshot.selfPlayer || !snapshot.opponentPlayer) return;
     const { logicWidth, logicHeight } = resolveLogicSize(snapshot.selfPlayer, snapshot.opponentPlayer);
     session.startMatch({
-      levelId: hostSelectedLevelId,
-      playMode: hostPlayMode,
+      levelId: activeLevelSelectState.levelId,
+      playMode: activeLevelSelectState.playMode,
       seed: createSeed(),
       logicWidth,
       logicHeight,
@@ -610,8 +648,8 @@ function MultiplayerPageContent() {
     });
     setLevelSelectStartCountdownEndsAt(null);
   }, [
-    hostSelectedLevelId,
-    hostPlayMode,
+    activeLevelSelectState.levelId,
+    activeLevelSelectState.playMode,
     levelSelectSlotsConfirmed,
     levelSelectStartCountdownEndsAt,
     levelSelectStartCountdownNow,
@@ -626,6 +664,10 @@ function MultiplayerPageContent() {
 
   const reportState = useCallback((state: SelfGameState) => {
     sessionRef.current?.reportState(state);
+  }, []);
+
+  const reportInput = useCallback((input: Pick<SelfGameState, "direction" | "charge" | "phase" | "status" | "elapsedMs">) => {
+    sessionRef.current?.reportInput(input);
   }, []);
 
   const reportResult = useCallback((result: GameResult) => {
@@ -670,7 +712,7 @@ function MultiplayerPageContent() {
 
   useEffect(() => {
     if (!isHomeworldRoute) return;
-    if (snapshot.status !== "disconnected" && snapshot.status !== "failed") return;
+    if (snapshot.status !== "disconnected" || snapshot.errorMessage !== "host-disbanded-room") return;
     cleanupSession();
     setLevelSelectOpen(false);
     setHomeworldEntryVisible(true);
@@ -678,7 +720,7 @@ function MultiplayerPageContent() {
     autoCreateHomeworldHostRef.current = false;
     setSnapshot(buildInitialSnapshot());
     router.replace("/multiplayer?homeworld=1");
-  }, [cleanupSession, isHomeworldRoute, router, snapshot.status]);
+  }, [cleanupSession, isHomeworldRoute, router, snapshot.errorMessage, snapshot.status]);
 
   const homeworldMode = snapshot.role === "guest" ? "visitor" : "owner";
   const homeworldStateForScreen = homeworldMode === "visitor" && snapshot.homeworldState ? snapshot.homeworldState : homeworldState;
@@ -714,6 +756,7 @@ function MultiplayerPageContent() {
               opponentPlayer={snapshot.opponentPlayer}
               opponentResult={snapshot.opponentResult}
               opponentState={snapshot.opponentState}
+              playMode={activePlayMode}
               onForfeit={handleForfeit}
               onRematch={handleRematch}
               onReturnRoom={handleReturnRoom}
@@ -734,6 +777,7 @@ function MultiplayerPageContent() {
                   readOpponentStateMetrics={readOpponentStateMetrics}
                   opponentState={snapshot.opponentState}
                   playMode={activePlayMode}
+                  reportInput={reportInput}
                   reportResult={reportResult}
                   reportState={reportState}
                   runSeed={runSeed}
@@ -767,6 +811,7 @@ function MultiplayerPageContent() {
             />
           ) : (
             <HomeworldScreen
+              key={homeworldInviteLink ? `homeworld-room-${snapshot.roomId}` : "homeworld-room-entry"}
               connectionLabel={homeworldConnectionLabel}
               copyStatus={copyStatus}
               doorMode={snapshot.status === "idle" ? "single-player" : "room"}
@@ -775,8 +820,11 @@ function MultiplayerPageContent() {
               initialPlayerPose={homeworldReturnPose}
               inviteLink={homeworldInviteLink}
               mode={homeworldMode}
+              roomCode={snapshot.roomId ?? ""}
+              roomCodeCopyStatus={roomCodeCopyStatus}
               roomEntryHidden={homeworldRoomEntryHidden}
               onCopyInvite={handleCopyLink}
+              onCopyRoomCode={handleCopyRoomCode}
               onCreateRoom={handleCreate}
               onJoinRoom={handleJoinHomeworldRoom}
               onLeaveRoom={handleExitHomeworldRoom}
@@ -927,6 +975,7 @@ function MultiplayerPageContent() {
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}
+            playMode={activePlayMode}
             onForfeit={handleForfeit}
             onRematch={handleRematch}
             onReturnRoom={handleReturnRoom}
@@ -947,6 +996,7 @@ function MultiplayerPageContent() {
                 readOpponentStateMetrics={readOpponentStateMetrics}
                 opponentState={snapshot.opponentState}
                 playMode={activePlayMode}
+                reportInput={reportInput}
                 reportResult={reportResult}
                 reportState={reportState}
                 runSeed={runSeed}

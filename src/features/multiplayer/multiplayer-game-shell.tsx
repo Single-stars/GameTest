@@ -4,6 +4,7 @@ import { type CSSProperties, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
 import type {
   GameResult,
   MultiplayerStatus,
@@ -103,6 +104,7 @@ export function MultiplayerGameShell({
   opponentPlayer,
   opponentResult,
   opponentState,
+  playMode,
   onForfeit,
   onRematch,
   onReturnRoom,
@@ -119,6 +121,7 @@ export function MultiplayerGameShell({
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
   opponentState: SelfGameState | null;
+  playMode: MultiplayerPlayMode;
   onForfeit: () => void;
   onRematch: () => void;
   onReturnRoom: () => void;
@@ -130,8 +133,12 @@ export function MultiplayerGameShell({
   status: MultiplayerStatus;
   winnerText: string;
 }) {
+  const coOpMode = playMode === "co-op";
   const selfProgress = resolveProgress(selfState, selfResult);
   const opponentProgress = resolveProgress(opponentState, opponentResult);
+  const sharedProgress = Math.max(selfProgress, opponentProgress);
+  const sharedResult = selfResult ?? opponentResult;
+  const sharedState = selfState ?? opponentState;
   const markersAreClose = Math.abs(selfProgress - opponentProgress) <= PROGRESS_MARKER_CLOSE_DISTANCE;
   const selfMarkerZIndex = markersAreClose && selfProgress >= opponentProgress ? 5 : 3;
   const opponentMarkerZIndex = markersAreClose && opponentProgress > selfProgress ? 5 : 4;
@@ -143,26 +150,38 @@ export function MultiplayerGameShell({
         <div className="multiplayer-progress-wrap">
           <div
             className="multiplayer-progress-track"
-            aria-label={`你 ${formatProgress(selfProgress)}，对方 ${formatProgress(opponentProgress)}`}
+            aria-label={coOpMode ? `合作 ${formatProgress(sharedProgress)}` : `你 ${formatProgress(selfProgress)}，对方 ${formatProgress(opponentProgress)}`}
           >
-            <span className="multiplayer-progress-fill" style={{ width: `${leadProgress * 100}%` }} />
-            <ProgressMarker
-              className="self"
-              label={selfPlayer?.name ?? "你"}
-              player={selfPlayer}
-              progress={selfProgress}
-              zIndex={selfMarkerZIndex}
-            />
-            <ProgressMarker
-              className="opponent"
-              label={opponentPlayer?.name ?? "对方"}
-              player={opponentPlayer}
-              progress={opponentProgress}
-              zIndex={opponentMarkerZIndex}
-            />
+            <span className="multiplayer-progress-fill" style={{ width: `${(coOpMode ? sharedProgress : leadProgress) * 100}%` }} />
+            {coOpMode ? (
+              <ProgressMarker
+                className="self co-op"
+                label="合作"
+                player={selfPlayer}
+                progress={sharedProgress}
+                zIndex={5}
+              />
+            ) : (
+              <>
+                <ProgressMarker
+                  className="self"
+                  label={selfPlayer?.name ?? "你"}
+                  player={selfPlayer}
+                  progress={selfProgress}
+                  zIndex={selfMarkerZIndex}
+                />
+                <ProgressMarker
+                  className="opponent"
+                  label={opponentPlayer?.name ?? "对方"}
+                  player={opponentPlayer}
+                  progress={opponentProgress}
+                  zIndex={opponentMarkerZIndex}
+                />
+              </>
+            )}
           </div>
         </div>
-        {(status === "countdown" || status === "playing") ? (
+        {status === "countdown" || status === "playing" ? (
           <button className="multiplayer-progress-action" type="button" onClick={onForfeit}>
             认输
           </button>
@@ -185,18 +204,28 @@ export function MultiplayerGameShell({
             rematchRequestedByOpponent={rematchRequestedByOpponent}
             rematchRequestedBySelf={rematchRequestedBySelf}
           />
-          <div className="multiplayer-game-result-grid">
-            <p>
-              <span>你</span>
-              <strong>{formatResult(selfResult)}</strong>
-              <small>{formatScore(selfState, selfResult)}分</small>
-            </p>
-            <p>
-              <span>对方</span>
-              <strong>{formatResult(opponentResult)}</strong>
-              <small>{formatScore(opponentState, opponentResult)}分</small>
-            </p>
-          </div>
+          {coOpMode ? (
+            <div className="multiplayer-game-result-grid co-op">
+              <p>
+                <span>合作</span>
+                <strong>{formatResult(sharedResult)}</strong>
+                <small>{formatScore(sharedState, sharedResult)}分</small>
+              </p>
+            </div>
+          ) : (
+            <div className="multiplayer-game-result-grid">
+              <p>
+                <span>你</span>
+                <strong>{formatResult(selfResult)}</strong>
+                <small>{formatScore(selfState, selfResult)}分</small>
+              </p>
+              <p>
+                <span>对方</span>
+                <strong>{formatResult(opponentResult)}</strong>
+                <small>{formatScore(opponentState, opponentResult)}分</small>
+              </p>
+            </div>
+          )}
           <div className="multiplayer-game-result-actions">
             <button type="button" onClick={onRematch} disabled={rematchRequestedBySelf}>
               再来一局

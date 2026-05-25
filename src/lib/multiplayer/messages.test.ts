@@ -7,6 +7,7 @@ import {
   createHelloMessage,
   createHomeworldPresenceMessage,
   createHomeworldStateMessage,
+  createInputMessage,
   createLevelSelectPresenceMessage,
   createLevelSelectStateMessage,
   createRematchMessage,
@@ -71,9 +72,20 @@ test("state messages carry shared-map runtime coordinates", () => {
     status: "playing",
     x: 128,
     y: 512,
+    cameraX: 64,
     cameraY: 96,
+    cameraScale: 0.88,
+    charge: 0.62,
     direction: "left",
+    exitingPlatformIndex: 1,
+    exitingPlatformOffsetY: 24,
     failures: 2,
+    gravity: "light",
+    nextPlatformIndex: 3,
+    nextPlatformOffsetY: 48,
+    phase: "charging",
+    platformIndex: 2,
+    usedPlatformIds: [10, 12, 14],
     elapsedMs: 3140,
     seq: 12,
     sentAt: 123456,
@@ -87,12 +99,48 @@ test("state messages carry shared-map runtime coordinates", () => {
   assert.equal(parsed.matchId, "match-1");
   assert.equal(parsed.x, 128);
   assert.equal(parsed.y, 512);
+  assert.equal(parsed.cameraX, 64);
   assert.equal(parsed.cameraY, 96);
+  assert.equal(parsed.cameraScale, 0.88);
+  assert.equal(parsed.charge, 0.62);
   assert.equal(parsed.direction, "left");
+  assert.equal(parsed.exitingPlatformIndex, 1);
+  assert.equal(parsed.exitingPlatformOffsetY, 24);
   assert.equal(parsed.failures, 2);
+  assert.equal(parsed.gravity, "light");
+  assert.equal(parsed.nextPlatformIndex, 3);
+  assert.equal(parsed.nextPlatformOffsetY, 48);
+  assert.equal(parsed.phase, "charging");
+  assert.equal(parsed.platformIndex, 2);
+  assert.deepEqual(parsed.usedPlatformIds, [10, 12, 14]);
   assert.equal(parsed.elapsedMs, 3140);
   assert.equal(parsed.seq, 12);
   assert.equal(parsed.sentAt, 123456);
+});
+
+test("input messages carry guest control without pretending to be authoritative state", () => {
+  const message = createInputMessage({
+    matchId: "match-input",
+    direction: "right",
+    phase: "charging",
+    charge: 0.5,
+    seq: 7,
+    sentAt: 123456,
+  });
+
+  const parsed = parseNetMessage(serializeNetMessage(message));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "input");
+  if (parsed.kind !== "input") return;
+  assert.equal(parsed.matchId, "match-input");
+  assert.equal(parsed.direction, "right");
+  assert.equal(parsed.phase, "charging");
+  assert.equal(parsed.charge, 0.5);
+  assert.equal(parsed.seq, 7);
+  assert.equal(parsed.sentAt, 123456);
+  assert.equal("x" in parsed, false);
+  assert.equal("cameraY" in parsed, false);
 });
 
 test("parseNetMessage parses rematch request messages with match identity", () => {

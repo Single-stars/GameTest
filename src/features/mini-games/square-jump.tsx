@@ -12,7 +12,14 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
 import type { SelfGameState } from "@/features/game-sync/types";
+import {
+  MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+  MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+  MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+  MULTIPLAYER_STATE_SYNC_MS,
+} from "@/lib/multiplayer/protocol";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -62,12 +69,23 @@ const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
 type SquareGravityState = PlayerAvatarGravity & NonNullable<SquareJumpBasePlatform["gravity"]>;
 export type SquareJumpStateSnapshot = {
+  cameraX: number;
   cameraY: number;
+  cameraScale: number;
+  charge: number;
   direction: PlayerAvatarDirection;
   elapsedMs: number;
+  exitingPlatformIndex?: number;
+  exitingPlatformOffsetY?: number;
   failures: number;
+  gravity: SquareGravityState;
+  nextPlatformIndex: number;
+  nextPlatformOffsetY: number;
+  phase: SquareJumpUnifiedState;
+  platformIndex: number;
   progress: number;
   status: PrototypeStatus;
+  turns: number;
   x: number;
   y: number;
 };
@@ -122,6 +140,7 @@ function squareProgressBackgroundStyle(camera: SquareJumpBaseCamera): CSSPropert
 }
 
 type SquareJumpUnifiedState = "idle" | "charging" | "jumping" | "airCharging" | "falling" | "advancing" | "success" | "failed";
+type SquareJumpCoOpRole = "first" | "second";
 type SquareJumpUnifiedRuntime = {
   started: boolean;
   time: number;
@@ -159,7 +178,7 @@ type SquareJumpUnifiedRuntime = {
 };
 
 const SQUARE_JUMP_ADVANCE_DELAY = 0.16;
-const SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
+const SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
 
 function getSquareJumpPlatformY(stageHeight: number) {
   return stageHeight * 0.72;
@@ -179,36 +198,160 @@ function resolveSquareJumpCoOpSkin(coOpSkinId: string | null | undefined): Playe
   return coOpSkinId ? resolvePlayerAvatarSkin(coOpSkinId) : undefined;
 }
 
-function makeSquareJumpRuntimeState(runtime: SquareJumpUnifiedRuntime): SquareJumpStateSnapshot {
+function resolveSquareJumpRemoteSkin(remotePlayer: { skinId?: string } | null | undefined): PlayerAvatarSkin {
+  return resolvePlayerAvatarSkin(remotePlayer?.skinId);
+}
+
+function resolveSquareJumpRemoteAvatarView(remoteState: SelfGameState | null | undefined): PlayerAvatarView {
+  if (remoteState?.status === "finished") return { action: "celebrate", expression: "happy", effect: "sparkles" };
+  if (remoteState?.status === "failed") return { action: "hit", expression: "hurt" };
+  return remoteState?.direction && remoteState.direction !== "none"
+    ? { action: "charge", expression: "neutral" }
+    : { action: "idle", expression: "neutral" };
+}
+
+function resolveSquareJumpTurnRole(turnIndex: number): SquareJumpCoOpRole {
+  return turnIndex % 2 === 0 ? "first" : "second";
+}
+
+function canControlSquareJumpCoOpTurn(runtime: Pick<SquareJumpUnifiedRuntime, "playerTurns">, coOpRole: SquareJumpCoOpRole | null | undefined) {
+  if (!coOpRole) return true;
+  return resolveSquareJumpTurnRole(runtime.playerTurns) === coOpRole;
+}
+
+function isSquareJumpUnifiedState(value: unknown): value is SquareJumpUnifiedState {
+  return value === "idle" || value === "charging" || value === "jumping" || value === "airCharging" || value === "falling" || value === "advancing" || value === "success" || value === "failed";
+}
+
+function resolveSquareJumpPlatformIndex(value: unknown, fallback: number, maxIndex: number) {
+  return typeof value === "number" && Number.isFinite(value) ? clamp(Math.round(value), 0, maxIndex) : clamp(fallback, 0, maxIndex);
+}
+
+function syncSquareJumpAuthoritativePlatformWindow(runtime: SquareJumpUnifiedRuntime, authoritativeState: SelfGameState) {
+  const maxIndex = Math.max(0, runtime.platforms.length - 1);
+  const platformIndex = resolveSquareJumpPlatformIndex(authoritativeState.platformIndex, Math.round((authoritativeState.progress ?? 0) * maxIndex), maxIndex);
+  const nextPlatformIndex = resolveSquareJumpPlatformIndex(authoritativeState.nextPlatformIndex, platformIndex + 1, maxIndex);
+  runtime.currentIndex = platformIndex;
+  runtime.nextIndex = nextPlatformIndex;
+  runtime.currentPlatform = runtime.platforms[platformIndex] ?? runtime.currentPlatform;
+  runtime.nextPlatform = runtime.platforms[nextPlatformIndex] ?? runtime.nextPlatform;
+  runtime.nextVisualOffsetY = typeof authoritativeState.nextPlatformOffsetY === "number" ? authoritativeState.nextPlatformOffsetY : 0;
+  runtime.lockedNextVisualOffsetY = null;
+  if (typeof authoritativeState.exitingPlatformIndex === "number") {
+    const exitingIndex = resolveSquareJumpPlatformIndex(authoritativeState.exitingPlatformIndex, platformIndex, maxIndex);
+    runtime.exitingPlatform = runtime.platforms[exitingIndex] ?? null;
+    runtime.exitingVisualOffsetY = typeof authoritativeState.exitingPlatformOffsetY === "number" ? authoritativeState.exitingPlatformOffsetY : 0;
+  } else {
+    runtime.exitingPlatform = null;
+    runtime.exitingVisualOffsetY = 0;
+  }
+}
+
+function hasSquareJumpPlatformWindowChanged(runtime: SquareJumpUnifiedRuntime, authoritativeState: SelfGameState | null | undefined) {
+  if (!authoritativeState) return false;
+  const maxIndex = Math.max(0, runtime.platforms.length - 1);
+  const platformIndex = resolveSquareJumpPlatformIndex(authoritativeState.platformIndex, Math.round((authoritativeState.progress ?? 0) * maxIndex), maxIndex);
+  const nextPlatformIndex = resolveSquareJumpPlatformIndex(authoritativeState.nextPlatformIndex, platformIndex + 1, maxIndex);
+  const exitingPlatformIndex =
+    typeof authoritativeState.exitingPlatformIndex === "number"
+      ? resolveSquareJumpPlatformIndex(authoritativeState.exitingPlatformIndex, platformIndex, maxIndex)
+      : null;
+  const currentExitingPlatformIndex = runtime.exitingPlatform
+    ? runtime.platforms.findIndex((platform) => platform.id === runtime.exitingPlatform?.id)
+    : null;
+  return (
+    runtime.currentIndex !== platformIndex ||
+    runtime.nextIndex !== nextPlatformIndex ||
+    currentExitingPlatformIndex !== exitingPlatformIndex
+  );
+}
+
+function applySquareJumpAuthoritativeState(runtime: SquareJumpUnifiedRuntime, authoritativeState: SelfGameState | null | undefined) {
+  if (!authoritativeState) return false;
+  if (
+    typeof authoritativeState.x !== "number" ||
+    typeof authoritativeState.y !== "number" ||
+    typeof authoritativeState.cameraX !== "number" ||
+    typeof authoritativeState.cameraY !== "number" ||
+    typeof authoritativeState.cameraScale !== "number"
+  ) {
+    return false;
+  }
+  runtime.playerX = authoritativeState.x;
+  runtime.playerY = authoritativeState.y;
+  runtime.camera.cameraX = authoritativeState.cameraX;
+  runtime.camera.cameraY = authoritativeState.cameraY;
+  runtime.camera.scale = authoritativeState.cameraScale;
+  syncSquareJumpAuthoritativePlatformWindow(runtime, authoritativeState);
+  runtime.time = Math.max(runtime.time, (authoritativeState.elapsedMs ?? 0) / 1000);
+  if (typeof authoritativeState.charge === "number") {
+    runtime.charge = clamp(authoritativeState.charge, 0, 1);
+    runtime.chargeElapsedMs = runtime.charge * SQUARE_BASE_MAX_HOLD_MS;
+  }
+  if (authoritativeState.gravity) {
+    runtime.activeGravity = authoritativeState.gravity;
+  }
+  runtime.failures = authoritativeState.failures ?? runtime.failures;
+  runtime.jumps = Math.round((authoritativeState.progress ?? 0) * Math.max(1, runtime.platforms.length - 1));
+  runtime.playerTurns = authoritativeState.turns ?? runtime.playerTurns;
+  runtime.status = authoritativeState.status === "finished" ? "passed" : authoritativeState.status;
+  runtime.started = runtime.status === "playing";
+  if (runtime.status === "playing" && isSquareJumpUnifiedState(authoritativeState.phase)) {
+    runtime.state = authoritativeState.phase;
+    runtime.jumpPlan = null;
+    runtime.advancePlan = null;
+    runtime.playerOffsetOnCurrent = runtime.playerX - getSquareJumpBasePlatformX(runtime.currentPlatform, runtime.time);
+  }
+  if (runtime.status !== "playing") {
+    runtime.state = runtime.status === "passed" ? "success" : "failed";
+    runtime.charge = 0;
+    runtime.chargeElapsedMs = 0;
+    runtime.jumpPlan = null;
+  }
+  return true;
+}
+
+function makeSquareJumpRuntimeState(runtime: SquareJumpUnifiedRuntime, chargeHeld = false): SquareJumpStateSnapshot {
+  const exitingPlatformIndex = runtime.exitingPlatform
+    ? runtime.platforms.findIndex((platform) => platform.id === runtime.exitingPlatform?.id)
+    : -1;
   return {
+    cameraX: runtime.camera.cameraX,
     cameraY: runtime.camera.cameraY,
-    direction: runtime.state === "charging" || runtime.state === "airCharging" ? "right" : "none",
+    cameraScale: runtime.camera.scale,
+    charge: runtime.charge,
+    direction: chargeHeld ? "right" : "none",
     elapsedMs: Math.round(runtime.time * 1000),
+    exitingPlatformIndex: exitingPlatformIndex >= 0 ? exitingPlatformIndex : undefined,
+    exitingPlatformOffsetY: exitingPlatformIndex >= 0 ? runtime.exitingVisualOffsetY : undefined,
     failures: runtime.failures,
+    gravity: runtime.activeGravity,
+    nextPlatformIndex: runtime.nextIndex,
+    nextPlatformOffsetY: runtime.nextVisualOffsetY,
+    phase: runtime.state,
+    platformIndex: runtime.currentIndex,
     progress: Number((runtime.jumps / Math.max(1, runtime.platforms.length - 1)).toFixed(4)),
     status: runtime.status,
+    turns: runtime.playerTurns,
     x: runtime.playerX,
     y: runtime.playerY,
   };
-}
-
-function canControlSquareJumpCoOpTurn(coOpTurnIndex: number, coOpRole: "first" | "second" | null | undefined) {
-  if (!coOpRole) return true;
-  const firstTurn = coOpTurnIndex % 2 === 0;
-  return firstTurn ? coOpRole === "first" : coOpRole === "second";
 }
 
 function toSquareJumpAvatarVar(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, "");
 }
 
-function setSquareJumpAvatarChargeVars(node: HTMLElement | null, current: SquareJumpUnifiedRuntime) {
+function setSquareJumpAvatarChargeVarsFromCharge(node: HTMLElement | null, charge: number) {
   if (!node) return;
-  const charge = current.state === "charging" || current.state === "airCharging" ? current.charge : 0;
   node.style.setProperty("--player-avatar-charge", toSquareJumpAvatarVar(charge));
   node.style.setProperty("--player-avatar-charge-offset", `${toSquareJumpAvatarVar(charge * 4)}px`);
   node.style.setProperty("--player-avatar-charge-scale-x", toSquareJumpAvatarVar(1 + charge * 0.18));
   node.style.setProperty("--player-avatar-charge-scale-y", toSquareJumpAvatarVar(1 - charge * 0.24));
+}
+
+function setSquareJumpAvatarChargeVars(node: HTMLElement | null, current: SquareJumpUnifiedRuntime) {
+  setSquareJumpAvatarChargeVarsFromCharge(node, current.state === "charging" || current.state === "airCharging" ? current.charge : 0);
 }
 
 function createSquareJumpPlan(level: MiniGameLevelConfig, runtime: SquareJumpUnifiedRuntime) {
@@ -334,7 +477,7 @@ function updateSquareJumpAdvanceAnimation(current: SquareJumpUnifiedRuntime) {
   }
 }
 
-function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize, unlimitedRespawn = false) {
+function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: string, logicStageSize: MiniGameStageSize, unlimitedRespawn = false) {
   const failures = current.failures + 1;
   current.failures = failures;
   current.reason = reason;
@@ -364,9 +507,9 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   current.exitingPlatform = null;
   current.exitingVisualOffsetY = 0;
   current.advancePlan = createSquareJumpBaseAdvancePlan({
-    cameraEnd: fitSquareBaseCamera(respawnPlatform, current.nextPlatform, current.playerX, stageSize),
+    cameraEnd: fitSquareBaseCamera(respawnPlatform, current.nextPlatform, current.playerX, logicStageSize),
     cameraStart,
-    stageHeight: stageSize.height,
+    stageHeight: logicStageSize.height,
   });
   current.advanceStartedAt = current.time + SQUARE_JUMP_ADVANCE_DELAY;
   current.lockedNextVisualOffsetY = nextVisualOffsetY;
@@ -378,49 +521,85 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
 
 export function SquareJumpPrototype({
   level,
+  logicStageSizeOverride,
   mode,
   runSeed,
   onBackToSelect,
   onComplete,
   onRuntimeState,
   onRestart,
+  remotePlayer,
+  remoteStateSubscription,
+  remoteState,
   unlimitedRespawn = false,
   coOpInputState = null,
+  coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  authoritativeStateSubscription = null,
 }: {
   level: MiniGameLevelConfig;
+  logicStageSizeOverride?: MiniGameStageSize;
   mode: MiniGameRunMode;
   runSeed: string;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: SquareJumpStateSnapshot) => void;
   onRestart: () => void;
+  remotePlayer?: { skinId?: string } | null;
+  remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
+  remoteState?: SelfGameState | null;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
-  coOpRole?: "first" | "second" | null;
+  coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
+  coOpRole?: SquareJumpCoOpRole | null;
   coOpSkinId?: string | null;
+  authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
 }) {
-  const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
-  const stageWidth = stageSize.width;
-  const stageHeight = stageSize.height;
+  const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
+  const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
+  const stageWidth = logicStageSize.width;
+  const stageHeight = logicStageSize.height;
+  const visualStageWidth = measuredStageSize.width;
+  const visualStageHeight = measuredStageSize.height;
+  const worldLayerScale = Math.min(visualStageWidth / stageWidth, visualStageHeight / stageHeight);
+  const worldLayerOffsetX = (visualStageWidth - stageWidth * worldLayerScale) / 2;
+  const worldLayerOffsetY = (visualStageHeight - stageHeight * worldLayerScale) / 2;
   const platformY = getSquareJumpPlatformY(stageHeight);
   const requiredJumps = numberParam(level.params, "jumpsRequired", 5);
   const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
   const flyAwayLandingCatchDepth = numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25);
   const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
-  const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed, stageSize), [level, runSeed, stageSize]);
+  const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed, logicStageSize), [level, logicStageSize, runSeed]);
   const runtimeRef = useRef<SquareJumpUnifiedRuntime>(initialRuntime);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
   const progressBackgroundRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
   const playerAvatarRef = useRef<HTMLSpanElement | null>(null);
+  const remotePlayerAvatarRef = useRef<HTMLSpanElement | null>(null);
+  const remoteSmootherRef = useRef(
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
+  );
+  const authoritativeSmootherRef = useRef(
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
+  );
+  const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
   const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
   const lastRuntimeSyncRef = useRef(0);
-  const previousCoOpInputDirectionRef = useRef<PlayerAvatarDirection>("none");
+  const localChargeHeldRef = useRef(false);
+  const remoteChargeHeldRef = useRef(false);
   const completedRef = useRef(false);
   const { fps, recordFrame: recordDebugFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const perf = useMiniGamePerfMonitor("Square Jump");
@@ -443,7 +622,7 @@ export function SquareJumpPrototype({
     if (!onRuntimeStateRef.current) return;
     if (!force && time - lastRuntimeSyncRef.current < SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS) return;
     lastRuntimeSyncRef.current = time;
-    onRuntimeStateRef.current(makeSquareJumpRuntimeState(runtimeRef.current));
+    onRuntimeStateRef.current(makeSquareJumpRuntimeState(runtimeRef.current, localChargeHeldRef.current));
   }, []);
   const canRecoverSquareJumpMiss = mode === "base" || unlimitedRespawn;
 
@@ -451,13 +630,53 @@ export function SquareJumpPrototype({
     runtimeRef.current = initialRuntime;
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
-    previousCoOpInputDirectionRef.current = "none";
+    localChargeHeldRef.current = false;
+    remoteChargeHeldRef.current = false;
     completedRef.current = false;
+    remoteSmootherRef.current.reset();
+    authoritativeSmootherRef.current.reset();
+    if (remotePlayerShellRef.current) {
+      remotePlayerShellRef.current.style.display = "none";
+    }
     const timer = window.setTimeout(() => {
       setView(makeSquareJumpUnifiedView(initialRuntime));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [initialRuntime]);
+
+  useEffect(() => {
+    if (!remoteState) {
+      remoteSmootherRef.current.reset();
+      if (remotePlayerShellRef.current) {
+        remotePlayerShellRef.current.style.display = "none";
+      }
+      return;
+    }
+    remoteSmootherRef.current.push(remoteState, performance.now());
+  }, [remoteState]);
+
+  useEffect(() => {
+    if (!remoteStateSubscription) return;
+    return remoteStateSubscription((nextState) => {
+      remoteSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [remoteStateSubscription]);
+
+  useEffect(() => {
+    authoritativeSmootherRef.current.reset();
+    if (!authoritativeStateSubscription) return;
+    return authoritativeStateSubscription((nextState) => {
+      if (nextState.status !== "playing") {
+        authoritativeSmootherRef.current.reset();
+        if (applySquareJumpAuthoritativeState(runtimeRef.current, nextState)) {
+          syncView();
+          syncRuntimeState(performance.now(), true);
+        }
+        return;
+      }
+      authoritativeSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [authoritativeStateSubscription, syncRuntimeState, syncView]);
 
   const updateSquareJumpDom = useCallback(
     (current: SquareJumpUnifiedRuntime) => {
@@ -466,7 +685,7 @@ export function SquareJumpPrototype({
         progressBackgroundRef.current.style.backgroundPosition = String(backgroundStyle.backgroundPosition ?? "");
       }
       if (worldLayerRef.current) {
-        worldLayerRef.current.style.transform = squareBaseWorldTransform(current.camera, stageSize);
+        worldLayerRef.current.style.transform = `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale}) ${squareBaseWorldTransform(current.camera, logicStageSize)}`;
       }
 
       const visiblePlatforms = selectSquareJumpVisiblePlatforms(current.currentPlatform, current.nextPlatform, current.exitingPlatform);
@@ -498,20 +717,32 @@ export function SquareJumpPrototype({
         playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
       setSquareJumpAvatarChargeVars(playerAvatarRef.current, current);
+      let remoteChargeHint = 0;
+      if (remotePlayerShellRef.current) {
+        const sampledRemote = remoteSmootherRef.current.sample(performance.now());
+        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
+          remoteChargeHint = sampledRemote.direction && sampledRemote.direction !== "none" ? 0.68 : 0;
+          remotePlayerShellRef.current.style.display = "";
+          remotePlayerShellRef.current.style.transform = transformPoint3d(sampledRemote.x - PLAYER_SIZE / 2, sampledRemote.y - PLAYER_SIZE / 2);
+        } else {
+          remotePlayerShellRef.current.style.display = "none";
+        }
+      }
+      setSquareJumpAvatarChargeVarsFromCharge(remotePlayerAvatarRef.current, remoteChargeHint);
       if (tutorialPreviewRef.current) {
         const previewPlan = level.levelId === "square-jump-base" && current.jumps < 3 && current.state === "charging" ? createSquareJumpPlan(level, current) : null;
         if (previewPlan) {
           tutorialPreviewRef.current.style.display = "";
           tutorialPreviewRef.current.style.transform = transformPoint3d(
-            stageWidth / 2 + (previewPlan.landingX - current.camera.cameraX) * current.camera.scale - 15,
-            stageHeight / 2 + (platformY - current.camera.cameraY) * current.camera.scale + 12,
+            worldLayerOffsetX + (stageWidth / 2 + (previewPlan.landingX - current.camera.cameraX) * current.camera.scale) * worldLayerScale - 15,
+            worldLayerOffsetY + (stageHeight / 2 + (platformY - current.camera.cameraY) * current.camera.scale) * worldLayerScale + 12,
           );
         } else {
           tutorialPreviewRef.current.style.display = "none";
         }
       }
     },
-    [level, platformY, stageHeight, stageSize, stageWidth],
+    [level, platformY, stageHeight, logicStageSize, stageWidth, worldLayerOffsetX, worldLayerOffsetY, worldLayerScale],
   );
 
   const fail = useCallback(
@@ -554,7 +785,7 @@ export function SquareJumpPrototype({
       const cameraStart = { ...current.camera };
       const futureIndex = current.nextIndex + 1;
       const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
-      const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, stageSize);
+      const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, logicStageSize);
       current.nextIndex = futureIndex;
       current.nextPlatform = futurePlatform;
       current.timer = null;
@@ -571,7 +802,7 @@ export function SquareJumpPrototype({
       current.state = "advancing";
       return false;
     },
-    [requiredJumps, stageHeight, stageSize, syncView],
+    [logicStageSize, requiredJumps, stageHeight, syncView],
   );
 
   const launchChargedJump = useCallback(() => {
@@ -588,13 +819,11 @@ export function SquareJumpPrototype({
     syncView();
   }, [level, syncView]);
 
-  const beginCharge = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
+  const startSharedCharge = useCallback(
+    () => {
       const current = runtimeRef.current;
       if (current.status !== "playing") return;
-      const coOpTurnIndex = current.jumps;
-      if (!canControlSquareJumpCoOpTurn(coOpTurnIndex, coOpRole)) return;
+      if (current.state === "charging" || current.state === "airCharging") return;
       if (!current.started) {
         current.started = true;
         current.timer = null;
@@ -602,28 +831,68 @@ export function SquareJumpPrototype({
       const canGroundCharge = current.state === "idle" || current.state === "advancing";
       const canAirCharge = doubleJumpEnabled && (current.state === "jumping" || current.state === "falling") && current.jumpPlan !== null && !current.doubleJumpUsed;
       if (!canGroundCharge && !canAirCharge) return;
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // Pointer capture can fail if the pointer is already gone.
-      }
       current.charge = 0;
       current.chargeElapsedMs = 0;
       current.state = canAirCharge ? "airCharging" : "charging";
       syncView();
     },
-    [coOpRole, doubleJumpEnabled, syncView],
+    [doubleJumpEnabled, syncView],
+  );
+
+  const releaseSharedChargeIfIdle = useCallback(() => {
+    if (localChargeHeldRef.current || remoteChargeHeldRef.current) return;
+    launchChargedJump();
+  }, [launchChargedJump]);
+
+  const applyRemoteChargeHeld = useCallback(
+    (nextRemoteHeld: boolean) => {
+      if (remoteChargeHeldRef.current === nextRemoteHeld) return;
+      const remoteCanControl = coOpRole ? !canControlSquareJumpCoOpTurn(runtimeRef.current, coOpRole) : true;
+      if (nextRemoteHeld && !remoteCanControl) return;
+      remoteChargeHeldRef.current = nextRemoteHeld;
+      if (nextRemoteHeld) {
+        startSharedCharge();
+        return;
+      }
+      releaseSharedChargeIfIdle();
+    },
+    [coOpRole, releaseSharedChargeIfIdle, startSharedCharge],
+  );
+
+  const beginCharge = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (!canControlSquareJumpCoOpTurn(runtimeRef.current, coOpRole)) {
+        localChargeHeldRef.current = false;
+        syncRuntimeState(performance.now(), true);
+        return;
+      }
+      localChargeHeldRef.current = true;
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture can fail if the pointer is already gone.
+      }
+      startSharedCharge();
+      syncRuntimeState(performance.now(), true);
+    },
+    [coOpRole, startSharedCharge, syncRuntimeState],
   );
 
   const releaseJump = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
-      launchChargedJump();
+      localChargeHeldRef.current = false;
+      releaseSharedChargeIfIdle();
+      syncRuntimeState(performance.now(), true);
     },
-    [launchChargedJump],
+    [releaseSharedChargeIfIdle, syncRuntimeState],
   );
 
   const cancelCharge = useCallback(() => {
+    localChargeHeldRef.current = false;
+    syncRuntimeState(performance.now(), true);
+    if (remoteChargeHeldRef.current) return;
     const current = runtimeRef.current;
     if (current.status !== "playing" || (current.state !== "charging" && current.state !== "airCharging")) return;
     if (current.state === "airCharging") {
@@ -634,35 +903,20 @@ export function SquareJumpPrototype({
     current.chargeElapsedMs = 0;
     current.state = "idle";
     syncView();
-  }, [launchChargedJump, syncView]);
+  }, [launchChargedJump, syncRuntimeState, syncView]);
 
   useEffect(() => {
-    if (!coOpRole || !coOpInputState) return;
-    const nextDirection = coOpInputState.direction ?? "none";
-    const previousDirection = previousCoOpInputDirectionRef.current;
-    previousCoOpInputDirectionRef.current = nextDirection;
-    const current = runtimeRef.current;
-    if (current.status !== "playing") return;
-    const coOpTurnIndex = current.jumps;
-    if (canControlSquareJumpCoOpTurn(coOpTurnIndex, coOpRole)) return;
-    if (previousDirection === "none" && nextDirection !== "none") {
-      if (!current.started) {
-        current.started = true;
-        current.timer = null;
-      }
-      const canGroundCharge = current.state === "idle" || current.state === "advancing";
-      const canAirCharge = doubleJumpEnabled && (current.state === "jumping" || current.state === "falling") && current.jumpPlan !== null && !current.doubleJumpUsed;
-      if (!canGroundCharge && !canAirCharge) return;
-      current.charge = 0;
-      current.chargeElapsedMs = 0;
-      current.state = canAirCharge ? "airCharging" : "charging";
-      syncView();
-      return;
-    }
-    if (previousDirection !== "none" && nextDirection === "none") {
-      launchChargedJump();
-    }
-  }, [coOpInputState, coOpRole, doubleJumpEnabled, launchChargedJump, syncView]);
+    coOpInputStateRef.current = coOpInputState;
+    applyRemoteChargeHeld((coOpInputState?.direction ?? "none") !== "none");
+  }, [applyRemoteChargeHeld, coOpInputState]);
+
+  useEffect(() => {
+    if (!coOpInputStateSubscription) return;
+    return coOpInputStateSubscription((nextState) => {
+      coOpInputStateRef.current = nextState;
+      applyRemoteChargeHeld((nextState.direction ?? "none") !== "none");
+    });
+  }, [applyRemoteChargeHeld, coOpInputStateSubscription]);
 
   useEffect(() => {
     let frameId = 0;
@@ -681,6 +935,25 @@ export function SquareJumpPrototype({
         updateSquareJumpDom(current);
         if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
       };
+
+      const sampledAuthoritativeState = authoritativeSmootherRef.current.sample(performance.now());
+      const platformWindowChanged = hasSquareJumpPlatformWindowChanged(current, sampledAuthoritativeState);
+      if (applySquareJumpAuthoritativeState(current, sampledAuthoritativeState)) {
+        paintSquareFrame();
+        syncRuntimeState(time);
+        if (platformWindowChanged) {
+          syncView(performance.now());
+        } else if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== view.status) {
+          syncView(time);
+        }
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+      if (authoritativeStateSubscription) {
+        paintSquareFrame();
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
       if (current.status === "playing") {
         current.time += delta;
@@ -744,7 +1017,7 @@ export function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
-            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize, unlimitedRespawn)) {
+            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
               syncView(time);
@@ -780,7 +1053,7 @@ export function SquareJumpPrototype({
           const screenX = stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
-            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", stageSize, unlimitedRespawn)) {
+            if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
               syncView(time);
@@ -807,7 +1080,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageSize, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom]);
+  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -839,17 +1112,20 @@ export function SquareJumpPrototype({
   const worldLayerStyle: CSSProperties = {
     inset: 0,
     position: "absolute",
-    transform: squareBaseWorldTransform(view.camera, stageSize),
+    height: `${stageHeight}px`,
+    transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale}) ${squareBaseWorldTransform(view.camera, logicStageSize)}`,
     transformOrigin: "0 0",
+    width: `${stageWidth}px`,
     zIndex: 2,
   };
   const platforms = selectSquareJumpVisiblePlatforms(view.currentPlatform, view.nextPlatform, view.exitingPlatform);
   const tutorialPreviewPlan = level.levelId === "square-jump-base" && view.jumps < 3 && view.state === "charging" ? createSquareJumpPlan(level, view) : null;
   const isCharging = view.state === "charging" || view.state === "airCharging";
-
+  const coOpTurnIsMine = canControlSquareJumpCoOpTurn(view, coOpRole);
   return (
     <div className="prototype-game-wrap">
       <div className="mini-score">
+        {coOpRole ? <span className="mini-coop-hint">{coOpTurnIsMine ? "轮到你蓄力" : "等待对方蓄力"}</span> : null}
         <span>进度 {view.jumps}/{requiredJumps}</span>
         {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
         {view.timer !== null ? <span>倒计�?{Math.max(0, view.timer).toFixed(1)}s</span> : null}
@@ -924,6 +1200,25 @@ export function SquareJumpPrototype({
               visualScale={1.18}
             />
           </div>
+          {remoteState || remoteStateSubscription ? (
+            <div
+              className="square-jump-base-remote-player-shell"
+              ref={remotePlayerShellRef}
+              style={{
+                left: "0px",
+                top: "0px",
+                width: `${PLAYER_SIZE}px`,
+                height: `${PLAYER_SIZE}px`,
+              }}
+            >
+              <PlayerAvatar
+                {...resolveSquareJumpRemoteAvatarView(remoteState)}
+                rootRef={remotePlayerAvatarRef}
+                skin={resolveSquareJumpRemoteSkin(remotePlayer)}
+                visualScale={1.18}
+              />
+            </div>
+          ) : null}
           {DEBUG_MINI_GAME_HITBOX ? (
             <>
               {platforms.map((platform) => {
@@ -962,8 +1257,8 @@ export function SquareJumpPrototype({
             ref={tutorialPreviewRef}
             style={{
               transform: transformPoint3d(
-                stageWidth / 2 + (tutorialPreviewPlan.landingX - view.camera.cameraX) * view.camera.scale - 15,
-                stageHeight / 2 + (platformY - view.camera.cameraY) * view.camera.scale + 12,
+                worldLayerOffsetX + (stageWidth / 2 + (tutorialPreviewPlan.landingX - view.camera.cameraX) * view.camera.scale) * worldLayerScale - 15,
+                worldLayerOffsetY + (stageHeight / 2 + (platformY - view.camera.cameraY) * view.camera.scale) * worldLayerScale + 12,
               ),
             }}
             aria-hidden="true"

@@ -52,9 +52,15 @@ import {
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 import type { SelfGameState } from "@/features/game-sync/types";
+import {
+  MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+  MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+  MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+  MULTIPLAYER_STATE_SYNC_MS,
+} from "@/lib/multiplayer/protocol";
 
 const DOODLE_PLAYER_SPEED = 315;
-const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
+const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -111,6 +117,7 @@ export type DoodleRuntimeState = {
   playerDirection: PlayerAvatarDirection;
   progress: number;
   status: PrototypeStatus;
+  usedPlatformIds: number[];
   vx: number;
   vy: number;
   x: number;
@@ -214,10 +221,34 @@ function resolveDoodleLastSafePlatform(frame: DoodleFrame) {
 }
 
 function resolveDoodleCoOpInputDirection(localDirection: number, coOpRole: "left" | "right" | null | undefined, coOpInputState: DoodleRemoteState | null | undefined) {
-  if (!coOpRole) return localDirection;
-  const localCoOpDirection = localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
+  const localCoOpDirection = !coOpRole ? clamp(localDirection, -1, 1) : localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
   const remoteCoOpDirection = coOpInputState?.direction === "left" ? -1 : coOpInputState?.direction === "right" ? 1 : 0;
   return clamp(localCoOpDirection + remoteCoOpDirection, -1, 1);
+}
+
+function applyDoodleAuthoritativeState(frame: DoodleFrame, authoritativeState: SelfGameState | null | undefined, targetHeight: number) {
+  if (!authoritativeState) return false;
+  if (typeof authoritativeState.x !== "number" || typeof authoritativeState.y !== "number" || typeof authoritativeState.cameraY !== "number") {
+    return false;
+  }
+  frame.playerX = authoritativeState.x;
+  frame.playerY = authoritativeState.y;
+  frame.cameraY = authoritativeState.cameraY;
+  const usedPlatformIds = new Set(authoritativeState.usedPlatformIds ?? []);
+  for (const platform of frame.platforms) {
+    platform.used = usedPlatformIds.has(platform.id);
+  }
+  frame.time = Math.max(frame.time, (authoritativeState.elapsedMs ?? 0) / 1000);
+  frame.failures = authoritativeState.failures ?? frame.failures;
+  frame.playerVy = authoritativeState.vy ?? frame.playerVy;
+  void targetHeight;
+  frame.status = authoritativeState.status === "finished" ? "passed" : authoritativeState.status;
+  frame.started = frame.status === "playing";
+  if (frame.status !== "playing") {
+    frame.playerDirection = "none";
+    frame.playerVy = 0;
+  }
+  return true;
 }
 
 function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number, stageHeight: number): DoodleViewFrame {
@@ -249,22 +280,24 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
   };
 }
 
-function makeDoodleRuntimeState(frame: DoodleFrame, targetHeight: number): DoodleRuntimeState {
+function makeDoodleRuntimeState(frame: DoodleFrame, targetHeight: number, inputDirection = frame.playerDirection === "left" ? -1 : frame.playerDirection === "right" ? 1 : 0): DoodleRuntimeState {
   const progressPercent = clamp((frame.playerY / targetHeight) * 100, 0, 100);
+  const inputPlayerDirection = resolveDoodlePlayerDirection(inputDirection);
   const vx =
-    frame.playerDirection === "left"
+    inputPlayerDirection === "left"
       ? -DOODLE_PLAYER_SPEED
-      : frame.playerDirection === "right"
+      : inputPlayerDirection === "right"
         ? DOODLE_PLAYER_SPEED
         : 0;
   return {
     cameraY: frame.cameraY,
-    direction: frame.playerDirection,
+    direction: inputPlayerDirection,
     elapsedMs: Math.round(frame.time * 1000),
     failures: frame.failures,
     playerDirection: frame.playerDirection,
     progress: Number((progressPercent / 100).toFixed(4)),
     status: frame.status,
+    usedPlatformIds: frame.platforms.filter((platform) => platform.used).map((platform) => platform.id),
     vx,
     vy: frame.playerVy,
     x: frame.playerX,
@@ -305,8 +338,10 @@ export function DoodleJumpPrototype({
   logicStageSizeOverride,
   unlimitedRespawn = false,
   coOpInputState = null,
+  coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  authoritativeStateSubscription = null,
   onBackToSelect,
   onComplete,
   onRestart,
@@ -322,8 +357,10 @@ export function DoodleJumpPrototype({
   logicStageSizeOverride?: MiniGameStageSize;
   unlimitedRespawn?: boolean;
   coOpInputState?: DoodleRemoteState | null;
+  coOpInputStateSubscription?: ((listener: (state: DoodleRemoteState) => void) => (() => void)) | null;
   coOpRole?: "left" | "right" | null;
   coOpSkinId?: string | null;
+  authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
@@ -348,8 +385,20 @@ export function DoodleJumpPrototype({
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
   );
+  const authoritativeSmootherRef = useRef(
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
+  );
+  const coOpInputStateRef = useRef<DoodleRemoteState | null>(coOpInputState);
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
@@ -382,7 +431,7 @@ export function DoodleJumpPrototype({
       if (!onRuntimeStateRef.current) return;
       if (!force && time - lastRuntimeSyncRef.current < DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS) return;
       lastRuntimeSyncRef.current = time;
-      onRuntimeStateRef.current(makeDoodleRuntimeState(runtimeRef.current, world.targetHeight));
+      onRuntimeStateRef.current(makeDoodleRuntimeState(runtimeRef.current, world.targetHeight, inputDirectionRef.current));
     },
     [world.targetHeight],
   );
@@ -392,6 +441,7 @@ export function DoodleJumpPrototype({
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    authoritativeSmootherRef.current.reset();
     const timer = window.setTimeout(() => {
       setView(makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, logicStageHeight));
     }, 0);
@@ -455,6 +505,11 @@ export function DoodleJumpPrototype({
     syncDoodleRuntimeState(performance.now(), true);
   }, [syncDoodleRuntimeState, syncDoodleView]);
 
+  useEffect(() => {
+    coOpInputStateRef.current = coOpInputState;
+    if ((coOpInputState?.direction ?? "none") !== "none") startDoodle();
+  }, [coOpInputState, startDoodle]);
+
   function chooseDoodleDirection(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     return event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
@@ -463,18 +518,16 @@ export function DoodleJumpPrototype({
   const updateDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (inputPointerIdRef.current !== event.pointerId) return;
-    const direction = chooseDoodleDirection(event);
-    if (coOpRole) inputDirectionRef.current = coOpRole === "left" ? -1 : 1;
-    else inputDirectionRef.current = direction;
+    const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseDoodleDirection(event);
+    inputDirectionRef.current = direction;
   }, [coOpRole]);
 
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     inputPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-    const direction = chooseDoodleDirection(event);
-    if (coOpRole) inputDirectionRef.current = coOpRole === "left" ? -1 : 1;
-    else inputDirectionRef.current = direction;
+    const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseDoodleDirection(event);
+    inputDirectionRef.current = direction;
     startDoodle();
   }, [coOpRole, startDoodle]);
 
@@ -483,7 +536,32 @@ export function DoodleJumpPrototype({
     if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
     inputPointerIdRef.current = null;
     inputDirectionRef.current = 0;
-  }, []);
+    syncDoodleRuntimeState(performance.now(), true);
+  }, [syncDoodleRuntimeState]);
+
+  useEffect(() => {
+    if (!coOpInputStateSubscription) return;
+    return coOpInputStateSubscription((nextState) => {
+      coOpInputStateRef.current = nextState;
+      if ((nextState.direction ?? "none") !== "none") startDoodle();
+    });
+  }, [coOpInputStateSubscription, startDoodle]);
+
+  useEffect(() => {
+    authoritativeSmootherRef.current.reset();
+    if (!authoritativeStateSubscription) return;
+    return authoritativeStateSubscription((nextState) => {
+      if (nextState.status !== "playing") {
+        authoritativeSmootherRef.current.reset();
+        if (applyDoodleAuthoritativeState(runtimeRef.current, nextState, world.targetHeight)) {
+          syncDoodleView();
+          syncDoodleRuntimeState(performance.now(), true);
+        }
+        return;
+      }
+      authoritativeSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [authoritativeStateSubscription, syncDoodleRuntimeState, syncDoodleView, world.targetHeight]);
 
   useEffect(() => {
     let frameId = 0;
@@ -547,6 +625,22 @@ export function DoodleJumpPrototype({
       };
 
       const current = runtimeRef.current;
+      const sampledAuthoritativeState = authoritativeSmootherRef.current.sample(performance.now());
+      if (applyDoodleAuthoritativeState(current, sampledAuthoritativeState, world.targetHeight)) {
+        paintDoodleFrame(current);
+        syncDoodleRuntimeState(time);
+        if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== view.status) {
+          syncDoodleView(time);
+        }
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+      if (authoritativeStateSubscription) {
+        paintDoodleFrame(current);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+
       if (current.status !== "playing") {
         paintDoodleFrame(current);
         syncDoodleRuntimeState(time);
@@ -576,7 +670,7 @@ export function DoodleJumpPrototype({
       }
 
       const nextTime = current.time + delta;
-      const inputDirection = resolveDoodleCoOpInputDirection(inputDirectionRef.current, coOpRole, coOpInputState);
+      const inputDirection = resolveDoodleCoOpInputDirection(inputDirectionRef.current, coOpRole, coOpInputStateRef.current);
       current.playerDirection = resolveDoodlePlayerDirection(inputDirection);
       current.playerX = clamp(current.playerX + inputDirection * DOODLE_PLAYER_SPEED * delta, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2);
       const nextX = current.playerX;
@@ -734,7 +828,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [coOpInputState, coOpRole, logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, world.targetHeight]);
+  }, [authoritativeStateSubscription, coOpRole, logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
   const worldLayerStyle = {
@@ -772,6 +866,7 @@ export function DoodleJumpPrototype({
   return (
     <div className="prototype-game-wrap">
       <div className="mini-score">
+        {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
         <span>进度 {Math.round(view.progressPercent)}%</span>
         {riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}
       </div>

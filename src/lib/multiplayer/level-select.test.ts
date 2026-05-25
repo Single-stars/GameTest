@@ -11,6 +11,7 @@ import {
   isMultiplayerLevelSelectReadyZone,
   isDefaultMultiplayerLevelSelectState,
   resolveMultiplayerLevelSelection,
+  resolveMultiplayerPlayMode,
 } from "./level-select.ts";
 
 test("multiplayer level selection temporarily exposes only jump, up, and down levels", () => {
@@ -44,6 +45,13 @@ test("multiplayer level selection only resolves currently exposed two-player gam
   assert.equal(knife.levelId, DEFAULT_MULTIPLAYER_LEVEL_ID);
   assert.equal(squareJump.gameId, "square-jump");
   assert.equal(squareJump.levelId, "square-jump-final");
+});
+
+test("multiplayer play mode parsing preserves versus from network messages", () => {
+  assert.equal(resolveMultiplayerPlayMode("versus"), "versus");
+  assert.equal(resolveMultiplayerPlayMode("co-op"), "co-op");
+  assert.equal(resolveMultiplayerPlayMode("missing"), "co-op");
+  assert.equal(resolveMultiplayerPlayMode(null), "co-op");
 });
 
 test("multiplayer level select room starts dark and lights full-height slots after interaction", () => {

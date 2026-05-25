@@ -32,6 +32,11 @@
   height: 32px;
 }
 
+.mini-coop-hint {
+  color: rgba(24, 24, 24, 0.82);
+  font-weight: 950;
+}
+
 .doodle-world-layer {
   z-index: 1;
   transform-origin: 0 0;

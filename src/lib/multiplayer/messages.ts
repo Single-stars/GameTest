@@ -5,6 +5,7 @@ import type {
   NetHelloMessage,
   NetHomeworldPresenceMessage,
   NetHomeworldStateMessage,
+  NetInputMessage,
   NetLevelSelectPresenceMessage,
   NetLevelSelectStateMessage,
   NetMessage,
@@ -16,6 +17,7 @@ import type {
   NetStateMessage,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
+import { MULTIPLAYER_PROTOCOL_VERSION } from "./protocol.ts";
 import {
   isHomeworldPresence,
   isHomeworldState,
@@ -29,7 +31,7 @@ import {
   type MultiplayerLevelSelectState,
 } from "./level-select.ts";
 
-export const MULTIPLAYER_PROTOCOL_VERSION = 1 as const;
+export { MULTIPLAYER_PROTOCOL_VERSION } from "./protocol.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -47,8 +49,16 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(isNumber);
+}
+
 function isDirection(value: unknown) {
   return value === "left" || value === "right" || value === "none";
+}
+
+function isGravity(value: unknown) {
+  return value === "normal" || value === "light" || value === "heavy";
 }
 
 function isPlayerInfo(value: unknown): value is PlayerInfo {
@@ -105,15 +115,41 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (value.score !== undefined && !isNumber(value.score)) return false;
   if (value.x !== undefined && !isNumber(value.x)) return false;
   if (value.y !== undefined && !isNumber(value.y)) return false;
+  if (value.cameraX !== undefined && !isNumber(value.cameraX)) return false;
   if (value.cameraY !== undefined && !isNumber(value.cameraY)) return false;
+  if (value.cameraScale !== undefined && !isNumber(value.cameraScale)) return false;
+  if (value.charge !== undefined && !isNumber(value.charge)) return false;
   if (value.vx !== undefined && !isNumber(value.vx)) return false;
   if (value.vy !== undefined && !isNumber(value.vy)) return false;
   if (value.direction !== undefined && !isDirection(value.direction)) return false;
+  if (value.exitingPlatformIndex !== undefined && !isNumber(value.exitingPlatformIndex)) return false;
+  if (value.exitingPlatformOffsetY !== undefined && !isNumber(value.exitingPlatformOffsetY)) return false;
   if (value.failures !== undefined && !isNumber(value.failures)) return false;
+  if (value.gravity !== undefined && !isGravity(value.gravity)) return false;
+  if (value.nextPlatformIndex !== undefined && !isNumber(value.nextPlatformIndex)) return false;
+  if (value.nextPlatformOffsetY !== undefined && !isNumber(value.nextPlatformOffsetY)) return false;
+  if (value.phase !== undefined && typeof value.phase !== "string") return false;
+  if (value.platformIndex !== undefined && !isNumber(value.platformIndex)) return false;
+  if (value.turns !== undefined && !isNumber(value.turns)) return false;
   if (value.elapsedMs !== undefined && !isNumber(value.elapsedMs)) return false;
   if (value.seq !== undefined && !isNumber(value.seq)) return false;
   if (value.sentAt !== undefined && !isNumber(value.sentAt)) return false;
+  if (value.usedPlatformIds !== undefined && !isNumberArray(value.usedPlatformIds)) return false;
   return value.status === "playing" || value.status === "failed" || value.status === "finished";
+}
+
+function isInputMessage(value: unknown): value is NetInputMessage {
+  if (!isRecord(value)) return false;
+  if (!isProtocolV1(value.v) || value.kind !== "input") return false;
+  if (!isString(value.matchId)) return false;
+  if (value.direction !== undefined && !isDirection(value.direction)) return false;
+  if (value.charge !== undefined && !isNumber(value.charge)) return false;
+  if (value.phase !== undefined && typeof value.phase !== "string") return false;
+  if (value.status !== undefined && value.status !== "playing" && value.status !== "failed" && value.status !== "finished") return false;
+  if (value.elapsedMs !== undefined && !isNumber(value.elapsedMs)) return false;
+  if (value.seq !== undefined && !isNumber(value.seq)) return false;
+  if (value.sentAt !== undefined && !isNumber(value.sentAt)) return false;
+  return true;
 }
 
 function isResultMessage(value: unknown): value is NetResultMessage {
@@ -191,6 +227,7 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isHelloMessage(payload)) return payload;
   if (isReadyMessage(payload)) return payload;
   if (isStartMessage(payload)) return payload;
+  if (isInputMessage(payload)) return payload;
   if (isStateMessage(payload)) return payload;
   if (isResultMessage(payload)) return payload;
   if (isRematchMessage(payload)) return payload;
@@ -233,11 +270,38 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind">): N
     status: data.status,
     x: data.x,
     y: data.y,
+    cameraX: data.cameraX,
     cameraY: data.cameraY,
+    cameraScale: data.cameraScale,
+    charge: data.charge,
     vx: data.vx,
     vy: data.vy,
     direction: data.direction,
+    exitingPlatformIndex: data.exitingPlatformIndex,
+    exitingPlatformOffsetY: data.exitingPlatformOffsetY,
     failures: data.failures,
+    gravity: data.gravity,
+    nextPlatformIndex: data.nextPlatformIndex,
+    nextPlatformOffsetY: data.nextPlatformOffsetY,
+    phase: data.phase,
+    platformIndex: data.platformIndex,
+    turns: data.turns,
+    elapsedMs: data.elapsedMs,
+    seq: data.seq,
+    sentAt: data.sentAt,
+    usedPlatformIds: data.usedPlatformIds,
+  };
+}
+
+export function createInputMessage(data: Omit<NetInputMessage, "v" | "kind">): NetInputMessage {
+  return {
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "input",
+    matchId: data.matchId,
+    direction: data.direction,
+    charge: data.charge,
+    phase: data.phase,
+    status: data.status,
     elapsedMs: data.elapsedMs,
     seq: data.seq,
     sentAt: data.sentAt,

@@ -86,8 +86,11 @@ export type HomeworldScreenProps = {
   inviteLink?: string;
   initialPlayerPose?: HomeworldPlayerPoseState | null;
   mode: HomeworldRole;
+  roomCode?: string;
+  roomCodeCopyStatus?: CopyStatus;
   roomEntryHidden?: boolean;
   onCopyInvite?: () => void;
+  onCopyRoomCode?: () => void;
   onCreateRoom?: () => void;
   onJoinRoom?: (roomCode: string) => void;
   onLeaveRoom?: () => void;
@@ -205,8 +208,11 @@ export function HomeworldScreen({
   inviteLink = "",
   initialPlayerPose,
   mode,
+  roomCode = "",
+  roomCodeCopyStatus = "idle",
   roomEntryHidden = false,
   onCopyInvite,
+  onCopyRoomCode,
   onCreateRoom,
   onJoinRoom,
   onLeaveRoom,
@@ -240,7 +246,7 @@ export function HomeworldScreen({
   });
   const [doorMenuOpen, setDoorMenuOpen] = useState(false);
   const [roomEntryOpen, setRoomEntryOpen] = useState(false);
-  const [roomEntryPanelCollapsed, setRoomEntryPanelCollapsed] = useState(true);
+  const [roomEntryPanelCollapsed, setRoomEntryPanelCollapsed] = useState(() => !inviteLink);
   const [joinRoomDialogOpen, setJoinRoomDialogOpen] = useState(false);
   const [joinRoomCode, setJoinRoomCode] = useState("");
   const [customizationOpen, setCustomizationOpen] = useState(false);
@@ -383,7 +389,7 @@ export function HomeworldScreen({
     setDoorMenuOpen(false);
     setCustomizationOpen(false);
     setRoomEntryOpen(true);
-    setRoomEntryPanelCollapsed(true);
+    setRoomEntryPanelCollapsed(false);
     onOpenMultiplayerEntry?.();
   }, [canCreateRoom, onOpenMultiplayerEntry]);
 
@@ -919,14 +925,24 @@ export function HomeworldScreen({
                   {roomEntryPanelCollapsed ? "^" : "v"}
                 </button>
                 {inviteLink ? (
-                  <>
-                    <span>好友邀请</span>
-                    <input aria-label="家园联机邀请链接" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
-                    <button className="secondary-button" type="button" onPointerDown={onCopyInvite}>
-                      {copyStatus === "copied" ? "已复制" : "复制"}
-                    </button>
+                  <div className="homeworld-room-invite">
+                    <div className="homeworld-room-invite-row">
+                      <span>房间码</span>
+                      <output aria-label="家园联机房间码">{roomCode}</output>
+                      <button className="secondary-button" type="button" onPointerDown={onCopyRoomCode}>
+                        {roomCodeCopyStatus === "copied" ? "已复制" : "复制房间码"}
+                      </button>
+                    </div>
+                    <div className="homeworld-room-invite-row">
+                      <span>邀请链接</span>
+                      <input aria-label="家园联机邀请链接" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
+                      <button className="secondary-button" type="button" onPointerDown={onCopyInvite}>
+                        {copyStatus === "copied" ? "已复制" : "复制链接"}
+                      </button>
+                    </div>
+                    {roomCodeCopyStatus === "manual" ? <small>请手动复制房间码。</small> : null}
                     {copyStatus === "manual" ? <small>请手动复制链接。</small> : null}
-                  </>
+                  </div>
                 ) : (
                   <div className="homeworld-room-entry-choice">
                     <section>
@@ -951,16 +967,30 @@ export function HomeworldScreen({
                 <input
                   aria-label="输入房间码"
                   autoFocus
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  enterKeyHint="go"
+                  inputMode="text"
                   onChange={(event) => setJoinRoomCode(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    const roomCode = joinRoomCode.trim();
+                    if (!roomCode) return;
+                    setJoinRoomDialogOpen(false);
+                    setRoomEntryPanelCollapsed(true);
+                    setRoomEntryOpen(false);
+                    onJoinRoom?.(roomCode);
+                  }}
                   placeholder="输入房间码"
+                  spellCheck={false}
                   value={joinRoomCode}
                 />
                 <div className="homeworld-room-code-actions">
-                  <button className="secondary-button" type="button" onPointerDown={closeJoinRoomDialog}>
-                    取消
-                  </button>
                   <button className="primary-button" disabled={!joinRoomCode.trim()} type="button" onPointerDown={handleConfirmJoinRoom}>
                     确认
+                  </button>
+                  <button className="secondary-button" type="button" onPointerDown={closeJoinRoomDialog}>
+                    取消
                   </button>
                 </div>
               </div>

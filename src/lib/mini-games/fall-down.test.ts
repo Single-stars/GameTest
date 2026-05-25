@@ -107,6 +107,7 @@ test("fall down levels encode downward platform variants and pressure rules", ()
 test("fall down base camera moves at constant speed and only top pressure fails by default", () => {
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+  const globalCss = readAppCssSource();
 
   assert.equal(advanceFallDownCamera({ cameraY: 200, delta: 0.5, speed: 80 }), 240);
   assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 187, cameraY: 220, stageHeight: 640, squareSize: 32 }), {
@@ -133,7 +134,17 @@ test("fall down base camera moves at constant speed and only top pressure fails 
     status: "playing",
     reason: "",
   });
-  assert.match(fallDownSource, /bottomFailLine: stageHeight \+ PLAYER_SIZE/);
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 843, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 624 }), {
+    status: "playing",
+    reason: "",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 845, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 624 }), {
+    status: "failed",
+    reason: "too-deep",
+  });
+  assert.match(fallDownSource, /bottomFailLine: stageHeight - PLAYER_SIZE \/ 2/);
+  assert.doesNotMatch(fallDownSource, /fall-danger-line/);
+  assert.doesNotMatch(globalCss, /\.fall-danger-line/);
 });
 
 test("fall down fragile platforms expire without directly failing the player", () => {
@@ -180,7 +191,8 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.doesNotMatch(fallDownSource, /current\.respawnUntil = 0;/);
   assert.match(fallDownSource, /current\.inputDirection = direction;/);
   assert.match(fallDownSource, /current\.vx = direction \* fallDownPlayerSpeed;/);
-  assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{\s*resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
+  assert.match(fallDownSource, /const restartDirection = resolveFallDownCoOpInputDirection\(fallDownInputDirectionRef\.current, coOpRole, coOpInputStateRef\.current\);/);
+  assert.match(fallDownSource, /if \(restartDirection !== 0\) \{\s*resumeFallDownInput\(current, restartDirection\);/);
   assert.match(fallDownSource, /function chooseFallDownDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
   assert.match(fallDownSource, /fallDownInputDirectionRef\.current = direction;/);
   assert.match(fallDownSource, /resumeFallDownInput\(current, direction\);/);
@@ -192,6 +204,16 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /const stopDirection = useCallback/);
   assert.match(fallDownSource, /fallDownInputDirectionRef\.current = 0;/);
   assert.match(fallDownSource, /fallDownPointerIdRef\.current = null;/);
+  assert.match(fallDownSource, /makeFallDownRuntimeState\(runtimeRef\.current, requiredLayers, fallDownInputDirectionRef\.current\)/);
+  assert.match(fallDownSource, /syncRuntimeState\(performance\.now\(\), true\);/);
+  assert.match(fallDownSource, /coOpRole\?: "left" \| "right" \| null;/);
+  assert.match(fallDownSource, /mini-coop-hint/);
+  assert.match(fallDownSource, /你负责/);
+  assert.match(componentSource, /const localCoOpDirection = !coOpRole \? clamp\(localDirection, -1, 1\) : localDirection === 0 \? 0 : coOpRole === "left" \? -1 : 1;/);
+  assert.match(componentSource, /const remoteCoOpDirection = coOpInputState\?\.direction === "left" \? -1 : coOpInputState\?\.direction === "right" \? 1 : 0;/);
+  assert.match(componentSource, /return clamp\(localCoOpDirection \+ remoteCoOpDirection, -1, 1\) as FallDownRuntime\["inputDirection"\];/);
+  assert.match(fallDownSource, /const startDirection = resolveFallDownCoOpInputDirection\(fallDownInputDirectionRef\.current, coOpRole, coOpInputStateRef\.current\);/);
+  assert.match(fallDownSource, /if \(startDirection !== 0\) \{[\s\S]*resumeFallDownInput\(current, startDirection\);/);
   assert.match(fallDownSource, /current\.inputDirection = 0;/);
   assert.match(fallDownSource, /current\.vx = 0;/);
   assert.match(fallDownSource, /onPointerUp=\{stopDirection\}/);
@@ -263,12 +285,14 @@ test("fall down base and multiplayer failures respawn on the last safe platform 
   assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
   assert.match(fallDownSource, /const respawnPlatform = resolveFallDownLastSafePlatform\(current\);/);
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
-  assert.match(fallDownSource, /const respawnCameraY = Math\.max\(0, current\.playerY - stageSize\.height \* 0\.5\);/);
+  assert.match(fallDownSource, /const respawnCameraY = Math\.min\(current\.cameraY, current\.playerY - stageSize\.height \* 0\.5\);/);
+  assert.doesNotMatch(fallDownSource, /const respawnCameraY = Math\.max\(current\.cameraY, current\.playerY - stageSize\.height \* 0\.5\);/);
   assert.match(fallDownSource, /current\.cameraY = smoothFallDownRespawnCamera/);
   assert.match(fallDownSource, /current\.pressureWorldY = current\.respawnCameraStartY - PLAYER_SIZE;/);
   assert.match(fallDownSource, /if \(current\.time < current\.respawnCameraUntil\) \{/);
   assert.match(fallDownSource, /current\.pressureWorldY = current\.cameraY - PLAYER_SIZE;/);
-  assert.match(fallDownSource, /if \(fallDownInputDirectionRef\.current !== 0\) \{/);
+  assert.match(fallDownSource, /const restartDirection = resolveFallDownCoOpInputDirection\(fallDownInputDirectionRef\.current, coOpRole, coOpInputStateRef\.current\);/);
+  assert.match(fallDownSource, /if \(restartDirection !== 0\) \{/);
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(fallDownSource, /current\.started = false;/);
   assert.doesNotMatch(fallDownFailSource, /resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);

@@ -1203,8 +1203,7 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   assert.doesNotMatch(fallDownDomSource, /current\.fallingHazards\.find/);
 
   assert.match(doodleSource, /onPointerMove=\{updateDoodleDirection\}/);
-  assert.match(doodlePointerMoveSource, /const direction = chooseDoodleDirection\(event\);/);
-  assert.match(doodlePointerMoveSource, /if \(coOpRole\) inputDirectionRef\.current = coOpRole === "left" \? -1 : 1;/);
+  assert.match(doodlePointerMoveSource, /const direction = coOpRole \? \(coOpRole === "left" \? -1 : 1\) : chooseDoodleDirection\(event\);/);
   assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = direction;/);
   assert.doesNotMatch(doodlePointerMoveSource, /playerTurns|jumpTurnAvailable|syncDoodleView|setView/);
   assert.doesNotMatch(doodlePointerMoveSource, /syncDoodleView|setView/);
@@ -1244,7 +1243,7 @@ test("square jump base misses can respawn on the current platform before retry",
 
   assert.match(squareJumpSource, /failures: number;/);
   assert.match(squareJumpSource, /respawnUntil: number;/);
-  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string, stageSize: MiniGameStageSize, unlimitedRespawn = false\)/);
+  assert.match(squareJumpSource, /function recoverSquareJumpBaseMiss\(current: SquareJumpUnifiedRuntime, reason: string, logicStageSize: MiniGameStageSize, unlimitedRespawn = false\)/);
   assert.match(squareJumpSource, /const failures = current\.failures \+ 1;/);
   assert.match(squareJumpSource, /if \(!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT\)/);
   assert.match(squareJumpSource, /BASE_FAILURE_LIMIT/);
@@ -1253,7 +1252,7 @@ test("square jump base misses can respawn on the current platform before retry",
   assert.match(squareJumpSource, /current\.currentPlatform = respawnPlatform;/);
   assert.match(squareJumpSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(squareJumpSource, /mode === "base" \|\| unlimitedRespawn/);
-  assert.match(squareJumpSource, /recoverSquareJumpBaseMiss\(current, "[^"/]+", stageSize, unlimitedRespawn\)/);
+  assert.match(squareJumpSource, /recoverSquareJumpBaseMiss\(current, "[^"/]+", logicStageSize, unlimitedRespawn\)/);
   assert.match(squareJumpSource, /failures: latest\.failures,/);
   assert.match(squareJumpSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
 });

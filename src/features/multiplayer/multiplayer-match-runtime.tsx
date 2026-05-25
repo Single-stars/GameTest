@@ -12,8 +12,7 @@ import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
 import type { GameResult, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
 import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
-
-const MULTIPLAYER_STATE_SYNC_MS = 33;
+import { MULTIPLAYER_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
 
 function resolveRuntimeStatus(status: "playing" | "passed" | "failed"): SelfGameState["status"] {
   if (status === "passed") return "finished";
@@ -62,12 +61,24 @@ function resolveCompletionScore(outcome: MiniGameCompletion) {
 }
 
 type MultiplayerRuntimeState = {
+  cameraX?: number;
   cameraY: number;
+  cameraScale?: number;
+  charge?: number;
   direction: SelfGameState["direction"];
   elapsedMs: number;
+  exitingPlatformIndex?: number;
+  exitingPlatformOffsetY?: number;
   failures: number;
+  gravity?: SelfGameState["gravity"];
+  nextPlatformIndex?: number;
+  nextPlatformOffsetY?: number;
+  phase?: string;
+  platformIndex?: number;
   progress: number;
   status: "playing" | "passed" | "failed";
+  turns?: number;
+  usedPlatformIds?: number[];
   vx?: number;
   vy?: number;
   x: number;
@@ -86,6 +97,7 @@ type MultiplayerMatchRuntimeProps = {
   }) | null;
   opponentState: SelfGameState | null;
   playMode: MultiplayerPlayMode;
+  reportInput: (input: Pick<SelfGameState, "direction" | "charge" | "phase" | "status" | "elapsedMs">) => void;
   reportResult: (result: GameResult) => void;
   reportState: (state: SelfGameState) => void;
   runSeed: string;
@@ -142,6 +154,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   readOpponentStateMetrics,
   opponentState,
   playMode,
+  reportInput,
   reportResult,
   reportState,
   runSeed,
@@ -150,6 +163,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
 }: MultiplayerMatchRuntimeProps) {
   const syncRef = useRef<SimpleGameSync | null>(null);
   const localResultSentRef = useRef(false);
+  const lastReportedDirectionRef = useRef<SelfGameState["direction"] | undefined>(undefined);
   const packetTelemetryRef = useRef<{
     intervalMs: number | null;
     jitterMs: number | null;
@@ -178,12 +192,22 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     cleanupSync();
     localResultSentRef.current = false;
     const sync = new SimpleGameSync((state: SelfGameState) => {
+      if (playMode === "co-op" && selfRole === "guest") {
+        reportInput({
+          charge: state.charge,
+          direction: state.direction,
+          elapsedMs: state.elapsedMs,
+          phase: state.phase,
+          status: state.status,
+        });
+        return;
+      }
       reportState(state);
     }, MULTIPLAYER_STATE_SYNC_MS);
     syncRef.current = sync;
     sync.start();
     return cleanupSync;
-  }, [cleanupSync, reportState]);
+  }, [cleanupSync, playMode, reportInput, reportState, selfRole]);
 
   useEffect(() => {
     if (!opponentStateSubscription) return;
@@ -226,23 +250,50 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     return () => window.clearInterval(timer);
   }, [readOpponentStateMetrics]);
 
+  const coOpMode = playMode === "co-op";
+  const coOpInputOnly = coOpMode && selfRole === "guest";
+  const coOpAuthoritativeStateSubscription = coOpInputOnly ? opponentStateSubscription : null;
+  const coOpInputStateSubscription = coOpMode ? opponentStateSubscription : null;
+
   const publishRuntimeState = useCallback(
     (runtime: MultiplayerRuntimeState, score: number) => {
       const status = resolveRuntimeStatus(runtime.status);
       const nextState: SelfGameState = {
+        cameraX: runtime.cameraX,
         cameraY: runtime.cameraY,
+        cameraScale: runtime.cameraScale,
+        charge: runtime.charge,
         direction: runtime.direction,
         elapsedMs: runtime.elapsedMs,
+        exitingPlatformIndex: runtime.exitingPlatformIndex,
+        exitingPlatformOffsetY: runtime.exitingPlatformOffsetY,
         failures: runtime.failures,
+        gravity: runtime.gravity,
+        nextPlatformIndex: runtime.nextPlatformIndex,
+        nextPlatformOffsetY: runtime.nextPlatformOffsetY,
+        phase: runtime.phase,
+        platformIndex: runtime.platformIndex,
         progress: runtime.progress,
         score,
         status,
+        turns: runtime.turns,
+        usedPlatformIds: runtime.usedPlatformIds,
         vx: runtime.vx,
         vy: runtime.vy,
         x: runtime.x,
         y: runtime.y,
       };
-      syncRef.current?.update(nextState);
+      const directionChanged = lastReportedDirectionRef.current !== nextState.direction;
+      lastReportedDirectionRef.current = nextState.direction;
+      if (coOpInputOnly) {
+        const inputOnlyState: SelfGameState = {
+          ...nextState,
+          status: "playing",
+        };
+        syncRef.current?.update(inputOnlyState, { immediate: directionChanged });
+      }
+      if (coOpInputOnly) return;
+      syncRef.current?.update(nextState, { immediate: directionChanged });
       if (nextState.status === "playing") return;
       syncRef.current?.flush();
       if (localResultSentRef.current) return;
@@ -253,7 +304,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         timeMs: runtime.elapsedMs,
       });
     },
-    [reportResult],
+    [coOpInputOnly, reportResult],
   );
 
   const handleRuntimeState = useCallback(
@@ -329,7 +380,6 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     );
   }, [level.gameId, publishRuntimeState, runSeed]);
 
-  const coOpMode = playMode === "co-op";
   const coOpRole = coOpMode ? resolveCoOpRole(selfRole, resolveCoOpHostLeft(runSeed)) : null;
   const squareJumpCoOpRole = coOpMode ? resolveSquareJumpCoOpRole(selfRole, resolveSquareJumpHostFirst(runSeed)) : null;
   const coOpSharedSkinId = coOpMode ? resolveCoOpSharedSkinId({ opponentPlayer, runSeed, selfSkinId }) : null;
@@ -350,8 +400,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
         coOpInputState={coOpMode ? opponentState : null}
+        coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : level.gameId === "fall-down" ? (
       <FallDownPrototype
@@ -367,8 +419,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
         coOpInputState={coOpMode ? opponentState : null}
+        coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : level.gameId === "flappy" ? (
       <FlappyPrototype
@@ -401,11 +455,17 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onComplete={handleCompletion}
         onRuntimeState={handleSquareJumpRuntimeState}
         onRestart={() => undefined}
+        remotePlayer={coOpMode ? null : opponentPlayer}
+        remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
+        remoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
+        logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
         coOpInputState={coOpMode ? opponentState : null}
+        coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={squareJumpCoOpRole}
         coOpSkinId={coOpSharedSkinId}
+        authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : (
       <DoodleJumpPrototype
@@ -422,8 +482,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
         coOpInputState={coOpMode ? opponentState : null}
+        coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     );
 

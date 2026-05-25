@@ -42,6 +42,12 @@ import {
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 import type { SelfGameState } from "@/features/game-sync/types";
+import {
+  MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+  MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+  MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+  MULTIPLAYER_STATE_SYNC_MS,
+} from "@/lib/multiplayer/protocol";
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {
@@ -93,7 +99,7 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
-const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
+const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
 
 export type FallDownRuntimeState = {
   cameraY: number;
@@ -144,10 +150,10 @@ function resolveFallDownRemoteAvatarView(remoteState: FallDownRemoteState): Play
     : { action: "idle", expression: "neutral" };
 }
 
-function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number): FallDownRuntimeState {
+function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number, inputDirection: FallDownRuntime["inputDirection"] = runtime.inputDirection): FallDownRuntimeState {
   return {
     cameraY: runtime.cameraY,
-    direction: resolveFallDownPlayerDirection(runtime.inputDirection),
+    direction: resolveFallDownPlayerDirection(inputDirection),
     elapsedMs: Math.round(runtime.time * 1000),
     failures: runtime.failures,
     progress: Number((runtime.layersReached / Math.max(1, requiredLayers)).toFixed(4)),
@@ -351,8 +357,7 @@ function resolveFallDownLastSafePlatform(current: FallDownRuntime) {
 }
 
 function resolveFallDownCoOpInputDirection(localDirection: FallDownRuntime["inputDirection"], coOpRole: "left" | "right" | null | undefined, coOpInputState: FallDownRemoteState | null | undefined): FallDownRuntime["inputDirection"] {
-  if (!coOpRole) return localDirection;
-  const localCoOpDirection = localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
+  const localCoOpDirection = !coOpRole ? clamp(localDirection, -1, 1) : localDirection === 0 ? 0 : coOpRole === "left" ? -1 : 1;
   const remoteCoOpDirection = coOpInputState?.direction === "left" ? -1 : coOpInputState?.direction === "right" ? 1 : 0;
   return clamp(localCoOpDirection + remoteCoOpDirection, -1, 1) as FallDownRuntime["inputDirection"];
 }
@@ -382,7 +387,7 @@ function recoverFallDownBaseFailure(
   current.lastSafePlatformId = respawnPlatform.id;
   current.playerX = fallPlatformX(respawnPlatform, current.time, stageSize.width);
   current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
-  const respawnCameraY = Math.max(0, current.playerY - stageSize.height * 0.5);
+  const respawnCameraY = Math.min(current.cameraY, current.playerY - stageSize.height * 0.5);
   current.respawnCameraStartY = current.cameraY;
   current.respawnCameraEndY = respawnCameraY;
   current.respawnCameraStartedAt = current.time;
@@ -391,6 +396,31 @@ function recoverFallDownBaseFailure(
   current.pressureWorldY = current.respawnCameraStartY - PLAYER_SIZE;
   current.respawnUntil = current.time + 1.1;
   current.status = "playing";
+  return true;
+}
+
+function applyFallDownAuthoritativeState(
+  current: FallDownRuntime,
+  authoritativeState: SelfGameState | null | undefined,
+  requiredLayers: number,
+) {
+  if (!authoritativeState) return false;
+  if (typeof authoritativeState.x !== "number" || typeof authoritativeState.y !== "number" || typeof authoritativeState.cameraY !== "number") {
+    return false;
+  }
+  current.playerX = authoritativeState.x;
+  current.playerY = authoritativeState.y;
+  current.cameraY = authoritativeState.cameraY;
+  current.time = Math.max(current.time, (authoritativeState.elapsedMs ?? 0) / 1000);
+  current.failures = authoritativeState.failures ?? current.failures;
+  current.layersReached = Math.round((authoritativeState.progress ?? 0) * Math.max(1, requiredLayers));
+  current.status = authoritativeState.status === "finished" ? "passed" : authoritativeState.status;
+  current.started = current.status === "playing";
+  if (current.status !== "playing") {
+    current.inputDirection = 0;
+    current.vx = 0;
+    current.vy = 0;
+  }
   return true;
 }
 
@@ -445,8 +475,10 @@ export function FallDownPrototype({
   runSeed,
   unlimitedRespawn = false,
   coOpInputState = null,
+  coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  authoritativeStateSubscription = null,
 }: {
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
@@ -461,8 +493,10 @@ export function FallDownPrototype({
   runSeed: string;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
+  coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   coOpRole?: "left" | "right" | null;
   coOpSkinId?: string | null;
+  authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -491,12 +525,23 @@ export function FallDownPrototype({
     [level, logicStageSize, runSeed],
   );
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
-  const dangerLineRef = useRef<HTMLDivElement | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
   );
+  const authoritativeSmootherRef = useRef(
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
+  );
+  const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
@@ -526,7 +571,7 @@ export function FallDownPrototype({
       if (!onRuntimeStateRef.current) return;
       if (!force && time - lastRuntimeSyncRef.current < FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS) return;
       lastRuntimeSyncRef.current = time;
-      onRuntimeStateRef.current(makeFallDownRuntimeState(runtimeRef.current, requiredLayers));
+      onRuntimeStateRef.current(makeFallDownRuntimeState(runtimeRef.current, requiredLayers, fallDownInputDirectionRef.current));
     },
     [requiredLayers],
   );
@@ -537,6 +582,7 @@ export function FallDownPrototype({
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     remoteSmootherRef.current.reset();
+    authoritativeSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
       remotePlayerShellRef.current.style.display = "none";
     }
@@ -564,12 +610,24 @@ export function FallDownPrototype({
     });
   }, [remoteStateSubscription]);
 
+  useEffect(() => {
+    authoritativeSmootherRef.current.reset();
+    if (!authoritativeStateSubscription) return;
+    return authoritativeStateSubscription((nextState) => {
+      if (nextState.status !== "playing") {
+        authoritativeSmootherRef.current.reset();
+        if (applyFallDownAuthoritativeState(runtimeRef.current, nextState, requiredLayers)) {
+          syncView();
+          syncRuntimeState(performance.now(), true);
+        }
+        return;
+      }
+      authoritativeSmootherRef.current.push(nextState, performance.now());
+    });
+  }, [authoritativeStateSubscription, requiredLayers, syncRuntimeState, syncView]);
+
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime) => {
-      const pressureScreenY = current.pressureWorldY - current.cameraY;
-      if (dangerLineRef.current) {
-        dangerLineRef.current.style.transform = transformPoint3d(0, pressureScreenY);
-      }
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
 
@@ -636,6 +694,21 @@ export function FallDownPrototype({
     [fallDownPlayerSpeed],
   );
 
+  useEffect(() => {
+    coOpInputStateRef.current = coOpInputState;
+  }, [coOpInputState]);
+
+  useEffect(() => {
+    if (!coOpInputStateSubscription) return;
+    return coOpInputStateSubscription((nextState) => {
+      coOpInputStateRef.current = nextState;
+      const direction = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, nextState);
+      const current = runtimeRef.current;
+      if (direction === 0 || current.status !== "playing" || current.time < current.respawnCameraUntil) return;
+      resumeFallDownInput(current, direction);
+    });
+  }, [coOpInputStateSubscription, coOpRole, resumeFallDownInput]);
+
   const fail = useCallback(
     (reason: string): boolean => {
       const current = runtimeRef.current;
@@ -696,7 +769,8 @@ export function FallDownPrototype({
     current.inputDirection = 0;
     current.vx = 0;
     syncView();
-  }, [syncView]);
+    syncRuntimeState(performance.now(), true);
+  }, [syncRuntimeState, syncView]);
 
   useEffect(() => {
     let frameId = 0;
@@ -726,6 +800,22 @@ export function FallDownPrototype({
         syncRuntimeState(time, true);
       };
       const keepRemoteRenderingAfterSettled = mode === "advanced" && Boolean(onRuntimeStateRef.current);
+
+      const sampledAuthoritativeState = authoritativeSmootherRef.current.sample(performance.now());
+      if (applyFallDownAuthoritativeState(current, sampledAuthoritativeState, requiredLayers)) {
+        paintFallDownFrame(current);
+        syncRuntimeState(time);
+        if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== view.status) {
+          syncView(time);
+        }
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+      if (authoritativeStateSubscription) {
+        paintFallDownFrame(current);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
       if (current.status !== "playing") {
         paintFallDownFrame(current);
@@ -758,14 +848,23 @@ export function FallDownPrototype({
         if (!current.started && previousTime < current.respawnCameraUntil) {
           current.cameraY = current.respawnCameraEndY;
           current.pressureWorldY = current.cameraY - PLAYER_SIZE;
-          if (fallDownInputDirectionRef.current !== 0) {
-            resumeFallDownInput(current, fallDownInputDirectionRef.current);
+          const restartDirection = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, coOpInputStateRef.current);
+          if (restartDirection !== 0) {
+            resumeFallDownInput(current, restartDirection);
           }
           paintFallDownFrame(current);
           syncRuntimeState(time, true);
           syncView(time);
           frameId = requestAnimationFrame(tick);
           return;
+        }
+
+        if (!current.started) {
+          const startDirection = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, coOpInputStateRef.current);
+          if (startDirection !== 0) {
+            resumeFallDownInput(current, startDirection);
+            eventChanged = true;
+          }
         }
 
         if (current.started) {
@@ -799,7 +898,7 @@ export function FallDownPrototype({
                 )
               : pressureCameraY;
           current.pressureWorldY = current.cameraY - PLAYER_SIZE;
-          current.inputDirection = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, coOpInputState);
+          current.inputDirection = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, coOpInputStateRef.current);
           current.vx = current.inputDirection * fallDownPlayerSpeed;
           current.vy = clamp(current.vy + 980 * delta, -220, 520);
           current.playerX = clamp(current.playerX + current.inputDirection * fallDownPlayerSpeed * delta + platformCarryX, PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
@@ -874,7 +973,7 @@ export function FallDownPrototype({
           }
 
           const bounds = resolveFallDownCameraBounds({
-            bottomFailLine: stageHeight + PLAYER_SIZE,
+            bottomFailLine: stageHeight - PLAYER_SIZE / 2,
             cameraY: current.cameraY,
             playerWorldY: current.playerY,
             squareSize: PLAYER_SIZE,
@@ -901,7 +1000,7 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [coOpInputState, coOpRole, fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom]);
+  }, [authoritativeStateSubscription, coOpRole, fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -929,11 +1028,10 @@ export function FallDownPrototype({
   }, [level.levelId, mode, onComplete, requiredLayers, view.status]);
 
   const showOverlay = mode === "prototype";
-  const pressureScreenY = view.pressureWorldY - view.cameraY;
-
   return (
     <div className="prototype-game-wrap">
       <div className="mini-score">
+        {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
         <span>进度 {view.layersReached}/{requiredLayers}</span>
       </div>
       <div
@@ -950,7 +1048,6 @@ export function FallDownPrototype({
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div style={worldLayerStyle}>
-        <div className="fall-danger-line" ref={dangerLineRef} style={{ transform: transformPoint3d(0, pressureScreenY) }} aria-hidden="true" />
         {view.platforms.map((platform) => {
           const platformX = fallPlatformX(platform, view.time, stageWidth);
           const screenY = platform.y - view.cameraY;

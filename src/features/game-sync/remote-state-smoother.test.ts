@@ -12,7 +12,9 @@ test("RemoteStateSmoother interpolates between buffered remote samples", () => {
       status: "playing",
       x: 100,
       y: 200,
+      cameraX: 25,
       cameraY: 50,
+      cameraScale: 1,
       direction: "right",
       seq: 1,
       sentAt: 1000,
@@ -26,7 +28,9 @@ test("RemoteStateSmoother interpolates between buffered remote samples", () => {
       status: "playing",
       x: 200,
       y: 400,
+      cameraX: 125,
       cameraY: 150,
+      cameraScale: 0.8,
       direction: "left",
       seq: 2,
       sentAt: 1050,
@@ -39,9 +43,111 @@ test("RemoteStateSmoother interpolates between buffered remote samples", () => {
   assert.ok(sampled);
   assert.equal(sampled.x, 150);
   assert.equal(sampled.y, 300);
+  assert.equal(sampled.cameraX, 75);
   assert.equal(sampled.cameraY, 100);
-  assert.equal(sampled.direction, "left");
-  assert.equal(sampled.seq, 2);
+  assert.equal(sampled.cameraScale, 0.9);
+  assert.equal(sampled.direction, "right");
+  assert.equal(sampled.seq, 1);
+});
+
+test("RemoteStateSmoother keeps discrete platform state aligned with the interpolated frame", () => {
+  const smoother = new RemoteStateSmoother({ interpolationDelayMs: 100 });
+
+  smoother.push(
+    {
+      progress: 0.25,
+      status: "playing",
+      x: 100,
+      y: 200,
+      cameraX: 10,
+      cameraY: 20,
+      cameraScale: 1,
+      direction: "right",
+      phase: "charging",
+      platformIndex: 1,
+      nextPlatformIndex: 2,
+      nextPlatformOffsetY: 0,
+      seq: 1,
+      sentAt: 1000,
+    },
+    1000,
+  );
+  smoother.push(
+    {
+      progress: 0.5,
+      status: "playing",
+      x: 200,
+      y: 400,
+      cameraX: 110,
+      cameraY: 120,
+      cameraScale: 0.8,
+      direction: "none",
+      phase: "advancing",
+      platformIndex: 1,
+      nextPlatformIndex: 2,
+      nextPlatformOffsetY: 60,
+      seq: 2,
+      sentAt: 1050,
+    },
+    1050,
+  );
+
+  const sampled = smoother.sample(1125);
+
+  assert.ok(sampled);
+  assert.equal(sampled.x, 150);
+  assert.equal(sampled.cameraX, 60);
+  assert.equal(sampled.platformIndex, 1);
+  assert.equal(sampled.nextPlatformIndex, 2);
+  assert.equal(sampled.phase, "charging");
+  assert.equal(sampled.direction, "right");
+  assert.equal(sampled.nextPlatformOffsetY, 30);
+});
+
+test("RemoteStateSmoother does not blend platform offsets across different platform windows", () => {
+  const smoother = new RemoteStateSmoother({ interpolationDelayMs: 100 });
+
+  smoother.push(
+    {
+      progress: 0.25,
+      status: "playing",
+      x: 100,
+      y: 200,
+      cameraX: 10,
+      cameraY: 20,
+      cameraScale: 1,
+      platformIndex: 1,
+      nextPlatformIndex: 2,
+      nextPlatformOffsetY: 0,
+      seq: 1,
+      sentAt: 1000,
+    },
+    1000,
+  );
+  smoother.push(
+    {
+      progress: 0.5,
+      status: "playing",
+      x: 200,
+      y: 400,
+      cameraX: 110,
+      cameraY: 120,
+      cameraScale: 0.8,
+      platformIndex: 2,
+      nextPlatformIndex: 3,
+      nextPlatformOffsetY: 80,
+      seq: 2,
+      sentAt: 1050,
+    },
+    1050,
+  );
+
+  const sampled = smoother.sample(1125);
+
+  assert.ok(sampled);
+  assert.equal(sampled.platformIndex, 1);
+  assert.equal(sampled.nextPlatformIndex, 2);
+  assert.equal(sampled.nextPlatformOffsetY, 0);
 });
 
 test("RemoteStateSmoother drops stale or coordinate-less samples", () => {
@@ -109,7 +215,9 @@ test("RemoteStateSmoother extrapolates briefly after the newest sample", () => {
       status: "playing",
       x: 100,
       y: 200,
+      cameraX: 50,
       cameraY: 50,
+      cameraScale: 1,
       direction: "right",
       seq: 1,
       sentAt: 1000,
@@ -122,7 +230,9 @@ test("RemoteStateSmoother extrapolates briefly after the newest sample", () => {
       status: "playing",
       x: 200,
       y: 400,
+      cameraX: 150,
       cameraY: 150,
+      cameraScale: 0.8,
       direction: "left",
       seq: 2,
       sentAt: 1050,
@@ -135,7 +245,9 @@ test("RemoteStateSmoother extrapolates briefly after the newest sample", () => {
   assert.ok(sampled);
   assert.equal(sampled.x, 300);
   assert.equal(sampled.y, 600);
+  assert.equal(sampled.cameraX, 250);
   assert.equal(sampled.cameraY, 250);
+  assert.ok(Math.abs((sampled.cameraScale ?? 0) - 0.6) < 0.000001);
   assert.equal(sampled.direction, "left");
   assert.equal(sampled.seq, 2);
 });

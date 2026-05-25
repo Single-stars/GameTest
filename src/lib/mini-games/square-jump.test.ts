@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -770,7 +771,10 @@ test("square jump base rendering keeps hot-path positions on transforms", () => 
   assert.match(updateDomSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(current\.playerX - PLAYER_SIZE \/ 2, current\.playerY - PLAYER_SIZE \/ 2\);/);
   assert.match(updateDomSource, /setSquareJumpAvatarChargeVars\(playerAvatarRef\.current, current\);/);
   assert.match(componentSource, /function setSquareJumpAvatarChargeVars/);
+  assert.match(componentSource, /function setSquareJumpAvatarChargeVarsFromCharge/);
   assert.match(componentSource, /style\.setProperty\("--player-avatar-charge"/);
+  assert.match(componentSource, /setSquareJumpAvatarChargeVarsFromCharge\(remotePlayerAvatarRef\.current, remoteChargeHint\);/);
+  assert.doesNotMatch(componentSource, /setSquareJumpAvatarChargeVars\(remotePlayerAvatarRef\.current, current\);/);
   assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.left =/);
   assert.doesNotMatch(updateDomSource, /playerShellRef\.current\.style\.top =/);
   assert.match(renderSource, /transform: transformPoint3d\(platformX - platform\.width \/ 2, platform\.y \+ visualOffsetY\)/);
@@ -858,10 +862,50 @@ test("square jump base and multiplayer misses respawn on the current platform wi
   assert.match(squareJumpSource, /current\.playerX = getSquareJumpBasePlatformX\(respawnPlatform, current\.time\);/);
   assert.match(squareJumpSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
   assert.match(squareJumpSource, /current\.advancePlan = createSquareJumpBaseAdvancePlan\(\{/);
-  assert.match(squareJumpSource, /cameraEnd: fitSquareBaseCamera\(respawnPlatform, current\.nextPlatform, current\.playerX, stageSize\)/);
+  assert.match(squareJumpSource, /cameraEnd: fitSquareBaseCamera\(respawnPlatform, current\.nextPlatform, current\.playerX, logicStageSize\)/);
   assert.match(squareJumpSource, /const nextVisualOffsetY = current\.nextVisualOffsetY;/);
   assert.match(squareJumpSource, /current\.nextVisualOffsetY = nextVisualOffsetY;/);
   assert.doesNotMatch(squareJumpSource, /current\.nextVisualOffsetY = current\.advancePlan\.nextPlatformStartVisualOffsetY;/);
   assert.doesNotMatch(squareJumpSource, /const nextJumps = current\.jumps \+ 1;[\s\S]*current\.currentPlatform = landedPlatform;/);
   assert.match(componentSource, /mode === "base" \|\| unlimitedRespawn/);
+});
+
+test("square jump multiplayer shows same-map opponent and shared co-op charge controls", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const squareJumpSource = readFileSync(new URL("../../features/mini-games/square-jump.tsx", import.meta.url), "utf8");
+  const globalCss = readAppCssSource();
+
+  assert.match(componentSource, /remotePlayer\?: \{ skinId\?: string \} \| null;/);
+  assert.match(componentSource, /logicStageSizeOverride\?: MiniGameStageSize;/);
+  assert.match(componentSource, /const logicStageSize = logicStageSizeOverride \?\? measuredStageSize;/);
+  assert.match(componentSource, /createSquareJumpUnifiedRuntime\(level, runSeed, logicStageSize\)/);
+  assert.match(componentSource, /squareBaseWorldTransform\(view\.camera, logicStageSize\)/);
+  assert.match(componentSource, /remoteState\?: SelfGameState \| null;/);
+  assert.match(componentSource, /RemoteStateSmoother/);
+  assert.match(componentSource, /remoteSmootherRef/);
+  assert.match(componentSource, /square-jump-base-remote-player-shell/);
+  assert.match(componentSource, /resolveSquareJumpRemoteAvatarView/);
+  assert.match(componentSource, /const localChargeHeldRef = useRef\(false\);/);
+  assert.match(componentSource, /const remoteChargeHeldRef = useRef\(false\);/);
+  assert.match(componentSource, /makeSquareJumpRuntimeState\(runtimeRef\.current, localChargeHeldRef\.current\)/);
+  assert.match(squareJumpSource, /cameraX: runtime\.camera\.cameraX,/);
+  assert.match(squareJumpSource, /cameraScale: runtime\.camera\.scale,/);
+  assert.match(squareJumpSource, /charge: runtime\.charge,/);
+  assert.match(squareJumpSource, /gravity: runtime\.activeGravity,/);
+  assert.match(squareJumpSource, /nextPlatformIndex: runtime\.nextIndex,/);
+  assert.match(squareJumpSource, /phase: runtime\.state,/);
+  assert.match(squareJumpSource, /platformIndex: runtime\.currentIndex,/);
+  assert.match(squareJumpSource, /if \(platformWindowChanged\) \{/);
+  assert.match(squareJumpSource, /syncView\(performance\.now\(\)\);/);
+  assert.match(squareJumpSource, /runtime\.camera\.cameraX = authoritativeState\.cameraX;/);
+  assert.match(squareJumpSource, /runtime\.camera\.scale = authoritativeState\.cameraScale;/);
+  assert.match(squareJumpSource, /syncSquareJumpAuthoritativePlatformWindow\(runtime, authoritativeState\);/);
+  assert.match(squareJumpSource, /runtime\.charge = clamp\(authoritativeState\.charge, 0, 1\);/);
+  assert.match(squareJumpSource, /runtime\.state = authoritativeState\.phase;/);
+  assert.match(squareJumpSource, /type SquareJumpCoOpRole = "first" \| "second";/);
+  assert.match(squareJumpSource, /function canControlSquareJumpCoOpTurn/);
+  assert.match(squareJumpSource, /if \(!canControlSquareJumpCoOpTurn\(runtimeRef\.current, coOpRole\)\)/);
+  assert.match(squareJumpSource, /const remoteCanControl = coOpRole \? !canControlSquareJumpCoOpTurn\(runtimeRef\.current, coOpRole\) : true;/);
+  assert.match(squareJumpSource, /mini-coop-hint/);
+  assert.match(globalCss, /\.square-jump-base-remote-player-shell/);
 });

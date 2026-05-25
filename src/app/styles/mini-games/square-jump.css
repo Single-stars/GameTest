@@ -85,8 +85,7 @@
 .square-platform,
 .square-jump-player-shell,
 .fall-down-player-shell,
-.fall-platform,
-.fall-danger-line {
+.fall-platform {
   position: absolute;
   left: 0;
   top: 0;
@@ -96,6 +95,7 @@
 
 .square-jump-base-platform,
 .square-jump-base-player-shell,
+.square-jump-base-remote-player-shell,
 .square-jump-base-debug-platform-line,
 .square-jump-base-debug-player-line {
   position: absolute;
@@ -252,12 +252,19 @@
   background: linear-gradient(180deg, rgba(211, 155, 42, 0.58), rgba(211, 155, 42, 0.1));
 }
 
-.square-jump-base-player-shell {
+.square-jump-base-player-shell,
+.square-jump-base-remote-player-shell {
   z-index: 12;
   transition: none;
   animation: none;
   transform: none;
   will-change: transform;
+}
+
+.square-jump-base-remote-player-shell {
+  z-index: 11;
+  opacity: 0.78;
+  filter: drop-shadow(0 4px 10px rgba(24, 24, 24, 0.18));
 }
 
 .square-jump-base-player-shell.jumping,

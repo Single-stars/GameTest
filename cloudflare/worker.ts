@@ -194,12 +194,12 @@ export class RoomDurableObject {
     });
   }
 
-  async webSocketClose(socket: WebSocket) {
-    this.notifyPeerLeft(socket);
+  async webSocketClose(socket: WebSocket, _code?: number, reason?: string) {
+    await this.notifyPeerLeft(socket, reason);
   }
 
   async webSocketError(socket: WebSocket) {
-    this.notifyPeerLeft(socket);
+    await this.notifyPeerLeft(socket);
   }
 
   private async createRoom() {
@@ -268,7 +268,8 @@ export class RoomDurableObject {
     }
 
     if (role === "guest" && metadata.guestToken && token !== metadata.guestToken) {
-      return jsonResponse({ error: "room-full" }, { status: 409 });
+      metadata.guestToken = token || randomToken();
+      await this.state.storage.put("metadata", metadata);
     }
 
     if (role === "guest" && !metadata.guestToken) {
@@ -320,13 +321,22 @@ export class RoomDurableObject {
     }
   }
 
-  private notifyPeerLeft(socket: WebSocket) {
+  private async clearGuestToken() {
+    const metadata = this.metadata;
+    if (!metadata?.guestToken) return;
+    metadata.guestToken = null;
+    await this.state.storage.put("metadata", metadata);
+  }
+
+  private async notifyPeerLeft(socket: WebSocket, reason?: string) {
+    if (reason === "replaced") return;
     const attachment = socket.deserializeAttachment() as { role?: SignalingRole } | null;
     if (attachment?.role === "host") {
-      this.sendToRole("guest", { type: "peer-left", reason: "房主已离开房间" });
+      this.sendToRole("guest", { type: "peer-left", reason: "host-disbanded-room" });
     }
     if (attachment?.role === "guest") {
-      this.sendToRole("host", { type: "peer-left", reason: "访客已离开房间" });
+      await this.clearGuestToken();
+      this.sendToRole("host", { type: "peer-left", reason: "guest-signaling-left" });
     }
   }
 }

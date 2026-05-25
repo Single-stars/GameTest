@@ -235,7 +235,8 @@ export function resolveMultiplayerLevelGroup(gameId: MiniGameId | null | undefin
 }
 
 export function resolveMultiplayerPlayMode(value: string | null | undefined): MultiplayerPlayMode {
-  return value === "co-op" ? "co-op" : DEFAULT_MULTIPLAYER_PLAY_MODE;
+  if (value === "versus" || value === "co-op") return value;
+  return DEFAULT_MULTIPLAYER_PLAY_MODE;
 }
 
 export function getNextMultiplayerGameId(currentGameId: MiniGameId) {

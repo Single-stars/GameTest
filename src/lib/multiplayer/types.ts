@@ -4,6 +4,7 @@ import type {
   MultiplayerDirection,
   SelfGameState,
 } from "@/features/game-sync/types";
+import type { NetInputMessage } from "@/lib/multiplayer/protocol";
 import type {
   HomeworldPresence,
   HomeworldState,
@@ -94,15 +95,29 @@ export type NetStateMessage = {
   status: GameStateStatus;
   x?: number;
   y?: number;
+  cameraX?: number;
   cameraY?: number;
+  cameraScale?: number;
+  charge?: number;
   vx?: number;
   vy?: number;
   direction?: MultiplayerDirection;
+  exitingPlatformIndex?: number;
+  exitingPlatformOffsetY?: number;
   failures?: number;
+  gravity?: "normal" | "light" | "heavy";
+  nextPlatformIndex?: number;
+  nextPlatformOffsetY?: number;
+  phase?: string;
+  platformIndex?: number;
+  turns?: number;
   elapsedMs?: number;
   seq?: number;
   sentAt?: number;
+  usedPlatformIds?: number[];
 };
+
+export type { NetInputMessage } from "@/lib/multiplayer/protocol";
 
 export type NetRematchMessage = {
   v: 1;
@@ -171,6 +186,7 @@ export type NetMessage =
   | NetHelloMessage
   | NetReadyMessage
   | NetStartMessage
+  | NetInputMessage
   | NetStateMessage
   | NetResultMessage
   | NetRematchMessage

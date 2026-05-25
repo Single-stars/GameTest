@@ -43,10 +43,16 @@ import {
   type MiniGameParams,
 } from "@/lib/mini-games";
 import type { SelfGameState } from "@/features/game-sync/types";
+import {
+  MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+  MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+  MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+  MULTIPLAYER_STATE_SYNC_MS,
+} from "@/lib/multiplayer/protocol";
 
 const FLAPPY_GATE_WIDTH = 54;
 const FLAPPY_START_PLATFORM_HEIGHT = 12;
-const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = 33;
+const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
 
@@ -304,7 +310,11 @@ export function FlappyPrototype({
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({ interpolationDelayMs: 80, maxExtrapolationMs: 100, staleStopExtrapolationMs: 250 }),
+    new RemoteStateSmoother({
+      interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
+      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+    }),
   );
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);

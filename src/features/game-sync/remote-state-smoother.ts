@@ -36,6 +36,24 @@ function lerp(start: number, end: number, t: number) {
   return start + (end - start) * t;
 }
 
+function lerpOptional(previous: number | undefined, next: number | undefined, t: number) {
+  if (typeof previous !== "number" || typeof next !== "number") return next;
+  return lerp(previous, next, t);
+}
+
+function extrapolateOptional(previous: number | undefined, latest: number | undefined, t: number) {
+  if (typeof previous !== "number" || typeof latest !== "number") return latest;
+  return latest + (latest - previous) * t;
+}
+
+function isSamePlatformWindow(previous: SelfGameState, next: SelfGameState) {
+  return (
+    previous.platformIndex === next.platformIndex &&
+    previous.nextPlatformIndex === next.nextPlatformIndex &&
+    previous.exitingPlatformIndex === next.exitingPlatformIndex
+  );
+}
+
 export class RemoteStateSmoother {
   private readonly interpolationDelayMs: number;
   private readonly maxExtrapolationMs: number;
@@ -83,11 +101,17 @@ export class RemoteStateSmoother {
       if (duration <= 0) return latest;
       const extrapolatedAt = Math.min(renderAt, latest.receivedAt + this.maxExtrapolationMs);
       const t = (extrapolatedAt - latest.receivedAt) / duration;
+      const samePlatformWindow = isSamePlatformWindow(previous, latest);
       return {
         ...latest,
         x: latest.x + (latest.x - previous.x) * t,
         y: latest.y + (latest.y - previous.y) * t,
+        cameraX: extrapolateOptional(previous.cameraX, latest.cameraX, t),
         cameraY: latest.cameraY + (latest.cameraY - previous.cameraY) * t,
+        cameraScale: extrapolateOptional(previous.cameraScale, latest.cameraScale, t),
+        charge: extrapolateOptional(previous.charge, latest.charge, t),
+        exitingPlatformOffsetY: samePlatformWindow ? extrapolateOptional(previous.exitingPlatformOffsetY, latest.exitingPlatformOffsetY, t) : latest.exitingPlatformOffsetY,
+        nextPlatformOffsetY: samePlatformWindow ? extrapolateOptional(previous.nextPlatformOffsetY, latest.nextPlatformOffsetY, t) : latest.nextPlatformOffsetY,
       };
     }
 
@@ -108,11 +132,19 @@ export class RemoteStateSmoother {
     }
 
     const t = Math.max(0, Math.min(1, (renderAt - previous.receivedAt) / (next.receivedAt - previous.receivedAt)));
+    const samePlatformWindow = isSamePlatformWindow(previous, next);
     return {
-      ...next,
+      ...previous,
       x: lerp(previous.x, next.x, t),
       y: lerp(previous.y, next.y, t),
+      cameraX: lerpOptional(previous.cameraX, next.cameraX, t),
       cameraY: lerp(previous.cameraY, next.cameraY, t),
+      cameraScale: lerpOptional(previous.cameraScale, next.cameraScale, t),
+      charge: lerpOptional(previous.charge, next.charge, t),
+      exitingPlatformOffsetY: samePlatformWindow ? lerpOptional(previous.exitingPlatformOffsetY, next.exitingPlatformOffsetY, t) : previous.exitingPlatformOffsetY,
+      nextPlatformOffsetY: samePlatformWindow ? lerpOptional(previous.nextPlatformOffsetY, next.nextPlatformOffsetY, t) : previous.nextPlatformOffsetY,
+      progress: lerp(previous.progress, next.progress, t),
+      score: lerpOptional(previous.score, next.score, t),
     };
   }
 }
