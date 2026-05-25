@@ -37,6 +37,17 @@ test("Cloudflare WebRTC transport retries direct connection with bounded ICE res
   assert.match(source, /MULTIPLAYER_FAILED_MESSAGE/);
 });
 
+test("Cloudflare WebRTC transport cancels pending ICE restart after recovery", () => {
+  const source = readSource("./webrtc-transport.ts");
+  const connectionHandler = source.slice(
+    source.indexOf("peerConnection.onconnectionstatechange"),
+    source.indexOf("if (this.role === \"host\")", source.indexOf("peerConnection.onconnectionstatechange")),
+  );
+
+  assert.match(connectionHandler, /connectionState === "connected"[\s\S]{0,160}this\.clearIceRestartTimer\(\)/);
+  assert.match(connectionHandler, /connectionState === "connected"[\s\S]{0,160}this\.iceRestartAttempts = 0/);
+});
+
 test("Cloudflare WebRTC host waits for a guest before starting direct-connect timeout", () => {
   const source = readSource("./webrtc-transport.ts");
   const bindDataChannel = source.slice(source.indexOf("private bindDataChannel"), source.indexOf("private startDataChannelOpenTimer"));
@@ -182,7 +193,7 @@ test("co-op multiplayer uses host-authoritative shared character state while gue
 
   assert.match(runtimeSource, /const coOpInputOnly = coOpMode && selfRole === "guest";/);
   assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = coOpInputOnly \? opponentStateSubscription : null;/);
-  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpMode \? opponentStateSubscription : null;/);
+  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null;/);
   assert.doesNotMatch(runtimeSource, /const coOpAuthoritativeState = coOpInputOnly \? opponentState : null;/);
   assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: directionChanged \}\);/);
   assert.match(runtimeSource, /if \(coOpInputOnly\) return;/);
@@ -252,13 +263,32 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
   assert.match(pageSource, /router\.push\("\/\?homeworld=1"\);/);
   assert.match(pageSource, /<main className="app-shell app-shell-play">/);
-  assert.match(pageSource, /<HomeworldScreen[\s\S]*doorMode=\{snapshot\.status === "idle" \? "single-player" : "room"\}[\s\S]*homeOwnerName=\{homeworldOwnerName\}[\s\S]*mode=\{homeworldMode\}/);
+  assert.match(pageSource, /const homeworldDoorMode = snapshot\.role === "host" && snapshot\.status !== "idle" \? "room" : guestInHostHome \? "room" : "single-player"/);
+  assert.match(pageSource, /<HomeworldScreen[\s\S]*doorMode=\{homeworldDoorMode\}[\s\S]*homeOwnerName=\{homeworldOwnerName\}[\s\S]*mode=\{homeworldMode\}/);
   assert.match(pageSource, /onJoinRoom=\{handleJoinHomeworldRoom\}/);
   assert.match(pageSource, /onLeaveRoom=\{handleExitHomeworldRoom\}/);
   assert.doesNotMatch(pageSource, /onExitHomeworld=\{handleExitHomeworldRoom\}/);
   assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldState/);
   assert.match(pageSource, /sessionRef\.current\?\.reportHomeworldPresence/);
   assert.doesNotMatch(pageSource, /homeworldMode[\s\S]{0,500}<MultiplayerEntry/);
+});
+
+test("homeworld guests stay in their own home until the host room is connected", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /const guestInHostHome =[\s\S]{0,220}snapshot\.role === "guest"[\s\S]{0,220}snapshot\.status === "connected"[\s\S]{0,220}Boolean\(snapshot\.opponentPlayer\)/);
+  assert.match(pageSource, /const homeworldMode = guestInHostHome \? "visitor" : "owner"/);
+  assert.doesNotMatch(pageSource, /snapshot\.role === "guest" && snapshot\.status !== "failed" && snapshot\.status !== "disconnected" \? "visitor" : "owner"/);
+  assert.match(pageSource, /const homeworldDoorMode = snapshot\.role === "host" && snapshot\.status !== "idle" \? "room" : guestInHostHome \? "room" : "single-player"/);
+  assert.match(pageSource, /doorMode=\{homeworldDoorMode\}/);
+});
+
+test("standalone multiplayer entry redirects into the homeworld multiplayer flow", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /if \(isHomeworldRoute\) return;/);
+  assert.match(pageSource, /router\.replace\(roomParam \? `\/multiplayer\?homeworld=1&room=\$\{encodeURIComponent\(roomParam\)\}` : "\/\?homeworld=1"\)/);
+  assert.match(pageSource, /if \(!isHomeworldRoute\) \{[\s\S]*正在进入家园联机/);
 });
 
 test("homeworld presence and round reset preserve profile sync after exercise rounds", () => {
@@ -580,6 +610,17 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
   assert.match(hostRoomSource, /房间已失效，已刷新房间码和邀请链接。/);
 });
 
+test("multiplayer host room shows balanced room code and truncated invite link", () => {
+  const hostRoomSource = readSource("../../features/multiplayer/host-room.tsx");
+
+  assert.match(hostRoomSource, /className="multiplayer-share-grid"/);
+  assert.match(hostRoomSource, /className="multiplayer-share-item"/);
+  assert.match(hostRoomSource, /className="multiplayer-share-value link"/);
+  assert.match(hostRoomSource, /\{roomLink\}/);
+  assert.match(hostRoomSource, /className="multiplayer-share-alert"/);
+  assert.match(hostRoomSource, /copyStatus === "expired" \|\| roomCodeCopyStatus === "expired"/);
+});
+
 test("multiplayer host can choose the battle level before match start", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const levelSelectSource = readSource("./level-select.ts");
@@ -838,6 +879,21 @@ test("co-op countdown explains the player's split control assignment", () => {
   assert.match(shellSource, /coOpMode && coOpAssignmentText \? <span>\{coOpAssignmentText\}<\/span> : null/);
   assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel strong/);
   assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel span/);
+});
+
+test("co-op guests render only host authoritative state instead of local prediction", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
+
+  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null/);
+  assert.match(doodleSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);
+  assert.match(doodleSource, /if \(authoritativePlayback\) return;/);
+  assert.match(fallDownSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);
+  assert.match(fallDownSource, /if \(authoritativePlayback\) return;/);
+  assert.match(squareJumpSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);
+  assert.match(squareJumpSource, /if \(authoritativePlayback\) return;/);
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {

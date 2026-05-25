@@ -256,7 +256,7 @@ export const HOMEWORLD_FURNITURE = [
     floor: "upper",
     floors: ["upper"],
     x: 147,
-    y: 396,
+    y: 412,
     width: 240,
     height: 332,
     asset: HOMEWORLD_OBJECT_ASSETS.mirror,
@@ -264,7 +264,7 @@ export const HOMEWORLD_FURNITURE = [
     anchor: "floor",
     hitbox: {
       x: 147,
-      y: 396,
+      y: 412,
       width: 240,
       height: 332,
     },

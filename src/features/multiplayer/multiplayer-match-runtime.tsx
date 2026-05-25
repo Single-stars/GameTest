@@ -253,7 +253,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   const coOpMode = playMode === "co-op";
   const coOpInputOnly = coOpMode && selfRole === "guest";
   const coOpAuthoritativeStateSubscription = coOpInputOnly ? opponentStateSubscription : null;
-  const coOpInputStateSubscription = coOpMode ? opponentStateSubscription : null;
+  const coOpInputStateSubscription = coOpInputOnly ? null : coOpMode ? opponentStateSubscription : null;
 
   const publishRuntimeState = useCallback(
     (runtime: MultiplayerRuntimeState, score: number) => {

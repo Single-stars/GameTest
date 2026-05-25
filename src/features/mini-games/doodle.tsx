@@ -399,6 +399,7 @@ export function DoodleJumpPrototype({
     }),
   );
   const coOpInputStateRef = useRef<DoodleRemoteState | null>(coOpInputState);
+  const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
@@ -495,6 +496,7 @@ export function DoodleJumpPrototype({
 
   const startDoodle = useCallback(() => {
     const current = runtimeRef.current;
+    if (authoritativePlayback) return;
     if (current.started || current.status !== "playing") return;
     if (current.respawnAwaitingInput && current.time < current.respawnCameraUntil) return;
     current.respawnAwaitingInput = false;
@@ -503,7 +505,7 @@ export function DoodleJumpPrototype({
     current.jumpTurnAvailable = true;
     syncDoodleView();
     syncDoodleRuntimeState(performance.now(), true);
-  }, [syncDoodleRuntimeState, syncDoodleView]);
+  }, [authoritativePlayback, syncDoodleRuntimeState, syncDoodleView]);
 
   useEffect(() => {
     coOpInputStateRef.current = coOpInputState;
@@ -520,7 +522,8 @@ export function DoodleJumpPrototype({
     if (inputPointerIdRef.current !== event.pointerId) return;
     const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseDoodleDirection(event);
     inputDirectionRef.current = direction;
-  }, [coOpRole]);
+    if (authoritativePlayback) syncDoodleRuntimeState(performance.now(), true);
+  }, [authoritativePlayback, coOpRole, syncDoodleRuntimeState]);
 
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -528,8 +531,12 @@ export function DoodleJumpPrototype({
     event.currentTarget.setPointerCapture(event.pointerId);
     const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseDoodleDirection(event);
     inputDirectionRef.current = direction;
+    if (authoritativePlayback) {
+      syncDoodleRuntimeState(performance.now(), true);
+      return;
+    }
     startDoodle();
-  }, [coOpRole, startDoodle]);
+  }, [authoritativePlayback, coOpRole, startDoodle, syncDoodleRuntimeState]);
 
   const stopDoodleDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
@@ -723,7 +730,7 @@ export function DoodleJumpPrototype({
               (nextTime - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
             )
           : naturalCameraY;
-      if (status === "playing" && riskHit < riskTotal) {
+      if (status === "playing" && !unlimitedRespawn && riskHit < riskTotal) {
         let missedRisk = false;
         for (const platform of current.platforms) {
           if (!platform.used && platform.risk && cameraY > platform.y + logicStageHeight * 0.34) {
@@ -760,9 +767,9 @@ export function DoodleJumpPrototype({
       }
 
       if (status === "playing" && landedFinishPlatform) {
-        if (riskHit >= riskTotal) {
+        if (riskHit >= riskTotal || unlimitedRespawn) {
           status = "passed";
-          reason = `站上最高终点平台，必踩平台 ${riskHit}/${riskTotal}`;
+          reason = unlimitedRespawn ? "站上最高终点平台" : `站上最高终点平台，必踩平台 ${riskHit}/${riskTotal}`;
         } else {
           status = "failed";
           reason = `漏踩高风险平台 ${riskHit}/${riskTotal}`;

@@ -449,6 +449,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(appPageSource, /setStage\("homeworld"\);/);
   assert.match(appPageSource, /new URLSearchParams\(window\.location\.search\)\.get\("homeworld"\) === "1"/);
   assert.match(appPageSource, /const closeHomeworldToHome = useCallback/);
+  assert.match(appPageSource, /setStage\(trialsRef\.current\.length > 0 \? "result" : "home"\)/);
   assert.match(appPageSource, /const openHomeworldMultiplayerEntry = useCallback/);
   assert.match(appPageSource, /const joinHomeworldPortalRoom = useCallback/);
   assert.match(appPageSource, /window\.location\.assign\("\/multiplayer\?homeworld=1&host=1"\)/);

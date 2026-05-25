@@ -542,6 +542,7 @@ export function FallDownPrototype({
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
+  const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
@@ -702,12 +703,13 @@ export function FallDownPrototype({
     if (!coOpInputStateSubscription) return;
     return coOpInputStateSubscription((nextState) => {
       coOpInputStateRef.current = nextState;
+      if (authoritativePlayback) return;
       const direction = resolveFallDownCoOpInputDirection(fallDownInputDirectionRef.current, coOpRole, nextState);
       const current = runtimeRef.current;
       if (direction === 0 || current.status !== "playing" || current.time < current.respawnCameraUntil) return;
       resumeFallDownInput(current, direction);
     });
-  }, [coOpInputStateSubscription, coOpRole, resumeFallDownInput]);
+  }, [authoritativePlayback, coOpInputStateSubscription, coOpRole, resumeFallDownInput]);
 
   const fail = useCallback(
     (reason: string): boolean => {
@@ -744,13 +746,17 @@ export function FallDownPrototype({
     if (current.status !== "playing") return;
     const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseFallDownDirection(event);
     fallDownInputDirectionRef.current = direction;
+    if (authoritativePlayback) {
+      syncRuntimeState(performance.now(), true);
+      return;
+    }
     if (current.time < current.respawnCameraUntil) {
       current.inputDirection = 0;
       current.vx = 0;
       return;
     }
     resumeFallDownInput(current, direction);
-  }, [coOpRole, resumeFallDownInput]);
+  }, [authoritativePlayback, coOpRole, resumeFallDownInput, syncRuntimeState]);
 
   const beginFallDownDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();

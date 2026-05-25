@@ -304,3 +304,11 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.doesNotMatch(doodleSource, /const respawnY = cameraY \+ logicStageHeight \* 0\.34;/);
   assert.doesNotMatch(doodleSource, /current\.platforms\.unshift\(respawnPlatform\);/);
 });
+
+test("doodle unlimited respawn race mode ignores missed risk platforms", () => {
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+
+  assert.match(doodleSource, /if \(status === "playing" && !unlimitedRespawn && riskHit < riskTotal\)/);
+  assert.match(doodleSource, /if \(riskHit >= riskTotal \|\| unlimitedRespawn\) \{/);
+  assert.match(doodleSource, /reason = unlimitedRespawn \? "站上最高终点平台" : `站上最高终点平台，必踩平台 \$\{riskHit\}\/\$\{riskTotal\}`/);
+});

@@ -296,7 +296,10 @@ export class RoomSignalTransport {
       if (peerConnection.connectionState === "failed") {
         this.scheduleIceRestart(MULTIPLAYER_FAILED_MESSAGE);
       }
-      if (peerConnection.connectionState === "connected") this.iceRestartAttempts = 0;
+      if (peerConnection.connectionState === "connected") {
+        this.clearIceRestartTimer();
+        this.iceRestartAttempts = 0;
+      }
       if (peerConnection.connectionState === "closed") {
         this.connected = false;
       }

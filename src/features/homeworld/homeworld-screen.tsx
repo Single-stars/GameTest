@@ -926,17 +926,25 @@ export function HomeworldScreen({
                 </button>
                 {inviteLink ? (
                   <div className="homeworld-room-invite">
-                    <span>房间码</span>
-                    <output aria-label="家园联机房间码">{roomCode}</output>
-                    <button className="secondary-button" type="button" onPointerDown={onCopyRoomCode}>
-                      {roomCodeCopyStatus === "copied" ? "已复制" : "复制码"}
-                    </button>
-                    <button className="secondary-button" type="button" onPointerDown={onCopyInvite} aria-label={`复制家园联机邀请链接 ${inviteLink}`}>
-                      {copyStatus === "copied" ? "已复制" : "复制链接"}
-                    </button>
+                    {roomCodeCopyStatus === "expired" || copyStatus === "expired" ? (
+                      <small className="homeworld-room-invite-alert">房间已失效，已刷新房间码和邀请链接。</small>
+                    ) : null}
+                    <div className="homeworld-room-invite-item">
+                      <span className="homeworld-room-invite-label">房间码</span>
+                      <output className="code" aria-label="家园联机房间码">{roomCode}</output>
+                      <button className="secondary-button" type="button" onPointerDown={onCopyRoomCode}>
+                        {roomCodeCopyStatus === "copied" ? "已复制" : "复制码"}
+                      </button>
+                    </div>
+                    <div className="homeworld-room-invite-item">
+                      <span className="homeworld-room-invite-label">邀请链接</span>
+                      <output aria-label="家园联机邀请链接">{inviteLink}</output>
+                      <button className="secondary-button" type="button" onPointerDown={onCopyInvite} aria-label={`复制家园联机邀请链接 ${inviteLink}`}>
+                        {copyStatus === "copied" ? "已复制" : "复制链接"}
+                      </button>
+                    </div>
                     {roomCodeCopyStatus === "manual" ? <small>请手动复制房间码。</small> : null}
                     {copyStatus === "manual" ? <small>请手动复制链接。</small> : null}
-                    {roomCodeCopyStatus === "expired" || copyStatus === "expired" ? <small>房间已失效，已刷新房间码和邀请链接。</small> : null}
                   </div>
                 ) : (
                   <div className="homeworld-room-entry-choice">

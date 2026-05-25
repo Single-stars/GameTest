@@ -333,7 +333,7 @@ test("homeworld walking line and bed placement match the visual floor", () => {
   assert.equal(bed.height >= 286, true);
   assert.equal(bed.y + bed.height >= HOMEWORLD_SCENE.floorY.upper + 56, true);
   assert.equal(mirror.width <= 248, true);
-  assert.equal(mirror.y >= 392, true);
+  assert.equal(mirror.y >= 408, true);
   assert.equal(mirror.y + mirror.height >= HOMEWORLD_SCENE.floorY.upper + 32, true);
   assert.equal(cabinet.y + cabinet.height >= HOMEWORLD_SCENE.floorY.ground - 8, true);
 });
@@ -408,11 +408,14 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*width:\s*100%[\s\S]*height: 50px[\s\S]*background:\s*#fffdf8/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*display:\s*grid[\s\S]*place-items:\s*center/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*display:\s*grid/);
-  assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(7ch, 1fr\) auto auto/);
-  assert.match(homeworldCssSource, /\.homeworld-room-invite output\s*\{[\s\S]*letter-spacing:\s*0\.08em[\s\S]*white-space:\s*nowrap/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite-item\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite output\s*\{[\s\S]*text-overflow:\s*ellipsis[\s\S]*white-space:\s*nowrap/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite output\.code\s*\{[\s\S]*letter-spacing:\s*0\.08em/);
+  assert.match(homeworldCssSource, /\.homeworld-room-invite-alert\s*\{[\s\S]*order:\s*-1/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite \.secondary-button\s*\{[\s\S]*white-space:\s*nowrap/);
-  assert.match(homeworldCssSource, /\.homeworld-door-menu\s*\{[\s\S]*width:\s*min\(320px, calc\(100vw - 24px\)\)/);
-  assert.match(homeworldCssSource, /\.homeworld-door-menu-panel button\s*\{[\s\S]*height:\s*50px[\s\S]*min-height:\s*50px/);
+  assert.match(homeworldCssSource, /\.homeworld-door-menu\s*\{[\s\S]*width:\s*min\(360px, calc\(100vw - 20px\)\)/);
+  assert.match(homeworldCssSource, /\.homeworld-door-menu-panel button\s*\{[\s\S]*height:\s*58px[\s\S]*min-height:\s*58px/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-dialog\s*\{[\s\S]*align-items:\s*end/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-card\s*\{[\s\S]*width:\s*min\(420px,\s*100%\)/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-card input\s*\{[\s\S]*height:\s*52px[\s\S]*font-size:\s*18px/);

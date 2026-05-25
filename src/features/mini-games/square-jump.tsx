@@ -594,6 +594,7 @@ export function SquareJumpPrototype({
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
+  const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
@@ -862,6 +863,11 @@ export function SquareJumpPrototype({
   const beginCharge = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
+      if (authoritativePlayback) {
+        localChargeHeldRef.current = true;
+        syncRuntimeState(performance.now(), true);
+        return;
+      }
       if (!canControlSquareJumpCoOpTurn(runtimeRef.current, coOpRole)) {
         localChargeHeldRef.current = false;
         syncRuntimeState(performance.now(), true);
@@ -876,22 +882,27 @@ export function SquareJumpPrototype({
       startSharedCharge();
       syncRuntimeState(performance.now(), true);
     },
-    [coOpRole, startSharedCharge, syncRuntimeState],
+    [authoritativePlayback, coOpRole, startSharedCharge, syncRuntimeState],
   );
 
   const releaseJump = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       localChargeHeldRef.current = false;
+      if (authoritativePlayback) {
+        syncRuntimeState(performance.now(), true);
+        return;
+      }
       releaseSharedChargeIfIdle();
       syncRuntimeState(performance.now(), true);
     },
-    [releaseSharedChargeIfIdle, syncRuntimeState],
+    [authoritativePlayback, releaseSharedChargeIfIdle, syncRuntimeState],
   );
 
   const cancelCharge = useCallback(() => {
     localChargeHeldRef.current = false;
     syncRuntimeState(performance.now(), true);
+    if (authoritativePlayback) return;
     if (remoteChargeHeldRef.current) return;
     const current = runtimeRef.current;
     if (current.status !== "playing" || (current.state !== "charging" && current.state !== "airCharging")) return;
@@ -903,20 +914,22 @@ export function SquareJumpPrototype({
     current.chargeElapsedMs = 0;
     current.state = "idle";
     syncView();
-  }, [launchChargedJump, syncRuntimeState, syncView]);
+  }, [authoritativePlayback, launchChargedJump, syncRuntimeState, syncView]);
 
   useEffect(() => {
     coOpInputStateRef.current = coOpInputState;
+    if (authoritativePlayback) return;
     applyRemoteChargeHeld((coOpInputState?.direction ?? "none") !== "none");
-  }, [applyRemoteChargeHeld, coOpInputState]);
+  }, [applyRemoteChargeHeld, authoritativePlayback, coOpInputState]);
 
   useEffect(() => {
     if (!coOpInputStateSubscription) return;
     return coOpInputStateSubscription((nextState) => {
       coOpInputStateRef.current = nextState;
+      if (authoritativePlayback) return;
       applyRemoteChargeHeld((nextState.direction ?? "none") !== "none");
     });
-  }, [applyRemoteChargeHeld, coOpInputStateSubscription]);
+  }, [applyRemoteChargeHeld, authoritativePlayback, coOpInputStateSubscription]);
 
   useEffect(() => {
     let frameId = 0;

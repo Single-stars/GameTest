@@ -279,7 +279,9 @@ function MultiplayerPageContent() {
     setCopyStatus(status);
     if (copyStatusTimerRef.current !== null) {
       window.clearTimeout(copyStatusTimerRef.current);
+      copyStatusTimerRef.current = null;
     }
+    if (status === "expired") return;
     copyStatusTimerRef.current = window.setTimeout(() => {
       setCopyStatus("idle");
       copyStatusTimerRef.current = null;
@@ -290,7 +292,9 @@ function MultiplayerPageContent() {
     setRoomCodeCopyStatus(status);
     if (roomCodeCopyStatusTimerRef.current !== null) {
       window.clearTimeout(roomCodeCopyStatusTimerRef.current);
+      roomCodeCopyStatusTimerRef.current = null;
     }
+    if (status === "expired") return;
     roomCodeCopyStatusTimerRef.current = window.setTimeout(() => {
       setRoomCodeCopyStatus("idle");
       roomCodeCopyStatusTimerRef.current = null;
@@ -554,11 +558,17 @@ function MultiplayerPageContent() {
   }, [selectedSkin]);
 
   useEffect(() => {
+    if (isHomeworldRoute) return;
+    router.replace(roomParam ? `/multiplayer?homeworld=1&room=${encodeURIComponent(roomParam)}` : "/?homeworld=1");
+  }, [isHomeworldRoute, roomParam, router]);
+
+  useEffect(() => {
     if (!skinHydrated) return;
+    if (!isHomeworldRoute) return;
     if (!roomParam || autoJoinRoomRef.current === roomParam) return;
     autoJoinRoomRef.current = roomParam;
     void bootstrapSession("guest", roomParam);
-  }, [bootstrapSession, roomParam, skinHydrated]);
+  }, [bootstrapSession, isHomeworldRoute, roomParam, skinHydrated]);
 
   useEffect(() => {
     if (!skinHydrated) return;
@@ -772,7 +782,12 @@ function MultiplayerPageContent() {
     router.replace("/multiplayer?homeworld=1");
   }, [cleanupSession, isHomeworldRoute, router, snapshot.errorMessage, snapshot.status]);
 
-  const homeworldMode = snapshot.role === "guest" && snapshot.status !== "failed" && snapshot.status !== "disconnected" ? "visitor" : "owner";
+  const guestInHostHome =
+    snapshot.role === "guest" &&
+    snapshot.status === "connected" &&
+    Boolean(snapshot.opponentPlayer);
+  const homeworldMode = guestInHostHome ? "visitor" : "owner";
+  const homeworldDoorMode = snapshot.role === "host" && snapshot.status !== "idle" ? "room" : guestInHostHome ? "room" : "single-player";
   const homeworldStateForScreen = homeworldMode === "visitor" && snapshot.homeworldState ? snapshot.homeworldState : homeworldState;
   const homeworldOwnerName = homeworldMode === "visitor"
     ? snapshot.opponentHomeworldPresence?.displayName || snapshot.opponentPlayer?.name || ""
@@ -804,6 +819,14 @@ function MultiplayerPageContent() {
     const moveRole = resolveCoOpRole(snapshot.role, resolveCoOpHostLeft(runSeed));
     return moveRole === "left" ? "你负责左方向" : "你负责右方向";
   }, [activePlayMode, battleLevel.gameId, runSeed, snapshot.match, snapshot.role]);
+
+  if (!isHomeworldRoute) {
+    return (
+      <main className="app-shell app-shell-play" style={{ display: "grid", minHeight: "100dvh", placeItems: "center", padding: 16 }}>
+        正在进入家园联机…
+      </main>
+    );
+  }
 
   if (isHomeworldRoute) {
     return (
@@ -874,7 +897,7 @@ function MultiplayerPageContent() {
               key={homeworldInviteLink ? `homeworld-room-${snapshot.roomId}` : "homeworld-room-entry"}
               connectionLabel={homeworldConnectionLabel}
               copyStatus={copyStatus}
-              doorMode={snapshot.status === "idle" ? "single-player" : "room"}
+              doorMode={homeworldDoorMode}
               homeOwnerName={homeworldOwnerName}
               homeworldState={homeworldStateForScreen}
               initialPlayerPose={homeworldReturnPose}

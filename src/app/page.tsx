@@ -445,7 +445,7 @@ export default function Home() {
   }, []);
 
   const closeHomeworldToHome = useCallback(() => {
-    setStage("home");
+    setStage(trialsRef.current.length > 0 ? "result" : "home");
   }, []);
 
   const closeAvatarLab = useCallback(() => {

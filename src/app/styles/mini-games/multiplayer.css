@@ -152,6 +152,94 @@
   box-shadow: inset 0 0 0 2px rgba(62, 134, 91, 0.18);
 }
 
+.multiplayer-share-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fffdf8;
+  box-shadow: 0 10px 22px rgba(24, 24, 24, 0.08);
+}
+
+.multiplayer-share-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.multiplayer-share-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(24, 24, 24, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.multiplayer-share-item span {
+  grid-column: 1 / -1;
+  color: rgba(24, 24, 24, 0.58);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.multiplayer-share-value {
+  min-width: 0;
+  height: 38px;
+  display: grid;
+  align-items: center;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fffdf8;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multiplayer-share-value.code {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+
+.multiplayer-share-value.link {
+  letter-spacing: 0;
+}
+
+.multiplayer-share-item button {
+  min-height: 38px;
+  border: 1px solid rgba(31, 74, 48, 0.16);
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: #d8efe4;
+  color: #214c35;
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.multiplayer-share-note,
+.multiplayer-share-alert {
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #8a5400;
+  background: #fff0d8;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.multiplayer-share-alert {
+  border: 1px solid rgba(138, 84, 0, 0.16);
+}
+
 .multiplayer-level-room {
   position: fixed;
   inset: 0;
@@ -577,6 +665,10 @@
 
 @media (max-width: 560px) {
   .multiplayer-entry-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .multiplayer-share-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

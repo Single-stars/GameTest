@@ -191,27 +191,27 @@
 .homeworld-door-menu {
   position: absolute;
   z-index: 9;
-  width: min(320px, calc(100vw - 24px));
+  width: min(360px, calc(100vw - 20px));
   pointer-events: auto;
 }
 
 .homeworld-door-menu-panel {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid rgba(24, 24, 24, 0.12);
   border-radius: 16px;
-  padding: 12px;
+  padding: 14px;
   background: rgba(255, 253, 248, 0.94);
   box-shadow: 0 12px 22px rgba(72, 57, 43, 0.16);
 }
 
 .homeworld-door-menu-panel button {
   width: 100%;
-  height: 50px;
-  min-height: 50px;
+  height: 58px;
+  min-height: 58px;
   min-width: 0;
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
 }
 
@@ -396,13 +396,28 @@
 }
 
 .homeworld-room-invite {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(7ch, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   align-items: center;
 }
 
-.homeworld-room-invite span {
+.homeworld-room-invite-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid rgba(103, 70, 39, 0.12);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fffdf8;
+}
+
+.homeworld-room-invite span,
+.homeworld-room-invite-label {
+  grid-column: 1 / -1;
   color: #6f4a2a;
   font-size: 12px;
   font-weight: 900;
@@ -411,19 +426,25 @@
 
 .homeworld-room-invite output {
   min-width: 0;
-  height: 34px;
+  height: 36px;
   display: grid;
   place-items: center start;
   border: 1px solid rgba(103, 70, 39, 0.18);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 0 10px;
   background: #fffdf8;
   color: #191919;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 950;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.homeworld-room-invite output.code {
+  font-size: 16px;
+  letter-spacing: 0.08em;
 }
 
 .homeworld-room-invite .secondary-button {
@@ -438,6 +459,18 @@
 
 .homeworld-room-invite small {
   grid-column: 1 / -1;
+}
+
+.homeworld-room-invite-alert {
+  order: -1;
+  grid-column: 1 / -1;
+  border: 1px solid rgba(154, 104, 31, 0.16);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: #fff0d8;
+  color: #8a5400;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .homeworld-room-entry-toggle.collapsed {
@@ -608,5 +641,9 @@
   .homeworld-room-entry-panel span,
   .homeworld-room-entry-panel small {
     grid-column: 1 / -1;
+  }
+
+  .homeworld-room-invite {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
