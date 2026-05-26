@@ -18,6 +18,9 @@ test("mode transitions are implemented as a reusable visual layer", () => {
   assert.match(transitionSource, /MODE_TRANSITION_ANCHOR_ATTR/);
   assert.match(transitionSource, /data-transition-avatar-anchor/);
   assert.match(transitionSource, /useModeTransition/);
+  assert.match(transitionSource, /visible:\s*false/);
+  assert.match(transitionSource, /const origin = consumeRouteTransition\(\);/);
+  assert.doesNotMatch(transitionSource, /useState<ModeTransitionOrigin \| null>\(\(\) => consumeRouteTransition\(\)\)/);
   assert.match(transitionSource, /runModeTransition/);
   assert.match(transitionSource, /runRouteTransition/);
   assert.match(transitionSource, /sessionStorage/);

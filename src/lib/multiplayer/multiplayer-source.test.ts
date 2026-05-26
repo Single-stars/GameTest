@@ -110,8 +110,9 @@ test("WebRTC game traffic uses separate control input and state channels", () =>
   assert.match(protocolSource, /control: "control"/);
   assert.match(protocolSource, /input: "input"/);
   assert.match(protocolSource, /state: "state"/);
-  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = 16/);
-  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = 45/);
+  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = 33/);
+  assert.match(protocolSource, /MULTIPLAYER_INPUT_KEEPALIVE_MS = 100/);
+  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = 80/);
   assert.match(protocolSource, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS = 140/);
   assert.match(protocolSource, /MULTIPLAYER_LOGIC_TIMESTEP_MS = 1000 \/ 60/);
   assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.control, \{ ordered: true \}\)/);
@@ -124,7 +125,22 @@ test("WebRTC game traffic uses separate control input and state channels", () =>
   assert.match(sessionSource, /createInputMessage/);
   assert.match(sessionSource, /case "input":/);
   assert.match(runtimeSource, /reportInput/);
-  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: directionChanged \}\);/);
+  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged \}\);/);
+});
+
+test("multiplayer game sync keeps network hot paths out of React snapshots", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const reportStateSource = sessionSource.slice(sessionSource.indexOf("reportState(state: SelfGameState)"), sessionSource.indexOf("reportResult(result: GameResult)"));
+  const reportInputSource = sessionSource.slice(sessionSource.indexOf("reportInput(input:"), sessionSource.indexOf("reportHomeworldState(homeworld"));
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+
+  assert.match(sessionSource, /const SELF_STATE_SNAPSHOT_SYNC_MS = 100;/);
+  assert.match(sessionSource, /private syncSelfStateSnapshot\(state: SelfGameState\)/);
+  assert.match(reportStateSource, /this\.syncSelfStateSnapshot\(sequencedState\);/);
+  assert.match(reportInputSource, /this\.syncSelfStateSnapshot\(sequencedInput\);/);
+  assert.doesNotMatch(reportStateSource, /this\.patchSnapshot\(\{ selfState: sequencedState \}\);/);
+  assert.doesNotMatch(reportInputSource, /this\.patchSnapshot\(\{ selfState: sequencedInput \}\);/);
+  assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*syncIntervalMs[\s\S]*keepAliveMs: inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : undefined/);
 });
 
 test("multiplayer page requests rematch without leaving or immediately resetting the P2P session", () => {
@@ -195,7 +211,7 @@ test("co-op multiplayer uses host-authoritative shared character state while gue
   assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = coOpInputOnly \? opponentStateSubscription : null;/);
   assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null;/);
   assert.doesNotMatch(runtimeSource, /const coOpAuthoritativeState = coOpInputOnly \? opponentState : null;/);
-  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: directionChanged \}\);/);
+  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged \}\);/);
   assert.match(runtimeSource, /if \(coOpInputOnly\) return;/);
   assert.match(runtimeSource, /authoritativeStateSubscription=\{coOpAuthoritativeStateSubscription\}/);
   assert.match(runtimeSource, /coOpInputStateSubscription=\{coOpInputStateSubscription\}/);
@@ -348,11 +364,12 @@ test("Doodle multiplayer mode uses a fixed match stage and renders the remote av
   assert.doesNotMatch(source, /width: `\$\{stageWidth\}px`/);
 });
 
-test("multiplayer match runtime sends high-rate state updates for smooth remote movement", () => {
+test("multiplayer match runtime sends throttled state samples for smooth remote movement", () => {
   const source = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
 
   assert.match(source, /MULTIPLAYER_STATE_SYNC_MS/);
-  assert.match(source, /new SimpleGameSync\([\s\S]*MULTIPLAYER_STATE_SYNC_MS/);
+  assert.match(source, /const syncIntervalMs = inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;/);
+  assert.match(source, /new SimpleGameSync\([\s\S]*syncIntervalMs/);
 });
 
 test("multiplayer gameplay uses an in-page fullscreen shell instead of a route split", () => {
@@ -381,7 +398,7 @@ test("multiplayer gameplay uses an in-page fullscreen shell instead of a route s
   assert.match(cssSource, /height:\s*100dvh/);
   assert.match(runtimeSource, /DoodleJumpPrototype/);
   assert.match(runtimeSource, /memo\(function MultiplayerMatchRuntime/);
-  assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*MULTIPLAYER_STATE_SYNC_MS/);
+  assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*syncIntervalMs/);
 });
 
 test("multiplayer in-game HUD uses avatar progress markers and only keeps surrender", () => {
@@ -894,6 +911,24 @@ test("co-op guests render only host authoritative state instead of local predict
   assert.match(fallDownSource, /if \(authoritativePlayback\) return;/);
   assert.match(squareJumpSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);
   assert.match(squareJumpSource, /if \(authoritativePlayback\) return;/);
+});
+
+test("co-op fall-down guest input release only reports input and does not patch local motion", () => {
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const beginDirectionSource = fallDownSource.slice(
+    fallDownSource.indexOf("const beginFallDownDirection = useCallback"),
+    fallDownSource.indexOf("const stopDirection = useCallback"),
+  );
+  const stopDirectionSource = fallDownSource.slice(
+    fallDownSource.indexOf("const stopDirection = useCallback"),
+    fallDownSource.indexOf("useEffect(() => {", fallDownSource.indexOf("const stopDirection = useCallback")),
+  );
+
+  assert.match(beginDirectionSource, /updateFallDownDirection\(event\);\s*if \(authoritativePlayback\) return;\s*syncView\(\);/);
+  assert.match(
+    stopDirectionSource,
+    /fallDownPointerIdRef\.current = null;\s*if \(authoritativePlayback\) \{\s*syncRuntimeState\(performance\.now\(\), true\);\s*return;\s*\}\s*const current = runtimeRef\.current;/,
+  );
 });
 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {

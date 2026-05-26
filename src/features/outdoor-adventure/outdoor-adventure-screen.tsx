@@ -68,6 +68,7 @@ type ScenePhase = "idle" | "preparing" | "leaving" | "resetting";
 type TimedChoice = { nodeKey: string; side: ChoiceSide };
 type DisplayChoice = { detail?: string; label: string; side: ChoiceSide };
 type OutdoorMoveDirection = ChoiceSide | "none";
+type DirectSceneAction = "restart";
 
 const EVENT_LINE_STAGGER_MS = 420;
 const EVENT_LINE_FADE_MS = 640;
@@ -285,10 +286,13 @@ export function OutdoorAdventureScreen({
   const inputPointerIdRef = useRef<number | null>(null);
   const didLeaveSceneRef = useRef(false);
   const sceneCompletingRef = useRef(false);
+  const scenePhaseRef = useRef<ScenePhase>("idle");
   const sceneFallbackTimerRef = useRef<number | null>(null);
   const sceneResetFrameRef = useRef<number | null>(null);
+  const directSceneActionRef = useRef<DirectSceneAction | null>(null);
   const eventRevealTimersRef = useRef<number[]>([]);
   const eventRevealTargetKeyRef = useRef("");
+  const previousEntryGateRef = useRef(entryGate);
   const sceneTrackRef = useRef<HTMLDivElement | null>(null);
   const relicRowRef = useRef<HTMLDivElement | null>(null);
   const relicButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -482,8 +486,30 @@ export function OutdoorAdventureScreen({
       window.clearTimeout(sceneFallbackTimerRef.current);
       sceneFallbackTimerRef.current = null;
     }
+    const directAction = directSceneActionRef.current;
+    if (directAction) {
+      directSceneActionRef.current = null;
+      if (directAction === "restart") onStartNew();
+      setPlayerPosition(OUTDOOR_CENTER_X);
+      setScenePhase("resetting");
+      if (sceneResetFrameRef.current !== null) window.cancelAnimationFrame(sceneResetFrameRef.current);
+      sceneResetFrameRef.current = window.requestAnimationFrame(() => {
+        sceneResetFrameRef.current = window.requestAnimationFrame(() => {
+          setExitSide(null);
+          didLeaveSceneRef.current = false;
+          sceneCompletingRef.current = false;
+          sceneResetFrameRef.current = null;
+          setScenePhase("idle");
+        });
+      });
+      return;
+    }
     if (entryGateOutcome && entryGateAction) {
       const action = entryGateAction;
+      if (action === "depart") onEntryGateDepart();
+      else if (action === "prepare") onEntryGatePrepare();
+      else if (action === "continue") onEntryGateContinue();
+      else onEntryGateAbandon();
       setPlayerPosition(OUTDOOR_CENTER_X);
       setScenePhase("resetting");
       if (sceneResetFrameRef.current !== null) window.cancelAnimationFrame(sceneResetFrameRef.current);
@@ -497,10 +523,6 @@ export function OutdoorAdventureScreen({
           sceneCompletingRef.current = false;
           sceneResetFrameRef.current = null;
           setScenePhase("idle");
-          if (action === "depart") onEntryGateDepart();
-          else if (action === "prepare") onEntryGatePrepare();
-          else if (action === "continue") onEntryGateContinue();
-          else onEntryGateAbandon();
         });
       });
       return;
@@ -518,7 +540,7 @@ export function OutdoorAdventureScreen({
         setScenePhase("idle");
       });
     });
-  }, [entryGateAction, entryGateOutcome, onContinueOutcome, onEntryGateAbandon, onEntryGateContinue, onEntryGateDepart, onEntryGatePrepare, setPlayerPosition]);
+  }, [entryGateAction, entryGateOutcome, onContinueOutcome, onEntryGateAbandon, onEntryGateContinue, onEntryGateDepart, onEntryGatePrepare, onStartNew, setPlayerPosition]);
 
   const startOutcomeExit = useCallback((side: ChoiceSide = outcomeSide) => {
     if (!displayedOutcome || scenePhase !== "idle" || didLeaveSceneRef.current) return;
@@ -537,6 +559,26 @@ export function OutdoorAdventureScreen({
     });
   }, [clearSceneTimers, completeSceneTransition, displayedOutcome, outcomeSide, scenePhase, stopOutcomeMove]);
 
+  const startDirectSceneExit = useCallback((side: ChoiceSide, action: DirectSceneAction) => {
+    if (scenePhase !== "idle" || didLeaveSceneRef.current) return;
+    clearSceneTimers();
+    directSceneActionRef.current = action;
+    didLeaveSceneRef.current = true;
+    sceneCompletingRef.current = false;
+    stopOutcomeMove();
+    setLastChoiceSide(side);
+    setPlayerPosition(xForSide(side));
+    setExitSide(side);
+    setScenePhase("preparing");
+    sceneResetFrameRef.current = window.requestAnimationFrame(() => {
+      sceneResetFrameRef.current = window.requestAnimationFrame(() => {
+        setScenePhase("leaving");
+        sceneFallbackTimerRef.current = window.setTimeout(completeSceneTransition, SCENE_LEAVE_MS + 180);
+        sceneResetFrameRef.current = null;
+      });
+    });
+  }, [clearSceneTimers, completeSceneTransition, scenePhase, setPlayerPosition, stopOutcomeMove]);
+
   const onSceneTrackTransitionEnd = useCallback((event: TransitionEvent<HTMLDivElement>) => {
     if (event.currentTarget !== event.target || event.propertyName !== "transform") return;
     completeSceneTransition();
@@ -554,6 +596,14 @@ export function OutdoorAdventureScreen({
   }, [sceneNodeKey, setPlayerPosition, showOutcome]);
 
   useEffect(() => {
+    scenePhaseRef.current = scenePhase;
+  }, [scenePhase]);
+
+  useEffect(() => {
+    const previousEntryGate = previousEntryGateRef.current;
+    previousEntryGateRef.current = entryGate;
+    if (previousEntryGate === entryGate) return;
+    if (didLeaveSceneRef.current || scenePhaseRef.current !== "idle") return;
     setEntryGateOutcome(null);
     setEntryGateAction(null);
     setPendingChoice(null);
@@ -1034,7 +1084,7 @@ export function OutdoorAdventureScreen({
             <button className="outdoor-choice-wall left selectable" type="button" onClick={onBackHome}>
               <strong style={choiceLabelStyle("回到家园")}>回到家园</strong>
             </button>
-            <button className="outdoor-choice-wall right selectable" type="button" onClick={onStartNew}>
+            <button className="outdoor-choice-wall right selectable" type="button" onClick={() => startDirectSceneExit("right", "restart")}>
               <strong style={choiceLabelStyle("再出发")}>再出发</strong>
             </button>
           </>

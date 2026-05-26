@@ -12,7 +12,7 @@ import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
 import type { GameResult, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
 import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
-import { MULTIPLAYER_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
+import { MULTIPLAYER_INPUT_KEEPALIVE_MS, MULTIPLAYER_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
 
 function resolveRuntimeStatus(status: "playing" | "passed" | "failed"): SelfGameState["status"] {
   if (status === "passed") return "finished";
@@ -163,7 +163,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
 }: MultiplayerMatchRuntimeProps) {
   const syncRef = useRef<SimpleGameSync | null>(null);
   const localResultSentRef = useRef(false);
-  const lastReportedDirectionRef = useRef<SelfGameState["direction"] | undefined>(undefined);
+  const lastReportedInputSignatureRef = useRef<string | undefined>(undefined);
   const packetTelemetryRef = useRef<{
     intervalMs: number | null;
     jitterMs: number | null;
@@ -191,6 +191,9 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   useEffect(() => {
     cleanupSync();
     localResultSentRef.current = false;
+    lastReportedInputSignatureRef.current = undefined;
+    const inputOnlySync = playMode === "co-op" && selfRole === "guest";
+    const syncIntervalMs = inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;
     const sync = new SimpleGameSync((state: SelfGameState) => {
       if (playMode === "co-op" && selfRole === "guest") {
         reportInput({
@@ -203,7 +206,9 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         return;
       }
       reportState(state);
-    }, MULTIPLAYER_STATE_SYNC_MS);
+    }, syncIntervalMs, {
+      keepAliveMs: inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : undefined,
+    });
     syncRef.current = sync;
     sync.start();
     return cleanupSync;
@@ -283,19 +288,20 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         x: runtime.x,
         y: runtime.y,
       };
-      const directionChanged = lastReportedDirectionRef.current !== nextState.direction;
-      lastReportedDirectionRef.current = nextState.direction;
       if (coOpInputOnly) {
         const inputOnlyState: SelfGameState = {
           ...nextState,
           status: "playing",
         };
-        syncRef.current?.update(inputOnlyState, { immediate: directionChanged });
+        const inputSignature = `${inputOnlyState.direction ?? "none"}:${inputOnlyState.charge ?? ""}:${inputOnlyState.phase ?? ""}:${inputOnlyState.status}`;
+        const inputChanged = lastReportedInputSignatureRef.current !== inputSignature;
+        lastReportedInputSignatureRef.current = inputSignature;
+        syncRef.current?.update(inputOnlyState, { immediate: inputChanged });
       }
       if (coOpInputOnly) return;
-      syncRef.current?.update(nextState, { immediate: directionChanged });
+      syncRef.current?.update(nextState, { immediate: true });
       if (nextState.status === "playing") return;
-      syncRef.current?.flush();
+      syncRef.current?.flush({ force: true });
       if (localResultSentRef.current) return;
       localResultSentRef.current = true;
       reportResult({

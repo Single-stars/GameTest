@@ -399,6 +399,16 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(screenSource, /if \(action === "prepare"\) \{[\s\S]*onEntryGatePrepare\(\);[\s\S]*return;/);
   assert.match(screenSource, /onEntryGateContinue/);
   assert.match(screenSource, /onEntryGateAbandon/);
+  assert.match(screenSource, /directSceneActionRef/);
+  assert.match(screenSource, /startDirectSceneExit/);
+  assert.match(screenSource, /startDirectSceneExit\("right", "restart"\)/);
+  assert.doesNotMatch(screenSource, /className="outdoor-choice-wall right selectable" type="button" onClick=\{onStartNew\}/);
+  const entryGateCompletionSource = screenSource.slice(
+    screenSource.indexOf("if (entryGateOutcome && entryGateAction)"),
+    screenSource.indexOf("onContinueOutcome();", screenSource.indexOf("if (entryGateOutcome && entryGateAction)")),
+  );
+  assert.match(entryGateCompletionSource, /if \(action === "depart"\) onEntryGateDepart\(\);[\s\S]*setEntryGateOutcome\(null\);/);
+  assert.doesNotMatch(entryGateCompletionSource, /setEntryGateOutcome\(null\);[\s\S]*if \(action === "depart"\) onEntryGateDepart\(\);/);
   assert.match(screenSource, /escapeFeedbackText/);
   assert.match(screenSource, /escapeFeedbackChars/);
   assert.match(screenSource, /eventRevealKey/);
@@ -407,6 +417,9 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(screenSource, /eventOptionsReady/);
   assert.match(screenSource, /startEventReveal/);
   assert.match(screenSource, /previewEventLines/);
+  assert.match(screenSource, /previousEntryGateRef/);
+  assert.match(screenSource, /if \(didLeaveSceneRef\.current \|\| scenePhaseRef\.current !== "idle"\) return;/);
+  assert.match(screenSource, /const isRevealingPreview = eventRevealTargetKey === revealKey;/);
   assert.match(screenSource, /eventRevealTargetKeyRef/);
   assert.match(screenSource, /eventRevealTargetKey === eventRevealKey && index < eventLineCount/);
   assert.doesNotMatch(screenSource, /!isResettingScene && scenePhase === "idle" && index < eventLineCount/);
@@ -445,6 +458,9 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(pageSource, /hasOutdoorAdventureProgress/);
   assert.match(pageSource, /setOutdoorEntryGate\("start"\)/);
   assert.match(pageSource, /setOutdoorEntryGate\("resume"\)/);
+  const startNewSource = pageSource.slice(pageSource.indexOf("const startNewOutdoorAdventure = useCallback"), pageSource.indexOf("const openHomeworldPortalRoom = useCallback"));
+  assert.match(startNewSource, /setOutdoorEntryGate\(null\)/);
+  assert.doesNotMatch(startNewSource, /setOutdoorEntryGate\("start"\)/);
   assert.match(pageSource, /abandonOutdoorAdventureAsFailed/);
 });
 

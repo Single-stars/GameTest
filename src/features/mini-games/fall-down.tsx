@@ -771,20 +771,25 @@ export function FallDownPrototype({
     fallDownPointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     updateFallDownDirection(event);
+    if (authoritativePlayback) return;
     syncView();
-  }, [syncView, updateFallDownDirection]);
+  }, [authoritativePlayback, syncView, updateFallDownDirection]);
 
   const stopDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
     if (event && fallDownPointerIdRef.current !== null && fallDownPointerIdRef.current !== event.pointerId) return;
     fallDownInputDirectionRef.current = 0;
     fallDownPointerIdRef.current = null;
+    if (authoritativePlayback) {
+      syncRuntimeState(performance.now(), true);
+      return;
+    }
     const current = runtimeRef.current;
     current.inputDirection = 0;
     current.vx = 0;
     syncView();
     syncRuntimeState(performance.now(), true);
-  }, [syncRuntimeState, syncView]);
+  }, [authoritativePlayback, syncRuntimeState, syncView]);
 
   useEffect(() => {
     let frameId = 0;

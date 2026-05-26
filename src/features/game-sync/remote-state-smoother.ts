@@ -11,6 +11,7 @@ export type RemoteStateSmootherOptions = {
 
 type BufferedRemoteState = SelfGameState & {
   receivedAt: number;
+  timelineAt: number;
   x: number;
   y: number;
   cameraY: number;
@@ -61,6 +62,9 @@ export class RemoteStateSmoother {
   private readonly staleStopExtrapolationMs: number;
   private buffer: BufferedRemoteState[] = [];
   private latestSeq = -1;
+  private latestTimelineAt = -Infinity;
+  private playbackReferenceReceivedAt: number | null = null;
+  private playbackReferenceTimelineAt: number | null = null;
 
   constructor(options: RemoteStateSmootherOptions = {}) {
     this.interpolationDelayMs = options.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
@@ -74,11 +78,20 @@ export class RemoteStateSmoother {
     const seq = state.seq;
     if (typeof seq === "number") {
       if (seq <= this.latestSeq) return false;
-      this.latestSeq = seq;
     }
 
-    this.buffer.push({ ...state, receivedAt });
-    this.buffer.sort((left, right) => left.receivedAt - right.receivedAt);
+    const timelineAt = typeof state.elapsedMs === "number" && Number.isFinite(state.elapsedMs) ? state.elapsedMs : receivedAt;
+    if (state.status === "playing" && timelineAt <= this.latestTimelineAt) return false;
+
+    if (typeof seq === "number") this.latestSeq = seq;
+    this.latestTimelineAt = Math.max(this.latestTimelineAt, timelineAt);
+    if (this.playbackReferenceReceivedAt === null || this.playbackReferenceTimelineAt === null) {
+      this.playbackReferenceReceivedAt = receivedAt;
+      this.playbackReferenceTimelineAt = timelineAt;
+    }
+
+    this.buffer.push({ ...state, receivedAt, timelineAt });
+    this.buffer.sort((left, right) => left.timelineAt - right.timelineAt);
     const minReceivedAt = receivedAt - this.maxBufferMs;
     this.buffer = this.buffer.filter((sample) => sample.receivedAt >= minReceivedAt);
     return true;
@@ -87,20 +100,26 @@ export class RemoteStateSmoother {
   reset() {
     this.buffer = [];
     this.latestSeq = -1;
+    this.latestTimelineAt = -Infinity;
+    this.playbackReferenceReceivedAt = null;
+    this.playbackReferenceTimelineAt = null;
   }
 
   sample(now: number): SelfGameState | null {
     if (this.buffer.length === 0) return null;
-    const renderAt = now - this.interpolationDelayMs;
+    const renderAt =
+      this.playbackReferenceReceivedAt === null || this.playbackReferenceTimelineAt === null
+        ? now - this.interpolationDelayMs
+        : this.playbackReferenceTimelineAt + (now - this.playbackReferenceReceivedAt) - this.interpolationDelayMs;
     const latest = this.buffer[this.buffer.length - 1];
-    if (renderAt >= latest.receivedAt) {
+    if (renderAt >= latest.timelineAt) {
       if (now - latest.receivedAt > this.staleStopExtrapolationMs) return latest;
       if (this.buffer.length < 2 || latest.status !== "playing") return latest;
       const previous = this.buffer[this.buffer.length - 2];
-      const duration = latest.receivedAt - previous.receivedAt;
+      const duration = latest.timelineAt - previous.timelineAt;
       if (duration <= 0) return latest;
-      const extrapolatedAt = Math.min(renderAt, latest.receivedAt + this.maxExtrapolationMs);
-      const t = (extrapolatedAt - latest.receivedAt) / duration;
+      const extrapolatedAt = Math.min(renderAt, latest.timelineAt + this.maxExtrapolationMs);
+      const t = (extrapolatedAt - latest.timelineAt) / duration;
       const samePlatformWindow = isSamePlatformWindow(previous, latest);
       return {
         ...latest,
@@ -120,18 +139,18 @@ export class RemoteStateSmoother {
 
     for (let index = 0; index < this.buffer.length; index += 1) {
       const sample = this.buffer[index];
-      if (sample.receivedAt <= renderAt) previous = sample;
-      if (sample.receivedAt >= renderAt) {
+      if (sample.timelineAt <= renderAt) previous = sample;
+      if (sample.timelineAt >= renderAt) {
         next = sample;
         break;
       }
     }
 
-    if (previous === next || next.receivedAt === previous.receivedAt) {
+    if (previous === next || next.timelineAt === previous.timelineAt) {
       return previous;
     }
 
-    const t = Math.max(0, Math.min(1, (renderAt - previous.receivedAt) / (next.receivedAt - previous.receivedAt)));
+    const t = Math.max(0, Math.min(1, (renderAt - previous.timelineAt) / (next.timelineAt - previous.timelineAt)));
     const samePlatformWindow = isSamePlatformWindow(previous, next);
     return {
       ...previous,

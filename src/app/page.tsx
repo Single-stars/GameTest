@@ -720,7 +720,7 @@ export default function Home() {
 
   const startNewOutdoorAdventure = useCallback(() => {
     const nextState = createDefaultOutdoorAdventureState();
-    setOutdoorEntryGate("start");
+    setOutdoorEntryGate(null);
     persistOutdoorAdventureState(nextState);
   }, [persistOutdoorAdventureState]);
 

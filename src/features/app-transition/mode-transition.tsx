@@ -105,12 +105,11 @@ function consumeRouteTransition(): ModeTransitionOrigin | null {
 }
 
 export function useModeTransition() {
-  const [pendingRouteOrigin] = useState<ModeTransitionOrigin | null>(() => consumeRouteTransition());
   const [transitionState, setTransitionState] = useState<ModeTransitionViewState>(() => {
     return {
-      origin: pendingRouteOrigin ?? { x: 0, y: 0 },
+      origin: { x: 0, y: 0 },
       phase: "closed",
-      visible: Boolean(pendingRouteOrigin),
+      visible: false,
     };
   });
   const mountedRef = useRef(false);
@@ -198,8 +197,13 @@ export function useModeTransition() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (pendingRouteOrigin && !routeOpeningStartedRef.current) {
-      const origin = pendingRouteOrigin;
+    if (!routeOpeningStartedRef.current) {
+      const origin = consumeRouteTransition();
+      if (!origin) {
+        return () => {
+          mountedRef.current = false;
+        };
+      }
       routeOpeningStartedRef.current = true;
       void (async () => {
         await waitFrame();
@@ -210,7 +214,7 @@ export function useModeTransition() {
     return () => {
       mountedRef.current = false;
     };
-  }, [pendingRouteOrigin, playOpening]);
+  }, [playOpening]);
 
   return {
     runModeTransition,

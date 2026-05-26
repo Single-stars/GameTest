@@ -203,6 +203,25 @@ test("RemoteStateSmoother drops stale or coordinate-less samples", () => {
   assert.equal(sampled.seq, 2);
 });
 
+test("RemoteStateSmoother uses game elapsed time instead of packet arrival spacing", () => {
+  const smoother = new RemoteStateSmoother({ interpolationDelayMs: 80 });
+
+  assert.equal(smoother.push({ cameraY: 0, elapsedMs: 1000, progress: 0, seq: 1, status: "playing", x: 0, y: 0 }, 0), true);
+  assert.equal(smoother.push({ cameraY: 0, elapsedMs: 1032, progress: 0.5, seq: 2, status: "playing", x: 32, y: 0 }, 64), true);
+
+  const sampled = smoother.sample(96);
+
+  assert.ok(sampled);
+  assert.equal(Math.round(sampled.x ?? -1), 16);
+});
+
+test("RemoteStateSmoother drops repeated game frames even with newer packets", () => {
+  const smoother = new RemoteStateSmoother({ interpolationDelayMs: 80 });
+
+  assert.equal(smoother.push({ cameraY: 0, elapsedMs: 1000, progress: 0, seq: 1, status: "playing", x: 10, y: 20 }, 0), true);
+  assert.equal(smoother.push({ cameraY: 0, elapsedMs: 1000, progress: 0, seq: 2, status: "playing", x: 10, y: 20 }, 16), false);
+});
+
 test("RemoteStateSmoother extrapolates briefly after the newest sample", () => {
   const smoother = new RemoteStateSmoother({
     interpolationDelayMs: 100,

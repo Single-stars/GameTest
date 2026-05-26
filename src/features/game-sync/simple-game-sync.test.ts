@@ -24,3 +24,41 @@ test("simple game sync can immediately flush input edge changes", () => {
     ["right", "none"],
   );
 });
+
+test("simple game sync does not flush the same state twice", () => {
+  const sent: SelfGameState[] = [];
+  const sync = new SimpleGameSync((nextState) => sent.push(nextState), 33);
+
+  sync.update(state("right"), { immediate: true });
+  sync.flush();
+  sync.update(state("right"));
+  sync.flush();
+  sync.update({ ...state("right"), progress: 0.25 });
+  sync.flush();
+
+  assert.deepEqual(
+    sent.map((nextState) => nextState.progress),
+    [0, 0.25],
+  );
+});
+
+test("simple game sync can keep input alive without sending every frame", () => {
+  let now = 0;
+  const sent: SelfGameState[] = [];
+  const sync = new SimpleGameSync((nextState) => sent.push(nextState), 100, {
+    keepAliveMs: 100,
+    now: () => now,
+  });
+
+  sync.update(state("left"), { immediate: true });
+  sync.flush();
+  now = 99;
+  sync.flush();
+  now = 100;
+  sync.flush();
+
+  assert.deepEqual(
+    sent.map((nextState) => nextState.direction),
+    ["left", "left"],
+  );
+});
