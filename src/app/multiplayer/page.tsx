@@ -4,6 +4,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ModeTransitionOverlay, useModeTransition } from "@/features/app-transition/mode-transition";
 import { ConnectionStatus } from "@/features/multiplayer/connection-status";
 import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
 import { MultiplayerLevelSelectRoom } from "@/features/multiplayer/multiplayer-level-select-room";
@@ -167,6 +168,21 @@ function MultiplayerPageContent() {
   const copyStatusTimerRef = useRef<number | null>(null);
   const roomCodeCopyStatusTimerRef = useRef<number | null>(null);
   const roomRefreshInFlightRef = useRef(false);
+  const { runModeTransition, runRouteTransition, transitionState } = useModeTransition();
+
+  const transitionToRoute = useCallback(
+    (href: string, action?: () => void | Promise<void>) => {
+      return runRouteTransition(href, action);
+    },
+    [runRouteTransition],
+  );
+
+  const transitionInPage = useCallback(
+    (action: () => void | Promise<void>) => {
+      return runModeTransition(action);
+    },
+    [runModeTransition],
+  );
 
   const hostSelectedLevelGroup = useMemo(
     () => resolveMultiplayerLevelGroup(hostSelectedGameId),
@@ -395,19 +411,21 @@ function MultiplayerPageContent() {
 
   const handleReturnHome = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
-    sessionRef.current?.leave(leaveReason);
-    cleanupSession();
-    setSnapshot(buildInitialSnapshot());
-    router.push("/");
-  }, [cleanupSession, router, snapshot.role]);
+    void transitionToRoute("/", () => {
+      sessionRef.current?.leave(leaveReason);
+      cleanupSession();
+      setSnapshot(buildInitialSnapshot());
+    });
+  }, [cleanupSession, snapshot.role, transitionToRoute]);
 
   const handleExitHomeworldRoom = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
-    sessionRef.current?.leave(leaveReason);
-    cleanupSession();
-    setSnapshot(buildInitialSnapshot());
-    router.push("/?homeworld=1");
-  }, [cleanupSession, router, snapshot.role]);
+    void transitionToRoute("/?homeworld=1", () => {
+      sessionRef.current?.leave(leaveReason);
+      cleanupSession();
+      setSnapshot(buildInitialSnapshot());
+    });
+  }, [cleanupSession, snapshot.role, transitionToRoute]);
 
   const handleOpenHomeworldMultiplayerEntry = useCallback(() => {
     setHomeworldEntryVisible(true);
@@ -824,6 +842,7 @@ function MultiplayerPageContent() {
     return (
       <main className="app-shell app-shell-play" style={{ display: "grid", minHeight: "100dvh", placeItems: "center", padding: 16 }}>
         正在进入家园联机…
+        <ModeTransitionOverlay state={transitionState} />
       </main>
     );
   }
@@ -890,7 +909,9 @@ function MultiplayerPageContent() {
               selectedSkin={selectedSkin}
               onPlayerNameChange={handlePlayerNameChange}
               onSelectSkin={handleSelectAvatarSkin}
-              onBack={() => setAvatarLabOpen(false)}
+              onBack={() => {
+                void transitionInPage(() => setAvatarLabOpen(false));
+              }}
             />
           ) : (
             <HomeworldScreen
@@ -913,8 +934,10 @@ function MultiplayerPageContent() {
               onLeaveRoom={handleExitHomeworldRoom}
               onOpenLevelSelectRoom={handleOpenLevelSelectRoom}
               onOpenAvatarLab={() => {
-                setHomeworldReturnPose(homeworldPlayerPoseRef.current);
-                setAvatarLabOpen(true);
+                void transitionInPage(() => {
+                  setHomeworldReturnPose(homeworldPlayerPoseRef.current);
+                  setAvatarLabOpen(true);
+                });
               }}
               onOpenMultiplayerEntry={handleOpenHomeworldMultiplayerEntry}
               onPlayerPoseChange={(pose) => {
@@ -930,6 +953,7 @@ function MultiplayerPageContent() {
               selfSkin={selectedSkin}
             />
           )}
+          <ModeTransitionOverlay state={transitionState} />
         </main>
       </PlayerAvatarSkinProvider>
     );
@@ -1108,6 +1132,7 @@ function MultiplayerPageContent() {
             </button>
           </section>
         ) : null}
+        <ModeTransitionOverlay state={transitionState} />
       </main>
     </PlayerAvatarSkinProvider>
   );

@@ -1,3 +1,55 @@
 @import "./styles/base-flow.css";
 @import "./styles/mini-games.css";
+@import "./styles/outdoor-adventure.css";
 @import "./styles/overlays-responsive.css";
+
+.mode-transition-overlay {
+  --mode-transition-x: 50vw;
+  --mode-transition-y: 50vh;
+  --mode-transition-size: 320vmax;
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  overflow: hidden;
+  opacity: 1;
+  pointer-events: auto;
+  contain: strict;
+}
+
+.mode-transition-hole {
+  position: absolute;
+  left: var(--mode-transition-x);
+  top: var(--mode-transition-y);
+  width: var(--mode-transition-size);
+  height: var(--mode-transition-size);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 220vmax #050505;
+  transform: translate(-50%, -50%);
+  will-change: width, height;
+  transition:
+    width 1500ms cubic-bezier(0.66, 0, 0.18, 1),
+    height 1500ms cubic-bezier(0.66, 0, 0.18, 1),
+    opacity 180ms ease;
+}
+
+.mode-transition-overlay.closing,
+.mode-transition-overlay.closed,
+.mode-transition-overlay.opening-start {
+  --mode-transition-size: 0px;
+}
+
+.mode-transition-overlay.closing-start,
+.mode-transition-overlay.opening {
+  --mode-transition-size: 320vmax;
+}
+
+.mode-transition-overlay.opening .mode-transition-hole {
+  transition-duration: 1500ms, 1500ms, 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-transition-hole {
+    transition: opacity 120ms ease;
+  }
+}

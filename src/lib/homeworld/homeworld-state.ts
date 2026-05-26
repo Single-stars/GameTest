@@ -2,7 +2,7 @@ export type HomeworldFurnitureId = "mirror" | "bed" | "door" | "ladder" | "cabin
 type LegacyHomeworldFurnitureId = "table";
 export type HomeworldRole = "owner" | "visitor";
 export type HomeworldInteraction = "open-skin" | "sleep" | "door-menu" | "floor-transfer" | "open-customization";
-export type HomeworldDoorAction = "create-room" | "leave-home" | "leave-room";
+export type HomeworldDoorAction = "create-room" | "outdoor-adventure" | "leave-home" | "leave-room";
 export type HomeworldPresenceAction = "idle" | "move" | "sleep";
 export type HomeworldPresenceDirection = "left" | "right" | "none";
 export type HomeworldFloor = "ground" | "upper";
@@ -494,7 +494,7 @@ export const HOMEWORLD_DOOR = {
   width: 204,
   height: 370,
   asset: HOMEWORLD_OBJECT_ASSETS.door,
-  actions: ["create-room", "leave-home", "leave-room"],
+  actions: ["create-room", "outdoor-adventure", "leave-home", "leave-room"],
 } as const satisfies HomeworldDoorDefinition;
 
 export const HOMEWORLD_INITIAL_PLAYER = {
@@ -626,7 +626,7 @@ export function canUseHomeworldInteraction(role: HomeworldRole, id: HomeworldFur
 export function canUseHomeworldDoorAction(role: HomeworldRole, action: HomeworldDoorAction) {
   if (action === "leave-room") return true;
   if (role !== "owner") return false;
-  return action === "create-room" || action === "leave-home";
+  return action === "create-room" || action === "outdoor-adventure" || action === "leave-home";
 }
 
 export function isHomeworldFurnitureReachable(

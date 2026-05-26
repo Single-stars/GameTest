@@ -15,18 +15,22 @@ import {
 } from "@/lib/mini-games";
 
 export function MiniGameEmbeddedStage({
+  baseRevives,
   gameId,
   levelId,
   mode = "prototype",
   onBackToSelect = () => undefined,
+  onBaseReviveUsed,
   onComplete,
   onRestart = () => undefined,
   runSeed,
 }: {
+  baseRevives?: number;
   gameId: MiniGameId;
   levelId: string;
   mode?: MiniGameRunMode;
   onBackToSelect?: () => void;
+  onBaseReviveUsed?: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart?: () => void;
   runSeed: string;
@@ -34,16 +38,16 @@ export function MiniGameEmbeddedStage({
   const level = getMiniGameLevel(gameId, levelId);
   const stageKey = `${gameId}-${levelId}-${runSeed}`;
   if (gameId === "doodle") {
-    return <DoodleJumpPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <DoodleJumpPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
   if (gameId === "flappy") {
-    return <FlappyPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <FlappyPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
   if (gameId === "square-jump") {
     return <SquareJumpPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
   if (gameId === "fall-down") {
-    return <FallDownPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <FallDownPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
   }
   return <KnifeHitPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
 }

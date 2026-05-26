@@ -22,9 +22,11 @@ export type RoundPlayerProps = {
   roundId: RoundId;
   onComplete: (trials: TrialEvent[]) => void;
   advancedConfig?: AdvancedStageConfig;
+  baseRevives?: number;
+  onBaseReviveUsed?: () => void;
 };
 
-export function RoundPlayer({ advancedConfig, onComplete, phase, roundId }: RoundPlayerProps) {
+export function RoundPlayer({ advancedConfig, baseRevives, onBaseReviveUsed, onComplete, phase, roundId }: RoundPlayerProps) {
   const implementation = getRoundDefinition(roundId)[phase];
 
   if (implementation.type === "mini-game") {
@@ -32,7 +34,7 @@ export function RoundPlayer({ advancedConfig, onComplete, phase, roundId }: Roun
       if (!isMiniGameAdvancedConfig(advancedConfig)) return null;
       return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
     }
-    return <MiniGameBaseRound gameId={implementation.gameId} onComplete={onComplete} round={roundId} />;
+    return <MiniGameBaseRound gameId={implementation.gameId} baseRevives={baseRevives} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} round={roundId} />;
   }
 
   switch (implementation.componentId) {

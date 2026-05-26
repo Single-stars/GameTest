@@ -328,6 +328,7 @@ function resolveDoodleRemoteAvatarView(remoteState: DoodleRemoteState): PlayerAv
 
 export function DoodleJumpPrototype({
   autoStart = false,
+  baseRevives,
   level,
   mode,
   onRuntimeState,
@@ -343,10 +344,12 @@ export function DoodleJumpPrototype({
   coOpSkinId = null,
   authoritativeStateSubscription = null,
   onBackToSelect,
+  onBaseReviveUsed,
   onComplete,
   onRestart,
 }: {
   autoStart?: boolean;
+  baseRevives?: number;
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode;
   onRuntimeState?: (state: DoodleRuntimeState) => void;
@@ -362,6 +365,7 @@ export function DoodleJumpPrototype({
   coOpSkinId?: string | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   onBackToSelect: () => void;
+  onBaseReviveUsed?: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart: () => void;
 }) {
@@ -787,7 +791,9 @@ export function DoodleJumpPrototype({
 
       if ((mode === "base" || unlimitedRespawn) && status === "failed") {
         const failures = current.failures + 1;
-        if (unlimitedRespawn || failures <= BASE_FAILURE_LIMIT) {
+        const baseFailureLimit = baseRevives ?? BASE_FAILURE_LIMIT;
+        if (unlimitedRespawn || failures <= baseFailureLimit) {
+          if (!unlimitedRespawn) onBaseReviveUsed?.();
           triggerScreenShake();
           const safeRespawnPlatform = resolveDoodleLastSafePlatform(current);
           safeRespawnPlatform.used = false;
@@ -814,7 +820,7 @@ export function DoodleJumpPrototype({
           return;
         }
         current.failures = failures;
-        reason = "失败超过 3 次，进入下一关";
+        reason = baseRevives === undefined ? "失败超过 3 次，进入下一关" : "冒险的心用尽，进入下一关";
       }
 
       if (status === "failed") triggerScreenShake();
@@ -835,7 +841,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [authoritativeStateSubscription, coOpRole, logicStageHeight, logicStageWidth, mode, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, world.targetHeight]);
+  }, [authoritativeStateSubscription, baseRevives, coOpRole, logicStageHeight, logicStageWidth, mode, onBaseReviveUsed, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
   const worldLayerStyle = {

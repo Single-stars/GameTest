@@ -98,6 +98,7 @@ export type HomeworldScreenProps = {
   onOpenCustomization?: () => void;
   onOpenLevelSelectRoom?: () => void;
   onOpenMultiplayerEntry?: () => void;
+  onOpenOutdoorAdventure?: () => void;
   onPlayerPoseChange?: (pose: HomeworldPlayerPoseState) => void;
   onPresenceChange?: (presence: HomeworldPresence) => void;
   onReturnHome?: () => void;
@@ -220,6 +221,7 @@ export function HomeworldScreen({
   onOpenCustomization,
   onOpenLevelSelectRoom,
   onOpenMultiplayerEntry,
+  onOpenOutdoorAdventure,
   onPlayerPoseChange,
   onPresenceChange,
   onReturnHome,
@@ -275,6 +277,7 @@ export function HomeworldScreen({
   const resolvedRemoteSkin = resolvePlayerAvatarSkin(remotePresence?.skinId ?? remoteSkin);
   const canLeaveHome = doorMode === "single-player" && canUseHomeworldDoorAction(role, "leave-home") && Boolean(onReturnHome);
   const canCreateRoom = doorMode === "single-player" && canUseHomeworldDoorAction(role, "create-room") && Boolean(onCreateRoom);
+  const canOpenOutdoorAdventure = doorMode === "single-player" && canUseHomeworldDoorAction(role, "outdoor-adventure") && Boolean(onOpenOutdoorAdventure);
   const canLeaveRoom = doorMode === "room" && canUseHomeworldDoorAction(role, "leave-room") && Boolean(onLeaveRoom);
   const canOpenLevelSelectRoom = doorMode === "room" && Boolean(onOpenLevelSelectRoom);
   const roomEntryVisible = useMemo(() => {
@@ -392,6 +395,15 @@ export function HomeworldScreen({
     setRoomEntryPanelCollapsed(false);
     onOpenMultiplayerEntry?.();
   }, [canCreateRoom, onOpenMultiplayerEntry]);
+
+  const handleOpenOutdoorAdventure = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!canOpenOutdoorAdventure) return;
+    setDoorMenuOpen(false);
+    setCustomizationOpen(false);
+    setRoomEntryOpen(false);
+    onOpenOutdoorAdventure?.();
+  }, [canOpenOutdoorAdventure, onOpenOutdoorAdventure]);
 
   const toggleRoomEntryPanel = useCallback((event: PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -834,6 +846,9 @@ export function HomeworldScreen({
                         <button className="primary-button" disabled={!canCreateRoom} type="button" onPointerDown={handleOpenMultiplayerEntry}>
                           联机模式
                         </button>
+                        <button className="primary-button" disabled={!canOpenOutdoorAdventure} type="button" onPointerDown={handleOpenOutdoorAdventure}>
+                          外出冒险
+                        </button>
                         <button className="secondary-button" disabled={!canLeaveHome} type="button" onPointerDown={handleLeaveHome}>
                           离开家园
                         </button>
@@ -845,6 +860,7 @@ export function HomeworldScreen({
 
               <div
                 className={`homeworld-player local floor-${floorTransition?.targetFloor ?? player.floor}${floorTransition ? ` transition-${floorTransition.direction}` : ""}`}
+                data-transition-avatar-anchor
                 style={localPlayerStyle}
               >
                 <PlayerAvatar

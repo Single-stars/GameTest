@@ -235,10 +235,12 @@ function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: n
 }
 
 export function FlappyPrototype({
+  baseRevives,
   level,
   logicStageSizeOverride,
   mode,
   onBackToSelect,
+  onBaseReviveUsed,
   onComplete,
   onRuntimeState,
   onRestart,
@@ -248,10 +250,12 @@ export function FlappyPrototype({
   runSeed,
   unlimitedRespawn = false,
 }: {
+  baseRevives?: number;
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
   mode: MiniGameRunMode;
   onBackToSelect: () => void;
+  onBaseReviveUsed?: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: FlappyRuntimeState) => void;
   onRestart: () => void;
@@ -571,7 +575,9 @@ export function FlappyPrototype({
 
       if (mode === "base" && status === "failed") {
         const failures = current.failures + 1;
-        if (failures <= BASE_FAILURE_LIMIT) {
+        const baseFailureLimit = baseRevives ?? BASE_FAILURE_LIMIT;
+        if (failures <= baseFailureLimit) {
+          onBaseReviveUsed?.();
           triggerScreenShake();
           const respawnProgressEnd = resolveFlappySafeRespawnProgress({
             gates: current.gates,
@@ -601,7 +607,7 @@ export function FlappyPrototype({
           return;
         }
         current.failures = failures;
-        reason = "失败超过 3 次，进入下一关";
+        reason = baseRevives === undefined ? "失败超过 3 次，进入下一关" : "冒险的心用尽，进入下一关";
       }
 
       if (unlimitedRespawn && status === "failed") {
@@ -653,7 +659,7 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [backgroundRefs, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, playerX, recordFrame, reverseDirection, reversedGravity, speed, stageHeight, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
+  }, [backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, level.params, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, speed, stageHeight, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const playerScreenX = getFlappyPlayerScreenX({

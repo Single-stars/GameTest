@@ -52,8 +52,16 @@ import {
 } from "@/lib/advanced-progress";
 import { rounds } from "@/features/game-flow/round-config";
 import { AdvancedChallengeScreen, type AdvancedChallengeState } from "@/features/advanced/advanced-challenge-screen";
+import { ModeTransitionOverlay, useModeTransition } from "@/features/app-transition/mode-transition";
 import { HomeScreen } from "@/features/game-flow/home-screen";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
+import {
+  OutdoorAdventureScreen,
+  applyDebugEventSelection,
+  applyForcedOutdoorOutcome,
+  outdoorMiniGameResultFromTrials,
+  type OutdoorEntryGateMode,
+} from "@/features/outdoor-adventure/outdoor-adventure-screen";
 import {
   createDefaultHomeworldState,
   readPersistedHomeworldState,
@@ -61,6 +69,22 @@ import {
   type HomeworldPlayerPoseState,
   type HomeworldState,
 } from "@/lib/homeworld/homeworld-state";
+import {
+  abandonOutdoorAdventureAsFailed,
+  applyOutdoorEventChoice,
+  attemptOutdoorMiniGameEscape,
+  campToNextOutdoorDay,
+  clearPersistedOutdoorAdventureState,
+  consumeOutdoorAdventureHeartForMiniGameRevive,
+  continueOutdoorAdventureAfterOutcome,
+  continueRestedOutdoorAdventure,
+  createDefaultOutdoorAdventureState,
+  finishOutdoorAdventure,
+  handleOutdoorMiniGameResult,
+  readPersistedOutdoorAdventureState,
+  writePersistedOutdoorAdventureState,
+  type OutdoorAdventureState,
+} from "@/lib/outdoor-adventure/engine";
 import { PlayFrame } from "@/features/game-flow/play-frame";
 import { RoundIntro } from "@/features/game-flow/round-intro";
 import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
@@ -87,7 +111,24 @@ const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
+function hasOutdoorAdventureProgress(state: OutdoorAdventureState) {
+  if (state.status === "settled" || state.status === "failed") return false;
+  if (state.status === "resting-home" || state.status === "day-end") return true;
+  if (state.day > 1 || state.stepInDay > 0) return true;
+  if (state.lastOutcome || state.pendingNextNode) return true;
+  if (state.supply !== 20 || state.stamina !== 5 || state.trouble !== 0 || state.reviveCoins !== 0 || state.heartCharges !== 1) return true;
+  if (state.usableItems.length > 0) return true;
+  if (state.relics.length !== 2) return true;
+  if (state.currentNode.kind !== "event") return true;
+  return state.currentNode.eventId !== "event_lollipop_block";
+}
 
+const MODE_TRANSITION_STAGES = new Set<Stage>(["home", "homeworld", "outdoor-adventure", "result", "avatar-lab"]);
+
+function shouldUseModeTransitionForStageChange(currentStage: Stage, nextStage: Stage) {
+  if (currentStage === nextStage) return false;
+  return MODE_TRANSITION_STAGES.has(currentStage) && MODE_TRANSITION_STAGES.has(nextStage);
+}
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
@@ -108,6 +149,8 @@ export default function Home() {
   const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
   const [playerName, setPlayerName] = useState("");
   const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
+  const [outdoorAdventureState, setOutdoorAdventureState] = useState<OutdoorAdventureState>(() => createDefaultOutdoorAdventureState());
+  const [outdoorEntryGate, setOutdoorEntryGate] = useState<OutdoorEntryGateMode | null>(null);
   const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
@@ -115,6 +158,7 @@ export default function Home() {
   const trialsRef = useRef<TrialEvent[]>([]);
   const advancedProgressRef = useRef(advancedProgress);
   const homeworldStateRef = useRef(homeworldState);
+  const outdoorAdventureStateRef = useRef(outdoorAdventureState);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
@@ -122,14 +166,35 @@ export default function Home() {
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
   const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
+  const { runModeTransition, runRouteTransition, transitionState } = useModeTransition();
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
   const playShellActive =
     stage === "homeworld" ||
+    stage === "outdoor-adventure" ||
     stage === "playing" ||
     (stage === "advanced" && (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing"));
+
+  const transitionToStage = useCallback(
+    (nextStage: Stage, action?: () => void | Promise<void>) => {
+      const applyStageChange = async () => {
+        await action?.();
+        setStage(nextStage);
+      };
+      if (!shouldUseModeTransitionForStageChange(stage, nextStage)) return applyStageChange();
+      return runModeTransition(applyStageChange);
+    },
+    [runModeTransition, stage],
+  );
+
+  const transitionToRoute = useCallback(
+    (href: string, action?: () => void | Promise<void>) => {
+      return runRouteTransition(href, action);
+    },
+    [runRouteTransition],
+  );
 
   const clearShareCopyToastTimer = useCallback(() => {
     if (shareCopyToastTimerRef.current !== null) {
@@ -218,14 +283,14 @@ export default function Home() {
   }, [clearShareCopyToastTimer]);
 
   const beginTest = () => {
-    resetCurrentRunState();
-    setStage("intro");
+    void transitionToStage("intro", resetCurrentRunState);
   };
 
   const confirmRestartToHome = () => {
-    resetCurrentRunState();
-    persistGameState(null, advancedProgressRef.current);
-    setStage(getRestartDestinationAfterClearingCurrentResult());
+    void transitionToStage(getRestartDestinationAfterClearingCurrentResult(), () => {
+      resetCurrentRunState();
+      persistGameState(null, advancedProgressRef.current);
+    });
   };
 
   const requestRestartToHome = () => {
@@ -250,8 +315,8 @@ export default function Home() {
       }
     }
     releaseHistoryGuard();
-    setStage("home");
-  }, [releaseHistoryGuard, resetCurrentRunState]);
+    void transitionToStage("home");
+  }, [releaseHistoryGuard, resetCurrentRunState, transitionToStage]);
 
   useEffect(() => {
     advancedProgressRef.current = advancedProgress;
@@ -260,6 +325,10 @@ export default function Home() {
   useEffect(() => {
     homeworldStateRef.current = homeworldState;
   }, [homeworldState]);
+
+  useEffect(() => {
+    outdoorAdventureStateRef.current = outdoorAdventureState;
+  }, [outdoorAdventureState]);
 
   useEffect(() => {
     advancedChallengeRef.current = advancedChallenge;
@@ -276,6 +345,8 @@ export default function Home() {
     setPlayerName(readPersistedPlayerName());
     if (typeof window !== "undefined") {
       setHomeworldState(readPersistedHomeworldState(window.localStorage));
+      const persistedOutdoorAdventure = readPersistedOutdoorAdventureState(window.localStorage);
+      if (persistedOutdoorAdventure) setOutdoorAdventureState(persistedOutdoorAdventure);
       if (new URLSearchParams(window.location.search).get("homeworld") === "1") {
         setStage("homeworld");
       }
@@ -349,20 +420,21 @@ export default function Home() {
           }
         }
         persistGameState(nextTrials, nextProgress);
-        setStage("result");
+        void transitionToStage("result");
         return;
       }
 
       const nextIndex = currentIndex + 1;
       roundIndexRef.current = nextIndex;
       setRoundIndex(nextIndex);
-      setStage("intro");
+      void transitionToStage("intro");
     }, 320);
-  }, [persistGameState]);
+  }, [persistGameState, transitionToStage]);
 
   const startCurrentRound = () => {
-    roundCompletionLockedRef.current = false;
-    setStage("playing");
+    void transitionToStage("playing", () => {
+      roundCompletionLockedRef.current = false;
+    });
   };
 
   const skipCurrentRoundWithPerfectScore = useCallback(() => {
@@ -379,7 +451,7 @@ export default function Home() {
     setShareImageDataUrl(null);
     setImageShareState("sharing");
     setShareCopyNoticeId(0);
-    setStage("share");
+    await transitionToStage("share");
 
     try {
       await copyTextToClipboard(buildShareText(input.kind === "result" ? input.result : null, input.url, input.kind === "result" ? input.rankTitle : undefined));
@@ -397,7 +469,7 @@ export default function Home() {
       setShareImageDataUrl(null);
       setImageShareState("failed");
     }
-  }, [clearShareCopyToastTimer, showShareCopyToast]);
+  }, [clearShareCopyToastTimer, showShareCopyToast, transitionToStage]);
 
   const openCurrentShareImage = useCallback(() => {
     const rankTitle = formatResultRankTitle(result.name, getAdvancedTotalStars(advancedProgressRef.current));
@@ -413,53 +485,53 @@ export default function Home() {
     setShareCopyNoticeId(0);
     releaseHistoryGuard();
     if (shareReturnStage === "result") scrollResultToTop();
-    setStage(shareReturnStage);
-  }, [clearShareCopyToastTimer, releaseHistoryGuard, scrollResultToTop, shareReturnStage]);
+    void transitionToStage(shareReturnStage);
+  }, [clearShareCopyToastTimer, releaseHistoryGuard, scrollResultToTop, shareReturnStage, transitionToStage]);
 
   const openAdvancedChallenge = useCallback((roundId: RoundId) => {
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge({ mode: "select", roundId });
-    setStage("advanced");
-  }, []);
+    void transitionToStage("advanced");
+  }, [transitionToStage]);
 
   const openLuckDraw = useCallback(() => {
     setAdvancedUnlockPulseId(0);
     setLuckDrawOutcome(null);
-    setStage("luck");
-  }, []);
+    void transitionToStage("luck");
+  }, [transitionToStage]);
 
   const openAvatarLab = useCallback(() => {
     setAvatarLabReturnStage("result");
-    setStage("avatar-lab");
-  }, []);
+    void transitionToStage("avatar-lab");
+  }, [transitionToStage]);
 
   const openHomeworld = useCallback(() => {
     releaseHistoryGuard();
-    setStage("homeworld");
-  }, [releaseHistoryGuard]);
+    void transitionToStage("homeworld");
+  }, [releaseHistoryGuard, transitionToStage]);
 
   const openHomeworldAvatarLab = useCallback(() => {
     setHomeworldReturnPose(homeworldPlayerPoseRef.current);
     setAvatarLabReturnStage("homeworld");
-    setStage("avatar-lab");
-  }, []);
+    void transitionToStage("avatar-lab");
+  }, [transitionToStage]);
 
   const closeHomeworldToHome = useCallback(() => {
-    setStage(trialsRef.current.length > 0 ? "result" : "home");
-  }, []);
+    void transitionToStage(trialsRef.current.length > 0 ? "result" : "home");
+  }, [transitionToStage]);
 
   const closeAvatarLab = useCallback(() => {
     releaseHistoryGuard();
     if (avatarLabReturnStage === "result") scrollResultToTop();
-    setStage(avatarLabReturnStage);
-  }, [avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop]);
+    void transitionToStage(avatarLabReturnStage);
+  }, [avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop, transitionToStage]);
 
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
     releaseHistoryGuard();
     scrollResultToTop();
-    setStage("result");
-  }, [releaseHistoryGuard, scrollResultToTop]);
+    void transitionToStage("result");
+  }, [releaseHistoryGuard, scrollResultToTop, transitionToStage]);
 
   const drawLuck = useCallback(() => {
     const result = recordLuckDraw(advancedProgressRef.current, Math.floor(Math.random() * 101));
@@ -491,13 +563,13 @@ export default function Home() {
       setAdvancedChallenge(null);
       releaseHistoryGuard();
       scrollResultToTop();
-      setStage("result");
+      void transitionToStage("result");
       return;
     }
 
     setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level: current.level });
-    setStage("advanced");
-  }, [releaseHistoryGuard, scrollResultToTop]);
+    void transitionToStage("advanced");
+  }, [releaseHistoryGuard, scrollResultToTop, transitionToStage]);
 
   const pickAdvancedLevel = useCallback((level: number) => {
     const current = advancedChallengeRef.current;
@@ -579,22 +651,23 @@ export default function Home() {
         reactionAverageMs: evaluation.reactionAverageMs,
         reactionThresholdMs: evaluation.reactionThresholdMs,
       });
-      setStage("advanced");
+      void transitionToStage("advanced");
     },
-    [persistGameState],
+    [persistGameState, transitionToStage],
   );
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
     void record.trials;
     setAdvancedChallenge({ mode: "intro", roundId: record.roundId, level: record.level });
-    setStage("advanced");
-  }, []);
+    void transitionToStage("advanced");
+  }, [transitionToStage]);
 
   const clearCurrentRunToHome = useCallback(() => {
-    resetCurrentRunState();
-    persistGameState(null, advancedProgressRef.current);
-    setStage("home");
-  }, [persistGameState, resetCurrentRunState]);
+    void transitionToStage("home", () => {
+      resetCurrentRunState();
+      persistGameState(null, advancedProgressRef.current);
+    });
+  }, [persistGameState, resetCurrentRunState, transitionToStage]);
 
   const handleHomeworldStateChange = useCallback((state: HomeworldState) => {
     homeworldStateRef.current = state;
@@ -602,19 +675,66 @@ export default function Home() {
     persistHomeworldState(state);
   }, [persistHomeworldState]);
 
-  const openHomeworldPortalRoom = useCallback(() => {
-    persistHomeworldState(homeworldStateRef.current);
-    if (typeof window !== "undefined") {
-      window.location.assign("/multiplayer?homeworld=1&host=1");
+  const persistOutdoorAdventureState = useCallback((state: OutdoorAdventureState) => {
+    outdoorAdventureStateRef.current = state;
+    setOutdoorAdventureState(state);
+    if (typeof window === "undefined") return;
+    try {
+      if (state.status === "settled" || state.status === "failed") {
+        clearPersistedOutdoorAdventureState(window.localStorage);
+      } else {
+        writePersistedOutdoorAdventureState(window.localStorage, state);
+      }
+    } catch {
+      // Storage can be unavailable in private mode; the visible adventure should still run.
     }
-  }, [persistHomeworldState]);
+  }, []);
+
+  const openOutdoorAdventure = useCallback(() => {
+    persistHomeworldState(homeworldStateRef.current);
+    let nextState = outdoorAdventureStateRef.current;
+    if (typeof window !== "undefined") {
+      try {
+        nextState = readPersistedOutdoorAdventureState(window.localStorage) ?? nextState;
+      } catch {
+        // Keep the in-memory adventure if storage is unavailable.
+      }
+    }
+    if (nextState.status === "resting-home") nextState = continueRestedOutdoorAdventure(nextState);
+    if (nextState.status === "settled" || nextState.status === "failed") nextState = createDefaultOutdoorAdventureState();
+    if (hasOutdoorAdventureProgress(nextState)) {
+      setOutdoorEntryGate("resume");
+    } else {
+      setOutdoorEntryGate("start");
+    }
+    void transitionToStage("outdoor-adventure", () => persistOutdoorAdventureState(nextState));
+  }, [persistHomeworldState, persistOutdoorAdventureState, transitionToStage]);
+
+  const updateOutdoorAdventure = useCallback((state: OutdoorAdventureState) => {
+    persistOutdoorAdventureState(state);
+  }, [persistOutdoorAdventureState]);
+
+  const backOutdoorAdventureToHomeworld = useCallback(() => {
+    void transitionToStage("homeworld", () => setOutdoorEntryGate(null));
+  }, [transitionToStage]);
+
+  const startNewOutdoorAdventure = useCallback(() => {
+    const nextState = createDefaultOutdoorAdventureState();
+    setOutdoorEntryGate("start");
+    persistOutdoorAdventureState(nextState);
+  }, [persistOutdoorAdventureState]);
+
+  const openHomeworldPortalRoom = useCallback(() => {
+    if (typeof window !== "undefined") {
+      void transitionToRoute("/multiplayer?homeworld=1&host=1", () => persistHomeworldState(homeworldStateRef.current));
+    }
+  }, [persistHomeworldState, transitionToRoute]);
 
   const joinHomeworldPortalRoom = useCallback((rawRoomCode: string) => {
     const roomCode = rawRoomCode.trim();
     if (!roomCode || typeof window === "undefined") return;
-    persistHomeworldState(homeworldStateRef.current);
-    window.location.assign(`/multiplayer?homeworld=1&room=${encodeURIComponent(roomCode)}`);
-  }, [persistHomeworldState]);
+    void transitionToRoute(`/multiplayer?homeworld=1&room=${encodeURIComponent(roomCode)}`, () => persistHomeworldState(homeworldStateRef.current));
+  }, [persistHomeworldState, transitionToRoute]);
 
   const openHomeworldMultiplayerEntry = useCallback(() => {
     persistHomeworldState(homeworldStateRef.current);
@@ -647,12 +767,16 @@ export default function Home() {
       closeAdvancedChallenge();
       return navigation;
     }
+    if (stage === "outdoor-adventure") {
+      backOutdoorAdventureToHomeworld();
+      return navigation;
+    }
     if (stage === "intro" || stage === "playing") {
       clearCurrentRunToHome();
       return navigation;
     }
     return navigation;
-  }, [clearCurrentRunToHome, closeAdvancedChallenge, closeAvatarLab, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
+  }, [backOutdoorAdventureToHomeworld, clearCurrentRunToHome, closeAdvancedChallenge, closeAvatarLab, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
 
   useEffect(() => {
     appBackHandlerRef.current = handleAppBack;
@@ -761,6 +885,32 @@ export default function Home() {
             />
           )}
         />
+      ) : stage === "outdoor-adventure" ? (
+        <OutdoorAdventureScreen
+          entryGate={outdoorEntryGate}
+          selfSkin={selectedAvatarSkin}
+          state={outdoorAdventureState}
+          onBackHome={backOutdoorAdventureToHomeworld}
+          onCampNextDay={() => updateOutdoorAdventure(campToNextOutdoorDay(outdoorAdventureStateRef.current))}
+          onChooseEventOption={(eventId, optionId) => updateOutdoorAdventure(applyOutdoorEventChoice(outdoorAdventureStateRef.current, eventId, optionId))}
+          onContinueOutcome={() => updateOutdoorAdventure(continueOutdoorAdventureAfterOutcome(outdoorAdventureStateRef.current))}
+          onCompleteMiniGame={(roundId, trials) => {
+            updateOutdoorAdventure(handleOutdoorMiniGameResult(outdoorAdventureStateRef.current, outdoorMiniGameResultFromTrials(roundId, trials)));
+          }}
+          onForceEventOutcome={(eventId, optionId, outcomeIndex) => updateOutdoorAdventure(applyForcedOutdoorOutcome(outdoorAdventureStateRef.current, eventId, optionId, outcomeIndex))}
+          onAttemptMiniGameEscape={(roundId) => updateOutdoorAdventure(attemptOutdoorMiniGameEscape(outdoorAdventureStateRef.current, roundId))}
+          onSelectDebugEvent={(eventId) => updateOutdoorAdventure(applyDebugEventSelection(outdoorAdventureStateRef.current, eventId))}
+          onSettleAdventure={() => updateOutdoorAdventure(finishOutdoorAdventure(outdoorAdventureStateRef.current))}
+          onStartNew={startNewOutdoorAdventure}
+          onUseAdventureHeart={(roundId) => updateOutdoorAdventure(consumeOutdoorAdventureHeartForMiniGameRevive(outdoorAdventureStateRef.current, roundId))}
+          onEntryGateDepart={() => setOutdoorEntryGate(null)}
+          onEntryGatePrepare={backOutdoorAdventureToHomeworld}
+          onEntryGateContinue={() => setOutdoorEntryGate(null)}
+          onEntryGateAbandon={() => {
+            setOutdoorEntryGate(null);
+            updateOutdoorAdventure(abandonOutdoorAdventureAsFailed(outdoorAdventureStateRef.current));
+          }}
+        />
       ) : stage === "homeworld" ? (
         <HomeworldScreen
           doorMode="single-player"
@@ -771,6 +921,7 @@ export default function Home() {
           onCreateRoom={openHomeworldPortalRoom}
           onJoinRoom={joinHomeworldPortalRoom}
           onOpenMultiplayerEntry={openHomeworldMultiplayerEntry}
+          onOpenOutdoorAdventure={openOutdoorAdventure}
           onOpenAvatarLab={openHomeworldAvatarLab}
           onPlayerPoseChange={(pose) => {
             homeworldPlayerPoseRef.current = pose;
@@ -833,6 +984,7 @@ export default function Home() {
           onConfirm={confirmRestartToHome}
         />
       ) : null}
+      <ModeTransitionOverlay state={transitionState} />
     </main>
     </PlayerAvatarSkinProvider>
   );

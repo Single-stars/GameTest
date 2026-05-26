@@ -115,11 +115,15 @@ export function isMiniGameAdvancedConfig(config?: AdvancedStageConfig): config i
 }
 
 export function MiniGameBaseRound({
+  baseRevives,
   gameId,
+  onBaseReviveUsed,
   onComplete,
   round,
 }: {
+  baseRevives?: number;
   gameId: MiniGameId;
+  onBaseReviveUsed?: () => void;
   onComplete: (trials: TrialEvent[]) => void;
   round: RoundId;
 }) {
@@ -156,9 +160,11 @@ export function MiniGameBaseRound({
 
   return (
     <MiniGameEmbeddedStage
+      baseRevives={baseRevives}
       gameId={gameId}
       levelId={levelId}
       mode="base"
+      onBaseReviveUsed={onBaseReviveUsed}
       onComplete={handleComplete}
       runSeed={runSeed}
     />

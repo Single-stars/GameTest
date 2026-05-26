@@ -265,7 +265,7 @@ test("fall down base recovery keeps the animation loop alive after a recoverable
   );
 
   assert.match(fallDownSource, /const fail = useCallback\(\s*\(reason: string\): boolean =>/);
-  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?return true;/);
+  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn, baseRevives, onBaseReviveUsed\)\) \{[\s\S]*?return true;/);
   assert.match(fallDownSource, /const continueAfterRecoverableFailure = \(reason: string\) => \{[\s\S]*?if \(fail\(reason\)\) \{[\s\S]*?frameId = requestAnimationFrame\(tick\);[\s\S]*?\}/);
   assert.match(fallDownSource, /continueAfterRecoverableFailure\(".*?"\);\s*return;/);
   assert.doesNotMatch(resumeInputSource, /respawnUntil\s*=\s*0/);
@@ -281,7 +281,7 @@ test("fall down base and multiplayer failures respawn on the last safe platform 
   assert.match(fallDownSource, /lastSafePlatformId: number;/);
   assert.match(fallDownSource, /function recoverFallDownBaseFailure\([\s\S]*current: FallDownRuntime,[\s\S]*reason: string,[\s\S]*stageSize: MiniGameStageSize,[\s\S]*unlimitedRespawn = false,[\s\S]*\)/);
   assert.match(fallDownSource, /const failures = current\.failures \+ 1;/);
-  assert.match(fallDownSource, /if \(!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT\)/);
+  assert.match(fallDownSource, /baseRevives === undefined \? failures >= BASE_FAILURE_LIMIT : failures > baseRevives/);
   assert.match(fallDownSource, /失败达到 3 次，进入下一关/);
   assert.match(fallDownSource, /const respawnPlatform = resolveFallDownLastSafePlatform\(current\);/);
   assert.match(fallDownSource, /current\.playerY = respawnPlatform\.y - PLAYER_SIZE \/ 2;/);
@@ -296,7 +296,7 @@ test("fall down base and multiplayer failures respawn on the last safe platform 
   assert.match(fallDownSource, /current\.respawnUntil = current\.time \+ 1\.1;/);
   assert.match(fallDownSource, /current\.started = false;/);
   assert.doesNotMatch(fallDownFailSource, /resumeFallDownInput\(current, fallDownInputDirectionRef\.current\);/);
-  assert.match(fallDownSource, /\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)/);
+  assert.match(fallDownSource, /\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn, baseRevives, onBaseReviveUsed\)/);
   assert.match(fallDownSource, /failures: latest\.failures,/);
   assert.match(fallDownSource, /view\.time < view\.respawnUntil \? "respawn-warning" : ""/);
   assert.doesNotMatch(fallDownSource, /current\.platforms\.unshift\(respawnPlatform\);/);

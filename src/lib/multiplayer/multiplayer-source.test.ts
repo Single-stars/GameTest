@@ -261,7 +261,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /const handleOpenHomeworldMultiplayerEntry = useCallback/);
   assert.match(pageSource, /const handleJoinHomeworldRoom = useCallback/);
   assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
-  assert.match(pageSource, /router\.push\("\/\?homeworld=1"\);/);
+  assert.match(pageSource, /transitionToRoute\("\/\?homeworld=1"/);
   assert.match(pageSource, /<main className="app-shell app-shell-play">/);
   assert.match(pageSource, /const homeworldDoorMode = snapshot\.role === "host" && snapshot\.status !== "idle" \? "room" : guestInHostHome \? "room" : "single-player"/);
   assert.match(pageSource, /<HomeworldScreen[\s\S]*doorMode=\{homeworldDoorMode\}[\s\S]*homeOwnerName=\{homeworldOwnerName\}[\s\S]*mode=\{homeworldMode\}/);
@@ -323,7 +323,7 @@ test("multiplayer page has a safe return-home action that leaves the P2P session
   assert.match(pageSource, /const leaveReason = snapshot\.role === "host" \? "host-disbanded-room" : "peer-left-room";/);
   assert.match(pageSource, /sessionRef\.current\?\.leave\(leaveReason\);/);
   assert.match(pageSource, /cleanupSession\(\);/);
-  assert.match(pageSource, /router\.push\("\/"\);/);
+  assert.match(pageSource, /transitionToRoute\("\/"/);
   assert.match(pageSource, /onClick=\{handleReturnHome\}/);
   assert.match(pageSource, />\s*返回首页\s*</);
 });

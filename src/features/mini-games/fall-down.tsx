@@ -367,6 +367,8 @@ function recoverFallDownBaseFailure(
   reason: string,
   stageSize: MiniGameStageSize,
   unlimitedRespawn = false,
+  baseRevives?: number,
+  onBaseReviveUsed?: () => void,
 ) {
   const failures = current.failures + 1;
   current.failures = failures;
@@ -376,11 +378,13 @@ function recoverFallDownBaseFailure(
   current.vx = 0;
   current.vy = 0;
 
-  if (!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT) {
-    current.reason = "失败达到 3 次，进入下一关";
+  const reviveLimitReached = baseRevives === undefined ? failures >= BASE_FAILURE_LIMIT : failures > baseRevives;
+  if (!unlimitedRespawn && reviveLimitReached) {
+    current.reason = baseRevives === undefined ? "失败达到 3 次，进入下一关" : "冒险的心用尽，进入下一关";
     current.status = "failed";
     return false;
   }
+  if (!unlimitedRespawn) onBaseReviveUsed?.();
 
   const respawnPlatform = resolveFallDownLastSafePlatform(current);
   current.currentPlatformId = respawnPlatform.id;
@@ -462,10 +466,12 @@ function makeFallDownView(runtime: FallDownRuntime): FallDownRuntime {
 }
 
 export function FallDownPrototype({
+  baseRevives,
   level,
   logicStageSizeOverride,
   mode,
   onBackToSelect,
+  onBaseReviveUsed,
   onComplete,
   onRuntimeState,
   onRestart,
@@ -480,6 +486,7 @@ export function FallDownPrototype({
   coOpSkinId = null,
   authoritativeStateSubscription = null,
 }: {
+  baseRevives?: number;
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
   mode: MiniGameRunMode;
@@ -497,6 +504,7 @@ export function FallDownPrototype({
   coOpRole?: "left" | "right" | null;
   coOpSkinId?: string | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
+  onBaseReviveUsed?: () => void;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -714,7 +722,7 @@ export function FallDownPrototype({
   const fail = useCallback(
     (reason: string): boolean => {
       const current = runtimeRef.current;
-      if ((mode === "base" || unlimitedRespawn) && recoverFallDownBaseFailure(current, reason, logicStageSize, unlimitedRespawn)) {
+      if ((mode === "base" || unlimitedRespawn) && recoverFallDownBaseFailure(current, reason, logicStageSize, unlimitedRespawn, baseRevives, onBaseReviveUsed)) {
         triggerScreenShake();
         syncView();
         return true;
@@ -731,7 +739,7 @@ export function FallDownPrototype({
       syncView();
       return false;
     },
-    [logicStageSize, mode, syncView, triggerScreenShake, unlimitedRespawn],
+    [baseRevives, logicStageSize, mode, onBaseReviveUsed, syncView, triggerScreenShake, unlimitedRespawn],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {

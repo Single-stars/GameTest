@@ -228,6 +228,7 @@ export function ResultScreen({
             aria-haspopup="menu"
             aria-label="打开结果操作气泡"
             className={`rank-avatar-entry ${avatarMenuOpen ? "open" : ""} ${avatarMenuFeedback ? "playing" : ""}`}
+            data-transition-avatar-anchor
             type="button"
             onClick={toggleAvatarMenu}
           >

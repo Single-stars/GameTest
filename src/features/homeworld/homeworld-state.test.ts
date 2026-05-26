@@ -122,7 +122,7 @@ test("homeworld furniture slots match the asset-backed fixed room contract", () 
   assert.equal(homeworldState.HOMEWORLD_SCENE?.width, 1086);
   assert.equal(homeworldState.HOMEWORLD_SCENE?.height, 1448);
   assert.equal(HOMEWORLD_DOOR.id, "door");
-  assert.deepEqual(HOMEWORLD_DOOR.actions, ["create-room", "leave-home", "leave-room"]);
+  assert.deepEqual(HOMEWORLD_DOOR.actions, ["create-room", "outdoor-adventure", "leave-home", "leave-room"]);
 });
 
 test("homeworld customization schema keeps cabinet and wall categories extensible", () => {
@@ -264,6 +264,7 @@ test("homeworld permissions cover implemented furniture and cabinet customizatio
   assert.equal(canUseHomeworldInteraction("owner", "ladder", "floor-transfer"), true);
   assert.equal(canUseHomeworldInteraction("owner", "cabinet", "open-customization"), true);
   assert.equal(canUseHomeworldDoorAction("owner", "create-room"), true);
+  assert.equal(canUseHomeworldDoorAction("owner", "outdoor-adventure"), true);
   assert.equal(canUseHomeworldDoorAction("owner", "leave-home"), true);
   assert.equal(canUseHomeworldDoorAction("owner", "leave-room"), true);
 
@@ -272,6 +273,7 @@ test("homeworld permissions cover implemented furniture and cabinet customizatio
   assert.equal(canUseHomeworldInteraction("visitor", "ladder", "floor-transfer"), true);
   assert.equal(canUseHomeworldInteraction("visitor", "cabinet", "open-customization"), false);
   assert.equal(canUseHomeworldDoorAction("visitor", "create-room"), false);
+  assert.equal(canUseHomeworldDoorAction("visitor", "outdoor-adventure"), false);
   assert.equal(canUseHomeworldDoorAction("visitor", "leave-home"), false);
   assert.equal(canUseHomeworldDoorAction("visitor", "leave-room"), true);
 });

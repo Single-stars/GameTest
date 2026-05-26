@@ -363,7 +363,7 @@ test("requested base and advanced mini-games trigger screen shake only on discre
 
   assert.match(doodleSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
   assert.match(doodleSource, /if \(status === "failed"\) triggerScreenShake\(\);/);
-  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?triggerScreenShake\(\);/);
+  assert.match(fallDownSource, /if \(\(mode === "base" \|\| unlimitedRespawn\) && recoverFallDownBaseFailure\(current, reason, logicStageSize, unlimitedRespawn, baseRevives, onBaseReviveUsed\)\) \{[\s\S]*?triggerScreenShake\(\);/);
   assert.match(fallDownSource, /if \(mode === "base" \|\| unlimitedRespawn\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return false;/);
   assert.match(squareJumpSource, /if \(canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss\(current, ".*?", logicStageSize, unlimitedRespawn\)\) \{[\s\S]*?triggerScreenShake\(\);/);
   assert.match(flappySource, /if \(mode === "base" && status === "failed"\) \{[\s\S]*?triggerScreenShake\(\);[\s\S]*?return;/);
