@@ -45,6 +45,7 @@ import {
   type HomeworldRole,
   type HomeworldState,
 } from "@/lib/homeworld/homeworld-state";
+import { OUTDOOR_MATERIALS, type OutdoorMaterialId } from "@/lib/outdoor-adventure/events";
 
 const PLAYER_SIZE = 70;
 const MOVE_SPEED = 360;
@@ -714,6 +715,28 @@ export function HomeworldScreen({
     );
   };
 
+  const renderHarvestList = () => (
+    <div className="homeworld-customization-slot homeworld-harvest-slot">
+      <strong>收获</strong>
+      <div className="homeworld-customization-options homeworld-harvest-options">
+        {OUTDOOR_MATERIALS.map((material) => {
+          const count = displayedState.harvest[material.id as OutdoorMaterialId] ?? 0;
+          return (
+            <button
+              aria-label={`${material.name} x${count}`}
+              className={`homeworld-harvest-item rarity-${material.rarity}${count > 0 ? " stocked" : ""}`}
+              disabled
+              key={material.id}
+              type="button"
+            >
+              {material.name} x{count}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const localPlayerStyle = floorTransition
     ? {
         "--floor-jump-x": `${floorTransition.x}px`,
@@ -923,7 +946,7 @@ export function HomeworldScreen({
                   ))}
                 </div>
                 <div className="homeworld-customization-list">
-                  {activeCategory.slots.map(renderCustomizationSlot)}
+                  {activeCategory.id === "harvest" ? renderHarvestList() : activeCategory.slots.map(renderCustomizationSlot)}
                 </div>
               </div>
             </div>

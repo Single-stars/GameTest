@@ -22,6 +22,7 @@ const {
   getHomeworldFurnitureVariant,
   isHomeworldFurnitureReachable,
   isHomeworldState,
+  mergeHomeworldHarvest,
   parseHomeworldState,
 } = homeworldState;
 
@@ -108,7 +109,7 @@ function getPngAlphaBounds(path: string) {
 
 test("homeworld furniture slots match the asset-backed fixed room contract", () => {
   assert.deepEqual(HOMEWORLD_FURNITURE.map((item) => item.id), ["mirror", "bed", "door", "ladder", "cabinet"]);
-  assert.equal(HOMEWORLD_FURNITURE.some((item) => item.id === "trampoline" || item.id === "dye-vat" || item.id === "table"), false);
+  assert.equal(HOMEWORLD_FURNITURE.some((item) => ["trampoline", "dye-vat", "table"].includes(item.id as string)), false);
   assert.equal(HOMEWORLD_FURNITURE.every((item) => Number.isFinite(item.x) && Number.isFinite(item.y)), true);
   assert.equal(HOMEWORLD_FURNITURE.every((item) => item.asset.src.startsWith("/homeworld/")), true);
   assert.equal(HOMEWORLD_FURNITURE.find((item) => item.id === "mirror")?.interaction, "open-skin");
@@ -140,8 +141,12 @@ test("homeworld customization schema keeps cabinet and wall categories extensibl
     [
       ["furniture", "家具", ["bed", "door", "mirror", "ladder", "cabinet"]],
       ["wall", "墙壁", ["room"]],
+      ["harvest", "收获", []],
     ],
   );
+  assert.deepEqual(initial.harvest, {});
+  assert.match(homeworldScreenSource, /OUTDOOR_MATERIALS\.map/);
+  assert.match(homeworldScreenSource, /activeCategory\.id === "harvest"/);
   assert.equal(HOMEWORLD_ROOM_VARIANTS[0]?.id, "room-normal");
   assert.equal(HOMEWORLD_ROOM_VARIANTS[0]?.background.src, "/homeworld/skins/oak/room.png");
 });
@@ -466,6 +471,11 @@ test("homeworld parser sanitizes saved furniture levels without moving slots", (
       room: {
         variantId: "rogue-room",
       },
+      harvest: {
+        material_wood: 2,
+        material_star_screw: 1.8,
+        rogue_material: 99,
+      },
     }),
     "2026-05-23T00:00:00.000Z",
   );
@@ -478,12 +488,37 @@ test("homeworld parser sanitizes saved furniture levels without moving slots", (
   assert.equal(parsed.furniture.ladder.variantId, "ladder-default");
   assert.equal(parsed.furniture.cabinet.variantId, "cabinet-normal");
   assert.equal(parsed.room.variantId, "room-normal");
+  assert.deepEqual(parsed.harvest, { material_wood: 2, material_star_screw: 1 });
   assert.equal("trampoline" in parsed.furniture, false);
   assert.equal("dye-vat" in parsed.furniture, false);
   assert.equal("table" in parsed.furniture, false);
   assert.equal("rogue" in parsed.furniture, false);
   assert.equal(isHomeworldState(parsed), true);
   assert.equal(getHomeworldFurnitureVariant(parsed, "bed").id, "bed-default");
+});
+
+test("homeworld harvest storage merges outdoor adventure settlement materials", () => {
+  const initial = createDefaultHomeworldState("2026-05-23T00:00:00.000Z");
+  const collected = mergeHomeworldHarvest(
+    {
+      ...initial,
+      harvest: {
+        material_wood: 1,
+      },
+    },
+    {
+      material_wood: 2,
+      material_1982_empty_bottle: 1,
+      material_small_part: 0,
+    },
+    "2026-05-24T00:00:00.000Z",
+  );
+
+  assert.deepEqual(collected.harvest, {
+    material_wood: 3,
+    material_1982_empty_bottle: 1,
+  });
+  assert.equal(collected.updatedAt, "2026-05-24T00:00:00.000Z");
 });
 
 test("homeworld presence carries side-view movement and sleep action for multiplayer", () => {

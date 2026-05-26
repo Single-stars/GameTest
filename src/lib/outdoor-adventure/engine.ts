@@ -4,12 +4,15 @@ import {
   OUTDOOR_ADVENTURE_EVENTS,
   OUTDOOR_ADVENTURE_REGIONS,
   OUTDOOR_ADVENTURE_RELICS,
+  OUTDOOR_MATERIALS,
   OUTDOOR_MINI_GAME_ROUNDS,
   OUTDOOR_MINI_GAME_TITLES,
   type OutdoorAdventureRoundId,
   type OutdoorEventDefinition,
   type OutdoorEventEffect,
   type OutdoorEventOutcome,
+  type OutdoorEventOption,
+  type OutdoorMaterialId,
   type OutdoorRegionDefinition,
   type OutdoorRegionId,
   type OutdoorRelicDefinition,
@@ -31,6 +34,8 @@ export type OutdoorRelicInstance = {
   count: number;
 };
 
+export type OutdoorMaterialBag = Partial<Record<OutdoorMaterialId, number>>;
+
 export type OutdoorChoiceResult = {
   eventId: string;
   optionId: string;
@@ -40,6 +45,7 @@ export type OutdoorChoiceResult = {
   text: string;
   lines: string[];
   regionId: OutdoorRegionId;
+  visibleChoices?: { label: string; optionId: string }[];
 };
 
 export type OutdoorAdventureState = {
@@ -54,8 +60,11 @@ export type OutdoorAdventureState = {
   trouble: number;
   reviveCoins: number;
   heartCharges: number;
+  distanceFromHome: number;
   relics: OutdoorRelicInstance[];
   usableItems: OutdoorRelicInstance[];
+  materialBag: OutdoorMaterialBag;
+  settledMaterials?: OutdoorMaterialBag;
   memory: Record<string, number>;
   currentNode: OutdoorAdventureNode;
   journal: string[];
@@ -105,6 +114,8 @@ function cloneState(state: OutdoorAdventureState): OutdoorAdventureState {
     journal: [...state.journal],
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome, lines: [...state.lastOutcome.lines] } : undefined,
     memory: { ...state.memory },
+    materialBag: { ...state.materialBag },
+    settledMaterials: state.settledMaterials ? { ...state.settledMaterials } : undefined,
     pendingNextNode: state.pendingNextNode ? { ...state.pendingNextNode } : undefined,
     relics: state.relics.map((item) => ({ ...item })),
     usableItems: state.usableItems.map((item) => ({ ...item })),
@@ -125,6 +136,50 @@ function addRelic(state: OutdoorAdventureState, relicId: string) {
   } else {
     list.push({ id: relicId, count: 1 });
   }
+}
+
+function removeRelic(state: OutdoorAdventureState, relicId: string) {
+  for (const list of [state.relics, state.usableItems]) {
+    const existing = list.find((item) => item.id === relicId);
+    if (!existing) continue;
+    existing.count -= 1;
+    if (existing.count <= 0) list.splice(list.indexOf(existing), 1);
+    return;
+  }
+}
+
+function relicCount(state: OutdoorAdventureState, relicId: string) {
+  return [...state.relics, ...state.usableItems]
+    .filter((item) => item.id === relicId)
+    .reduce((sum, item) => sum + item.count, 0);
+}
+
+function relicEffectTotal(state: OutdoorAdventureState, effect: keyof NonNullable<OutdoorRelicDefinition["effects"]>) {
+  return [...state.relics, ...state.usableItems].reduce((sum, item) => {
+    const relic = getOutdoorAdventureRelic(item.id);
+    return sum + (relic?.effects?.[effect] ?? 0) * item.count;
+  }, 0);
+}
+
+export function getOutdoorMiniGameReviveCapacity(state: OutdoorAdventureState) {
+  return relicEffectTotal(state, "miniGameRevivesPerDay");
+}
+
+export function getOutdoorMiniGameReviveCharges(state: OutdoorAdventureState) {
+  return Math.min(state.heartCharges, getOutdoorMiniGameReviveCapacity(state));
+}
+
+function addMaterial(state: OutdoorAdventureState, materialId: OutdoorMaterialId, amount: number) {
+  state.materialBag[materialId] = Math.max(0, (state.materialBag[materialId] ?? 0) + amount);
+  if (state.materialBag[materialId] === 0) delete state.materialBag[materialId];
+}
+
+function removeMaterial(state: OutdoorAdventureState, materialId: OutdoorMaterialId, amount: number) {
+  addMaterial(state, materialId, -amount);
+}
+
+function materialCount(state: OutdoorAdventureState, materialId: OutdoorMaterialId) {
+  return state.materialBag[materialId] ?? 0;
 }
 
 function applyTrouble(state: OutdoorAdventureState, amount: number) {
@@ -159,9 +214,10 @@ function weightedOutcome(outcomes: OutdoorEventOutcome[], randomValue: number) {
 }
 
 function regionForProgress(state: OutdoorAdventureState): OutdoorRegionId {
-  if (state.day >= 6 || state.trouble >= 8) return "tower-alley";
-  if (state.day >= 3 || state.trouble >= 4) return "block-market";
-  return state.regionId ?? "doorstep-meadow";
+  if (state.distanceFromHome >= 60) return "far-edge";
+  if (state.distanceFromHome >= 40) return "city-corner";
+  if (state.distanceFromHome >= 20) return "block-market";
+  return "doorstep-meadow";
 }
 
 function eventSeenKey(eventId: string) {
@@ -196,10 +252,10 @@ function selectNextEvent(state: OutdoorAdventureState) {
   const regionId = regionForProgress(state);
   state.regionId = regionId;
   const regionEvents = getOutdoorEventsForRegion(regionId);
-  if (regionId === "doorstep-meadow" && piggyCount > 0 && piggyCount < 3 && (state.day + state.stepInDay) % 2 === 0) return "event_piggy_block";
-  if (regionId === "tower-alley" && state.trouble >= 6 && (state.day + state.stepInDay) % 5 === 0) return "event_mom_chase";
+  if ((regionId === "doorstep-meadow" || regionId === "block-market") && piggyCount > 0 && piggyCount < 7 && (state.day + state.stepInDay) % 2 === 0) return "event_piggy_block";
+  if ((regionId === "block-market" || regionId === "city-corner") && (state.memory.wokeVendingMachine ?? 0) > 0 && (state.day + state.stepInDay) % 10 >= 7) return "event_familiar_vending_machine";
   const index = Math.abs(state.day * 7 + state.stepInDay * 5 + state.trouble) % regionEvents.length;
-  return regionEvents[index]?.id ?? "event_lollipop_block";
+  return regionEvents[index]?.id ?? "event_piggy_block";
 }
 
 function advanceAfterAction(state: OutdoorAdventureState) {
@@ -246,14 +302,27 @@ function applyEffect(state: OutdoorAdventureState, effect: OutdoorEventEffect) {
     case "relic":
       addRelic(state, effect.relicId);
       return;
+    case "removeRelic":
+      removeRelic(state, effect.relicId);
+      return;
+    case "material":
+      addMaterial(state, effect.materialId, effect.amount);
+      return;
+    case "removeMaterial":
+      removeMaterial(state, effect.materialId, effect.amount);
+      return;
     case "reviveCoin":
       state.reviveCoins = Math.max(0, state.reviveCoins + effect.amount);
       return;
     case "heart":
-      state.heartCharges = Math.max(0, state.heartCharges + effect.amount);
+      state.heartCharges = Math.min(getOutdoorMiniGameReviveCapacity(state), Math.max(0, state.heartCharges + effect.amount));
       return;
     case "memory":
       state.memory[effect.key] = (state.memory[effect.key] ?? 0) + effect.amount;
+      return;
+    case "distance":
+      state.distanceFromHome = Math.max(0, state.distanceFromHome + effect.amount);
+      state.regionId = regionForProgress(state);
       return;
     case "miniGame":
       state.currentNode = { kind: "mini-game", roundId: effect.roundId };
@@ -282,6 +351,31 @@ function relicCountMap(state: OutdoorAdventureState) {
   return result;
 }
 
+function materialName(materialId: OutdoorMaterialId) {
+  return OUTDOOR_MATERIALS.find((material) => material.id === materialId)?.name ?? materialId;
+}
+
+function materialCountMap(state: OutdoorAdventureState) {
+  return new Map(Object.entries(state.materialBag) as [OutdoorMaterialId, number][]);
+}
+
+function gainedMaterialLines(before: OutdoorAdventureState, after: OutdoorAdventureState) {
+  const beforeCounts = materialCountMap(before);
+  const afterCounts = materialCountMap(after);
+  const lines: string[] = [];
+  for (const [materialId, count] of afterCounts) {
+    const gained = count - (beforeCounts.get(materialId) ?? 0);
+    if (gained <= 0) continue;
+    lines.push(`获得素材：${materialName(materialId)} x${gained}`);
+  }
+  for (const [materialId, count] of beforeCounts) {
+    const lost = count - (afterCounts.get(materialId) ?? 0);
+    if (lost <= 0) continue;
+    lines.push(`消耗素材：${materialName(materialId)} x${lost}`);
+  }
+  return lines;
+}
+
 function gainedRelicLines(before: OutdoorAdventureState, after: OutdoorAdventureState) {
   const beforeCounts = relicCountMap(before);
   const afterCounts = relicCountMap(after);
@@ -298,12 +392,13 @@ function gainedRelicLines(before: OutdoorAdventureState, after: OutdoorAdventure
 
 function outcomeMemoryLines(event: OutdoorEventDefinition, optionId: string, outcome: OutdoorEventOutcome) {
   const lines: string[] = [];
-  if (event.id === "event_lollipop_block" && optionId === "snatch") lines.push("小方块妈妈记住了你");
   if (event.id === "event_piggy_block" && optionId === "feed") lines.push("猪猪方块记住了这次投喂");
-  if (event.id === "event_mom_chase" && optionId === "apologize") lines.push("小方块妈妈记住了你的道歉");
+  if (event.id === "event_drunken_vending_machine" && optionId === "grab") lines.push("记录：抢过售货机");
+  if (event.id === "event_drunken_vending_machine" && optionId === "wake") lines.push("记录：叫醒过售货机");
   for (const effect of outcome.effects) {
     if (effect.type === "miniGame") lines.push(`触发阻碍：${getOutdoorMiniGameTitle(effect.roundId)}`);
   }
+  lines.push(`结果类型：${outcome.type}`);
   return lines;
 }
 
@@ -313,6 +408,7 @@ function buildChoiceResult(
   event: OutdoorEventDefinition,
   option: { id: string; label: string },
   outcome: OutdoorEventOutcome,
+  visibleChoiceIds?: string[],
 ): OutdoorChoiceResult {
   const lines: string[] = [];
   const supplyDelta = after.supply - before.supply;
@@ -320,16 +416,20 @@ function buildChoiceResult(
   const troubleDelta = after.trouble - before.trouble;
   const reviveDelta = after.reviveCoins - before.reviveCoins;
   const heartDelta = after.heartCharges - before.heartCharges;
+  const distanceDelta = after.distanceFromHome - before.distanceFromHome;
 
   if (supplyDelta !== 0) lines.push(`物资 ${signedAmount(supplyDelta)}`);
   if (staminaDelta !== 0) lines.push(`体力 ${signedAmount(staminaDelta)}`);
   if (troubleDelta !== 0) lines.push(`麻烦 ${signedAmount(troubleDelta)}`);
   if (reviveDelta !== 0) lines.push(`复活币 ${signedAmount(reviveDelta)}`);
   if (heartDelta !== 0) lines.push(`冒险的心 ${signedAmount(heartDelta)}`);
+  if (distanceDelta !== 0) lines.push(`离家距离 ${signedAmount(distanceDelta)}`);
   lines.push(...gainedRelicLines(before, after));
+  lines.push(...gainedMaterialLines(before, after));
   lines.push(...outcomeMemoryLines(event, option.id, outcome));
   if (lines.length === 0) lines.push("没有明显资源变化");
 
+  const allDefinedOptions = event.rareChoice ? [...event.options, event.rareChoice.option] : event.options;
   return {
     eventId: event.id,
     optionId: option.id,
@@ -339,6 +439,11 @@ function buildChoiceResult(
     text: outcome.text,
     lines,
     regionId: event.regionId,
+    visibleChoices: visibleChoiceIds
+      ?.map((optionId) => allDefinedOptions.find((item) => item.id === optionId))
+      .filter((item): item is OutdoorEventOption => Boolean(item))
+      .slice(0, 2)
+      .map((item) => ({ label: item.label, optionId: item.id })),
   };
 }
 
@@ -351,17 +456,71 @@ export function getOutdoorAdventureRegion(regionId: OutdoorRegionId): OutdoorReg
 }
 
 export function getOutdoorEventsForRegion(regionId: OutdoorRegionId): OutdoorEventDefinition[] {
-  const events = OUTDOOR_ADVENTURE_EVENTS.filter((event) => event.regionId === regionId);
+  const events = OUTDOOR_ADVENTURE_EVENTS.filter((event) => event.regions?.includes(regionId) || event.regionId === regionId);
   return events.length > 0 ? events : OUTDOOR_ADVENTURE_EVENTS;
 }
 
-export function getOutdoorAdventureEvent(eventId: string): OutdoorEventDefinition {
-  return OUTDOOR_ADVENTURE_EVENTS.find((event) => event.id === eventId) ?? OUTDOOR_ADVENTURE_EVENTS[0]!;
+function rareChoiceChance(event: OutdoorEventDefinition, state: OutdoorAdventureState) {
+  const rule = event.rareChoice;
+  if (!rule) return 0;
+  if (rule.blockedRelicId && relicCount(state, rule.blockedRelicId) > 0) return 0;
+  if (rule.requiredRelicId && relicCount(state, rule.requiredRelicId) <= 0) return 0;
+  if (rule.requiredMaterialId && materialCount(state, rule.requiredMaterialId) <= 0) return 0;
+  if (rule.requiredMemoryKey && (state.memory[rule.requiredMemoryKey] ?? 0) > 0 && rule.memoryChance !== undefined) return rule.memoryChance;
+  return rule.baseChance;
+}
+
+function eventWithVisibleOptions(
+  event: OutdoorEventDefinition,
+  state?: OutdoorAdventureState,
+  options: { forceRareChoice?: "replaceA" | "replaceB"; random?: number } = {},
+): OutdoorEventDefinition {
+  if (event.id === "event_piggy_block" && state && (state.memory.piggyFeedCount ?? 0) >= 7) {
+    return {
+      ...event,
+      firstDescription: "猪猪方块们开心地围着你转圈圈。",
+      description: "猪猪方块们开心地围着你转圈圈。",
+      repeatDescription: "猪猪方块们开心地围着你转圈圈。",
+      options: [
+        {
+          id: "completed",
+          label: "收下小物资",
+          hint: "猪猪完成版的稳定小收益。",
+          outcomes: [{ id: "completed", weight: 100, text: "猪猪方块们开心地围着你转圈圈。", type: "good", effects: [{ type: "supply", amount: 1 }] }],
+        },
+        {
+          id: "leave",
+          label: "直接离开",
+          hint: "挥挥手继续走。",
+          outcomes: [{ id: "b1", weight: 100, text: "你假装没看见。猪猪方块也假装没饿。", type: "neutral", effects: [] }],
+        },
+      ],
+    };
+  }
+
+  const rare = event.rareChoice;
+  if (!rare || !state) return event;
+  const chance = rareChoiceChance(event, state);
+  const shouldShow = options.forceRareChoice !== undefined || (chance > 0 && (options.random ?? Math.random()) < chance / 100);
+  if (!shouldShow) return event;
+  const replaceIndex = options.forceRareChoice === "replaceA" ? 0 : options.forceRareChoice === "replaceB" ? 1 : (options.random ?? Math.random()) < 0.5 ? 0 : 1;
+  const visibleOptions = [...event.options] as [OutdoorEventOption, OutdoorEventOption];
+  visibleOptions[replaceIndex] = rare.option;
+  return { ...event, options: visibleOptions };
+}
+
+export function getOutdoorAdventureEvent(
+  eventId: string,
+  state?: OutdoorAdventureState,
+  options: { forceRareChoice?: "replaceA" | "replaceB"; random?: number } = {},
+): OutdoorEventDefinition {
+  const event = OUTDOOR_ADVENTURE_EVENTS.find((item) => item.id === eventId) ?? OUTDOOR_ADVENTURE_EVENTS[0]!;
+  return eventWithVisibleOptions(event, state, options);
 }
 
 export function getOutdoorAdventureEventPresentation(state: OutdoorAdventureState, eventId: string): OutdoorEventPresentation {
-  const event = getOutdoorAdventureEvent(eventId);
-  const region = getOutdoorAdventureRegion(event.regionId);
+  const event = getOutdoorAdventureEvent(eventId, state);
+  const region = getOutdoorAdventureRegion(state.regionId);
   if (event.resolvedDescription && wasResolvedByChoice(state, event)) {
     return {
       title: event.title,
@@ -402,14 +561,16 @@ export function createDefaultOutdoorAdventureState(): OutdoorAdventureState {
     stamina: 5,
     trouble: 0,
     reviveCoins: 0,
-    heartCharges: 1,
+    heartCharges: 0,
+    distanceFromHome: 0,
     relics: [
-      { id: "relic_adventure_heart", count: 1 },
+      { id: "relic_travel_bag", count: 1 },
       { id: "relic_travel_footprints", count: 1 },
     ],
     usableItems: [],
+    materialBag: {},
     memory: {},
-    currentNode: { kind: "event", eventId: "event_lollipop_block" },
+    currentNode: { kind: "event", eventId: "event_piggy_block" },
     journal: ["第 1 天：你从家园门口出发，口袋里有一点物资和一点勇气。"],
     updatedAt: timestamp(),
   };
@@ -420,8 +581,9 @@ export function getOutdoorSelectableEvents(regionId?: OutdoorRegionId) {
 }
 
 export function getOutdoorDebugOutcomeButtons(eventId: string): OutdoorDebugOutcomeButton[] {
-  const event = getOutdoorAdventureEvent(eventId);
-  return event.options.flatMap((option) =>
+  const event = OUTDOOR_ADVENTURE_EVENTS.find((item) => item.id === eventId) ?? OUTDOOR_ADVENTURE_EVENTS[0]!;
+  const options = event.rareChoice ? [...event.options, event.rareChoice.option] : event.options;
+  return options.flatMap((option) =>
     option.outcomes.map((outcome, outcomeIndex) => ({
       eventId: event.id,
       regionId: event.regionId,
@@ -437,9 +599,14 @@ export function applyOutdoorEventChoice(
   state: OutdoorAdventureState,
   eventId: string,
   optionId: string,
-  options: { outcomeIndex?: number; random?: number } = {},
+  options: { forceMaterialDrops?: boolean; forceRareChoice?: "replaceA" | "replaceB"; outcomeIndex?: number; random?: number; visibleChoiceIds?: string[] } = {},
 ): OutdoorAdventureState {
-  const event = getOutdoorAdventureEvent(eventId);
+  let event = getOutdoorAdventureEvent(eventId, state, options);
+  if (!event.options.some((item) => item.id === optionId)) {
+    const base = OUTDOOR_ADVENTURE_EVENTS.find((item) => item.id === eventId);
+    if (base?.rareChoice?.option.id === optionId) event = { ...base, options: [base.rareChoice.option, base.options[1]!] };
+    else if (base?.options.some((item) => item.id === optionId)) event = base;
+  }
   const option = event.options.find((item) => item.id === optionId) ?? event.options[0]!;
   const outcome =
     options.outcomeIndex !== undefined
@@ -449,20 +616,31 @@ export function applyOutdoorEventChoice(
   const displayNode = { ...state.currentNode };
   next.updatedAt = timestamp();
   next.status = "exploring";
-  next.regionId = event.regionId;
+  next.regionId = state.regionId;
   next.pendingNextNode = undefined;
   next.stamina = Math.max(0, next.stamina - (event.staminaCost ?? 1));
   next.stepInDay += 1;
+  next.distanceFromHome += 1;
+  next.regionId = regionForProgress(next);
   recordEventMemory(next, event.id, option.id, outcome.id);
   addJournal(next, outcome.text);
-  for (const effect of outcome.effects) applyEffect(next, effect);
-
-  if ((next.memory.piggyFedCount ?? 0) >= 3 && !next.relics.some((item) => item.id === "relic_piggy_bank")) {
-    addRelic(next, "relic_piggy_bank");
-    addJournal(next, "三只猪猪方块推来旧箱子，里面躺着猪猪储蓄罐。");
+  if (event.id === "event_piggy_block" && (option.id === "feed" || option.id === "piggy_ticket")) {
+    const beforeFeedCount = next.memory.piggyFeedCount ?? 0;
+    const nextFeedCount = Math.min(7, beforeFeedCount + 1);
+    if (option.id === "feed") next.supply -= nextFeedCount;
+    next.memory.piggyFeedCount = nextFeedCount;
+    if (nextFeedCount === 3) addRelic(next, "relic_piggy_ticket");
+    if (nextFeedCount === 7) addRelic(next, "relic_piggy_jar");
+  }
+  for (const effect of outcome.effects) {
+    if (effect.type === "material" && !options.forceMaterialDrops) {
+      const chance = effect.chance ?? 100;
+      if ((options.random ?? Math.random()) >= chance / 100) continue;
+    }
+    applyEffect(next, effect);
   }
 
-  next.lastOutcome = buildChoiceResult(state, next, event, option, outcome);
+  next.lastOutcome = buildChoiceResult(state, next, event, option, outcome, options.visibleChoiceIds);
 
   const resolved = resolveNearDeath(next);
   if (resolved.status === "failed" || resolved.status === "settled") return resolved;
@@ -490,12 +668,6 @@ export function continueOutdoorAdventureAfterOutcome(state: OutdoorAdventureStat
 
 function miniGameFailureSupplyLoss(state: OutdoorAdventureState) {
   return 5 + Math.floor(state.trouble / 10);
-}
-
-function relicCount(state: OutdoorAdventureState, relicId: string) {
-  return [...state.relics, ...state.usableItems]
-    .filter((item) => item.id === relicId)
-    .reduce((sum, item) => sum + item.count, 0);
 }
 
 export function getOutdoorMiniGameEscapeChance(state: OutdoorAdventureState) {
@@ -627,6 +799,8 @@ export function attemptOutdoorMiniGameEscape(
 
   next.stamina = Math.max(0, next.stamina - 1);
   next.stepInDay += 1;
+  next.distanceFromHome += 1;
+  next.regionId = regionForProgress(next);
   next.memory.escapeTechnique = (next.memory.escapeTechnique ?? 0) + 1;
   addRelic(next, "relic_escape_shoe");
   addJournal(next, `${getOutdoorMiniGameTitle(roundId)}前，你从旁边溜走了。`);
@@ -649,7 +823,7 @@ export function consumeOutdoorAdventureHeartForMiniGameRevive(
   next.pendingNextNode = undefined;
   next.status = "exploring";
   next.currentNode = { kind: "mini-game", roundId };
-  if (next.heartCharges <= 0) return next;
+  if (getOutdoorMiniGameReviveCharges(next) <= 0) return next;
   next.heartCharges -= 1;
   addJournal(next, `冒险的心亮了一下，${getOutdoorMiniGameTitle(roundId)}这次失败没有算数。`);
   return next;
@@ -670,6 +844,8 @@ export function handleOutdoorMiniGameResult(
 
   next.stamina = Math.max(0, next.stamina - 1);
   next.stepInDay += 1;
+  next.distanceFromHome += 1;
+  next.regionId = regionForProgress(next);
   if (result.success) {
     const reward = result.excellent || result.scoreTier === "excellent" ? 6 : 4;
     next.supply += reward;
@@ -697,11 +873,8 @@ function addTroubleFromFailure(state: OutdoorAdventureState) {
 }
 
 export function getOutdoorDayCost(state: OutdoorAdventureState) {
-  if (state.day <= 3 && state.trouble < 5) return 3;
-  if (state.day <= 7) return 4;
-  if (state.day <= 12) return 5 + Math.floor(state.trouble / 8);
-  if (state.day <= 17) return 6 + Math.floor(state.trouble / 6);
-  return 8 + Math.floor(state.trouble / 5);
+  const base = state.day <= 3 && state.trouble < 5 ? 3 : state.day <= 7 ? 4 : state.day <= 12 ? 5 + Math.floor(state.trouble / 8) : state.day <= 17 ? 6 + Math.floor(state.trouble / 6) : 8 + Math.floor(state.trouble / 5);
+  return base + relicCount(state, "relic_crumpled_debt_note");
 }
 
 export function restOutdoorAdventureAtHome(state: OutdoorAdventureState): OutdoorAdventureState {
@@ -722,7 +895,7 @@ export function campToNextOutdoorDay(state: OutdoorAdventureState): OutdoorAdven
   next.day += 1;
   next.stepInDay = 0;
   next.stamina = 5;
-  next.heartCharges = 1;
+  next.heartCharges = getOutdoorMiniGameReviveCapacity(next);
   next.status = "exploring";
   next.regionId = regionForProgress(next);
   next.currentNode = { kind: "event", eventId: selectNextEvent(next) };
@@ -745,8 +918,32 @@ export function continueRestedOutdoorAdventure(state: OutdoorAdventureState): Ou
   return next;
 }
 
+function settleMaterials(state: OutdoorAdventureState, mode: "active" | "failed") {
+  const result: OutdoorMaterialBag = {};
+  for (const material of OUTDOOR_MATERIALS) {
+    const materialId = material.id as OutdoorMaterialId;
+    const count = state.materialBag[materialId] ?? 0;
+    if (count <= 0) continue;
+    if (mode === "active" || material.rarity === "legendary") {
+      result[materialId] = count;
+    } else if (material.rarity === "rare") {
+      result[materialId] = Math.ceil(count / 2);
+    } else {
+      result[materialId] = Math.floor(count / 2);
+    }
+  }
+  return result;
+}
+
+function clearDebuffRelics(state: OutdoorAdventureState) {
+  state.relics = state.relics.filter((item) => getOutdoorAdventureRelic(item.id)?.kind !== "debuff");
+}
+
 export function finishOutdoorAdventure(state: OutdoorAdventureState): OutdoorAdventureState {
   const next = cloneState(state);
+  next.settledMaterials = settleMaterials(next, "active");
+  next.distanceFromHome = 0;
+  next.regionId = "doorstep-meadow";
   next.status = "settled";
   next.currentNode = { kind: "summary" };
   next.lastOutcome = undefined;
@@ -759,6 +956,10 @@ export function finishOutdoorAdventure(state: OutdoorAdventureState): OutdoorAdv
 
 export function abandonOutdoorAdventureAsFailed(state: OutdoorAdventureState): OutdoorAdventureState {
   const next = cloneState(state);
+  next.settledMaterials = settleMaterials(next, "failed");
+  next.distanceFromHome = 0;
+  next.regionId = "doorstep-meadow";
+  clearDebuffRelics(next);
   next.status = "failed";
   next.currentNode = { kind: "summary" };
   next.lastOutcome = undefined;
@@ -773,13 +974,33 @@ export function getOutdoorAdventureStatusText(state: OutdoorAdventureState) {
   const relics = state.relics.map((item) => {
     const relic = getOutdoorAdventureRelic(item.id);
     if (!relic) return item.id;
-    if (item.id === "relic_adventure_heart") return `${relic.name} ${state.heartCharges}`;
+    if (relic.effects?.miniGameRevivesPerDay) return `${relic.name} ${getOutdoorMiniGameReviveCharges(state)}`;
+    if (item.id === "relic_travel_footprints") {
+      return `${relic.name}：离家 ${state.distanceFromHome} 步 / 休整消耗 ${getOutdoorDayCost(state)} 物资`;
+    }
     return item.count > 1 ? `${relic.name} x${item.count}` : relic.name;
   });
   return {
     resources: [`体力 ${state.stamina}`, `物资 ${state.supply}`, `麻烦 ${state.trouble}`],
     relics,
   };
+}
+
+export function applyOutdoorDebugGrantAll(state: OutdoorAdventureState): OutdoorAdventureState {
+  const next = cloneState(state);
+  next.stamina = 999;
+  next.supply = 999;
+  next.trouble += 10;
+  for (const material of OUTDOOR_MATERIALS) {
+    addMaterial(next, material.id, 1);
+  }
+  for (const relic of OUTDOOR_ADVENTURE_RELICS) {
+    addRelic(next, relic.id);
+  }
+  next.heartCharges = getOutdoorMiniGameReviveCapacity(next);
+  next.updatedAt = timestamp();
+  addJournal(next, "调试：体力和物资补满，麻烦增加，所有素材和纪念品各加一。");
+  return next;
 }
 
 export function writePersistedOutdoorAdventureState(storage: StorageLike, state: OutdoorAdventureState) {
@@ -797,7 +1018,7 @@ function isOutdoorAdventureNode(value: unknown): value is OutdoorAdventureNode {
 }
 
 function isOutdoorRegionId(value: unknown): value is OutdoorRegionId {
-  return value === "doorstep-meadow" || value === "block-market" || value === "tower-alley";
+  return value === "doorstep-meadow" || value === "block-market" || value === "city-corner" || value === "far-edge";
 }
 
 function sanitizeLastOutcome(value: unknown): OutdoorChoiceResult | undefined {
@@ -823,6 +1044,15 @@ function sanitizeLastOutcome(value: unknown): OutdoorChoiceResult | undefined {
     text: record.text,
     lines: Array.isArray(record.lines) ? record.lines.filter((item): item is string => typeof item === "string").slice(0, 12) : [],
     regionId: record.regionId,
+    visibleChoices: Array.isArray(record.visibleChoices)
+      ? record.visibleChoices
+          .filter((item): item is { label: string; optionId: string } => {
+            if (typeof item !== "object" || item === null) return false;
+            const choice = item as Record<string, unknown>;
+            return typeof choice.label === "string" && typeof choice.optionId === "string";
+          })
+          .slice(0, 2)
+      : undefined,
   };
 }
 
@@ -833,7 +1063,9 @@ export function readPersistedOutdoorAdventureState(storage: StorageLike): Outdoo
     const parsed = JSON.parse(raw) as Partial<OutdoorAdventureState>;
     if (parsed.schemaVersion !== OUTDOOR_ADVENTURE_SCHEMA_VERSION) return null;
     if (!isOutdoorAdventureNode(parsed.currentNode)) return null;
-    return {
+    const relics = normalizePersistedRelics(Array.isArray(parsed.relics) ? parsed.relics.filter(isRelicInstance) : []);
+    const usableItems = Array.isArray(parsed.usableItems) ? parsed.usableItems.filter(isRelicInstance) : [];
+    const restored: OutdoorAdventureState = {
       schemaVersion: OUTDOOR_ADVENTURE_SCHEMA_VERSION,
       id: typeof parsed.id === "string" ? parsed.id : `outdoor-${Date.now().toString(36)}`,
       status:
@@ -851,9 +1083,12 @@ export function readPersistedOutdoorAdventureState(storage: StorageLike): Outdoo
       stamina: clampInteger(parsed.stamina, 0, 99),
       trouble: clampInteger(parsed.trouble, 0, 9999),
       reviveCoins: clampInteger(parsed.reviveCoins, 0, 999),
-      heartCharges: clampInteger(parsed.heartCharges, 0, 99),
-      relics: Array.isArray(parsed.relics) ? parsed.relics.filter(isRelicInstance) : [],
-      usableItems: Array.isArray(parsed.usableItems) ? parsed.usableItems.filter(isRelicInstance) : [],
+      heartCharges: 0,
+      distanceFromHome: clampInteger(parsed.distanceFromHome, 0, 9999),
+      relics,
+      usableItems,
+      materialBag: normalizeMaterialBag(parsed.materialBag),
+      settledMaterials: normalizeMaterialBag(parsed.settledMaterials),
       memory: typeof parsed.memory === "object" && parsed.memory !== null ? normalizeMemory(parsed.memory) : {},
       currentNode: parsed.currentNode,
       journal: Array.isArray(parsed.journal) ? parsed.journal.filter((item): item is string => typeof item === "string").slice(-120) : [],
@@ -862,9 +1097,28 @@ export function readPersistedOutdoorAdventureState(storage: StorageLike): Outdoo
       summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : timestamp(),
     };
+    restored.heartCharges = Math.min(clampInteger(parsed.heartCharges, 0, 99), getOutdoorMiniGameReviveCapacity(restored));
+    return restored;
   } catch {
     return null;
   }
+}
+
+function normalizePersistedRelics(items: OutdoorRelicInstance[]) {
+  const normalized: OutdoorRelicInstance[] = [];
+  const add = (id: string, count: number) => {
+    if (count <= 0 || !getOutdoorAdventureRelic(id)) return;
+    const existing = normalized.find((item) => item.id === id);
+    if (existing) existing.count += count;
+    else normalized.push({ id, count });
+  };
+
+  for (const item of items) {
+    add(item.id, item.count);
+  }
+  if (!normalized.some((item) => item.id === "relic_travel_bag")) add("relic_travel_bag", 1);
+  if (!normalized.some((item) => item.id === "relic_travel_footprints")) add("relic_travel_footprints", 1);
+  return normalized;
 }
 
 function isRelicInstance(value: unknown): value is OutdoorRelicInstance {
@@ -878,6 +1132,21 @@ function normalizeMemory(value: object): Record<string, number> {
   for (const [key, item] of Object.entries(value)) {
     const numeric = Number(item);
     if (Number.isFinite(numeric)) result[key] = Math.trunc(numeric);
+  }
+  return result;
+}
+
+function isOutdoorMaterialId(value: string): value is OutdoorMaterialId {
+  return OUTDOOR_MATERIALS.some((material) => material.id === value);
+}
+
+function normalizeMaterialBag(value: unknown): OutdoorMaterialBag {
+  const result: OutdoorMaterialBag = {};
+  if (typeof value !== "object" || value === null) return result;
+  for (const [key, item] of Object.entries(value)) {
+    if (!isOutdoorMaterialId(key)) continue;
+    const numeric = Number(item);
+    if (Number.isFinite(numeric) && numeric > 0) result[key] = Math.trunc(numeric);
   }
   return result;
 }

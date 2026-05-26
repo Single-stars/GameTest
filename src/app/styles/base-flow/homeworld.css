@@ -617,6 +617,24 @@
   font-size: 13px;
 }
 
+.homeworld-harvest-options button {
+  opacity: 1;
+}
+
+.homeworld-harvest-item.rarity-common {
+  background: rgba(255, 253, 248, 0.88);
+}
+
+.homeworld-harvest-item.rarity-rare {
+  background: rgba(210, 220, 255, 0.92);
+  border-color: rgba(88, 83, 167, 0.28);
+}
+
+.homeworld-harvest-item.rarity-legendary {
+  background: rgba(255, 225, 132, 0.94);
+  border-color: rgba(159, 111, 25, 0.32);
+}
+
 @keyframes homeworld-floor-jump {
   0% {
     transform: translate3d(var(--floor-jump-x), var(--floor-jump-from-y), 0) scale(1);

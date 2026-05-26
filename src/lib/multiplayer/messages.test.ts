@@ -223,6 +223,9 @@ test("homeworld messages carry extensible asset-backed furniture state and side-
     room: {
       variantId: "room-normal",
     },
+    harvest: {
+      material_wood: 2,
+    },
     updatedAt: "2026-05-23T00:00:00.000Z",
   });
   const presence = createHomeworldPresenceMessage({

@@ -1,3 +1,5 @@
+import { OUTDOOR_MATERIALS, type OutdoorMaterialId } from "../outdoor-adventure/events.ts";
+
 export type HomeworldFurnitureId = "mirror" | "bed" | "door" | "ladder" | "cabinet";
 type LegacyHomeworldFurnitureId = "table";
 export type HomeworldRole = "owner" | "visitor";
@@ -39,7 +41,7 @@ export type HomeworldRoomVariant = {
 };
 
 export type HomeworldCustomizationCategory = {
-  id: "furniture" | "wall";
+  id: "furniture" | "wall" | "harvest";
   label: string;
   slots: readonly HomeworldCustomizationSlot[];
 };
@@ -82,11 +84,14 @@ export type HomeworldRoomState = {
   variantId: string;
 };
 
+export type HomeworldHarvestStorage = Partial<Record<OutdoorMaterialId, number>>;
+
 export type HomeworldState = {
   schemaVersion: 1;
   updatedAt: string;
   furniture: Record<HomeworldFurnitureId, HomeworldFurnitureState>;
   room: HomeworldRoomState;
+  harvest: HomeworldHarvestStorage;
 };
 
 export type HomeworldPresence = {
@@ -483,6 +488,11 @@ export const HOMEWORLD_CUSTOMIZATION_CATEGORIES = [
     label: "墙壁",
     slots: ["room"],
   },
+  {
+    id: "harvest",
+    label: "收获",
+    slots: [],
+  },
 ] as const satisfies readonly HomeworldCustomizationCategory[];
 
 const HOMEWORLD_FURNITURE_IDS = HOMEWORLD_FURNITURE.map((item) => item.id) as HomeworldFurnitureId[];
@@ -532,6 +542,22 @@ function migrateLegacyFurnitureVariant(id: HomeworldFurnitureId, variantId: unkn
   return variantId;
 }
 
+function isOutdoorMaterialId(value: unknown): value is OutdoorMaterialId {
+  return typeof value === "string" && OUTDOOR_MATERIALS.some((material) => material.id === value);
+}
+
+function sanitizeHomeworldHarvest(value: unknown): HomeworldHarvestStorage {
+  const source = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  const harvest: HomeworldHarvestStorage = {};
+  for (const material of OUTDOOR_MATERIALS) {
+    const amount = source[material.id];
+    if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
+    const normalized = Math.max(0, Math.floor(amount));
+    if (normalized > 0) harvest[material.id as OutdoorMaterialId] = normalized;
+  }
+  return harvest;
+}
+
 export function sanitizeHomeworldDisplayName(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 16) : "";
 }
@@ -555,6 +581,7 @@ export function createDefaultHomeworldState(updatedAt = timestamp()): HomeworldS
     room: {
       variantId: getDefaultRoomVariantId(),
     },
+    harvest: {},
   };
 }
 
@@ -579,6 +606,7 @@ function sanitizeHomeworldState(value: unknown, updatedAt = timestamp()): Homewo
   base.room = {
     variantId: isRoomVariantId(sourceRoom.variantId) ? sourceRoom.variantId : getDefaultRoomVariantId(),
   };
+  base.harvest = sanitizeHomeworldHarvest(source.harvest);
   base.updatedAt = typeof source.updatedAt === "string" && Number.isFinite(Date.parse(source.updatedAt))
     ? source.updatedAt
     : updatedAt;
@@ -614,6 +642,18 @@ export function getHomeworldFurnitureVariant(state: HomeworldState, id: Homeworl
 
 export function getHomeworldRoomVariant(state: HomeworldState) {
   return HOMEWORLD_ROOM_VARIANTS.find((variant) => variant.id === state.room.variantId) ?? HOMEWORLD_ROOM_VARIANTS[0]!;
+}
+
+export function mergeHomeworldHarvest(state: HomeworldState, materials: HomeworldHarvestStorage, updatedAt = timestamp()): HomeworldState {
+  const next = sanitizeHomeworldState(state, updatedAt);
+  for (const [materialId, amount] of Object.entries(materials)) {
+    if (!isOutdoorMaterialId(materialId) || typeof amount !== "number" || !Number.isFinite(amount)) continue;
+    const normalized = Math.max(0, Math.floor(amount));
+    if (normalized <= 0) continue;
+    next.harvest[materialId] = (next.harvest[materialId] ?? 0) + normalized;
+  }
+  next.updatedAt = updatedAt;
+  return next;
 }
 
 export function canUseHomeworldInteraction(role: HomeworldRole, id: HomeworldFurnitureId, interaction: HomeworldInteraction) {
@@ -670,6 +710,8 @@ export function isHomeworldState(value: unknown): value is HomeworldState {
   if (typeof source.updatedAt !== "string") return false;
   if (typeof source.furniture !== "object" || source.furniture === null) return false;
   if (typeof source.room !== "object" || source.room === null || !isRoomVariantId(source.room.variantId)) return false;
+  if (typeof source.harvest !== "object" || source.harvest === null) return false;
+  if (Object.entries(source.harvest).some(([materialId, amount]) => !isOutdoorMaterialId(materialId) || typeof amount !== "number" || !Number.isFinite(amount) || amount < 0)) return false;
 
   const keys = Object.keys(source.furniture);
   if (keys.length !== HOMEWORLD_FURNITURE_IDS.length) return false;

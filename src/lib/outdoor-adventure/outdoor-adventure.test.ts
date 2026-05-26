@@ -18,15 +18,18 @@ import {
   getOutdoorAdventureRegion,
   getOutdoorAdventureStatusText,
   getOutdoorDebugOutcomeButtons,
+  getOutdoorMiniGameReviveCapacity,
   getOutdoorMiniGameEscapeChance,
   getOutdoorEventsForRegion,
   handleOutdoorMiniGameResult,
   attemptOutdoorMiniGameEscape,
+  applyOutdoorDebugGrantAll,
   readPersistedOutdoorAdventureState,
   restOutdoorAdventureAtHome,
   writePersistedOutdoorAdventureState,
 } from "./engine.ts";
 import {
+  OUTDOOR_MATERIALS,
   OUTDOOR_ADVENTURE_EVENTS,
   OUTDOOR_ADVENTURE_RELICS,
 } from "./events.ts";
@@ -45,12 +48,14 @@ function memoryStorage() {
 }
 
 test("outdoor adventure v1 ships a complete first event and relic pool", () => {
-  assert.equal(OUTDOOR_ADVENTURE_EVENTS.length, 20);
-  assert.equal(OUTDOOR_ADVENTURE_RELICS.length >= 20, true);
+  assert.equal(OUTDOOR_ADVENTURE_EVENTS.length, 11);
+  assert.equal(OUTDOOR_ADVENTURE_RELICS.length >= 9, true);
   assert.ok(OUTDOOR_ADVENTURE_EVENTS.every((event) => event.options.length === 2));
-  assert.ok(OUTDOOR_ADVENTURE_EVENTS.every((event) => event.options.every((option) => option.outcomes.length >= 2)));
+  assert.ok(OUTDOOR_ADVENTURE_EVENTS.every((event) => event.options.every((option) => option.outcomes.length >= 1)));
   assert.ok(getOutdoorAdventureRelic("relic_adventure_heart"));
+  assert.ok(getOutdoorAdventureRelic("relic_travel_bag"));
   assert.ok(getOutdoorAdventureRelic("relic_travel_footprints"));
+  assert.ok(OUTDOOR_MATERIALS.some((material) => material.id === "material_1982_empty_bottle" && material.rarity === "legendary"));
 });
 
 test("default outdoor adventure starts from home with starter relics and a story event", () => {
@@ -61,26 +66,145 @@ test("default outdoor adventure starts from home with starter relics and a story
   assert.equal(getOutdoorAdventureRegion(state.regionId).name, "门外草地");
   assert.equal(state.stamina, 5);
   assert.equal(state.trouble, 0);
-  assert.equal(state.heartCharges, 1);
+  assert.equal(state.distanceFromHome, 0);
+  assert.deepEqual(state.materialBag, {});
+  assert.equal(state.heartCharges, 0);
   assert.equal(state.currentNode.kind, "event");
   assert.deepEqual(
     state.relics.map((item) => item.id),
-    ["relic_adventure_heart", "relic_travel_footprints"],
+    ["relic_travel_bag", "relic_travel_footprints"],
   );
+});
+
+test("v2 regions are selected by distance from home and footprints show rest cost", () => {
+  const state = createDefaultOutdoorAdventureState();
+  state.distanceFromHome = 23;
+  state.regionId = "block-market";
+  state.relics.push({ id: "relic_crumpled_debt_note", count: 1 });
+
+  const status = getOutdoorAdventureStatusText(state);
+
+  assert.ok(status.relics.some((line) => line.includes("远行脚印")));
+  assert.ok(status.relics.some((line) => line.includes("离家 23 步")));
+  assert.equal(status.relics.some((line) => line.includes("当前区域")), false);
+  assert.ok(status.relics.some((line) => line.includes("休整消耗 4 物资")));
+});
+
+test("v2 vending machine chain follows the rare 1982 sample", () => {
+  let state = createDefaultOutdoorAdventureState();
+  state.distanceFromHome = 20;
+  state.regionId = "block-market";
+  state.currentNode = { kind: "event", eventId: "event_drunken_vending_machine" };
+
+  const withRare = getOutdoorAdventureEvent(state.currentNode.eventId, state, { forceRareChoice: "replaceA" });
+  assert.deepEqual(withRare.options.map((option) => option.id), ["pickup_1982", "wake"]);
+
+  state = applyOutdoorEventChoice(state, "event_drunken_vending_machine", "pickup_1982", { outcomeIndex: 0 });
+  assert.ok(state.relics.some((item) => item.id === "relic_1982_mystery_drink"));
+  assert.equal(state.lastOutcome?.lines.some((line) => line.includes("获得纪念品：1982神秘饮品")), true);
+
+  state.currentNode = { kind: "event", eventId: "event_drunken_vending_machine" };
+  state = applyOutdoorEventChoice(state, "event_drunken_vending_machine", "wake", { outcomeIndex: 0 });
+  assert.equal(state.memory.wokeVendingMachine, 1);
+
+  const followup = getOutdoorAdventureEvent("event_familiar_vending_machine", state, { forceRareChoice: "replaceB" });
+  assert.deepEqual(followup.options.map((option) => option.id), ["buy", "intoxicate"]);
+
+  state.currentNode = { kind: "event", eventId: "event_familiar_vending_machine" };
+  const rewarded = applyOutdoorEventChoice(state, "event_familiar_vending_machine", "intoxicate", {
+    forceMaterialDrops: true,
+    outcomeIndex: 0,
+  });
+
+  assert.equal(rewarded.relics.some((item) => item.id === "relic_1982_mystery_drink"), false);
+  assert.equal(rewarded.supply - state.supply, 10);
+  assert.equal(rewarded.trouble - state.trouble, 5);
+  assert.equal(rewarded.materialBag.material_small_part, 1);
+  assert.equal(rewarded.materialBag.material_colorful_bottle_cap, 1);
+  assert.equal(rewarded.materialBag.material_1982_empty_bottle, 1);
+});
+
+test("v2 piggy chain increments feeding, uses ticket as rare choice, and completes with stable gain", () => {
+  let state = createDefaultOutdoorAdventureState();
+  state.supply = 60;
+  state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+
+  state = applyOutdoorEventChoice(state, "event_piggy_block", "feed", { forceMaterialDrops: true, outcomeIndex: 0 });
+  state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+  state = applyOutdoorEventChoice(state, "event_piggy_block", "feed", { outcomeIndex: 0, random: 1 });
+  state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+  state = applyOutdoorEventChoice(state, "event_piggy_block", "feed", { outcomeIndex: 0, random: 1 });
+
+  assert.equal(state.memory.piggyFeedCount, 3);
+  assert.ok(state.relics.some((item) => item.id === "relic_piggy_ticket"));
+  assert.equal(state.materialBag.material_flower, 1);
+
+  const rare = getOutdoorAdventureEvent("event_piggy_block", state, { forceRareChoice: "replaceA" });
+  assert.deepEqual(rare.options.map((option) => option.id), ["piggy_ticket", "leave"]);
+
+  state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+  const beforeTicketSupply = state.supply;
+  state = applyOutdoorEventChoice(state, "event_piggy_block", "piggy_ticket", { outcomeIndex: 0 });
+  assert.equal(state.supply, beforeTicketSupply);
+  assert.equal(state.memory.piggyFeedCount, 4);
+  assert.equal(state.relics.some((item) => item.id === "relic_piggy_ticket"), false);
+
+  for (let index = 0; index < 3; index += 1) {
+    state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+    state = applyOutdoorEventChoice(state, "event_piggy_block", "feed", { outcomeIndex: 0, random: 1 });
+  }
+
+  assert.equal(state.memory.piggyFeedCount, 7);
+  assert.ok(state.relics.some((item) => item.id === "relic_piggy_jar"));
+
+  state.currentNode = { kind: "event", eventId: "event_piggy_block" };
+  const completedSupply = state.supply;
+  state = applyOutdoorEventChoice(state, "event_piggy_block", "completed", { outcomeIndex: 0 });
+  assert.equal(state.supply, completedSupply + 1);
+});
+
+test("v2 material settlement keeps materials out of relics and applies active/failure rules", () => {
+  const state = createDefaultOutdoorAdventureState();
+  state.materialBag = {
+    material_1982_empty_bottle: 1,
+    material_flower: 3,
+    material_glowing_pollen: 3,
+    material_star_screw: 1,
+    material_wood: 5,
+  };
+  state.relics.push({ id: "relic_sticky_drink_stain", count: 1 });
+
+  const settled = finishOutdoorAdventure(state);
+  assert.deepEqual(settled.settledMaterials, state.materialBag);
+  assert.equal(settled.distanceFromHome, 0);
+
+  const failed = abandonOutdoorAdventureAsFailed(state);
+  assert.deepEqual(failed.settledMaterials, {
+    material_1982_empty_bottle: 1,
+    material_flower: 1,
+    material_glowing_pollen: 2,
+    material_star_screw: 1,
+    material_wood: 2,
+  });
+  assert.equal(failed.relics.some((item) => item.id === "relic_sticky_drink_stain"), false);
+  assert.equal(failed.distanceFromHome, 0);
 });
 
 test("outdoor regions keep their event pools separated", () => {
   const meadowEvents = getOutdoorEventsForRegion("doorstep-meadow");
   const marketEvents = getOutdoorEventsForRegion("block-market");
-  const alleyEvents = getOutdoorEventsForRegion("tower-alley");
+  const cornerEvents = getOutdoorEventsForRegion("city-corner");
+  const farEvents = getOutdoorEventsForRegion("far-edge");
 
   assert.equal(meadowEvents.length > 0, true);
   assert.equal(marketEvents.length > 0, true);
-  assert.equal(alleyEvents.length > 0, true);
-  assert.ok(meadowEvents.every((event) => event.regionId === "doorstep-meadow"));
-  assert.ok(marketEvents.every((event) => event.regionId === "block-market"));
-  assert.ok(alleyEvents.every((event) => event.regionId === "tower-alley"));
-  assert.equal(marketEvents.some((event) => event.id === "event_lollipop_block"), false);
+  assert.equal(cornerEvents.length > 0, true);
+  assert.equal(farEvents.length > 0, true);
+  assert.ok(meadowEvents.every((event) => event.regions.includes("doorstep-meadow")));
+  assert.ok(marketEvents.every((event) => event.regions.includes("block-market")));
+  assert.ok(cornerEvents.every((event) => event.regions.includes("city-corner")));
+  assert.ok(farEvents.every((event) => event.regions.includes("far-edge")));
+  assert.equal(OUTDOOR_ADVENTURE_EVENTS.some((event) => event.id === "event_lollipop_block"), false);
 });
 
 test("event presentation changes after later encounters and remembered choices", () => {
@@ -101,44 +225,46 @@ test("event presentation changes after later encounters and remembered choices",
   assert.equal(repeatPiggy.phase, "repeat");
   assert.match(repeatPiggy.description, /又|第二|两只|饭碗/);
 
-  const apologized = applyOutdoorEventChoice(
+  const woke = applyOutdoorEventChoice(
     {
       ...fedOnce,
-      currentNode: { kind: "event", eventId: "event_mom_chase" },
+      currentNode: { kind: "event", eventId: "event_drunken_vending_machine" },
     },
-    "event_mom_chase",
-    "apologize",
+    "event_drunken_vending_machine",
+    "wake",
     { outcomeIndex: 0 },
   );
-  const resolvedMom = getOutdoorAdventureEventPresentation(apologized, "event_mom_chase");
-  assert.equal(resolvedMom.phase, "resolved");
-  assert.match(resolvedMom.description, /道过歉|原谅|别再抢/);
+  const resolvedVending = getOutdoorAdventureEventPresentation(woke, "event_drunken_vending_machine");
+  assert.equal(resolvedVending.phase, "resolved");
+  assert.match(resolvedVending.description, /眼熟|站直/);
 });
 
 test("choice results expose clear resource and relic consequences", () => {
   const state = createDefaultOutdoorAdventureState();
-  const next = applyOutdoorEventChoice(state, "event_lollipop_block", "snatch", { outcomeIndex: 0 });
+  const next = applyOutdoorEventChoice(state, "event_drunken_vending_machine", "grab", { forceMaterialDrops: true, outcomeIndex: 0 });
 
-  assert.equal(next.lastOutcome?.eventId, "event_lollipop_block");
-  assert.equal(next.lastOutcome?.optionId, "snatch");
-  assert.equal(next.lastOutcome?.outcomeId, "stolen");
-  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("麻烦 +2")));
-  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("获得纪念品：抢来的棒棒糖")));
-  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("小方块妈妈记住了你")));
+  assert.equal(next.lastOutcome?.eventId, "event_drunken_vending_machine");
+  assert.equal(next.lastOutcome?.optionId, "grab");
+  assert.equal(next.lastOutcome?.outcomeId, "a1");
+  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("物资 +3")));
+  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("麻烦 +1")));
+  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("获得素材：小零件")));
+  assert.ok(next.lastOutcome?.lines.some((line) => line.includes("记录：抢过售货机")));
 });
 
 test("event choices can force every probability branch for debugging", () => {
   const state = createDefaultOutdoorAdventureState();
-  const event = getOutdoorAdventureEvent("event_lollipop_block");
+  const event = getOutdoorAdventureEvent("event_drunken_vending_machine");
   const buttons = getOutdoorDebugOutcomeButtons(event.id);
-  assert.ok(buttons.some((button) => button.optionId === "snatch" && button.outcomeIndex === 0));
-  assert.ok(buttons.some((button) => button.optionId === "ignore" && button.outcomeIndex === 1));
+  assert.ok(buttons.some((button) => button.optionId === "grab" && button.outcomeIndex === 0));
+  assert.ok(buttons.some((button) => button.optionId === "wake" && button.outcomeIndex === 1));
+  assert.ok(buttons.some((button) => button.optionId === "pickup_1982" && button.outcomeIndex === 0));
 
-  const next = applyOutdoorEventChoice(state, event.id, "snatch", { outcomeIndex: 0 });
-  assert.ok(next.relics.some((item) => item.id === "relic_stolen_lollipop"));
-  assert.equal(next.trouble, 2);
+  const next = applyOutdoorEventChoice(state, event.id, "wake", { outcomeIndex: 1 });
+  assert.ok(next.relics.some((item) => item.id === "relic_sticky_drink_stain"));
+  assert.equal(next.memory.wokeVendingMachine, 1);
   assert.equal(next.stamina, 4);
-  assert.ok(next.journal.at(-1)?.includes("棒棒糖"));
+  assert.ok(next.journal.at(-1)?.includes("吐了你一身"));
 });
 
 test("piggy chain remembers repeated feeding and grants the third reward", () => {
@@ -149,9 +275,9 @@ test("piggy chain remembers repeated feeding and grants the third reward", () =>
   state.currentNode = { kind: "event", eventId: "event_piggy_block" };
   state = applyOutdoorEventChoice(state, "event_piggy_block", "feed", { outcomeIndex: 0 });
 
-  assert.equal(state.memory.piggyFedCount, 3);
-  assert.ok(state.relics.some((item) => item.id === "relic_piggy_bank"));
-  assert.ok(state.journal.some((line) => line.includes("猪猪储蓄罐")));
+  assert.equal(state.memory.piggyFeedCount, 3);
+  assert.ok(state.relics.some((item) => item.id === "relic_piggy_ticket"));
+  assert.ok(state.journal.some((line) => line.includes("猪猪方块")));
 });
 
 test("adventure heart is consumed by the running mini-game revive, not by a post-failure retry", () => {
@@ -160,6 +286,9 @@ test("adventure heart is consumed by the running mini-game revive, not by a post
   state.stepInDay = 2;
   state.stamina = 4;
   state.trouble = 3;
+  state.heartCharges = 1;
+  state.relics.push({ id: "relic_adventure_heart", count: 1 });
+  assert.equal(getOutdoorMiniGameReviveCapacity(state), 1);
 
   const revived = consumeOutdoorAdventureHeartForMiniGameRevive(state, "search");
   assert.equal(revived.heartCharges, 0);
@@ -191,7 +320,11 @@ test("outdoor adventure passes heart charges into the real mini-game revive pipe
   const miniGameRoundSource = readFileSync("src/features/game-flow/mini-game-rounds.tsx", "utf8");
   const embeddedStageSource = readFileSync("src/features/mini-games/embedded-stage.tsx", "utf8");
 
-  assert.match(screenSource, /baseRevives=\{state\.heartCharges\}/);
+  assert.match(screenSource, /getOutdoorMiniGameReviveCharges/);
+  assert.match(screenSource, /const activeMiniGameRevives = miniGameReviveCharges > 0 \? miniGameReviveCharges : undefined/);
+  assert.match(screenSource, /baseRevives=\{activeMiniGameRevives\}/);
+  assert.match(screenSource, /activeMiniGameRevives \? ` · 复活 \$\{activeMiniGameRevives\}` : ""/);
+  assert.doesNotMatch(screenSource, />\s*复活 \{miniGameReviveCharges\}/);
   assert.match(screenSource, /onBaseReviveUsed=\{\(\) => onUseAdventureHeart\(activeMiniGameRound\)\}/);
   assert.match(roundPlayerSource, /baseRevives\?: number/);
   assert.match(roundPlayerSource, /<MiniGameBaseRound[\s\S]*baseRevives=\{baseRevives\}/);
@@ -229,18 +362,18 @@ test("outdoor mini-game failure is punished when the running game had no heart r
 
 test("outdoor mini-game result stays on the challenge scene until the player leaves", () => {
   const state = createDefaultOutdoorAdventureState();
-  state.currentNode = { kind: "mini-game", roundId: "jump" };
+  state.currentNode = { kind: "mini-game", roundId: "search" };
   state.stepInDay = 2;
 
   const result = handleOutdoorMiniGameResult(state, {
     excellent: false,
-    roundId: "jump",
+    roundId: "search",
     scoreTier: "normal",
     success: true,
   });
 
-  assert.deepEqual(result.currentNode, { kind: "mini-game", roundId: "jump" });
-  assert.equal(result.lastOutcome?.eventId, "mini-game:jump");
+  assert.deepEqual(result.currentNode, { kind: "mini-game", roundId: "search" });
+  assert.equal(result.lastOutcome?.eventId, "mini-game:search");
   assert.ok(result.lastOutcome?.lines.some((line) => line.includes("物资 +4")));
   assert.ok(result.pendingNextNode);
   assert.notDeepEqual(result.pendingNextNode, result.currentNode);
@@ -303,10 +436,15 @@ test("successful outdoor mini-game escape grants an escape shoe and waits for sc
 
 test("event outcome stays on the current scene until the player continues", () => {
   const state = createDefaultOutdoorAdventureState();
-  const result = applyOutdoorEventChoice(state, "event_lollipop_block", "snatch", { outcomeIndex: 0 });
+  state.currentNode = { kind: "event", eventId: "event_drunken_vending_machine" };
+  const result = applyOutdoorEventChoice(state, "event_drunken_vending_machine", "grab", {
+    outcomeIndex: 0,
+    visibleChoiceIds: ["pickup_1982", "wake"],
+  });
 
-  assert.deepEqual(result.currentNode, { kind: "event", eventId: "event_lollipop_block" });
-  assert.equal(result.lastOutcome?.eventId, "event_lollipop_block");
+  assert.deepEqual(result.currentNode, { kind: "event", eventId: "event_drunken_vending_machine" });
+  assert.equal(result.lastOutcome?.eventId, "event_drunken_vending_machine");
+  assert.deepEqual(result.lastOutcome?.visibleChoices?.map((choice) => choice.optionId), ["pickup_1982", "wake"]);
   assert.ok(result.pendingNextNode);
   assert.notDeepEqual(result.pendingNextNode, result.currentNode);
 
@@ -329,7 +467,7 @@ test("day end supports temporary home, continuation, and formal settlement", () 
   assert.equal(continued.status, "exploring");
   assert.equal(continued.day, 2);
   assert.equal(continued.stamina, 5);
-  assert.equal(continued.heartCharges, 1);
+  assert.equal(continued.heartCharges, 0);
   assert.equal(continued.supply, 17);
   assert.deepEqual(continued.currentNode, { kind: "day-end" });
   assert.equal(continued.lastOutcome?.eventId, "day-end:rest");
@@ -385,6 +523,16 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(screenSource, /sceneResetFrameRef/);
   assert.match(screenSource, /sceneFallbackTimerRef/);
   assert.match(screenSource, /selectDayEndSide/);
+  assert.match(screenSource, /buildDayEndOutcome/);
+  assert.match(screenSource, /setDayEndOutcome\(outcome\)/);
+  assert.match(screenSource, /if \(side === "right"\) \{[\s\S]*onSettleAdventure\(\);[\s\S]*onBackHome\(\);[\s\S]*return;/);
+  const dayEndSelectionSource = screenSource.slice(
+    screenSource.indexOf("const selectDayEndSide ="),
+    screenSource.indexOf("const selectSummarySide =", screenSource.indexOf("const selectDayEndSide =")),
+  );
+  assert.match(dayEndSelectionSource, /setPendingChoice\(\{ nodeKey: currentNodeKey, side \}\);\s*setPlayerPosition\(xForSide\(side\)\);/);
+  assert.doesNotMatch(dayEndSelectionSource, /if \(side !== "right"\) setPlayerPosition\(xForSide\(side\)\);/);
+  assert.doesNotMatch(screenSource, /if \(side === "left"\) onCampNextDay\(\);\s*else onSettleAdventure\(\);/);
   assert.match(screenSource, /isEscapeFailure && side === "right"/);
   assert.doesNotMatch(screenSource, /isEscapeFailure \? "逃跑失败" : "尝试逃跑"/);
   assert.match(screenSource, /choiceLabelStyle\("尝试逃跑"\)/);
@@ -397,47 +545,102 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(screenSource, /onEntryGateDepart/);
   assert.match(screenSource, /onEntryGatePrepare/);
   assert.match(screenSource, /if \(action === "prepare"\) \{[\s\S]*onEntryGatePrepare\(\);[\s\S]*return;/);
+  assert.match(screenSource, /if \(action === "abandon"\) \{[\s\S]*onEntryGateAbandon\(\);[\s\S]*onBackHome\(\);[\s\S]*return;/);
   assert.match(screenSource, /onEntryGateContinue/);
   assert.match(screenSource, /onEntryGateAbandon/);
   assert.match(screenSource, /directSceneActionRef/);
   assert.match(screenSource, /startDirectSceneExit/);
-  assert.match(screenSource, /startDirectSceneExit\("right", "restart"\)/);
+  assert.match(screenSource, /selectSummarySide/);
+  assert.match(screenSource, /activePendingChoice === "right" \? " selected" : ""/);
+  assert.match(screenSource, /onClick=\{\(\) => selectSummarySide\("right"\)\}/);
+  assert.match(screenSource, /onClick=\{\(\) => selectSummarySide\("left"\)\}/);
+  assert.doesNotMatch(screenSource, /className="outdoor-choice-wall left selectable" type="button" onClick=\{onBackHome\}/);
   assert.doesNotMatch(screenSource, /className="outdoor-choice-wall right selectable" type="button" onClick=\{onStartNew\}/);
   const entryGateCompletionSource = screenSource.slice(
     screenSource.indexOf("if (entryGateOutcome && entryGateAction)"),
     screenSource.indexOf("onContinueOutcome();", screenSource.indexOf("if (entryGateOutcome && entryGateAction)")),
   );
-  assert.match(entryGateCompletionSource, /if \(action === "depart"\) onEntryGateDepart\(\);[\s\S]*setEntryGateOutcome\(null\);/);
-  assert.doesNotMatch(entryGateCompletionSource, /setEntryGateOutcome\(null\);[\s\S]*if \(action === "depart"\) onEntryGateDepart\(\);/);
+  assert.match(entryGateCompletionSource, /setEntryGateOutcome\(null\);[\s\S]*setEntryGateAction\(null\);[\s\S]*setPendingChoice\(null\);[\s\S]*setOutcomeChoiceSnapshot\(null\);[\s\S]*if \(action === "depart"\) onEntryGateDepart\(\);/);
+  assert.doesNotMatch(entryGateCompletionSource, /if \(action === "depart"\) onEntryGateDepart\(\);[\s\S]*setEntryGateOutcome\(null\);/);
   assert.match(screenSource, /escapeFeedbackText/);
   assert.match(screenSource, /escapeFeedbackChars/);
   assert.match(screenSource, /eventRevealKey/);
-  assert.match(screenSource, /const EVENT_LINE_STAGGER_MS = 420/);
-  assert.match(screenSource, /const EVENT_LINE_FADE_MS = 640/);
+  assert.match(screenSource, /type OutdoorTextSpeed = "slow" \| "fast"/);
+  assert.match(screenSource, /OUTDOOR_TEXT_SPEED_TIMINGS/);
+  assert.match(screenSource, /slow: \{[\s\S]*lineStaggerMs: 620[\s\S]*outcomeTypeMs: 70/);
+  assert.match(screenSource, /fast: \{[\s\S]*lineStaggerMs: 260[\s\S]*outcomeTypeMs: 28/);
+  assert.match(screenSource, /useState<OutdoorTextSpeed>\("slow"\)/);
+  assert.match(screenSource, /const textTimings = OUTDOOR_TEXT_SPEED_TIMINGS\[textSpeed\]/);
+  assert.match(screenSource, /textTimings\.lineFirstDelayMs \+ textTimings\.lineStaggerMs \* index/);
+  assert.match(screenSource, /textTimings\.outcomeTypeMs/);
   assert.match(screenSource, /eventOptionsReady/);
+  assert.match(screenSource, /eventLineCount >= eventLines\.length/);
   assert.match(screenSource, /startEventReveal/);
   assert.match(screenSource, /previewEventLines/);
+  assert.doesNotMatch(screenSource, /scenePhase === "leaving"[\s\S]{0,120}startEventReveal\(previewEventLines/);
+  assert.match(screenSource, /getOutdoorAdventureEvent\(state\.currentNode\.eventId, state\)/);
+  assert.match(screenSource, /const currentEvent = useMemo/);
+  assert.match(screenSource, /currentEventKey/);
+  assert.match(screenSource, /selectedRelic\.id === "relic_travel_footprints"/);
+  assert.match(screenSource, /selectedRelic\.id === "relic_travel_bag"/);
+  assert.match(screenSource, /OUTDOOR_MATERIALS/);
+  assert.match(screenSource, /outdoor-material-item rarity-/);
+  assert.match(screenSource, /function isOutdoorGoldRelic/);
+  assert.match(screenSource, /relic\.tags\.includes\("task"\)/);
+  assert.match(screenSource, /function outdoorRelicDisplayGroup/);
+  assert.match(screenSource, /outdoorRelicDisplayGroup\(a\.relic\)/);
+  assert.match(screenSource, /tone-gold/);
+  assert.match(screenSource, /onDebugGrantAll/);
+  assert.match(screenSource, /getOutdoorMiniGameReviveCharges/);
+  assert.doesNotMatch(screenSource, /事件测试 · 心 \{state\.heartCharges\}/);
+  assert.ok(screenSource.indexOf("const relicDetailContent = useMemo") < screenSource.indexOf("if (miniGameActive && activeMiniGameRound && activeRoundConfig)"));
   assert.match(screenSource, /previousEntryGateRef/);
   assert.match(screenSource, /if \(didLeaveSceneRef\.current \|\| scenePhaseRef\.current !== "idle"\) return;/);
   assert.match(screenSource, /const isRevealingPreview = eventRevealTargetKey === revealKey;/);
   assert.match(screenSource, /eventRevealTargetKeyRef/);
+  assert.match(screenSource, /if \(eventRevealTargetKey === eventRevealKey\) return;/);
+  assert.doesNotMatch(screenSource, /if \(eventRevealTargetKeyRef\.current === eventRevealKey\) return;/);
   assert.match(screenSource, /eventRevealTargetKey === eventRevealKey && index < eventLineCount/);
   assert.doesNotMatch(screenSource, /!isResettingScene && scenePhase === "idle" && index < eventLineCount/);
   assert.match(screenSource, /outdoor-forward-hint/);
   assert.match(screenSource, /displayRelicItems/);
   assert.match(screenSource, /previousRelicCountsRef/);
   assert.match(screenSource, /revealRelic/);
-  assert.match(screenSource, /kind === "debuff" \? 1 : 0/);
-  assert.match(screenSource, /const OUTCOME_TYPE_MS = 46/);
+  assert.match(screenSource, /if \(relic\.kind === "debuff"\) return 2/);
   assert.match(screenSource, /outcomeChoiceOptions/);
+  assert.match(screenSource, /showOutcome && displayedOutcome/);
+  assert.match(screenSource, /outcomeChoiceSnapshot/);
+  assert.match(screenSource, /function outcomeVisibleChoices/);
+  assert.match(screenSource, /outcomeVisibleChoices\(displayedOutcome\)/);
+  assert.match(screenSource, /visibleChoiceIds/);
+  assert.match(screenSource, /visibleChoiceOptions/);
+  assert.match(screenSource, /function sideForDisplayedOutcome/);
+  assert.match(screenSource, /if \(outcome\.eventId\.startsWith\("mini-game-escape"\)\) return "right"/);
+  assert.doesNotMatch(screenSource, /label: side === outcomeSide \? displayedOutcome\.optionLabel : ""/);
+  assert.match(screenSource, /setDayEndOutcome\(null\);[\s\S]*setDayEndAction\(null\);[\s\S]*setPendingChoice\(null\);[\s\S]*setOutcomeChoiceSnapshot\(null\);[\s\S]*if \(action === "camp"\) onCampNextDay\(\);/);
   assert.match(screenSource, /choiceRoomHasDetail/);
   assert.match(screenSource, /detail-align/);
   assert.match(screenSource, /休息会继续冒险/);
   assert.match(screenSource, /结算冒险/);
+  assert.match(screenSource, /state\.currentNode\.kind === "day-end"[\s\S]*eventRevealDone \?/);
+  assert.match(screenSource, /state\.status === "settled" \|\| state\.status === "failed"[\s\S]*eventRevealDone \?/);
+  assert.match(screenSource, /activeMiniGameRound[\s\S]*eventRevealDone \?/);
   assert.doesNotMatch(cssSource, /text-overflow:\s*ellipsis/);
   assert.doesNotMatch(cssSource, /\.outdoor-choice-wall\.movement-zone\.preferred\s*\{[\s\S]*cursor:\s*pointer/);
   assert.match(cssSource, /\.outdoor-scene-viewport/);
   assert.match(cssSource, /\.outdoor-scene-track/);
+  assert.match(cssSource, /\.outdoor-meta-panel/);
+  assert.match(cssSource, /\.outdoor-text-speed-toggle/);
+  assert.match(cssSource, /\.outdoor-text-speed-toggle button\[aria-pressed="true"\]/);
+  assert.match(cssSource, /\.outdoor-material-list/);
+  assert.match(cssSource, /\.outdoor-material-item\.rarity-legendary/);
+  assert.match(cssSource, /\.outdoor-relic-chip\.tone-gold/);
+  assert.match(cssSource, /\.outdoor-relic-chip\.rarity-special/);
+  assert.match(cssSource, /\.outdoor-relic-chip\.rarity-rare/);
+  assert.match(cssSource, /overflow:\s*hidden;/);
+  assert.doesNotMatch(cssSource, /overflow:\s*hidden auto/);
+  assert.match(cssSource, /max-height:\s*none/);
+  assert.match(cssSource, /right: calc\(max\(14px, env\(safe-area-inset-right\)\) \+ min\(34vw, 150px\) \+ 8px\)/);
   assert.match(cssSource, /\.outdoor-choice-wall\.unselected/);
   assert.match(cssSource, /\.outdoor-choice-room\.detail-align \.outdoor-choice-wall/);
   assert.match(cssSource, /grid-template-rows: minmax\(1\.08em, auto\) 1\.35em/);
@@ -450,18 +653,31 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(cssSource, /border-left: 2px solid color-mix/);
   assert.match(cssSource, /\.outdoor-adventure-room\.scene-resetting \.outdoor-scene-track/);
   assert.match(cssSource, /transition: transform 420ms/);
-  assert.match(cssSource, /transition: opacity 560ms ease, transform 560ms ease/);
+  assert.match(cssSource, /transition: opacity var\(--outdoor-event-line-fade-ms, 560ms\) ease, transform var\(--outdoor-event-line-fade-ms, 560ms\) ease/);
   assert.match(cssSource, /will-change: transform/);
   assert.match(cssSource, /\.outdoor-adventure-room\.scene-leaving\.exit-left \.outdoor-scene-track/);
   assert.doesNotMatch(cssSource, /scene-leaving[\s\S]*\.outdoor-event-panel[\s\S]*transform/);
   assert.match(pageSource, /outdoorEntryGate/);
   assert.match(pageSource, /hasOutdoorAdventureProgress/);
+  assert.match(pageSource, /event_piggy_block/);
+  assert.doesNotMatch(pageSource, /event_lollipop_block/);
   assert.match(pageSource, /setOutdoorEntryGate\("start"\)/);
   assert.match(pageSource, /setOutdoorEntryGate\("resume"\)/);
   const startNewSource = pageSource.slice(pageSource.indexOf("const startNewOutdoorAdventure = useCallback"), pageSource.indexOf("const openHomeworldPortalRoom = useCallback"));
   assert.match(startNewSource, /setOutdoorEntryGate\(null\)/);
   assert.doesNotMatch(startNewSource, /setOutdoorEntryGate\("start"\)/);
   assert.match(pageSource, /abandonOutdoorAdventureAsFailed/);
+  assert.match(pageSource, /mergeHomeworldHarvest/);
+  assert.match(pageSource, /collectOutdoorAdventureMaterials/);
+  assert.match(pageSource, /const campToNextOutdoorDayAfterShownOutcome = useCallback/);
+  assert.match(pageSource, /const campedState = campToNextOutdoorDay\(outdoorAdventureStateRef\.current\);[\s\S]*updateOutdoorAdventure\(continueOutdoorAdventureAfterOutcome\(campedState\)\);/);
+  assert.match(pageSource, /onCampNextDay=\{campToNextOutdoorDayAfterShownOutcome\}/);
+  assert.doesNotMatch(pageSource, /onCampNextDay=\{\(\) => updateOutdoorAdventure\(campToNextOutdoorDay\(outdoorAdventureStateRef\.current\)\)\}/);
+  assert.match(pageSource, /resetOutdoorAdventureAfterReturnHome/);
+  assert.match(pageSource, /clearPersistedOutdoorAdventureState\(window\.localStorage\)/);
+  assert.match(pageSource, /transitionToStageThenRun/);
+  assert.match(pageSource, /onSettleAdventure=\{settleOutdoorAdventureToHomeworld\}/);
+  assert.match(pageSource, /onEntryGateAbandon=\{failOutdoorAdventureToHomeworld\}/);
 });
 
 test("unfinished outdoor adventure persists and can be continued from home", () => {
@@ -478,9 +694,30 @@ test("unfinished outdoor adventure persists and can be continued from home", () 
   assert.equal(readPersistedOutdoorAdventureState(storage), null);
 });
 
+test("debug grant all fills adventure resources, materials, and relics", () => {
+  const state = createDefaultOutdoorAdventureState();
+  const next = applyOutdoorDebugGrantAll(state);
+
+  assert.equal(next.stamina, 999);
+  assert.equal(next.supply, 999);
+  assert.equal(next.trouble, 10);
+  for (const material of OUTDOOR_MATERIALS) {
+    assert.equal(next.materialBag[material.id], 1);
+  }
+  for (const relic of OUTDOOR_ADVENTURE_RELICS) {
+    assert.ok([...next.relics, ...next.usableItems].some((item) => item.id === relic.id));
+  }
+  assert.equal(state.stamina, 5);
+});
+
 test("status text exposes resources without making relics part of the resource row", () => {
   const state = createDefaultOutdoorAdventureState();
+  state.relics.push({ id: "relic_adventure_heart", count: 1 });
+  state.heartCharges = 1;
   const text = getOutdoorAdventureStatusText(state);
   assert.deepEqual(text.resources, ["体力 5", "物资 20", "麻烦 0"]);
-  assert.deepEqual(text.relics, ["冒险的心 1", "远行脚印"]);
+  assert.ok(text.relics.some((line) => line === "旅行背包"));
+  assert.ok(text.relics.some((line) => line.includes("远行脚印") && line.includes("离家 0 步")));
+  assert.ok(text.relics.some((line) => line.includes("冒险的心") && line.includes("1")));
+  assert.equal(text.relics.some((line) => line.includes("当前区域")), false);
 });

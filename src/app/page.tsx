@@ -64,6 +64,7 @@ import {
 } from "@/features/outdoor-adventure/outdoor-adventure-screen";
 import {
   createDefaultHomeworldState,
+  mergeHomeworldHarvest,
   readPersistedHomeworldState,
   writePersistedHomeworldState,
   type HomeworldPlayerPoseState,
@@ -71,6 +72,7 @@ import {
 } from "@/lib/homeworld/homeworld-state";
 import {
   abandonOutdoorAdventureAsFailed,
+  applyOutdoorDebugGrantAll,
   applyOutdoorEventChoice,
   attemptOutdoorMiniGameEscape,
   campToNextOutdoorDay,
@@ -80,6 +82,7 @@ import {
   continueRestedOutdoorAdventure,
   createDefaultOutdoorAdventureState,
   finishOutdoorAdventure,
+  getOutdoorMiniGameReviveCharges,
   handleOutdoorMiniGameResult,
   readPersistedOutdoorAdventureState,
   writePersistedOutdoorAdventureState,
@@ -116,11 +119,11 @@ function hasOutdoorAdventureProgress(state: OutdoorAdventureState) {
   if (state.status === "resting-home" || state.status === "day-end") return true;
   if (state.day > 1 || state.stepInDay > 0) return true;
   if (state.lastOutcome || state.pendingNextNode) return true;
-  if (state.supply !== 20 || state.stamina !== 5 || state.trouble !== 0 || state.reviveCoins !== 0 || state.heartCharges !== 1) return true;
+  if (state.supply !== 20 || state.stamina !== 5 || state.trouble !== 0 || state.reviveCoins !== 0 || getOutdoorMiniGameReviveCharges(state) !== 0) return true;
   if (state.usableItems.length > 0) return true;
   if (state.relics.length !== 2) return true;
   if (state.currentNode.kind !== "event") return true;
-  return state.currentNode.eventId !== "event_lollipop_block";
+  return state.currentNode.eventId !== "event_piggy_block";
 }
 
 const MODE_TRANSITION_STAGES = new Set<Stage>(["home", "homeworld", "outdoor-adventure", "result", "avatar-lab"]);
@@ -182,6 +185,18 @@ export default function Home() {
       const applyStageChange = async () => {
         await action?.();
         setStage(nextStage);
+      };
+      if (!shouldUseModeTransitionForStageChange(stage, nextStage)) return applyStageChange();
+      return runModeTransition(applyStageChange);
+    },
+    [runModeTransition, stage],
+  );
+
+  const transitionToStageThenRun = useCallback(
+    (nextStage: Stage, action?: () => void | Promise<void>) => {
+      const applyStageChange = async () => {
+        setStage(nextStage);
+        await action?.();
       };
       if (!shouldUseModeTransitionForStageChange(stage, nextStage)) return applyStageChange();
       return runModeTransition(applyStageChange);
@@ -714,9 +729,60 @@ export default function Home() {
     persistOutdoorAdventureState(state);
   }, [persistOutdoorAdventureState]);
 
+  const campToNextOutdoorDayAfterShownOutcome = useCallback(() => {
+    const campedState = campToNextOutdoorDay(outdoorAdventureStateRef.current);
+    updateOutdoorAdventure(continueOutdoorAdventureAfterOutcome(campedState));
+  }, [updateOutdoorAdventure]);
+
+  const resetOutdoorAdventureAfterReturnHome = useCallback(() => {
+    const nextState = createDefaultOutdoorAdventureState();
+    outdoorAdventureStateRef.current = nextState;
+    setOutdoorAdventureState(nextState);
+    if (typeof window === "undefined") return;
+    try {
+      clearPersistedOutdoorAdventureState(window.localStorage);
+    } catch {
+      // Storage can be unavailable in private mode; the next in-memory entry still starts fresh.
+    }
+  }, []);
+
+  const collectOutdoorAdventureMaterials = useCallback((state: OutdoorAdventureState) => {
+    if (!state.settledMaterials || Object.keys(state.settledMaterials).length === 0) return;
+    const nextHomeworldState = mergeHomeworldHarvest(homeworldStateRef.current, state.settledMaterials);
+    homeworldStateRef.current = nextHomeworldState;
+    setHomeworldState(nextHomeworldState);
+    persistHomeworldState(nextHomeworldState);
+  }, [persistHomeworldState]);
+
+  const settleOutdoorAdventure = useCallback(() => {
+    const nextState = finishOutdoorAdventure(outdoorAdventureStateRef.current);
+    collectOutdoorAdventureMaterials(nextState);
+    resetOutdoorAdventureAfterReturnHome();
+  }, [collectOutdoorAdventureMaterials, resetOutdoorAdventureAfterReturnHome]);
+
+  const failOutdoorAdventure = useCallback(() => {
+    const nextState = abandonOutdoorAdventureAsFailed(outdoorAdventureStateRef.current);
+    collectOutdoorAdventureMaterials(nextState);
+    resetOutdoorAdventureAfterReturnHome();
+  }, [collectOutdoorAdventureMaterials, resetOutdoorAdventureAfterReturnHome]);
+
   const backOutdoorAdventureToHomeworld = useCallback(() => {
-    void transitionToStage("homeworld", () => setOutdoorEntryGate(null));
-  }, [transitionToStage]);
+    void transitionToStageThenRun("homeworld", () => setOutdoorEntryGate(null));
+  }, [transitionToStageThenRun]);
+
+  const settleOutdoorAdventureToHomeworld = useCallback(() => {
+    void transitionToStageThenRun("homeworld", () => {
+      setOutdoorEntryGate(null);
+      settleOutdoorAdventure();
+    });
+  }, [settleOutdoorAdventure, transitionToStageThenRun]);
+
+  const failOutdoorAdventureToHomeworld = useCallback(() => {
+    void transitionToStageThenRun("homeworld", () => {
+      setOutdoorEntryGate(null);
+      failOutdoorAdventure();
+    });
+  }, [failOutdoorAdventure, transitionToStageThenRun]);
 
   const startNewOutdoorAdventure = useCallback(() => {
     const nextState = createDefaultOutdoorAdventureState();
@@ -891,25 +957,23 @@ export default function Home() {
           selfSkin={selectedAvatarSkin}
           state={outdoorAdventureState}
           onBackHome={backOutdoorAdventureToHomeworld}
-          onCampNextDay={() => updateOutdoorAdventure(campToNextOutdoorDay(outdoorAdventureStateRef.current))}
-          onChooseEventOption={(eventId, optionId) => updateOutdoorAdventure(applyOutdoorEventChoice(outdoorAdventureStateRef.current, eventId, optionId))}
+          onCampNextDay={campToNextOutdoorDayAfterShownOutcome}
+          onChooseEventOption={(eventId, optionId, visibleChoiceIds) => updateOutdoorAdventure(applyOutdoorEventChoice(outdoorAdventureStateRef.current, eventId, optionId, { visibleChoiceIds }))}
           onContinueOutcome={() => updateOutdoorAdventure(continueOutdoorAdventureAfterOutcome(outdoorAdventureStateRef.current))}
           onCompleteMiniGame={(roundId, trials) => {
             updateOutdoorAdventure(handleOutdoorMiniGameResult(outdoorAdventureStateRef.current, outdoorMiniGameResultFromTrials(roundId, trials)));
           }}
           onForceEventOutcome={(eventId, optionId, outcomeIndex) => updateOutdoorAdventure(applyForcedOutdoorOutcome(outdoorAdventureStateRef.current, eventId, optionId, outcomeIndex))}
+          onDebugGrantAll={() => updateOutdoorAdventure(applyOutdoorDebugGrantAll(outdoorAdventureStateRef.current))}
           onAttemptMiniGameEscape={(roundId) => updateOutdoorAdventure(attemptOutdoorMiniGameEscape(outdoorAdventureStateRef.current, roundId))}
           onSelectDebugEvent={(eventId) => updateOutdoorAdventure(applyDebugEventSelection(outdoorAdventureStateRef.current, eventId))}
-          onSettleAdventure={() => updateOutdoorAdventure(finishOutdoorAdventure(outdoorAdventureStateRef.current))}
+          onSettleAdventure={settleOutdoorAdventureToHomeworld}
           onStartNew={startNewOutdoorAdventure}
           onUseAdventureHeart={(roundId) => updateOutdoorAdventure(consumeOutdoorAdventureHeartForMiniGameRevive(outdoorAdventureStateRef.current, roundId))}
           onEntryGateDepart={() => setOutdoorEntryGate(null)}
           onEntryGatePrepare={backOutdoorAdventureToHomeworld}
           onEntryGateContinue={() => setOutdoorEntryGate(null)}
-          onEntryGateAbandon={() => {
-            setOutdoorEntryGate(null);
-            updateOutdoorAdventure(abandonOutdoorAdventureAsFailed(outdoorAdventureStateRef.current));
-          }}
+          onEntryGateAbandon={failOutdoorAdventureToHomeworld}
         />
       ) : stage === "homeworld" ? (
         <HomeworldScreen

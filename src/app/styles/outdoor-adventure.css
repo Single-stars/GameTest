@@ -118,13 +118,27 @@
   background: #e8f6ef;
 }
 
+.outdoor-relic-chip.tone-gold,
+.outdoor-relic-chip.rarity-special,
+.outdoor-relic-chip.rarity-rare {
+  border-color: rgba(151, 117, 46, 0.34);
+  color: #6f5520;
+  background: #f4ecd2;
+}
+
 .outdoor-relic-chip[aria-pressed="true"] {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--outdoor-accent) 30%, transparent);
 }
 
-.outdoor-day-region {
+.outdoor-meta-panel {
   max-width: min(34vw, 150px);
-  min-height: 34px;
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+}
+
+.outdoor-day-region {
+  min-height: 18px;
   display: grid;
   align-items: center;
   color: rgba(23, 32, 24, 0.72);
@@ -134,31 +148,83 @@
   text-align: right;
 }
 
+.outdoor-text-speed-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--outdoor-accent) 24%, transparent);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.58);
+}
+
+.outdoor-text-speed-toggle button {
+  min-width: 30px;
+  min-height: 22px;
+  border: 0;
+  padding: 3px 8px;
+  background: transparent;
+  color: rgba(23, 32, 24, 0.62);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.outdoor-text-speed-toggle button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--outdoor-accent) 18%, rgba(255, 253, 248, 0.86));
+  color: var(--outdoor-ink);
+}
+
 .outdoor-relic-detail {
   position: absolute;
   left: max(14px, env(safe-area-inset-left));
-  right: max(14px, env(safe-area-inset-right));
+  right: calc(max(14px, env(safe-area-inset-right)) + min(34vw, 150px) + 8px);
   top: 37px;
   z-index: 7;
-  max-height: 0;
+  max-height: none;
   overflow: hidden;
   border-left: 3px solid var(--outdoor-accent);
-  padding: 0 9px;
+  padding: 6px 10px;
   opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
   background: rgba(255, 253, 248, 0.93);
   color: rgba(27, 38, 31, 0.78);
   font-size: 12px;
   font-weight: 900;
   line-height: 1.35;
-  transition: max-height 180ms ease, opacity 160ms ease, padding 180ms ease;
+  overflow-wrap: anywhere;
+  transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
   pointer-events: none;
 }
 
 .outdoor-relic-detail.open {
-  max-height: 42px;
-  padding-top: 6px;
-  padding-bottom: 6px;
   opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.outdoor-material-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  vertical-align: baseline;
+}
+
+.outdoor-material-item {
+  font-weight: 950;
+}
+
+.outdoor-material-item.rarity-common {
+  color: #2f6c52;
+}
+
+.outdoor-material-item.rarity-rare {
+  color: #5f4f9c;
+}
+
+.outdoor-material-item.rarity-legendary {
+  color: #9b6a12;
 }
 
 .outdoor-scene-viewport {
@@ -247,7 +313,7 @@
   line-height: 1.25;
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 560ms ease, transform 560ms ease;
+  transition: opacity var(--outdoor-event-line-fade-ms, 560ms) ease, transform var(--outdoor-event-line-fade-ms, 560ms) ease;
 }
 
 .outdoor-event-lines p.visible {
@@ -509,6 +575,7 @@
 }
 
 .outdoor-debug-regions,
+.outdoor-debug-actions,
 .outdoor-debug-grid,
 .outdoor-debug-outcomes {
   display: grid;
@@ -516,6 +583,7 @@
   gap: 7px;
 }
 
+.outdoor-debug-actions,
 .outdoor-debug-grid,
 .outdoor-debug-outcomes {
   margin-top: 8px;
@@ -609,7 +677,7 @@
 
   .outdoor-relic-detail {
     left: 0;
-    right: 0;
+    right: calc(min(34vw, 150px) + 8px);
   }
 }
 
@@ -620,9 +688,18 @@
     padding-right: 2px;
   }
 
-  .outdoor-day-region {
+  .outdoor-meta-panel {
     max-width: 30vw;
+  }
+
+  .outdoor-day-region {
     font-size: 11px;
+  }
+
+  .outdoor-text-speed-toggle button {
+    min-width: 26px;
+    padding-left: 6px;
+    padding-right: 6px;
   }
 
   .outdoor-choice-wall {
