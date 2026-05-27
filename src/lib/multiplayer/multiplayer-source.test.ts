@@ -110,10 +110,10 @@ test("WebRTC game traffic uses separate control input and state channels", () =>
   assert.match(protocolSource, /control: "control"/);
   assert.match(protocolSource, /input: "input"/);
   assert.match(protocolSource, /state: "state"/);
-  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = 33/);
-  assert.match(protocolSource, /MULTIPLAYER_INPUT_KEEPALIVE_MS = 100/);
-  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = 80/);
-  assert.match(protocolSource, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS = 140/);
+  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = 16/);
+  assert.match(protocolSource, /MULTIPLAYER_INPUT_KEEPALIVE_MS = 50/);
+  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = 32/);
+  assert.match(protocolSource, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS = 180/);
   assert.match(protocolSource, /MULTIPLAYER_LOGIC_TIMESTEP_MS = 1000 \/ 60/);
   assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.control, \{ ordered: true \}\)/);
   assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.input, \{ ordered: false, maxRetransmits: 0 \}\)/);
@@ -125,7 +125,7 @@ test("WebRTC game traffic uses separate control input and state channels", () =>
   assert.match(sessionSource, /createInputMessage/);
   assert.match(sessionSource, /case "input":/);
   assert.match(runtimeSource, /reportInput/);
-  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged \}\);/);
+  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged, signature: multiplayerStateSignature\(inputOnlyState\) \}\);/);
 });
 
 test("multiplayer game sync keeps network hot paths out of React snapshots", () => {
@@ -134,7 +134,7 @@ test("multiplayer game sync keeps network hot paths out of React snapshots", () 
   const reportInputSource = sessionSource.slice(sessionSource.indexOf("reportInput(input:"), sessionSource.indexOf("reportHomeworldState(homeworld"));
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
 
-  assert.match(sessionSource, /const SELF_STATE_SNAPSHOT_SYNC_MS = 100;/);
+  assert.match(sessionSource, /const SELF_STATE_SNAPSHOT_SYNC_MS = 50;/);
   assert.match(sessionSource, /private syncSelfStateSnapshot\(state: SelfGameState\)/);
   assert.match(reportStateSource, /this\.syncSelfStateSnapshot\(sequencedState\);/);
   assert.match(reportInputSource, /this\.syncSelfStateSnapshot\(sequencedInput\);/);
@@ -211,7 +211,7 @@ test("co-op multiplayer uses host-authoritative shared character state while gue
   assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = coOpInputOnly \? opponentStateSubscription : null;/);
   assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null;/);
   assert.doesNotMatch(runtimeSource, /const coOpAuthoritativeState = coOpInputOnly \? opponentState : null;/);
-  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged \}\);/);
+  assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged, signature: multiplayerStateSignature\(inputOnlyState\) \}\);/);
   assert.match(runtimeSource, /if \(coOpInputOnly\) return;/);
   assert.match(runtimeSource, /authoritativeStateSubscription=\{coOpAuthoritativeStateSubscription\}/);
   assert.match(runtimeSource, /coOpInputStateSubscription=\{coOpInputStateSubscription\}/);
@@ -279,6 +279,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
   assert.match(pageSource, /transitionToRoute\("\/\?homeworld=1"/);
   assert.match(pageSource, /<main className="app-shell app-shell-play">/);
+  assert.match(pageSource, /if \(!skinHydrated\) \{[\s\S]*<ModeTransitionOverlay state=\{transitionState\} \/>[\s\S]*<\/PlayerAvatarSkinProvider>[\s\S]*\}/);
   assert.match(pageSource, /const homeworldDoorMode = snapshot\.role === "host" && snapshot\.status !== "idle" \? "room" : guestInHostHome \? "room" : "single-player"/);
   assert.match(pageSource, /<HomeworldScreen[\s\S]*doorMode=\{homeworldDoorMode\}[\s\S]*homeOwnerName=\{homeworldOwnerName\}[\s\S]*mode=\{homeworldMode\}/);
   assert.match(pageSource, /onJoinRoom=\{handleJoinHomeworldRoom\}/);
@@ -304,7 +305,8 @@ test("standalone multiplayer entry redirects into the homeworld multiplayer flow
 
   assert.match(pageSource, /if \(isHomeworldRoute\) return;/);
   assert.match(pageSource, /router\.replace\(roomParam \? `\/multiplayer\?homeworld=1&room=\$\{encodeURIComponent\(roomParam\)\}` : "\/\?homeworld=1"\)/);
-  assert.match(pageSource, /if \(!isHomeworldRoute\) \{[\s\S]*正在进入家园联机/);
+  assert.match(pageSource, /if \(!isHomeworldRoute\) \{[\s\S]*route-blackout-shell/);
+  assert.doesNotMatch(pageSource, /正在进入家园联机/);
 });
 
 test("homeworld presence and round reset preserve profile sync after exercise rounds", () => {
@@ -370,6 +372,27 @@ test("multiplayer match runtime sends throttled state samples for smooth remote 
   assert.match(source, /MULTIPLAYER_STATE_SYNC_MS/);
   assert.match(source, /const syncIntervalMs = inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;/);
   assert.match(source, /new SimpleGameSync\([\s\S]*syncIntervalMs/);
+  assert.match(source, /signature: multiplayerStateSignature\(nextState\)/);
+  assert.match(source, /function multiplayerStateSignature/);
+});
+
+test("multiplayer transport drops replaceable state frames under data channel backpressure", () => {
+  const source = readSource("./webrtc-transport.ts");
+
+  assert.match(source, /STATE_CHANNEL_BACKPRESSURE_BYTES/);
+  assert.match(source, /function canSendReplaceableState/);
+  assert.match(source, /if \(message\.kind === "state" && !canSendReplaceableState\(preferredChannel\)\) return;/);
+  assert.match(source, /channel\.bufferedAmount/);
+  assert.doesNotMatch(source, /message\.kind !== "state"[\s\S]{0,120}bufferedAmount/);
+});
+
+test("multiplayer level-select presence is throttled by the animation loop instead of playerX renders", () => {
+  const source = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(source, /LEVEL_SELECT_PRESENCE_SYNC_MS = 90/);
+  assert.match(source, /time - lastPresenceSentRef\.current >= LEVEL_SELECT_PRESENCE_SYNC_MS/);
+  assert.doesNotMatch(source, /useEffect\(\(\) => \{\s*publishPresence\(playerX, inputDirectionRef\.current\);/);
+  assert.match(source, /publishPresence\(playerXRef\.current, "none"\)/);
 });
 
 test("multiplayer gameplay uses an in-page fullscreen shell instead of a route split", () => {
@@ -636,6 +659,15 @@ test("multiplayer host room shows balanced room code and truncated invite link",
   assert.match(hostRoomSource, /\{roomLink\}/);
   assert.match(hostRoomSource, /className="multiplayer-share-alert"/);
   assert.match(hostRoomSource, /copyStatus === "expired" \|\| roomCodeCopyStatus === "expired"/);
+});
+
+test("homeworld multiplayer creation stays on the room surface while connecting", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.doesNotMatch(pageSource, /snapshot\.status === "creating" \|\| snapshot\.status === "joining"[\s\S]{0,220}multiplayer-black-loading/);
+  assert.match(pageSource, /homeworldConnectionLabel/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-black-loading/);
 });
 
 test("multiplayer host can choose the battle level before match start", () => {
@@ -1050,7 +1082,7 @@ test("Cloudflare signaling stays off the hot gameplay state path", () => {
   assert.match(transportSource, /message\.kind === "input" \? this\.inputChannel/);
   assert.match(transportSource, /message\.kind === "state" \? this\.stateChannel/);
   assert.match(runtimeSource, /MULTIPLAYER_STATE_SYNC_MS/);
-  assert.match(sessionSource, /const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 100;/);
+  assert.match(sessionSource, /const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;/);
   assert.match(sessionSource, /private readonly opponentStateListeners = new Set/);
   assert.match(sessionSource, /this\.emitOpponentState\(opponentState\);[\s\S]*this\.syncOpponentStateSnapshot\(opponentState\);/);
 });

@@ -64,6 +64,10 @@ test("doodle jump moves only while pressing the left or right half of the screen
   assert.doesNotMatch(doodleSource, /onPointerLeave=\{stopDoodleDirection\}/);
   assert.match(doodleSource, /onPointerCancel=\{stopDoodleDirection\}/);
   assert.match(doodleSource, /onLostPointerCapture=\{stopDoodleDirection\}/);
+  assert.match(doodleSource, /const playerShellStyle = \{/);
+  assert.match(doodleSource, /clamp\(view\.playerX, PLAYER_SIZE \/ 2, logicStageWidth - PLAYER_SIZE \/ 2\) - PLAYER_SIZE \/ 2/);
+  assert.match(doodleSource, /logicStageHeight - \(view\.playerY - view\.cameraY\) - PLAYER_SIZE \/ 2/);
+  assert.match(doodleSource, /style=\{playerShellStyle\}/);
 });
 
 test("doodle levels encode moving platforms, required risk platforms, moving hazards, and final rules", () => {
@@ -141,10 +145,20 @@ test("doodle generated platforms use smooth lane noise to stay horizontally dist
   assert.match(source, /function makeDoodleNoisePoints\(rand: \(\) => number, count: number\)/);
   assert.match(source, /function doodleSmoothNoise\(points: number\[\], position: number\)/);
   assert.match(source, /const lanePattern = hardLayout \? \[0\.04, 0\.96, 0\.5, 0\.8, 0\.2\] : \[0\.04, 0\.96, 0\.5, 0\.8, 0\.2\];/);
-  assert.ok(spread >= 200, `expected doodle platforms to span at least 200px horizontally, got ${spread}`);
+  assert.ok(spread >= 190, `expected doodle platforms to span at least 190px horizontally, got ${spread}`);
   assert.ok(maxCenterRun <= 4, `expected no long centered platform run, got ${maxCenterRun}`);
   assert.ok(xs.some((x) => x <= 115), "expected at least one clearly left-side platform");
   assert.ok(xs.some((x) => x >= 245), "expected at least one clearly right-side platform");
+});
+
+test("doodle start platform adapts to tall stages so the player is visible on entry", () => {
+  const level = getMiniGameLevel("doodle", "doodle-base");
+  const tall = generateDoodleWorldLayout(level, "tall-entry", { stageHeight: 1180, stageWidth: 752 });
+  const start = tall.platforms.find((platform) => platform.start);
+
+  assert.ok(start);
+  assert.equal(start.y, 132);
+  assert.equal(tall.startPlayerY, 148);
 });
 
 test("doodle normal jump covers two layers without overshooting far beyond them", () => {

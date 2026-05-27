@@ -10,8 +10,10 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type MutableRefObject,
   type PointerEvent,
   type ReactNode,
+  type RefObject,
   type TransitionEvent,
 } from "react";
 
@@ -21,13 +23,11 @@ import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/pl
 import { RoundPlayer } from "@/features/rounds/round-player";
 import {
   applyOutdoorEventChoice,
-  createDefaultOutdoorAdventureState,
   getOutdoorAdventureEvent,
   getOutdoorAdventureEventPresentation,
   getOutdoorAdventureRegion,
   getOutdoorAdventureRelic,
   getOutdoorAdventureStatusText,
-  getOutdoorDayCost,
   getOutdoorDebugOutcomeButtons,
   getOutdoorMiniGameReviveCharges,
   getOutdoorMiniGameTitle,
@@ -40,9 +40,11 @@ import {
 import {
   OUTDOOR_ADVENTURE_REGIONS,
   OUTDOOR_MATERIALS,
+  OUTDOOR_MINI_GAME_ROUNDS,
   type OutdoorAdventureRoundId,
   type OutdoorMaterialId,
   type OutdoorMaterialRarity,
+  type OutdoorRegionDefinition,
   type OutdoorRegionId,
   type OutdoorRelicDefinition,
 } from "@/lib/outdoor-adventure/events";
@@ -58,11 +60,13 @@ type OutdoorAdventureScreenProps = {
   onCompleteMiniGame: (roundId: OutdoorAdventureRoundId, trials: TrialEvent[]) => void;
   onContinueOutcome: () => void;
   onForceEventOutcome: (eventId: string, optionId: string, outcomeIndex: number) => void;
+  onDebugAddDistance: () => void;
   onDebugGrantAll: () => void;
+  onDebugLoseSupplies: () => void;
+  onDebugOpenChallenge: (roundId: OutdoorAdventureRoundId) => void;
   onAttemptMiniGameEscape: (roundId: OutdoorAdventureRoundId) => void;
   onSelectDebugEvent: (eventId: string) => void;
   onSettleAdventure: () => void;
-  onStartNew: () => void;
   onUseAdventureHeart: (roundId: OutdoorAdventureRoundId) => void;
   onEntryGateDepart: () => void;
   onEntryGatePrepare: () => void;
@@ -78,12 +82,12 @@ type ScenePhase = "idle" | "preparing" | "leaving" | "resetting";
 type TimedChoice = { nodeKey: string; side: ChoiceSide };
 type DisplayChoice = { detail?: string; label: string; side: ChoiceSide };
 type OutdoorMoveDirection = ChoiceSide | "none";
-type DirectSceneAction = "restart";
-type DayEndAction = "camp" | "settle";
+type DayEndAction = "settle";
 type OutdoorTextSpeed = "slow" | "fast";
 type OutdoorMaterialEntry = { count: number; id: OutdoorMaterialId; name: string; rarity: OutdoorMaterialRarity };
 
 const OUTDOOR_GOLD_RELIC_RARITIES = new Set(["special", "rare"]);
+const summaryChoiceLabel = "回到家园";
 
 const OUTDOOR_TEXT_SPEED_TIMINGS: Record<
   OutdoorTextSpeed,
@@ -204,6 +208,17 @@ function regionForNode(state: OutdoorAdventureState, node: OutdoorAdventureNode)
   return getOutdoorAdventureRegion(state.regionId);
 }
 
+function outdoorRegionStyle(region: OutdoorRegionDefinition) {
+  return {
+    "--outdoor-accent": region.theme.accent,
+    "--outdoor-bg-band": region.theme.band,
+    "--outdoor-bg-top": region.theme.top,
+    "--outdoor-field": region.theme.field,
+    "--outdoor-field-2": region.theme.field2,
+  } as CSSProperties &
+    Record<"--outdoor-accent" | "--outdoor-bg-band" | "--outdoor-bg-top" | "--outdoor-field" | "--outdoor-field-2", string>;
+}
+
 function nodeKeyFor(node: OutdoorAdventureNode) {
   if (node.kind === "event") return `event:${node.eventId}`;
   if (node.kind === "mini-game") return `mini-game:${node.roundId}`;
@@ -259,22 +274,242 @@ function buildEntryGateOutcome(entryGate: OutdoorEntryGateMode, side: ChoiceSide
   };
 }
 
-function buildDayEndOutcome(side: ChoiceSide, state: OutdoorAdventureState): { action: DayEndAction; outcome: OutdoorChoiceResult } {
-  const action: DayEndAction = side === "left" ? "camp" : "settle";
-  const dayCost = getOutdoorDayCost(state);
+function buildDayEndOutcome(state: OutdoorAdventureState): { action: DayEndAction; outcome: OutdoorChoiceResult } {
   return {
-    action,
+    action: "settle",
     outcome: {
       eventId: "day-end",
-      optionId: action,
-      optionLabel: action === "camp" ? "休息会继续冒险" : "结算冒险",
-      outcomeId: action,
-      title: action === "camp" ? "休整" : "回程",
-      text: action === "camp" ? `你找了个地方休整，花掉 ${dayCost} 份物资。` : "你把这趟路上的东西收好，准备回家。",
-      lines: action === "camp" ? [`物资 -${dayCost}`] : ["素材会写入家园收获仓库"],
+      optionId: "settle",
+      optionLabel: "结算冒险",
+      outcomeId: "settle",
+      title: "回程",
+      text: "你把这趟路上的东西收好，准备回家。",
+      lines: ["素材会写入家园收获仓库"],
       regionId: state.regionId,
     },
   };
+}
+
+type OutdoorResourceSnapshot = {
+  stamina: number;
+  supply: number;
+  trouble: number;
+};
+
+function AnimatedOutdoorResource({ initialValue, label, value }: { initialValue?: number; label: string; value: number }) {
+  const [displayValue, setDisplayValue] = useState(initialValue ?? value);
+  const [remainingDelta, setRemainingDelta] = useState(0);
+  const [deltaSign, setDeltaSign] = useState<1 | -1>(1);
+  const [deltaVisible, setDeltaVisible] = useState(false);
+  const displayValueRef = useRef(initialValue ?? value);
+  const animationRef = useRef<number | null>(null);
+  const mergeTimerRef = useRef<number | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const startTimeRef = useRef(0);
+  const startValueRef = useRef(value);
+  const targetValueRef = useRef(value);
+
+  useEffect(() => {
+    if (mergeTimerRef.current !== null) {
+      window.clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
+    }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    if (animationRef.current !== null) {
+      window.cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    const startValue = displayValueRef.current;
+    const delta = value - startValue;
+    if (delta === 0) {
+      displayValueRef.current = value;
+      setDisplayValue(value);
+      setRemainingDelta(0);
+      setDeltaVisible(false);
+      return undefined;
+    }
+
+    startValueRef.current = startValue;
+    targetValueRef.current = value;
+    setDeltaSign(delta > 0 ? 1 : -1);
+    setDeltaVisible(true);
+    setRemainingDelta(delta);
+
+    const duration = Math.min(1100, Math.max(520, Math.abs(delta) * 140));
+    const tick = (time: number) => {
+      const progress = Math.min(1, (time - startTimeRef.current) / duration);
+      const totalDelta = targetValueRef.current - startValueRef.current;
+      const moved = Math.trunc(Math.abs(totalDelta) * progress) * Math.sign(totalDelta);
+      const nextValue = progress >= 1 ? targetValueRef.current : startValueRef.current + moved;
+      displayValueRef.current = nextValue;
+      setDisplayValue(nextValue);
+      setRemainingDelta(targetValueRef.current - nextValue);
+      if (progress < 1) {
+        animationRef.current = window.requestAnimationFrame(tick);
+      } else {
+        animationRef.current = null;
+        hideTimerRef.current = window.setTimeout(() => {
+          setDeltaVisible(false);
+          hideTimerRef.current = null;
+        }, 500);
+      }
+    };
+
+    mergeTimerRef.current = window.setTimeout(() => {
+      startTimeRef.current = performance.now();
+      mergeTimerRef.current = null;
+      animationRef.current = window.requestAnimationFrame(tick);
+    }, 500);
+    return () => {
+      if (mergeTimerRef.current !== null) {
+        window.clearTimeout(mergeTimerRef.current);
+        mergeTimerRef.current = null;
+      }
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      if (animationRef.current !== null) {
+        window.cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [value]);
+
+  return (
+    <span className="outdoor-resource-meter">
+      <span className="outdoor-resource-label">{label}</span>
+      <span className="outdoor-resource-value">{displayValue}</span>
+      {deltaVisible ? (
+        <span className={`outdoor-resource-delta ${deltaSign > 0 ? "positive" : "negative"}`}>
+          {deltaSign > 0 ? "+" : "-"}
+          {Math.abs(remainingDelta)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function OutdoorAdventureHud({
+  initialResourceValues,
+  materialEntries,
+  miniGameReviveCharges,
+  onToggleRelic,
+  relicButtonRefs,
+  relicRowRef,
+  roomStyle,
+  selectedRelic,
+  selectedRelicId,
+  state,
+  statusText,
+  textSpeed,
+  onTextSpeedChange,
+}: {
+  initialResourceValues?: OutdoorResourceSnapshot;
+  materialEntries: OutdoorMaterialEntry[];
+  miniGameReviveCharges: number;
+  onToggleRelic: (relicId: string) => void;
+  relicButtonRefs: MutableRefObject<Map<string, HTMLButtonElement>>;
+  relicRowRef: RefObject<HTMLDivElement | null>;
+  roomStyle: CSSProperties & Record<"--outdoor-event-line-fade-ms", string>;
+  selectedRelic: OutdoorRelicDefinition | null;
+  selectedRelicId: string | null;
+  state: OutdoorAdventureState;
+  statusText: ReturnType<typeof getOutdoorAdventureStatusText>;
+  textSpeed: OutdoorTextSpeed;
+  onTextSpeedChange: (speed: OutdoorTextSpeed) => void;
+}) {
+  const currentRegion = getOutdoorAdventureRegion(state.regionId);
+  const displayRelicItems = [...state.relics, ...state.usableItems]
+    .map((item) => ({ item, relic: getOutdoorAdventureRelic(item.id) }))
+    .filter((entry): entry is { item: { id: string; count: number }; relic: OutdoorRelicDefinition } => Boolean(entry.relic))
+    .sort((a, b) => {
+      const groupDelta = outdoorRelicDisplayGroup(a.relic) - outdoorRelicDisplayGroup(b.relic);
+      if (groupDelta !== 0) return groupDelta;
+      return a.relic.name.localeCompare(b.relic.name);
+    });
+  const relicDetailContent = (() => {
+    if (!selectedRelic) return "";
+    if (selectedRelic.id === "relic_travel_bag") {
+      return (
+        <>
+          <span>{selectedRelic.name}：</span>
+          {materialEntries.length > 0 ? (
+            <span className="outdoor-material-list">
+              {materialEntries.map((material) => (
+                <span className={`outdoor-material-item rarity-${material.rarity}`} key={material.id}>
+                  {material.name} x{material.count}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span>本次还没有收集到素材。</span>
+          )}
+        </>
+      );
+    }
+    if (selectedRelic.id === "relic_travel_footprints") {
+      return `${selectedRelic.name}：${statusText.relics.find((line) => line.startsWith(selectedRelic.name))?.replace(`${selectedRelic.name}：`, "") ?? "记录本次冒险已经离家多远。"}`
+    }
+    return `${selectedRelic.name}：${selectedRelic.effectText || "只是一个奇怪纪念品，不改变本次冒险。"}`
+  })();
+
+  return (
+    <>
+      <div className="outdoor-status-strip" aria-label="冒险资源">
+        <AnimatedOutdoorResource initialValue={initialResourceValues?.stamina} label="体力" value={state.stamina} />
+        <AnimatedOutdoorResource initialValue={initialResourceValues?.supply} label="物资" value={state.supply} />
+        <AnimatedOutdoorResource initialValue={initialResourceValues?.trouble} label="麻烦" value={state.trouble} />
+      </div>
+
+      <div className="outdoor-relic-area">
+        <div className="outdoor-relic-bar">
+          <div className="outdoor-relic-row" ref={relicRowRef} aria-label="纪念品">
+            {displayRelicItems.map(({ item, relic }) => {
+              const label = relic.effects?.miniGameRevivesPerDay ? `${relic.name} ${miniGameReviveCharges}` : item.count > 1 ? `${relic.name} x${item.count}` : relic.name;
+              return (
+                <button
+                  aria-pressed={selectedRelicId === item.id}
+                  className={`outdoor-relic-chip kind-${relic.kind} rarity-${relic.rarity}${isOutdoorGoldRelic(relic) ? " tone-gold" : ""}`}
+                  key={item.id}
+                  ref={(node) => {
+                    if (node) relicButtonRefs.current.set(item.id, node);
+                    else relicButtonRefs.current.delete(item.id);
+                  }}
+                  type="button"
+                  onClick={() => onToggleRelic(item.id)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="outdoor-meta-panel">
+            <div className="outdoor-day-region">第 {state.day} 天 · {currentRegion.name}</div>
+            <div className="outdoor-text-speed-toggle" aria-label="文本速度">
+              {(["slow", "fast"] as const).map((speed) => (
+                <button
+                  aria-pressed={textSpeed === speed}
+                  key={speed}
+                  type="button"
+                  onClick={() => onTextSpeedChange(speed)}
+                >
+                  {speed === "slow" ? "慢" : "快"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className={`outdoor-relic-detail ${selectedRelic ? "open" : ""}`} style={roomStyle} aria-live="polite">
+          {relicDetailContent}
+        </div>
+      </div>
+    </>
+  );
 }
 
 function sideForDisplayedOutcome(outcome: OutdoorChoiceResult | null | undefined, fallback: ChoiceSide): ChoiceSide {
@@ -300,9 +535,11 @@ function isOutdoorGoldRelic(relic: OutdoorRelicDefinition) {
 }
 
 function outdoorRelicDisplayGroup(relic: OutdoorRelicDefinition) {
-  if (isOutdoorGoldRelic(relic)) return 0;
-  if (relic.kind === "debuff") return 2;
-  return 1;
+  if (relic.id === "relic_travel_bag") return 0;
+  if (relic.id === "relic_travel_footprints") return 1;
+  if (isOutdoorGoldRelic(relic)) return 2;
+  if (relic.kind === "debuff") return 4;
+  return 3;
 }
 
 export function OutdoorAdventureScreen({
@@ -315,11 +552,13 @@ export function OutdoorAdventureScreen({
   onCompleteMiniGame,
   onContinueOutcome,
   onForceEventOutcome,
+  onDebugAddDistance,
   onDebugGrantAll,
+  onDebugLoseSupplies,
+  onDebugOpenChallenge,
   onAttemptMiniGameEscape,
   onSelectDebugEvent,
   onSettleAdventure,
-  onStartNew,
   onUseAdventureHeart,
   onEntryGateDepart,
   onEntryGatePrepare,
@@ -338,6 +577,7 @@ export function OutdoorAdventureScreen({
   const [scenePhase, setScenePhase] = useState<ScenePhase>("idle");
   const [exitSide, setExitSide] = useState<ChoiceSide | null>(null);
   const [miniGameActive, setMiniGameActive] = useState(false);
+  const [resourceAnimationBaseline, setResourceAnimationBaseline] = useState<OutdoorResourceSnapshot | undefined>(undefined);
   const [playerX, setPlayerX] = useState(OUTDOOR_CENTER_X);
   const [moving, setMoving] = useState(false);
   const [inputDirection, setInputDirectionState] = useState<OutdoorMoveDirection>("none");
@@ -348,7 +588,6 @@ export function OutdoorAdventureScreen({
   const [outcomeChangeChars, setOutcomeChangeChars] = useState(0);
   const [escapeFeedbackChars, setEscapeFeedbackChars] = useState(0);
   const [escapeFeedbackChangeChars, setEscapeFeedbackChangeChars] = useState(0);
-  const [directPreviewNode, setDirectPreviewNode] = useState<OutdoorAdventureNode | null>(null);
   const [outcomeChoiceSnapshot, setOutcomeChoiceSnapshot] = useState<DisplayChoice[] | null>(null);
   const [textSpeed, setTextSpeed] = useState<OutdoorTextSpeed>("slow");
   const playerXRef = useRef(OUTDOOR_CENTER_X);
@@ -359,7 +598,6 @@ export function OutdoorAdventureScreen({
   const scenePhaseRef = useRef<ScenePhase>("idle");
   const sceneFallbackTimerRef = useRef<number | null>(null);
   const sceneResetFrameRef = useRef<number | null>(null);
-  const directSceneActionRef = useRef<DirectSceneAction | null>(null);
   const eventRevealTimersRef = useRef<number[]>([]);
   const eventRevealTargetKeyRef = useRef("");
   const previousEntryGateRef = useRef(entryGate);
@@ -369,29 +607,29 @@ export function OutdoorAdventureScreen({
   const previousRelicCountsRef = useRef<Map<string, number> | null>(null);
 
   const statusText = getOutdoorAdventureStatusText(state);
-  const selectedRelic = selectedRelicId ? getOutdoorAdventureRelic(selectedRelicId) : null;
-  const currentEventKey = !entryGate && state.currentNode.kind === "event"
-    ? `${state.id}:${state.day}:${state.stepInDay}:${state.currentNode.eventId}`
-    : "";
+  const selectedRelic = selectedRelicId ? getOutdoorAdventureRelic(selectedRelicId) ?? null : null;
   const currentEvent = useMemo(
     () => (!entryGate && state.currentNode.kind === "event" ? getOutdoorAdventureEvent(state.currentNode.eventId, state) : null),
-    [currentEventKey],
+    [entryGate, state],
   );
   const currentPresentation = currentEvent ? getOutdoorAdventureEventPresentation(state, currentEvent.id) : null;
   const currentRegion = currentPresentation?.region ?? getOutdoorAdventureRegion(state.regionId);
   const textTimings = OUTDOOR_TEXT_SPEED_TIMINGS[textSpeed];
   const roomStyle = {
+    ...outdoorRegionStyle(currentRegion),
     "--outdoor-event-line-fade-ms": `${textTimings.lineFadeMs}ms`,
   } as CSSProperties & Record<"--outdoor-event-line-fade-ms", string>;
   const entryGatePreviewNode = entryGateOutcome && (entryGateAction === "depart" || entryGateAction === "continue") ? state.currentNode : null;
-  const nextPreviewNode = entryGatePreviewNode ?? state.pendingNextNode ?? directPreviewNode ?? null;
+  const nextPreviewNode = entryGatePreviewNode ?? state.pendingNextNode ?? null;
   const previewNode = (scenePhase === "preparing" || scenePhase === "leaving") && exitSide && nextPreviewNode ? nextPreviewNode : null;
+  const isSummaryTransition = previewNode?.kind === "summary";
   const currentOptions = useMemo(() => currentEvent?.options ?? [], [currentEvent]);
   const activeMiniGameRound = !entryGate && state.currentNode.kind === "mini-game" ? state.currentNode.roundId : null;
+  const isAdventureTerminal = state.status === "settled" || state.status === "failed";
   const activeRoundIndex = activeMiniGameRound ? roundIndexFor(activeMiniGameRound) : 0;
   const activeRoundConfig = activeMiniGameRound ? rounds[activeRoundIndex] : null;
   const miniGameReviveCharges = getOutdoorMiniGameReviveCharges(state);
-  const activeMiniGameRevives = miniGameReviveCharges > 0 ? miniGameReviveCharges : undefined;
+  const activeMiniGameRevives = miniGameReviveCharges;
   const displayedOutcome = entryGate ? entryGateOutcome : dayEndOutcome ?? state.lastOutcome ?? undefined;
   const activeOutcomeKey = entryGateOutcome
     ? `${entryGateOutcome.eventId}:${entryGateOutcome.optionId}:${entryGateOutcome.outcomeId}`
@@ -475,6 +713,12 @@ export function OutdoorAdventureScreen({
       return count > 0 ? [{ count, id: material.id, name: material.name, rarity: material.rarity }] : [];
     });
   }, [state.materialBag]);
+  const settledMaterialEntries = useMemo<OutdoorMaterialEntry[]>(() => {
+    return OUTDOOR_MATERIALS.flatMap((material) => {
+      const count = state.settledMaterials?.[material.id] ?? 0;
+      return count > 0 ? [{ count, id: material.id, name: material.name, rarity: material.rarity }] : [];
+    });
+  }, [state.settledMaterials]);
   const avatarDirection: ChoiceSide | "none" = moving ? inputDirection : playerX < OUTDOOR_CENTER_X ? "left" : playerX > OUTDOOR_CENTER_X ? "right" : "none";
   const renderedAvatarDirection = scenePhase === "leaving" && exitSide ? exitSide : avatarDirection;
   const debugEvents = useMemo(
@@ -602,13 +846,6 @@ export function OutdoorAdventureScreen({
       window.clearTimeout(sceneFallbackTimerRef.current);
       sceneFallbackTimerRef.current = null;
     }
-    const directAction = directSceneActionRef.current;
-    if (directAction) {
-      directSceneActionRef.current = null;
-      if (directAction === "restart") onStartNew();
-      scheduleSceneReset(() => setDirectPreviewNode(null));
-      return;
-    }
     if (entryGateOutcome && entryGateAction) {
       const action = entryGateAction;
       setEntryGateOutcome(null);
@@ -623,20 +860,18 @@ export function OutdoorAdventureScreen({
       return;
     }
     if (dayEndOutcome && dayEndAction) {
-      const action = dayEndAction;
       setDayEndOutcome(null);
       setDayEndAction(null);
       setPendingChoice(null);
       setOutcomeChoiceSnapshot(null);
-      if (action === "camp") onCampNextDay();
-      else onSettleAdventure();
+      onSettleAdventure();
       scheduleSceneReset();
       return;
     }
     setOutcomeChoiceSnapshot(null);
     onContinueOutcome();
     scheduleSceneReset();
-  }, [dayEndAction, dayEndOutcome, entryGateAction, entryGateOutcome, onCampNextDay, onContinueOutcome, onEntryGateAbandon, onEntryGateContinue, onEntryGateDepart, onEntryGatePrepare, onSettleAdventure, onStartNew, scheduleSceneReset]);
+  }, [dayEndAction, dayEndOutcome, entryGateAction, entryGateOutcome, onContinueOutcome, onEntryGateAbandon, onEntryGateContinue, onEntryGateDepart, onEntryGatePrepare, onSettleAdventure, scheduleSceneReset]);
 
   const startOutcomeExit = useCallback((side: ChoiceSide = outcomeSide) => {
     if (!displayedOutcome || scenePhase !== "idle" || didLeaveSceneRef.current) return;
@@ -654,27 +889,6 @@ export function OutdoorAdventureScreen({
       });
     });
   }, [clearSceneTimers, completeSceneTransition, displayedOutcome, outcomeSide, scenePhase, stopOutcomeMove]);
-
-  const startDirectSceneExit = useCallback((side: ChoiceSide, action: DirectSceneAction) => {
-    if (scenePhase !== "idle" || didLeaveSceneRef.current) return;
-    clearSceneTimers();
-    directSceneActionRef.current = action;
-    setDirectPreviewNode(action === "restart" ? createDefaultOutdoorAdventureState().currentNode : null);
-    didLeaveSceneRef.current = true;
-    sceneCompletingRef.current = false;
-    stopOutcomeMove();
-    setLastChoiceSide(side);
-    setPlayerPosition(xForSide(side));
-    setExitSide(side);
-    setScenePhase("preparing");
-    sceneResetFrameRef.current = window.requestAnimationFrame(() => {
-      sceneResetFrameRef.current = window.requestAnimationFrame(() => {
-        setScenePhase("leaving");
-        sceneFallbackTimerRef.current = window.setTimeout(completeSceneTransition, SCENE_LEAVE_MS + 180);
-        sceneResetFrameRef.current = null;
-      });
-    });
-  }, [clearSceneTimers, completeSceneTransition, scenePhase, setPlayerPosition, stopOutcomeMove]);
 
   const onSceneTrackTransitionEnd = useCallback((event: TransitionEvent<HTMLDivElement>) => {
     if (event.currentTarget !== event.target || event.propertyName !== "transform") return;
@@ -750,9 +964,11 @@ export function OutdoorAdventureScreen({
     const timer = window.setInterval(() => {
       setEscapeFeedbackChars((current) => {
         if (current < escapeFeedbackTypeText.length) return current + 1;
-        setEscapeFeedbackChangeChars((changeCurrent) =>
-          changeCurrent < challengeFeedbackChangeText.length ? changeCurrent + 1 : changeCurrent,
-        );
+        setEscapeFeedbackChangeChars((changeCurrent) => {
+          if (changeCurrent < challengeFeedbackChangeText.length) return changeCurrent + 1;
+          window.clearInterval(timer);
+          return changeCurrent;
+        });
         return current;
       });
     }, textTimings.outcomeTypeMs);
@@ -772,7 +988,11 @@ export function OutdoorAdventureScreen({
     const timer = window.setInterval(() => {
       setOutcomeTextChars((current) => {
         if (current < outcomeTypeText.length) return current + 1;
-        setOutcomeChangeChars((changeCurrent) => (changeCurrent < outcomeChangeText.length ? changeCurrent + 1 : changeCurrent));
+        setOutcomeChangeChars((changeCurrent) => {
+          if (changeCurrent < outcomeChangeText.length) return changeCurrent + 1;
+          window.clearInterval(timer);
+          return changeCurrent;
+        });
         return current;
       });
     }, textTimings.outcomeTypeMs);
@@ -780,6 +1000,7 @@ export function OutdoorAdventureScreen({
   }, [activeOutcomeKey, outcomeChangeText.length, outcomeSide, outcomeTypeText.length, setPlayerPosition, showOutcome, textTimings.outcomeTypeMs]);
 
   useEffect(() => {
+    if (!showOutcome || scenePhase !== "idle" || inputDirection === "none") return;
     let frameId = 0;
     let lastTime = performance.now();
 
@@ -815,7 +1036,7 @@ export function OutdoorAdventureScreen({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [outcomeSide, outcomeTypingDone, scenePhase, setPlayerPosition, showOutcome, startOutcomeExit]);
+  }, [inputDirection, outcomeSide, outcomeTypingDone, scenePhase, setPlayerPosition, showOutcome, startOutcomeExit]);
 
   const revealRelic = useCallback((relicId: string, toggle = false) => {
     const row = relicRowRef.current;
@@ -916,14 +1137,14 @@ export function OutdoorAdventureScreen({
   const selectDayEndSide = (side: ChoiceSide) => {
     if (state.currentNode.kind !== "day-end" || showOutcome || scenePhase !== "idle" || !eventRevealDone) return;
     if (activePendingChoice === side) {
-      if (side === "right") {
-        onSettleAdventure();
-        return;
-      }
       setLastChoiceSide(side);
       setPlayerPosition(xForSide(side));
       setPendingChoice(null);
-      const { action, outcome } = buildDayEndOutcome(side, state);
+      if (side === "left") {
+        onCampNextDay();
+        return;
+      }
+      const { action, outcome } = buildDayEndOutcome(state);
       setDayEndAction(action);
       snapshotVisibleChoices();
       setDayEndOutcome(outcome);
@@ -935,19 +1156,14 @@ export function OutdoorAdventureScreen({
 
   const selectSummarySide = (side: ChoiceSide) => {
     if ((state.status !== "settled" && state.status !== "failed") || showOutcome || scenePhase !== "idle") return;
+    setPlayerPosition(xForSide(side));
     if (activePendingChoice === side) {
-      if (side === "left") {
-        onBackHome();
-        return;
-      }
       setLastChoiceSide(side);
-      setPlayerPosition(xForSide(side));
       setPendingChoice(null);
-      startDirectSceneExit("right", "restart");
+      onBackHome();
       return;
     }
     setPendingChoice({ nodeKey: currentNodeKey, side });
-    if (side !== "left") setPlayerPosition(xForSide(side));
   };
 
   const handleChoiceRoomKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -999,9 +1215,74 @@ export function OutdoorAdventureScreen({
     return `${selectedRelic.name}：${selectedRelic.effectText || "只是一个奇怪纪念，不改变本次冒险。"}`;
   }, [materialEntries, selectedRelic, statusText.relics]);
 
+  if (state.status === "settled" || state.status === "failed") {
+    const summaryLines = splitDisplayLines(state.summary ?? latestJournal(state), 6);
+    const statusLabel = state.status === "failed" ? "冒险失败" : "冒险结算";
+    return (
+      <section
+        className={`outdoor-adventure-room outdoor-summary-room region-${currentRegion.id}`}
+        style={roomStyle}
+        aria-label="外出冒险结算"
+        role="button"
+        tabIndex={0}
+        onClick={onBackHome}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onBackHome();
+          }
+        }}
+      >
+        <div className="outdoor-summary-page">
+          <small>{statusLabel}</small>
+          <div className="outdoor-summary-lines">
+            {summaryLines.map((line, index) => (
+              <p key={`${state.updatedAt}-summary-${index}`}>{line}</p>
+            ))}
+          </div>
+          <div className="outdoor-summary-stats">
+            <span>带回物资 {Math.max(0, state.supply)}</span>
+            <span>纪念品 {state.relics.reduce((sum, item) => sum + item.count, 0)}</span>
+            <span>{state.status === "failed" ? "失败返程" : "正式结算"}</span>
+          </div>
+          <div className="outdoor-summary-materials">
+            {settledMaterialEntries.length > 0 ? (
+              settledMaterialEntries.map((material) => (
+                <span className={`outdoor-material-item rarity-${material.rarity}`} key={material.id}>
+                  {material.name} x{material.count}
+                </span>
+              ))
+            ) : (
+              <span>没有带回素材</span>
+            )}
+          </div>
+          <strong>再次点击屏幕返回家园</strong>
+        </div>
+      </section>
+    );
+  }
+
   if (miniGameActive && activeMiniGameRound && activeRoundConfig) {
     return (
-      <section className="outdoor-round-play" aria-label="外出冒险挑战">
+      <section
+        className={`outdoor-adventure-room outdoor-round-play region-${currentRegion.id}`}
+        style={roomStyle}
+        aria-label="外出冒险挑战"
+      >
+        <OutdoorAdventureHud
+          materialEntries={materialEntries}
+          miniGameReviveCharges={miniGameReviveCharges}
+          onToggleRelic={toggleRelic}
+          relicButtonRefs={relicButtonRefs}
+          relicRowRef={relicRowRef}
+          roomStyle={roomStyle}
+          selectedRelic={selectedRelic}
+          selectedRelicId={selectedRelicId}
+          state={state}
+          statusText={statusText}
+          textSpeed={textSpeed}
+          onTextSpeedChange={setTextSpeed}
+        />
         <PlayFrame
           round={activeRoundConfig}
           index={activeRoundIndex}
@@ -1016,14 +1297,12 @@ export function OutdoorAdventureScreen({
             phase="base"
             roundId={activeMiniGameRound}
             onComplete={(trials) => {
+              setResourceAnimationBaseline({ stamina: state.stamina, supply: state.supply, trouble: state.trouble });
               setMiniGameActive(false);
               onCompleteMiniGame(activeMiniGameRound, trials);
             }}
           />
         </PlayFrame>
-        <div className="outdoor-round-status" aria-live="polite">
-          {`体力 ${state.stamina} · 物资 ${state.supply} · 麻烦 ${state.trouble}${activeMiniGameRevives ? ` · 复活 ${activeMiniGameRevives}` : ""}`}
-        </div>
       </section>
     );
   }
@@ -1033,8 +1312,46 @@ export function OutdoorAdventureScreen({
     const revealKey = `${nodeKeyFor(node)}:`;
     const isRevealingPreview = eventRevealTargetKey === revealKey;
 
+    if (node.kind === "summary") {
+      const summaryLines = splitDisplayLines(state.summary ?? latestJournal(state), 6);
+      const statusLabel = state.pendingSummaryReason === "supply-failure" || state.status === "failed" ? "冒险失败" : "冒险结算";
+      return (
+        <section
+          className={`outdoor-scene-panel preview ${side} outdoor-summary-room region-${previewRegion.id}`}
+          style={outdoorRegionStyle(previewRegion)}
+          aria-hidden="true"
+        >
+          <div className="outdoor-summary-page">
+            <small>{statusLabel}</small>
+            <div className="outdoor-summary-lines">
+              {summaryLines.map((line, index) => (
+                <p key={`${state.updatedAt}-preview-summary-${index}`}>{line}</p>
+              ))}
+            </div>
+            <div className="outdoor-summary-stats">
+              <span>带回物资 {Math.max(0, state.supply)}</span>
+              <span>纪念品 {state.relics.reduce((sum, item) => sum + item.count, 0)}</span>
+              <span>{statusLabel === "冒险失败" ? "失败返程" : "正式结算"}</span>
+            </div>
+            <div className="outdoor-summary-materials">
+              {settledMaterialEntries.length > 0 ? (
+                settledMaterialEntries.map((material) => (
+                  <span className={`outdoor-material-item rarity-${material.rarity}`} key={material.id}>
+                    {material.name} x{material.count}
+                  </span>
+                ))
+              ) : (
+                <span>没有带回素材</span>
+              )}
+            </div>
+            <strong>再次点击屏幕返回家园</strong>
+          </div>
+        </section>
+      );
+    }
+
     return (
-      <section className={`outdoor-scene-panel preview ${side} region-${previewRegion.id}`} aria-hidden="true">
+      <section className={`outdoor-scene-panel preview ${side} region-${previewRegion.id}`} style={outdoorRegionStyle(previewRegion)} aria-hidden="true">
         <main className="outdoor-event-panel">
           <div className="outdoor-event-lines preview-waiting">
             {previewEventLines.map((line, index) => (
@@ -1068,14 +1385,14 @@ export function OutdoorAdventureScreen({
 
   return (
     <section
-      className={`outdoor-adventure-room region-${currentRegion.id} scene-${scenePhase}${exitSide ? ` exit-${exitSide}` : ""}`}
+      className={`outdoor-adventure-room region-${currentRegion.id} scene-${scenePhase}${exitSide ? ` exit-${exitSide}` : ""}${isSummaryTransition ? " summary-transition" : ""}`}
       style={roomStyle}
       aria-label="外出冒险"
     >
       <div className="outdoor-status-strip" aria-label="冒险资源">
-        {statusText.resources.map((item) => (
-          <span key={item}>{item}</span>
-        ))}
+        <AnimatedOutdoorResource initialValue={resourceAnimationBaseline?.stamina} label="体力" value={state.stamina} />
+        <AnimatedOutdoorResource initialValue={resourceAnimationBaseline?.supply} label="物资" value={state.supply} />
+        <AnimatedOutdoorResource initialValue={resourceAnimationBaseline?.trouble} label="麻烦" value={state.trouble} />
       </div>
 
       <div className="outdoor-relic-area">
@@ -1251,7 +1568,7 @@ export function OutdoorAdventureScreen({
               </>
             ) : (["left", "right"] as const).map((side) => <div className={`outdoor-choice-wall ${side} waiting`} key={side} aria-hidden="true" />)}
           </>
-        ) : state.status === "settled" || state.status === "failed" ? (
+        ) : isAdventureTerminal ? (
           <>
             {eventRevealDone ? (
               <>
@@ -1260,14 +1577,14 @@ export function OutdoorAdventureScreen({
                   type="button"
                   onClick={() => selectSummarySide("left")}
                 >
-                  <strong style={choiceLabelStyle("回到家园")}>回到家园</strong>
+                  <strong style={choiceLabelStyle(summaryChoiceLabel)}>{summaryChoiceLabel}</strong>
                 </button>
                 <button
                   className={`outdoor-choice-wall right selectable${activePendingChoice === "right" ? " selected" : ""}`}
                   type="button"
                   onClick={() => selectSummarySide("right")}
                 >
-                  <strong style={choiceLabelStyle("再出发")}>再出发</strong>
+                  <strong style={choiceLabelStyle(summaryChoiceLabel)}>{summaryChoiceLabel}</strong>
                 </button>
               </>
             ) : (["left", "right"] as const).map((side) => <div className={`outdoor-choice-wall ${side} waiting`} key={side} aria-hidden="true" />)}
@@ -1326,9 +1643,25 @@ export function OutdoorAdventureScreen({
       <details className="outdoor-debug-panel">
         <summary>{`事件测试${miniGameReviveCharges > 0 ? ` · 复活 ${miniGameReviveCharges}` : ""} · step ${state.stepInDay}`}</summary>
         <div className="outdoor-debug-actions">
+          <button type="button" onClick={onDebugLoseSupplies}>
+            物资-999 立即失败
+          </button>
+          <button type="button" onClick={onDebugAddDistance}>
+            离家+20步
+          </button>
           <button type="button" onClick={onDebugGrantAll}>
             体力999 物资999 麻烦+10 全素材/纪念品+1
           </button>
+          {OUTDOOR_MINI_GAME_ROUNDS.map((roundId) => (
+            <button
+              className={activeMiniGameRound === roundId ? "selected" : ""}
+              key={roundId}
+              type="button"
+              onClick={() => onDebugOpenChallenge(roundId)}
+            >
+              打开挑战事件: {getOutdoorMiniGameTitle(roundId)}
+            </button>
+          ))}
         </div>
         <div className="outdoor-debug-regions" aria-label="事件区域筛选">
           <button className={debugRegionFilter === "all" ? "selected" : ""} type="button" onClick={() => setDebugRegionFilter("all")}>

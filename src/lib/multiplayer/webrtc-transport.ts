@@ -107,6 +107,12 @@ function channelIsOpen(channel: RTCDataChannel | null): channel is RTCDataChanne
   return channel?.readyState === "open";
 }
 
+const STATE_CHANNEL_BACKPRESSURE_BYTES = 64 * 1024;
+
+function canSendReplaceableState(channel: RTCDataChannel | null) {
+  return channelIsOpen(channel) && channel.bufferedAmount <= STATE_CHANNEL_BACKPRESSURE_BYTES;
+}
+
 export class RoomSignalTransport {
   private readonly role: SignalingRole;
   private readonly targetRoomId: string | null;
@@ -164,6 +170,7 @@ export class RoomSignalTransport {
   send(message: NetMessage) {
     const serialized = serializeNetMessage(message);
     const preferredChannel = message.kind === "input" ? this.inputChannel : message.kind === "state" ? this.stateChannel : this.controlChannel;
+    if (message.kind === "state" && !canSendReplaceableState(preferredChannel)) return;
     if (channelIsOpen(preferredChannel)) {
       preferredChannel.send(serialized);
     }

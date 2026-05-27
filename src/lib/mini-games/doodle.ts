@@ -112,7 +112,7 @@ export function generateDoodleWorldLayout(
   const riskWidth = numberParam(level.params, "riskPlatformWidth", 86);
   const platformGap = numberParam(level.params, "platformGap", 104);
   const rand = createSeededRandom(`${level.levelId}:${runSeed}:doodle-world`);
-  const startPlatformY = 54;
+  const startPlatformY = clamp(stageHeight * 0.18, 54, 132);
   const startPlayerY = startPlatformY + playerSize / 2;
   const platformCount = Math.ceil((targetHeight - startPlatformY) / platformGap) + 4;
   const allMotions: DoodleMovementPattern[] = ["horizontal", "vertical", "patrolDiagonal", "orbitSmall", "pulse", "slowCross"];

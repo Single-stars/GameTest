@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 export const MODE_TRANSITION_ANCHOR_ATTR = "data-transition-avatar-anchor";
 const MODE_TRANSITION_STORAGE_KEY = "game-rank-test/mode-transition/v1";
-const MODE_TRANSITION_CLOSE_MS = 1500;
-const MODE_TRANSITION_OPEN_MS = 1500;
+const MODE_TRANSITION_CLOSE_MS = 900;
+const MODE_TRANSITION_OPEN_MS = 900;
+const MODE_TRANSITION_STAGE_SETTLE_FRAMES = 3;
 
 type ModeTransitionPhase = "closing-start" | "closing" | "closed" | "opening-start" | "opening";
+type ModeTransitionPresentation = "iris" | "blackout";
 
 export type ModeTransitionOrigin = {
   x: number;
@@ -17,12 +19,18 @@ export type ModeTransitionOrigin = {
 export type ModeTransitionViewState = {
   origin: ModeTransitionOrigin;
   phase: ModeTransitionPhase;
+  presentation?: ModeTransitionPresentation;
   visible: boolean;
 };
 
 type StoredModeTransition = {
   origin: ModeTransitionOrigin;
+  presentation?: ModeTransitionPresentation;
   savedAt: number;
+};
+
+export type ModeTransitionRouteOptions = {
+  presentation?: ModeTransitionPresentation;
 };
 
 function wait(ms: number) {
@@ -35,6 +43,12 @@ function waitFrame() {
   return new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
   });
+}
+
+async function waitTransitionFrames(count = MODE_TRANSITION_STAGE_SETTLE_FRAMES) {
+  for (let index = 0; index < count; index += 1) {
+    await waitFrame();
+  }
 }
 
 function centerOrigin(): ModeTransitionOrigin {
@@ -76,10 +90,11 @@ function resolveModeTransitionOrigin() {
   return readAnchorOrigin() ?? centerOrigin();
 }
 
-function storeRouteTransition(origin: ModeTransitionOrigin) {
+function storeRouteTransition(origin: ModeTransitionOrigin, presentation: ModeTransitionPresentation = "iris") {
   if (typeof window === "undefined") return;
   const payload: StoredModeTransition = {
     origin: clampOrigin(origin),
+    presentation,
     savedAt: Date.now(),
   };
   try {
@@ -89,7 +104,7 @@ function storeRouteTransition(origin: ModeTransitionOrigin) {
   }
 }
 
-function consumeRouteTransition(): ModeTransitionOrigin | null {
+function consumeRouteTransition(): StoredModeTransition | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(MODE_TRANSITION_STORAGE_KEY);
@@ -98,7 +113,11 @@ function consumeRouteTransition(): ModeTransitionOrigin | null {
     const parsed = JSON.parse(raw) as Partial<StoredModeTransition>;
     if (!parsed.origin || typeof parsed.origin.x !== "number" || typeof parsed.origin.y !== "number") return null;
     if (typeof parsed.savedAt === "number" && Date.now() - parsed.savedAt > 12_000) return null;
-    return clampOrigin(parsed.origin);
+    return {
+      origin: clampOrigin(parsed.origin),
+      presentation: parsed.presentation === "blackout" ? "blackout" : "iris",
+      savedAt: parsed.savedAt ?? Date.now(),
+    };
   } catch {
     return null;
   }
@@ -109,6 +128,7 @@ export function useModeTransition() {
     return {
       origin: { x: 0, y: 0 },
       phase: "closed",
+      presentation: "iris",
       visible: false,
     };
   });
@@ -123,11 +143,11 @@ export function useModeTransition() {
   const playOpening = useCallback(
     async (origin: ModeTransitionOrigin) => {
       if (shouldReduceMotion()) return;
-      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening-start", visible: true });
+      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening-start", presentation: "iris", visible: true });
       await waitFrame();
-      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening", visible: true });
+      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening", presentation: "iris", visible: true });
       await wait(MODE_TRANSITION_OPEN_MS);
-      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening", visible: false });
+      setSafeTransitionState({ origin: clampOrigin(origin), phase: "opening", presentation: "iris", visible: false });
     },
     [setSafeTransitionState],
   );
@@ -142,14 +162,13 @@ export function useModeTransition() {
 
       const task = (async () => {
         const closeOrigin = resolveModeTransitionOrigin();
-        setSafeTransitionState({ origin: closeOrigin, phase: "closing-start", visible: true });
+        setSafeTransitionState({ origin: closeOrigin, phase: "closing-start", presentation: "iris", visible: true });
         await waitFrame();
-        setSafeTransitionState({ origin: closeOrigin, phase: "closing", visible: true });
+        setSafeTransitionState({ origin: closeOrigin, phase: "closing", presentation: "iris", visible: true });
         await wait(MODE_TRANSITION_CLOSE_MS);
-        setSafeTransitionState({ origin: closeOrigin, phase: "closed", visible: true });
+        setSafeTransitionState({ origin: closeOrigin, phase: "closed", presentation: "iris", visible: true });
         await action();
-        await waitFrame();
-        await waitFrame();
+        await waitTransitionFrames();
         await playOpening(resolveModeTransitionOrigin());
       })();
 
@@ -164,7 +183,7 @@ export function useModeTransition() {
   );
 
   const runRouteTransition = useCallback(
-    async (href: string, action?: () => void | Promise<void>) => {
+    async (href: string, action?: () => void | Promise<void>, options: ModeTransitionRouteOptions = {}) => {
       if (typeof window === "undefined") return;
       if (shouldReduceMotion()) {
         await action?.();
@@ -174,14 +193,15 @@ export function useModeTransition() {
       if (runningRef.current) await runningRef.current;
 
       const task = (async () => {
-        const closeOrigin = resolveModeTransitionOrigin();
-        setSafeTransitionState({ origin: closeOrigin, phase: "closing-start", visible: true });
+        const presentation = options.presentation ?? "iris";
+        const closeOrigin = presentation === "blackout" ? centerOrigin() : resolveModeTransitionOrigin();
+        setSafeTransitionState({ origin: closeOrigin, phase: "closing-start", presentation, visible: true });
         await waitFrame();
-        setSafeTransitionState({ origin: closeOrigin, phase: "closing", visible: true });
+        setSafeTransitionState({ origin: closeOrigin, phase: "closing", presentation, visible: true });
         await wait(MODE_TRANSITION_CLOSE_MS);
-        setSafeTransitionState({ origin: closeOrigin, phase: "closed", visible: true });
+        setSafeTransitionState({ origin: closeOrigin, phase: "closed", presentation, visible: true });
         await action?.();
-        storeRouteTransition(closeOrigin);
+        storeRouteTransition(closeOrigin, presentation);
         window.location.assign(href);
       })();
 
@@ -206,15 +226,20 @@ export function useModeTransition() {
       }
       routeOpeningStartedRef.current = true;
       void (async () => {
-        await waitFrame();
-        await waitFrame();
-        await playOpening(readAnchorOrigin() ?? origin);
+        await waitTransitionFrames();
+        if (origin.presentation === "blackout") {
+          setSafeTransitionState({ origin: origin.origin, phase: "closed", presentation: "blackout", visible: true });
+          await waitFrame();
+          await playOpening(origin.origin);
+          return;
+        }
+        await playOpening(readAnchorOrigin() ?? origin.origin);
       })();
     }
     return () => {
       mountedRef.current = false;
     };
-  }, [playOpening]);
+  }, [playOpening, setSafeTransitionState]);
 
   return {
     runModeTransition,
@@ -229,7 +254,7 @@ export function ModeTransitionOverlay({ state }: { state: ModeTransitionViewStat
   return (
     <div
       aria-hidden="true"
-      className={`mode-transition-overlay ${state.phase}`}
+      className={`mode-transition-overlay ${state.phase}${state.presentation === "blackout" ? " blackout" : ""}`}
       style={
         {
           "--mode-transition-x": `${state.origin.x}px`,

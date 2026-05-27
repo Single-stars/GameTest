@@ -38,8 +38,8 @@ export class SimpleGameSync {
     this.now = options.now ?? (() => Date.now());
   }
 
-  update(state: SelfGameState, options: { immediate?: boolean } = {}) {
-    const nextSignature = stableSerialize(state);
+  update(state: SelfGameState, options: { immediate?: boolean; signature?: string } = {}) {
+    const nextSignature = options.signature ?? stableSerialize(state);
     this.latestState = state;
     this.latestSignature = nextSignature;
     if (nextSignature !== this.lastSentSignature) this.dirty = true;

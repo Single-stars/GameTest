@@ -20,6 +20,7 @@ const ROOM_PLAYER_SIZE = 58;
 const BUTTON_REACH = 12;
 const MOVE_SPEED = 42;
 const EXIT_LEFT = -9;
+const LEVEL_SELECT_PRESENCE_SYNC_MS = 90;
 
 type LevelSelectRoomProps = {
   opponentName?: string;
@@ -185,10 +186,6 @@ export function MultiplayerLevelSelectRoom({
   }, [selfReady]);
 
   useEffect(() => {
-    publishPresence(playerX, inputDirectionRef.current);
-  }, [playerX, publishPresence]);
-
-  useEffect(() => {
     if (isMultiplayerLevelSelectReadyZone(selection, playerX)) return;
     updateReady(false);
   }, [playerX, selection, updateReady]);
@@ -207,7 +204,7 @@ export function MultiplayerLevelSelectRoom({
         playerXRef.current = clamped;
         setPlayerX(clamped);
         updateReady(isMultiplayerLevelSelectReadyZone(selection, clamped));
-        if (time - lastPresenceSentRef.current >= 90) {
+        if (time - lastPresenceSentRef.current >= LEVEL_SELECT_PRESENCE_SYNC_MS) {
           lastPresenceSentRef.current = time;
           publishPresence(clamped, inputDirection);
         }

@@ -26,6 +26,8 @@ test("mode transitions are implemented as a reusable visual layer", () => {
   assert.match(transitionSource, /sessionStorage/);
   assert.match(transitionSource, /prefers-reduced-motion/);
   assert.match(transitionSource, /requestAnimationFrame/);
+  assert.match(transitionSource, /waitTransitionFrames/);
+  assert.match(transitionSource, /MODE_TRANSITION_STAGE_SETTLE_FRAMES/);
   assert.match(transitionSource, /pointerEvents/);
   assert.match(transitionSource, /mode-transition-hole/);
 
@@ -51,8 +53,8 @@ test("mode transitions are implemented as a reusable visual layer", () => {
   assert.match(cssSource, /\.mode-transition-hole/);
   assert.match(cssSource, /z-index:\s*3000/);
   assert.match(cssSource, /box-shadow:\s*0 0 0 220vmax/);
-  assert.match(transitionSource, /MODE_TRANSITION_CLOSE_MS = 1500/);
-  assert.match(transitionSource, /MODE_TRANSITION_OPEN_MS = 1500/);
-  assert.match(cssSource, /transition:[\s\S]*width 1500ms/);
-  assert.match(cssSource, /transition-duration:\s*1500ms,\s*1500ms,\s*180ms/);
+  assert.match(transitionSource, /MODE_TRANSITION_CLOSE_MS = 900/);
+  assert.match(transitionSource, /MODE_TRANSITION_OPEN_MS = 900/);
+  assert.match(cssSource, /transition:[\s\S]*width 900ms/);
+  assert.match(cssSource, /transition-duration:\s*900ms,\s*900ms,\s*180ms/);
 });

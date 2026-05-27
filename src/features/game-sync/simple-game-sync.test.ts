@@ -62,3 +62,17 @@ test("simple game sync can keep input alive without sending every frame", () => 
     ["left", "left"],
   );
 });
+
+test("simple game sync can use caller-provided signatures instead of serializing full state", () => {
+  const sent: SelfGameState[] = [];
+  const sync = new SimpleGameSync((nextState) => sent.push(nextState), 33);
+
+  sync.update({ ...state("right"), usedPlatformIds: [1] }, { immediate: true, signature: "right:playing" });
+  sync.update({ ...state("right"), usedPlatformIds: [1, 2, 3, 4, 5] }, { immediate: true, signature: "right:playing" });
+  sync.update({ ...state("left"), usedPlatformIds: [1, 2, 3, 4, 5] }, { immediate: true, signature: "left:playing" });
+
+  assert.deepEqual(
+    sent.map((nextState) => nextState.direction),
+    ["right", "left"],
+  );
+});

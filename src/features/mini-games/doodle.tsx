@@ -849,6 +849,12 @@ export function DoodleJumpPrototype({
     transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
     width: `${logicStageWidth}px`,
   };
+  const playerShellStyle = {
+    transform: transformPoint3d(
+      clamp(view.playerX, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2) - PLAYER_SIZE / 2,
+      logicStageHeight - (view.playerY - view.cameraY) - PLAYER_SIZE / 2,
+    ),
+  };
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -939,6 +945,7 @@ export function DoodleJumpPrototype({
           <div
             className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
             ref={playerShellRef}
+            style={playerShellStyle}
           >
             <PlayerAvatar
               {...resolveDoodlePlayerAvatarView(view)}

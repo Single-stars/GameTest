@@ -6,14 +6,19 @@
   --outdoor-field: #d8e4d6;
   --outdoor-field-2: #c7d8c8;
   --outdoor-accent: #2f6c52;
+  --outdoor-bg-top: rgba(255, 253, 248, 0.95);
+  --outdoor-bg-band: rgba(230, 240, 231, 0.92);
+  --outdoor-meta-width: min(34vw, 150px);
   position: fixed;
   inset: 0;
+  height: 100dvh;
+  min-height: 100svh;
   z-index: 1250;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.95) 0 40%, rgba(230, 240, 231, 0.92) 40% 45%, var(--outdoor-field) 45% 100%),
+    linear-gradient(180deg, var(--outdoor-bg-top) 0 40%, var(--outdoor-bg-band) 40% 45%, var(--outdoor-field) 45% 100%),
     var(--outdoor-field);
   color: var(--outdoor-ink);
   touch-action: manipulation;
@@ -24,18 +29,24 @@
   --outdoor-field: #eadfca;
   --outdoor-field-2: #ddd0b6;
   --outdoor-accent: #8a5f2e;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.95) 0 40%, rgba(241, 230, 207, 0.92) 40% 45%, var(--outdoor-field) 45% 100%),
-    var(--outdoor-field);
+  --outdoor-bg-top: rgba(255, 251, 241, 0.95);
+  --outdoor-bg-band: rgba(241, 230, 207, 0.92);
 }
 
-.outdoor-adventure-room.region-tower-alley {
+.outdoor-adventure-room.region-city-corner {
   --outdoor-field: #d9deec;
   --outdoor-field-2: #c9d0e1;
   --outdoor-accent: #5b6fa3;
-  background:
-    linear-gradient(180deg, rgba(247, 249, 255, 0.94) 0 40%, rgba(221, 226, 239, 0.92) 40% 45%, var(--outdoor-field) 45% 100%),
-    var(--outdoor-field);
+  --outdoor-bg-top: rgba(247, 249, 255, 0.94);
+  --outdoor-bg-band: rgba(221, 226, 239, 0.92);
+}
+
+.outdoor-adventure-room.region-far-edge {
+  --outdoor-field: #ddd6e8;
+  --outdoor-field-2: #cec4dd;
+  --outdoor-accent: #71558f;
+  --outdoor-bg-top: rgba(250, 247, 255, 0.94);
+  --outdoor-bg-band: rgba(226, 219, 236, 0.92);
 }
 
 .outdoor-status-strip {
@@ -46,15 +57,44 @@
   padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 6px max(14px, env(safe-area-inset-left));
 }
 
-.outdoor-status-strip span {
+.outdoor-status-strip > span {
   min-width: 0;
   border-bottom: 2px solid color-mix(in srgb, var(--outdoor-accent) 46%, transparent);
-  padding: 8px 4px 7px;
+  padding: 8px 6px 7px;
   background: rgba(255, 253, 248, 0.64);
-  text-align: center;
+  text-align: left;
   font-size: 12px;
   font-weight: 950;
   white-space: nowrap;
+}
+
+.outdoor-resource-meter {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 3px;
+  max-width: 100%;
+}
+
+.outdoor-resource-label,
+.outdoor-resource-value {
+  flex: 0 0 auto;
+}
+
+.outdoor-resource-delta {
+  flex: 0 0 auto;
+  min-width: 1.8em;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.outdoor-resource-delta.positive {
+  color: #16833e;
+}
+
+.outdoor-resource-delta.negative {
+  color: #c43b32;
 }
 
 .outdoor-relic-area {
@@ -127,11 +167,12 @@
 }
 
 .outdoor-relic-chip[aria-pressed="true"] {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--outdoor-accent) 30%, transparent);
+  border-width: 3px;
 }
 
 .outdoor-meta-panel {
-  max-width: min(34vw, 150px);
+  width: var(--outdoor-meta-width);
+  max-width: var(--outdoor-meta-width);
   display: grid;
   gap: 5px;
   justify-items: end;
@@ -177,9 +218,10 @@
 .outdoor-relic-detail {
   position: absolute;
   left: max(14px, env(safe-area-inset-left));
-  right: calc(max(14px, env(safe-area-inset-right)) + min(34vw, 150px) + 8px);
+  right: calc(max(14px, env(safe-area-inset-right)) + var(--outdoor-meta-width) + 8px);
   top: 37px;
-  z-index: 7;
+  z-index: 60;
+  max-width: calc(100% - max(14px, env(safe-area-inset-left)) - max(14px, env(safe-area-inset-right)) - var(--outdoor-meta-width) - 8px);
   max-height: none;
   overflow: hidden;
   border-left: 3px solid var(--outdoor-accent);
@@ -192,7 +234,8 @@
   font-size: 12px;
   font-weight: 900;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
   transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
   pointer-events: none;
 }
@@ -258,12 +301,24 @@
   --outdoor-field: #eadfca;
   --outdoor-field-2: #ddd0b6;
   --outdoor-accent: #8a5f2e;
+  --outdoor-bg-top: rgba(255, 251, 241, 0.95);
+  --outdoor-bg-band: rgba(241, 230, 207, 0.92);
 }
 
-.outdoor-scene-panel.region-tower-alley {
+.outdoor-scene-panel.region-city-corner {
   --outdoor-field: #d9deec;
   --outdoor-field-2: #c9d0e1;
   --outdoor-accent: #5b6fa3;
+  --outdoor-bg-top: rgba(247, 249, 255, 0.94);
+  --outdoor-bg-band: rgba(221, 226, 239, 0.92);
+}
+
+.outdoor-scene-panel.region-far-edge {
+  --outdoor-field: #ddd6e8;
+  --outdoor-field-2: #cec4dd;
+  --outdoor-accent: #71558f;
+  --outdoor-bg-top: rgba(250, 247, 255, 0.94);
+  --outdoor-bg-band: rgba(226, 219, 236, 0.92);
 }
 
 .outdoor-scene-panel.preview {
@@ -278,6 +333,26 @@
 .outdoor-adventure-room.scene-resetting .outdoor-scene-track {
   transform: translateX(-100%);
   transition: none;
+}
+
+.outdoor-adventure-room.summary-transition {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.outdoor-adventure-room.summary-transition > .outdoor-status-strip,
+.outdoor-adventure-room.summary-transition > .outdoor-relic-area,
+.outdoor-adventure-room.summary-transition > .outdoor-debug-panel {
+  display: none;
+}
+
+.outdoor-adventure-room.summary-transition .outdoor-scene-viewport,
+.outdoor-adventure-room.summary-transition .outdoor-scene-track,
+.outdoor-adventure-room.summary-transition .outdoor-scene-panel {
+  min-height: 100dvh;
+}
+
+.outdoor-adventure-room.summary-transition .outdoor-scene-panel {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .outdoor-event-panel {
@@ -421,7 +496,6 @@
 }
 
 .outdoor-choice-wall.selectable {
-  cursor: pointer;
 }
 
 .outdoor-choice-wall.selected {
@@ -624,36 +698,47 @@
   position: fixed;
   inset: 0;
   z-index: 1300;
+  height: 100dvh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
-  background: var(--bg);
+  background: #fffdf8;
 }
 
 .outdoor-round-play .play-screen {
-  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  justify-self: stretch;
+  margin: 0;
+  padding: 0 0 max(14px, env(safe-area-inset-bottom));
 }
 
+.outdoor-round-play .prototype-game-wrap,
+.outdoor-round-play .prototype-stage {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-radius: 0;
+}
+
+.outdoor-round-play .prototype-stage {
+  border: 0;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: none;
+}
+
+.outdoor-round-play .round-header,
 .outdoor-round-play .progress-track {
   display: none;
 }
 
-.outdoor-round-status {
-  position: fixed;
-  left: 50%;
-  top: calc(max(10px, env(safe-area-inset-top)) + 54px);
-  z-index: 20;
-  max-width: calc(100vw - 24px);
-  border: var(--hud-border);
-  border-radius: var(--radius-sm);
-  padding: 5px 9px;
-  background: rgba(255, 253, 248, 0.78);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 950;
-  line-height: 1.25;
-  text-align: center;
-  translate: -50% 0;
-  pointer-events: none;
-  backdrop-filter: blur(12px);
+.outdoor-round-play .outdoor-relic-area {
+  z-index: 45;
 }
 
 @media (min-width: 760px) {
@@ -677,19 +762,24 @@
 
   .outdoor-relic-detail {
     left: 0;
-    right: calc(min(34vw, 150px) + 8px);
+    right: calc(var(--outdoor-meta-width) + 8px);
+    max-width: calc(100% - var(--outdoor-meta-width) - 8px);
   }
 }
 
 @media (max-width: 420px) {
-  .outdoor-status-strip span {
+  .outdoor-adventure-room {
+    --outdoor-meta-width: 30vw;
+  }
+
+  .outdoor-status-strip > span {
     font-size: 11px;
     padding-left: 2px;
     padding-right: 2px;
   }
 
   .outdoor-meta-panel {
-    max-width: 30vw;
+    max-width: var(--outdoor-meta-width);
   }
 
   .outdoor-day-region {
@@ -714,4 +804,125 @@
 
 .outdoor-adventure-room.scene-leaving.exit-right .outdoor-scene-track {
   transform: translateX(-200%);
+}
+
+.outdoor-summary-room {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(28px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+}
+
+.outdoor-summary-page {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 18px;
+  color: #172018;
+  text-align: left;
+}
+
+.outdoor-summary-page small {
+  color: rgba(23, 32, 24, 0.58);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.outdoor-summary-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.outdoor-summary-lines p {
+  margin: 0;
+  font-size: clamp(22px, 6vw, 34px);
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.outdoor-summary-stats,
+.outdoor-summary-materials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outdoor-summary-stats span,
+.outdoor-summary-materials span {
+  border: 1px solid rgba(47, 108, 82, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ecf8f1;
+  color: #215d47;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.outdoor-summary-page > strong {
+  color: rgba(23, 32, 24, 0.64);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.outdoor-settlement-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(10, 12, 10, 0.38);
+}
+
+.outdoor-settlement-card {
+  width: min(420px, 100%);
+  border: 2px solid rgba(23, 32, 24, 0.16);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 253, 248, 0.96);
+  color: #172018;
+  box-shadow: 0 18px 44px rgba(20, 20, 20, 0.18);
+}
+
+.outdoor-settlement-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.outdoor-settlement-card p {
+  margin: 0 0 12px;
+  color: rgba(23, 32, 24, 0.72);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.outdoor-settlement-grid,
+.outdoor-settlement-materials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.outdoor-settlement-grid span,
+.outdoor-settlement-materials span {
+  border: 1px solid rgba(47, 108, 82, 0.2);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: #ecf8f1;
+  color: #215d47;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.outdoor-settlement-card button {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: #172018;
+  color: #fffdf8;
+  font: inherit;
+  font-weight: 950;
 }

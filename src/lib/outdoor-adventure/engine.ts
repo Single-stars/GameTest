@@ -70,6 +70,8 @@ export type OutdoorAdventureState = {
   journal: string[];
   lastOutcome?: OutdoorChoiceResult;
   pendingNextNode?: OutdoorAdventureNode;
+  pendingSummaryReason?: "supply-failure";
+  pendingSceneStaminaCost?: number;
   summary?: string;
   updatedAt: string;
 };
@@ -186,16 +188,24 @@ function applyTrouble(state: OutdoorAdventureState, amount: number) {
   state.trouble = Math.max(0, state.trouble + amount);
 }
 
+function hasPendingFailureSummary(state: OutdoorAdventureState) {
+  return state.pendingNextNode?.kind === "summary" && state.pendingSummaryReason === "supply-failure";
+}
+
 function resolveNearDeath(state: OutdoorAdventureState) {
   if (state.supply > 0 || state.status === "settled" || state.status === "failed") return state;
+  if (hasPendingFailureSummary(state)) return state;
   if (state.reviveCoins > 0) {
     state.reviveCoins -= 1;
     state.supply = 8;
     addJournal(state, "复活币在口袋里亮了一下，把你从野外边缘拽了回来。");
     return state;
   }
-  state.status = "failed";
-  state.currentNode = { kind: "summary" };
+  state.status = "exploring";
+  state.pendingNextNode = { kind: "summary" };
+  state.pendingSummaryReason = "supply-failure";
+  state.settledMaterials = settleMaterials(state, "failed");
+  clearDebuffRelics(state);
   state.summary = `第 ${state.day} 天，物资耗尽，你被野外送回了家。`;
   addJournal(state, "物资见底，野外把你送回了家。");
   return state;
@@ -260,6 +270,7 @@ function selectNextEvent(state: OutdoorAdventureState) {
 
 function advanceAfterAction(state: OutdoorAdventureState) {
   resolveNearDeath(state);
+  if (hasPendingFailureSummary(state)) return state;
   if (state.status === "failed" || state.status === "settled") return state;
   if (state.stamina <= 0) {
     state.status = "day-end";
@@ -279,6 +290,7 @@ function advanceAfterAction(state: OutdoorAdventureState) {
 
 function advanceAfterMiniGame(state: OutdoorAdventureState) {
   resolveNearDeath(state);
+  if (hasPendingFailureSummary(state)) return state;
   if (state.status === "failed" || state.status === "settled") return state;
   if (state.stamina <= 0) {
     state.status = "day-end";
@@ -295,6 +307,9 @@ function applyEffect(state: OutdoorAdventureState, effect: OutdoorEventEffect) {
   switch (effect.type) {
     case "supply":
       state.supply += effect.amount;
+      return;
+    case "stamina":
+      state.stamina = Math.max(0, state.stamina + effect.amount);
       return;
     case "trouble":
       applyTrouble(state, effect.amount);
@@ -595,6 +610,21 @@ export function getOutdoorDebugOutcomeButtons(eventId: string): OutdoorDebugOutc
   );
 }
 
+export function applyOutdoorDebugChallengeSelection(
+  state: OutdoorAdventureState,
+  roundId: OutdoorAdventureRoundId = "memory",
+): OutdoorAdventureState {
+  return {
+    ...state,
+    currentNode: { kind: "mini-game", roundId },
+    lastOutcome: undefined,
+    pendingNextNode: undefined,
+    pendingSummaryReason: undefined,
+    status: "exploring",
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function applyOutdoorEventChoice(
   state: OutdoorAdventureState,
   eventId: string,
@@ -618,7 +648,7 @@ export function applyOutdoorEventChoice(
   next.status = "exploring";
   next.regionId = state.regionId;
   next.pendingNextNode = undefined;
-  next.stamina = Math.max(0, next.stamina - (event.staminaCost ?? 1));
+  next.pendingSceneStaminaCost = undefined;
   next.stepInDay += 1;
   next.distanceFromHome += 1;
   next.regionId = regionForProgress(next);
@@ -643,16 +673,17 @@ export function applyOutdoorEventChoice(
   next.lastOutcome = buildChoiceResult(state, next, event, option, outcome, options.visibleChoiceIds);
 
   const resolved = resolveNearDeath(next);
+  if (hasPendingFailureSummary(resolved)) return resolved;
   if (resolved.status === "failed" || resolved.status === "settled") return resolved;
   if (hasForcedNode(outcome.effects)) {
-    resolved.pendingNextNode = { ...resolved.currentNode };
+    resolved.pendingNextNode = resolved.stamina <= 0 ? { kind: "day-end" } : { ...resolved.currentNode };
     resolved.currentNode = displayNode;
     return resolved;
   }
   const advanced = advanceAfterAction(resolved);
-  advanced.pendingNextNode = { ...advanced.currentNode };
-  advanced.currentNode = displayNode;
-  return advanced;
+  resolved.pendingNextNode = { ...advanced.currentNode };
+  resolved.currentNode = displayNode;
+  return resolved;
 }
 
 export function continueOutdoorAdventureAfterOutcome(state: OutdoorAdventureState): OutdoorAdventureState {
@@ -660,6 +691,19 @@ export function continueOutdoorAdventureAfterOutcome(state: OutdoorAdventureStat
   if (next.pendingNextNode) {
     next.currentNode = { ...next.pendingNextNode };
     next.pendingNextNode = undefined;
+  }
+  if (next.currentNode.kind === "summary" && next.summary) {
+    next.status = "failed";
+  }
+  if (next.currentNode.kind !== "day-end" && next.currentNode.kind !== "summary") {
+    next.stamina = Math.max(0, next.stamina - (next.pendingSceneStaminaCost ?? 1));
+  }
+  next.pendingSceneStaminaCost = undefined;
+  next.pendingSummaryReason = undefined;
+  if (next.currentNode.kind === "day-end" && next.status !== "failed" && next.status !== "settled") {
+    next.status = "day-end";
+  } else if (next.status !== "failed" && next.status !== "settled") {
+    next.status = "exploring";
   }
   next.lastOutcome = undefined;
   next.updatedAt = timestamp();
@@ -790,9 +834,10 @@ export function attemptOutdoorMiniGameEscape(
   if (randomValue >= chance / 100) {
     next.supply -= 1;
     addJournal(next, `${getOutdoorMiniGameTitle(roundId)}前，你尝试逃跑失败，物资少了 1。`);
+    next.lastOutcome = buildMiniGameEscapeResult(before, next, roundId, false);
     const resolved = resolveNearDeath(next);
+    if (hasPendingFailureSummary(resolved)) return resolved;
     if (resolved.status === "failed" || resolved.status === "settled") return resolved;
-    resolved.lastOutcome = buildMiniGameEscapeResult(before, resolved, roundId, false);
     resolved.currentNode = displayNode;
     return resolved;
   }
@@ -806,6 +851,7 @@ export function attemptOutdoorMiniGameEscape(
   addJournal(next, `${getOutdoorMiniGameTitle(roundId)}前，你从旁边溜走了。`);
 
   const advanced = advanceAfterMiniGame(next);
+  if (hasPendingFailureSummary(advanced)) return advanced;
   if (advanced.status === "failed" || advanced.status === "settled") return advanced;
   advanced.lastOutcome = buildMiniGameEscapeResult(before, advanced, roundId, true);
   advanced.pendingNextNode = { ...advanced.currentNode };
@@ -859,9 +905,10 @@ export function handleOutdoorMiniGameResult(
     addTroubleFromFailure(next);
     addJournal(next, `${getOutdoorMiniGameTitle(roundId)}失败了，物资少了 ${loss}。`);
   }
+  next.lastOutcome = buildMiniGameResult(before, next, roundId, result);
   const advanced = advanceAfterMiniGame(next);
+  if (hasPendingFailureSummary(advanced)) return advanced;
   if (advanced.status === "failed" || advanced.status === "settled") return advanced;
-  advanced.lastOutcome = buildMiniGameResult(before, advanced, roundId, result);
   advanced.pendingNextNode = { ...advanced.currentNode };
   advanced.currentNode = displayNode;
   return advanced;
@@ -902,6 +949,10 @@ export function campToNextOutdoorDay(state: OutdoorAdventureState): OutdoorAdven
   next.updatedAt = timestamp();
   addJournal(next, `你扎营过夜，远行脚印吃掉了 ${cost} 物资。`);
   const resolved = resolveNearDeath(next);
+  if (hasPendingFailureSummary(resolved)) {
+    resolved.currentNode = displayNode;
+    return resolved;
+  }
   if (resolved.status === "failed" || resolved.status === "settled") return resolved;
   resolved.lastOutcome = buildDayRestResult(before, resolved);
   resolved.pendingNextNode = { ...resolved.currentNode };
@@ -942,12 +993,11 @@ function clearDebuffRelics(state: OutdoorAdventureState) {
 export function finishOutdoorAdventure(state: OutdoorAdventureState): OutdoorAdventureState {
   const next = cloneState(state);
   next.settledMaterials = settleMaterials(next, "active");
-  next.distanceFromHome = 0;
-  next.regionId = "doorstep-meadow";
   next.status = "settled";
   next.currentNode = { kind: "summary" };
   next.lastOutcome = undefined;
   next.pendingNextNode = undefined;
+  next.pendingSummaryReason = undefined;
   next.summary = `第 ${next.day} 天，你整理完这趟日记，带着 ${Math.max(0, next.supply)} 物资和 ${next.relics.length} 件纪念品回家。`;
   next.updatedAt = timestamp();
   addJournal(next, "你正式结束这趟远行，把值得记住的事写进日记。");
@@ -957,13 +1007,12 @@ export function finishOutdoorAdventure(state: OutdoorAdventureState): OutdoorAdv
 export function abandonOutdoorAdventureAsFailed(state: OutdoorAdventureState): OutdoorAdventureState {
   const next = cloneState(state);
   next.settledMaterials = settleMaterials(next, "failed");
-  next.distanceFromHome = 0;
-  next.regionId = "doorstep-meadow";
   clearDebuffRelics(next);
   next.status = "failed";
   next.currentNode = { kind: "summary" };
   next.lastOutcome = undefined;
   next.pendingNextNode = undefined;
+  next.pendingSummaryReason = undefined;
   next.summary = `第 ${next.day} 天，这趟旅途到这里为止，暂时以失败告终。`;
   next.updatedAt = timestamp();
   addJournal(next, "你没有继续这趟远行，把它记成一次失败告终的旅途。");
@@ -1001,6 +1050,25 @@ export function applyOutdoorDebugGrantAll(state: OutdoorAdventureState): Outdoor
   next.updatedAt = timestamp();
   addJournal(next, "调试：体力和物资补满，麻烦增加，所有素材和纪念品各加一。");
   return next;
+}
+
+export function applyOutdoorDebugAddDistance(state: OutdoorAdventureState, amount = 20): OutdoorAdventureState {
+  const next = cloneState(state);
+  next.distanceFromHome = Math.max(0, next.distanceFromHome + amount);
+  next.regionId = regionForProgress(next);
+  next.updatedAt = timestamp();
+  addJournal(next, `调试：离家步数 +${amount}。`);
+  return next;
+}
+
+export function applyOutdoorDebugLoseSupplies(state: OutdoorAdventureState): OutdoorAdventureState {
+  const next = cloneState(state);
+  next.supply -= 999;
+  next.pendingNextNode = undefined;
+  next.pendingSummaryReason = undefined;
+  next.updatedAt = timestamp();
+  addJournal(next, "调试：物资 -999。");
+  return resolveNearDeath(next);
 }
 
 export function writePersistedOutdoorAdventureState(storage: StorageLike, state: OutdoorAdventureState) {
@@ -1094,6 +1162,7 @@ export function readPersistedOutdoorAdventureState(storage: StorageLike): Outdoo
       journal: Array.isArray(parsed.journal) ? parsed.journal.filter((item): item is string => typeof item === "string").slice(-120) : [],
       lastOutcome: sanitizeLastOutcome(parsed.lastOutcome),
       pendingNextNode: isOutdoorAdventureNode(parsed.pendingNextNode) ? parsed.pendingNextNode : undefined,
+      pendingSummaryReason: parsed.pendingSummaryReason === "supply-failure" ? "supply-failure" : undefined,
       summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : timestamp(),
     };

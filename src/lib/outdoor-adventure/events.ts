@@ -14,6 +14,13 @@ export type OutdoorRegionDefinition = {
   tone: string;
   description: string;
   minDistance: number;
+  theme: {
+    accent: string;
+    field: string;
+    field2: string;
+    top: string;
+    band: string;
+  };
 };
 
 export type OutdoorRelicDefinition = {
@@ -38,6 +45,7 @@ export type OutdoorMaterialDefinition = {
 
 export type OutdoorEventEffect =
   | { type: "supply"; amount: number }
+  | { type: "stamina"; amount: number }
   | { type: "trouble"; amount: number }
   | { type: "relic"; relicId: string }
   | { type: "removeRelic"; relicId: string }
@@ -118,6 +126,13 @@ export const OUTDOOR_ADVENTURE_REGIONS: OutdoorRegionDefinition[] = [
     shortName: "草地",
     tone: "soft",
     description: "安全、轻松、可爱。猪猪、小花、路牌和小木堆常在这里出现。",
+    theme: {
+      accent: "#2f6c52",
+      band: "rgba(230, 240, 231, 0.92)",
+      field: "#d8e4d6",
+      field2: "#c7d8c8",
+      top: "rgba(255, 253, 248, 0.95)",
+    },
   },
   {
     id: "block-market",
@@ -126,6 +141,13 @@ export const OUTDOOR_ADVENTURE_REGIONS: OutdoorRegionDefinition[] = [
     shortName: "集市",
     tone: "busy",
     description: "热闹、交易、混乱。售货机、商人、纸箱和门卫挤在一起。",
+    theme: {
+      accent: "#8a5f2e",
+      band: "rgba(241, 230, 207, 0.92)",
+      field: "#eadfca",
+      field2: "#ddd0b6",
+      top: "rgba(255, 251, 241, 0.95)",
+    },
   },
   {
     id: "city-corner",
@@ -134,6 +156,13 @@ export const OUTDOOR_ADVENTURE_REGIONS: OutdoorRegionDefinition[] = [
     shortName: "角落",
     tone: "tense",
     description: "怪异、风险、机会。债务单、旧镜子和近路门会把麻烦放大。",
+    theme: {
+      accent: "#5b6fa3",
+      band: "rgba(221, 226, 239, 0.92)",
+      field: "#d9deec",
+      field2: "#c9d0e1",
+      top: "rgba(247, 249, 255, 0.94)",
+    },
   },
   {
     id: "far-edge",
@@ -142,6 +171,13 @@ export const OUTDOOR_ADVENTURE_REGIONS: OutdoorRegionDefinition[] = [
     shortName: "远处",
     tone: "strange",
     description: "稀有、高风险、离谱。传说素材和高麻烦事件更常出现。",
+    theme: {
+      accent: "#71558f",
+      band: "rgba(226, 219, 236, 0.92)",
+      field: "#ddd6e8",
+      field2: "#cec4dd",
+      top: "rgba(250, 247, 255, 0.94)",
+    },
   },
 ];
 

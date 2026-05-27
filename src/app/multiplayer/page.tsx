@@ -4,7 +4,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ModeTransitionOverlay, useModeTransition } from "@/features/app-transition/mode-transition";
+import { ModeTransitionOverlay, useModeTransition, type ModeTransitionRouteOptions } from "@/features/app-transition/mode-transition";
 import { ConnectionStatus } from "@/features/multiplayer/connection-status";
 import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
 import { MultiplayerLevelSelectRoom } from "@/features/multiplayer/multiplayer-level-select-room";
@@ -171,8 +171,8 @@ function MultiplayerPageContent() {
   const { runModeTransition, runRouteTransition, transitionState } = useModeTransition();
 
   const transitionToRoute = useCallback(
-    (href: string, action?: () => void | Promise<void>) => {
-      return runRouteTransition(href, action);
+    (href: string, action?: () => void | Promise<void>, options?: ModeTransitionRouteOptions) => {
+      return runRouteTransition(href, action, options);
     },
     [runRouteTransition],
   );
@@ -838,12 +838,38 @@ function MultiplayerPageContent() {
     return moveRole === "left" ? "你负责左方向" : "你负责右方向";
   }, [activePlayMode, battleLevel.gameId, runSeed, snapshot.match, snapshot.role]);
 
+  const waitingForInitialHomeworldSession =
+    isHomeworldRoute &&
+    skinHydrated &&
+    !snapshot.role &&
+    snapshot.status === "idle" &&
+    (hostHomeworldParam === "1" || Boolean(roomParam));
+
   if (!isHomeworldRoute) {
     return (
-      <main className="app-shell app-shell-play" style={{ display: "grid", minHeight: "100dvh", placeItems: "center", padding: 16 }}>
-        正在进入家园联机…
+      <main className="app-shell app-shell-play route-blackout-shell">
         <ModeTransitionOverlay state={transitionState} />
       </main>
+    );
+  }
+
+  if (!skinHydrated) {
+    return (
+      <PlayerAvatarSkinProvider skin={selectedSkin}>
+        <main className="app-shell app-shell-play route-blackout-shell">
+          <ModeTransitionOverlay state={transitionState} />
+        </main>
+      </PlayerAvatarSkinProvider>
+    );
+  }
+
+  if (waitingForInitialHomeworldSession) {
+    return (
+      <PlayerAvatarSkinProvider skin={selectedSkin}>
+        <main className="app-shell app-shell-play route-blackout-shell">
+          <ModeTransitionOverlay state={transitionState} />
+        </main>
+      </PlayerAvatarSkinProvider>
     );
   }
 
@@ -1140,7 +1166,7 @@ function MultiplayerPageContent() {
 
 export default function MultiplayerPage() {
   return (
-    <Suspense fallback={<main style={{ padding: 16 }}>联机页面加载中…</main>}>
+    <Suspense fallback={<main className="app-shell app-shell-play route-blackout-shell" />}>
       <MultiplayerPageContent />
     </Suspense>
   );

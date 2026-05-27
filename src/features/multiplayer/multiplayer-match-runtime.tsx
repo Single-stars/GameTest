@@ -60,6 +60,28 @@ function resolveCompletionScore(outcome: MiniGameCompletion) {
   return Math.max(0, Math.round(baseScore + timeBonus + progressScore + hitScore + jumpScore - failurePenalty));
 }
 
+function multiplayerStateSignature(state: SelfGameState) {
+  return [
+    state.status,
+    state.direction ?? "none",
+    state.phase ?? "",
+    state.charge ?? "",
+    state.progress ?? 0,
+    state.score ?? 0,
+    state.x ?? "",
+    state.y ?? "",
+    state.cameraX ?? "",
+    state.cameraY ?? "",
+    state.cameraScale ?? "",
+    state.platformIndex ?? "",
+    state.nextPlatformIndex ?? "",
+    state.exitingPlatformIndex ?? "",
+    state.failures ?? 0,
+    state.gravity ?? "",
+    state.turns ?? "",
+  ].join(":");
+}
+
 type MultiplayerRuntimeState = {
   cameraX?: number;
   cameraY: number;
@@ -296,10 +318,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         const inputSignature = `${inputOnlyState.direction ?? "none"}:${inputOnlyState.charge ?? ""}:${inputOnlyState.phase ?? ""}:${inputOnlyState.status}`;
         const inputChanged = lastReportedInputSignatureRef.current !== inputSignature;
         lastReportedInputSignatureRef.current = inputSignature;
-        syncRef.current?.update(inputOnlyState, { immediate: inputChanged });
+        syncRef.current?.update(inputOnlyState, { immediate: inputChanged, signature: multiplayerStateSignature(inputOnlyState) });
       }
       if (coOpInputOnly) return;
-      syncRef.current?.update(nextState, { immediate: true });
+      syncRef.current?.update(nextState, { immediate: true, signature: multiplayerStateSignature(nextState) });
       if (nextState.status === "playing") return;
       syncRef.current?.flush({ force: true });
       if (localResultSentRef.current) return;
