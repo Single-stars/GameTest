@@ -620,9 +620,8 @@ export function OutdoorAdventureScreen({
     "--outdoor-event-line-fade-ms": `${textTimings.lineFadeMs}ms`,
   } as CSSProperties & Record<"--outdoor-event-line-fade-ms", string>;
   const entryGatePreviewNode = entryGateOutcome && (entryGateAction === "depart" || entryGateAction === "continue") ? state.currentNode : null;
-  const nextPreviewNode = entryGatePreviewNode ?? state.pendingNextNode ?? null;
+  const nextPreviewNode = entryGatePreviewNode ?? (state.pendingNextNode?.kind === "summary" ? null : state.pendingNextNode) ?? null;
   const previewNode = (scenePhase === "preparing" || scenePhase === "leaving") && exitSide && nextPreviewNode ? nextPreviewNode : null;
-  const isSummaryTransition = previewNode?.kind === "summary";
   const currentOptions = useMemo(() => currentEvent?.options ?? [], [currentEvent]);
   const activeMiniGameRound = !entryGate && state.currentNode.kind === "mini-game" ? state.currentNode.roundId : null;
   const isAdventureTerminal = state.status === "settled" || state.status === "failed";
@@ -1312,44 +1311,6 @@ export function OutdoorAdventureScreen({
     const revealKey = `${nodeKeyFor(node)}:`;
     const isRevealingPreview = eventRevealTargetKey === revealKey;
 
-    if (node.kind === "summary") {
-      const summaryLines = splitDisplayLines(state.summary ?? latestJournal(state), 6);
-      const statusLabel = state.pendingSummaryReason === "supply-failure" || state.status === "failed" ? "冒险失败" : "冒险结算";
-      return (
-        <section
-          className={`outdoor-scene-panel preview ${side} outdoor-summary-room region-${previewRegion.id}`}
-          style={outdoorRegionStyle(previewRegion)}
-          aria-hidden="true"
-        >
-          <div className="outdoor-summary-page">
-            <small>{statusLabel}</small>
-            <div className="outdoor-summary-lines">
-              {summaryLines.map((line, index) => (
-                <p key={`${state.updatedAt}-preview-summary-${index}`}>{line}</p>
-              ))}
-            </div>
-            <div className="outdoor-summary-stats">
-              <span>带回物资 {Math.max(0, state.supply)}</span>
-              <span>纪念品 {state.relics.reduce((sum, item) => sum + item.count, 0)}</span>
-              <span>{statusLabel === "冒险失败" ? "失败返程" : "正式结算"}</span>
-            </div>
-            <div className="outdoor-summary-materials">
-              {settledMaterialEntries.length > 0 ? (
-                settledMaterialEntries.map((material) => (
-                  <span className={`outdoor-material-item rarity-${material.rarity}`} key={material.id}>
-                    {material.name} x{material.count}
-                  </span>
-                ))
-              ) : (
-                <span>没有带回素材</span>
-              )}
-            </div>
-            <strong>再次点击屏幕返回家园</strong>
-          </div>
-        </section>
-      );
-    }
-
     return (
       <section className={`outdoor-scene-panel preview ${side} region-${previewRegion.id}`} style={outdoorRegionStyle(previewRegion)} aria-hidden="true">
         <main className="outdoor-event-panel">
@@ -1385,7 +1346,7 @@ export function OutdoorAdventureScreen({
 
   return (
     <section
-      className={`outdoor-adventure-room region-${currentRegion.id} scene-${scenePhase}${exitSide ? ` exit-${exitSide}` : ""}${isSummaryTransition ? " summary-transition" : ""}`}
+      className={`outdoor-adventure-room region-${currentRegion.id} scene-${scenePhase}${exitSide ? ` exit-${exitSide}` : ""}`}
       style={roomStyle}
       aria-label="外出冒险"
     >

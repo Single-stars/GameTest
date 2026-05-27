@@ -335,26 +335,6 @@
   transition: none;
 }
 
-.outdoor-adventure-room.summary-transition {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.outdoor-adventure-room.summary-transition > .outdoor-status-strip,
-.outdoor-adventure-room.summary-transition > .outdoor-relic-area,
-.outdoor-adventure-room.summary-transition > .outdoor-debug-panel {
-  display: none;
-}
-
-.outdoor-adventure-room.summary-transition .outdoor-scene-viewport,
-.outdoor-adventure-room.summary-transition .outdoor-scene-track,
-.outdoor-adventure-room.summary-transition .outdoor-scene-panel {
-  min-height: 100dvh;
-}
-
-.outdoor-adventure-room.summary-transition .outdoor-scene-panel {
-  grid-template-rows: minmax(0, 1fr);
-}
-
 .outdoor-event-panel {
   z-index: 3;
   align-self: stretch;

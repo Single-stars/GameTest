@@ -713,8 +713,9 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(screenSource, /\) : isAdventureTerminal \? \(/);
   assert.match(screenSource, /outdoor-summary-room/);
   assert.match(screenSource, /outdoor-summary-page/);
-  assert.match(screenSource, /const isSummaryTransition = previewNode\?\.kind === "summary"/);
-  assert.match(screenSource, /isSummaryTransition \? " summary-transition" : ""/);
+  assert.match(screenSource, /state\.pendingNextNode\?\.kind === "summary" \? null : state\.pendingNextNode/);
+  assert.doesNotMatch(screenSource, /summary-transition/);
+  assert.doesNotMatch(screenSource, /preview-summary/);
   assert.match(screenSource, /再次点击屏幕返回家园/);
   assert.match(screenSource, /onClick=\{onBackHome\}/);
   assert.match(screenSource, /onDebugOpenChallenge\(roundId\)/);
@@ -755,11 +756,7 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(cssSource, /\.outdoor-material-item\.rarity-legendary/);
   assert.match(cssSource, /\.outdoor-summary-room/);
   assert.match(cssSource, /\.outdoor-summary-page/);
-  assert.match(cssSource, /\.outdoor-adventure-room\.summary-transition/);
-  assert.match(cssSource, /\.outdoor-adventure-room\.summary-transition > \.outdoor-status-strip/);
-  assert.match(cssSource, /\.outdoor-adventure-room\.summary-transition > \.outdoor-relic-area/);
-  assert.match(cssSource, /\.outdoor-adventure-room\.summary-transition > \.outdoor-debug-panel/);
-  assert.match(cssSource, /\.outdoor-adventure-room\.summary-transition \.outdoor-scene-panel[\s\S]*grid-template-rows: minmax\(0, 1fr\)/);
+  assert.doesNotMatch(cssSource, /summary-transition/);
   assert.match(cssSource, /\.outdoor-summary-lines p/);
   assert.match(cssSource, /--outdoor-meta-width: min\(34vw, 150px\)/);
   assert.match(cssSource, /\.outdoor-relic-detail[\s\S]*right: calc\(max\(14px, env\(safe-area-inset-right\)\) \+ var\(--outdoor-meta-width\) \+ 8px\)/);
