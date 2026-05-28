@@ -1,0 +1,456 @@
+.page {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(253, 250, 244, 0.96), rgba(241, 247, 244, 0.96)),
+    #f8f5ed;
+  color: #171717;
+  padding: 28px clamp(16px, 4vw, 48px) 48px;
+}
+
+.hero,
+.authBar,
+.dashboard,
+.analyticsPanel,
+.filters,
+.feedbackList {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 0 18px;
+}
+
+.hero h1 {
+  margin: 3px 0 8px;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.hero p {
+  margin: 0;
+  color: #5f6058;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.eyebrow {
+  color: #0c7a68 !important;
+  font-size: 13px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em !important;
+}
+
+.refreshButton,
+.authBar button,
+.analyticsPanel button,
+.segmented button {
+  border: 1px solid #d8d0c1;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #191715;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.refreshButton {
+  min-width: 108px;
+  min-height: 44px;
+  padding: 0 18px;
+  background: #171717;
+  color: #fffaf0;
+  border-color: #171717;
+}
+
+.refreshButton:disabled,
+.authBar button:disabled,
+.analyticsPanel button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.authBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid #ded6c8;
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.92);
+  box-shadow: 0 12px 28px rgba(38, 35, 29, 0.08);
+}
+
+.authBar label {
+  display: grid;
+  gap: 7px;
+  color: #615d55;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.authBar input {
+  min-height: 42px;
+  border: 1px solid #d8d0c1;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #171717;
+  font: inherit;
+  font-weight: 800;
+  padding: 0 12px;
+  outline: none;
+}
+
+.authBar input:focus-visible,
+.refreshButton:focus-visible,
+.analyticsPanel button:focus-visible,
+.authBar button:focus-visible,
+.segmented button:focus-visible {
+  outline: 3px solid rgba(12, 122, 104, 0.26);
+  outline-offset: 2px;
+}
+
+.authBar button {
+  min-height: 42px;
+  padding: 0 16px;
+  background: #0c7a68;
+  border-color: #0c7a68;
+  color: #ffffff;
+}
+
+.authBar .secondaryButton {
+  background: #fffaf0;
+  color: #171717;
+  border-color: #d8d0c1;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.metric {
+  min-height: 112px;
+  border: 1px solid #ded6c8;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric span {
+  color: #656159;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.metric strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.analyticsPanel {
+  margin-top: 16px;
+  border: 1px solid #ded6c8;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 14px;
+}
+
+.analyticsPanel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.analyticsPanel h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.analyticsPanel button {
+  min-height: 40px;
+  padding: 0 14px;
+  background: #171717;
+  color: #fffaf0;
+  border-color: #171717;
+}
+
+.analyticsMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.analyticsMetrics > div {
+  min-height: 106px;
+  border-radius: 8px;
+  background: #f4f6ef;
+  border: 1px solid #e0e6d8;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.analyticsMetrics span,
+.analyticsMetrics small {
+  color: #60645a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.analyticsMetrics strong {
+  color: #111812;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.analyticsBars {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.analyticsBars p {
+  margin: 0;
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  color: #69645c;
+  font-weight: 900;
+}
+
+.analyticsBar {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 54px;
+  gap: 10px;
+  align-items: center;
+  color: #595d53;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.analyticsBar > div {
+  block-size: 12px;
+  border-radius: 999px;
+  background: #ede8db;
+  overflow: hidden;
+}
+
+.analyticsBar i {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0c7a68, #f0b84a);
+}
+
+.analyticsBar strong {
+  justify-self: end;
+  color: #171717;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #ded6c8;
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.92);
+}
+
+.filterLabel {
+  display: block;
+  margin-bottom: 8px;
+  color: #5f6058;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.segmented button {
+  min-height: 38px;
+  padding: 0 13px;
+}
+
+.segmented .selected {
+  background: #934b9f;
+  border-color: #934b9f;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(147, 75, 159, 0.18);
+}
+
+.error {
+  max-width: 1080px;
+  margin: 14px auto 0;
+  padding: 12px 14px;
+  border: 1px solid #e3a39a;
+  border-radius: 8px;
+  background: #fff0ee;
+  color: #9a2e20;
+  font-weight: 900;
+}
+
+.feedbackList {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.empty {
+  border: 1px dashed #cfc5b5;
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.82);
+  color: #69645c;
+  font-weight: 900;
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.feedbackItem {
+  border: 1px solid #ded6c8;
+  border-radius: 8px;
+  background: #fffdf8;
+  overflow: hidden;
+}
+
+.feedbackItem header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #ece4d6;
+}
+
+.feedbackItem header > div {
+  width: 56px;
+  height: 44px;
+  border-radius: 8px;
+  background: #f6e28a;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  color: #2a2309;
+}
+
+.feedbackItem header strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.feedbackItem header span {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.feedbackItem header p {
+  margin: 0;
+  color: #171717;
+  font-weight: 900;
+}
+
+.feedbackItem time {
+  color: #666058;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.content {
+  margin: 0;
+  padding: 16px 14px;
+  color: #26211c;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedbackItem footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f7f2e8;
+  color: #69645c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.feedbackItem code {
+  font: inherit;
+}
+
+@media (max-width: 820px) {
+  .page {
+    padding: 18px 14px 36px;
+  }
+
+  .hero,
+  .authBar,
+  .analyticsPanel header,
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    display: grid;
+    align-items: start;
+  }
+
+  .refreshButton {
+    width: 100%;
+  }
+
+  .dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyticsPanel header {
+    display: grid;
+  }
+
+  .analyticsPanel button {
+    width: 100%;
+  }
+
+  .analyticsMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric {
+    min-height: 96px;
+  }
+
+  .feedbackItem header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .feedbackItem time {
+    grid-column: 1 / -1;
+  }
+}

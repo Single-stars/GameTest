@@ -3,6 +3,9 @@
 export interface Env {
   ROOMS: DurableObjectNamespace;
   FEEDBACK_DB: D1Database;
+  FEEDBACK_ADMIN_TOKEN?: string;
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
+  CLOUDFLARE_ZONE_ID?: string;
   ALLOWED_ORIGIN?: string;
 }
 
@@ -25,11 +28,58 @@ const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
 const CREATE_ROOM_ROUTE = "POST /api/rooms";
 const POST_FEEDBACK_ROUTE = "POST /api/feedback";
+const GET_FEEDBACK_ADMIN_ROUTE = "GET /api/feedback/admin";
+const GET_FEEDBACK_ANALYTICS_ROUTE = "GET /api/feedback/admin/analytics";
 const ROOM_WS_ROUTE = "/api/rooms/:code/ws";
 const ENABLE_TURN = false;
 const ENABLE_RELAY = false;
 const FEEDBACK_CONTENT_MAX_LENGTH = 250;
+const FEEDBACK_ADMIN_LIMIT = 100;
 const FEEDBACK_CATEGORIES = new Set<FeedbackCategory>(["bug", "idea", "chat"]);
+
+type FeedbackAdminRow = {
+  id: string;
+  created_at: string;
+  rating: number;
+  category: FeedbackCategory;
+  content: string;
+  page: string;
+};
+
+type FeedbackAdminSummaryRow = {
+  total: number;
+  average_rating: number | null;
+};
+
+type FeedbackAdminBreakdownRow = {
+  category: FeedbackCategory;
+  count: number;
+  average_rating: number | null;
+};
+
+type CloudflareAnalyticsDay = {
+  dimensions?: {
+    date?: string;
+  };
+  sum?: {
+    pageViews?: number;
+    requests?: number;
+  };
+  uniq?: {
+    uniques?: number;
+  };
+};
+
+type CloudflareAnalyticsResponse = {
+  data?: {
+    viewer?: {
+      zones?: Array<{
+        httpRequests1dGroups?: CloudflareAnalyticsDay[];
+      }>;
+    };
+  };
+  errors?: Array<{ message?: string }>;
+};
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
@@ -72,7 +122,7 @@ function corsHeaders(request: Request, env: Env) {
   return {
     "access-control-allow-origin": allowedOrigin,
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, content-type, x-admin-token",
     "vary": "origin",
   };
 }
@@ -95,6 +145,20 @@ function isRequestOriginAllowed(request: Request, env: Env) {
 
 function originForbiddenResponse() {
   return jsonResponse({ error: "origin-forbidden" }, { status: 403 });
+}
+
+function getAdminToken(request: Request) {
+  const directToken = request.headers.get("x-admin-token")?.trim();
+  if (directToken) return directToken;
+
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authorization);
+  return bearerMatch?.[1]?.trim() ?? "";
+}
+
+function isFeedbackAdminAuthorized(request: Request, env: Env) {
+  const expectedToken = env.FEEDBACK_ADMIN_TOKEN?.trim();
+  return Boolean(expectedToken && getAdminToken(request) === expectedToken);
 }
 
 function isFeedbackCategory(value: unknown): value is FeedbackCategory {
@@ -174,6 +238,191 @@ async function saveFeedback(request: Request, env: Env) {
   return jsonResponse({ ok: true, id }, { status: 201 });
 }
 
+function normalizeFeedbackAdminRating(value: string | null) {
+  if (!value || value === "all") return null;
+  const rating = Number(value);
+  return Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : "invalid";
+}
+
+function normalizeFeedbackAdminCategory(value: string | null) {
+  if (!value || value === "all") return null;
+  return isFeedbackCategory(value) ? value : "invalid";
+}
+
+function buildFeedbackAdminFilter(url: URL) {
+  const rating = normalizeFeedbackAdminRating(url.searchParams.get("rating"));
+  const category = normalizeFeedbackAdminCategory(url.searchParams.get("category"));
+  if (rating === "invalid") return { error: "invalid-rating" as const };
+  if (category === "invalid") return { error: "invalid-category" as const };
+
+  const conditions: string[] = [];
+  const bindings: Array<number | string> = [];
+  if (rating !== null) {
+    conditions.push("rating = ?");
+    bindings.push(rating);
+  }
+  if (category !== null) {
+    conditions.push("category = ?");
+    bindings.push(category);
+  }
+
+  return {
+    bindings,
+    category,
+    rating,
+    where: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+  };
+}
+
+async function listFeedbackForAdmin(request: Request, env: Env) {
+  if (!env.FEEDBACK_ADMIN_TOKEN?.trim()) {
+    return jsonResponse({ error: "admin-token-not-configured" }, { status: 503 });
+  }
+  if (!isFeedbackAdminAuthorized(request, env)) {
+    return jsonResponse({ error: "admin-unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(request.url);
+  const filter = buildFeedbackAdminFilter(url);
+  if ("error" in filter) {
+    return jsonResponse({ error: filter.error }, { status: 400 });
+  }
+
+  const itemsStatement = env.FEEDBACK_DB.prepare(
+    `SELECT id, created_at, rating, category, content, page
+     FROM feedback
+     ${filter.where}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  ).bind(...filter.bindings, FEEDBACK_ADMIN_LIMIT);
+  const summaryStatement = env.FEEDBACK_DB.prepare(
+    `SELECT COUNT(*) AS total, AVG(rating) AS average_rating
+     FROM feedback
+     ${filter.where}`,
+  ).bind(...filter.bindings);
+  const breakdownStatement = env.FEEDBACK_DB.prepare(
+    `SELECT category, COUNT(*) AS count, AVG(rating) AS average_rating
+     FROM feedback
+     GROUP BY category
+     ORDER BY count DESC`,
+  );
+
+  const [itemsResult, summaryResult, breakdownResult] = await Promise.all([
+    itemsStatement.all<FeedbackAdminRow>(),
+    summaryStatement.first<FeedbackAdminSummaryRow>(),
+    breakdownStatement.all<FeedbackAdminBreakdownRow>(),
+  ]);
+
+  return jsonResponse({
+    breakdown:
+      breakdownResult.results?.map((item) => ({
+        averageRating: item.average_rating,
+        category: item.category,
+        count: item.count,
+      })) ?? [],
+    filters: {
+      category: filter.category,
+      rating: filter.rating,
+    },
+    items: itemsResult.results ?? [],
+    limit: FEEDBACK_ADMIN_LIMIT,
+    summary: {
+      averageRating: summaryResult?.average_rating ?? null,
+      total: summaryResult?.total ?? 0,
+    },
+  });
+}
+
+function dateDaysAgo(daysAgo: number) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  return date.toISOString().slice(0, 10);
+}
+
+function readCloudflareNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+async function fetchCloudflareAnalytics(request: Request, env: Env) {
+  if (!env.FEEDBACK_ADMIN_TOKEN?.trim()) {
+    return jsonResponse({ error: "admin-token-not-configured" }, { status: 503 });
+  }
+  if (!isFeedbackAdminAuthorized(request, env)) {
+    return jsonResponse({ error: "admin-unauthorized" }, { status: 401 });
+  }
+
+  const analyticsToken = env.CLOUDFLARE_ANALYTICS_TOKEN?.trim();
+  const zoneId = env.CLOUDFLARE_ZONE_ID?.trim();
+  if (!analyticsToken || !zoneId) {
+    return jsonResponse({ error: "analytics-not-configured" }, { status: 503 });
+  }
+
+  const startDate = dateDaysAgo(6);
+  const endDate = dateDaysAgo(0);
+  const query = `query ZoneTraffic($zoneTag: string, $start: Date, $end: Date) {
+    viewer {
+      zones(filter: { zoneTag: $zoneTag }) {
+        httpRequests1dGroups(limit: 7, filter: { date_geq: $start, date_leq: $end }, orderBy: [date_ASC]) {
+          dimensions { date }
+          sum { pageViews requests }
+          uniq { uniques }
+        }
+      }
+    }
+  }`;
+
+  const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${analyticsToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        end: endDate,
+        start: startDate,
+        zoneTag: zoneId,
+      },
+    }),
+  });
+
+  const payload = (await response.json()) as CloudflareAnalyticsResponse;
+  if (!response.ok || payload.errors?.length) {
+    return jsonResponse(
+      { error: "analytics-query-failed", message: payload.errors?.[0]?.message ?? "cloudflare analytics query failed" },
+      { status: 502 },
+    );
+  }
+
+  const groups = payload.data?.viewer?.zones?.[0]?.httpRequests1dGroups ?? [];
+  const days = groups.map((item) => ({
+    date: item.dimensions?.date ?? "",
+    pageViews: readCloudflareNumber(item.sum?.pageViews),
+    requests: readCloudflareNumber(item.sum?.requests),
+    uniqueVisitors: readCloudflareNumber(item.uniq?.uniques),
+  }));
+  const latest = days.at(-1) ?? null;
+  const totals = days.reduce(
+    (sum, item) => ({
+      pageViews: sum.pageViews + item.pageViews,
+      requests: sum.requests + item.requests,
+      uniqueVisitors: sum.uniqueVisitors + item.uniqueVisitors,
+    }),
+    { pageViews: 0, requests: 0, uniqueVisitors: 0 },
+  );
+
+  return jsonResponse({
+    days,
+    latest,
+    range: {
+      endDate,
+      startDate,
+    },
+    totals,
+  });
+}
+
 function getRoomCodeFromPath(pathname: string, suffix = "") {
   const prefix = "/api/rooms/";
   if (!pathname.startsWith(prefix)) return null;
@@ -227,6 +476,28 @@ const workerEntrypoint = {
       });
     }
 
+    if (request.method === "GET" && url.pathname === "/api/feedback/admin") {
+      const response = await listFeedbackForAdmin(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          ...Object.fromEntries(response.headers),
+          ...corsHeaders(request, env),
+        },
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/feedback/admin/analytics") {
+      const response = await fetchCloudflareAnalytics(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          ...Object.fromEntries(response.headers),
+          ...corsHeaders(request, env),
+        },
+      });
+    }
+
     const wsRoomCode = getRoomCodeFromPath(url.pathname, "/ws");
     if (wsRoomCode && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       return env.ROOMS.get(env.ROOMS.idFromName(wsRoomCode)).fetch(request);
@@ -244,7 +515,17 @@ const workerEntrypoint = {
       });
     }
 
-    return jsonResponse({ error: "not-found", feedbackRoute: POST_FEEDBACK_ROUTE, route: CREATE_ROOM_ROUTE, wsRoute: ROOM_WS_ROUTE }, { status: 404 });
+    return jsonResponse(
+      {
+        adminAnalyticsRoute: GET_FEEDBACK_ANALYTICS_ROUTE,
+        adminFeedbackRoute: GET_FEEDBACK_ADMIN_ROUTE,
+        error: "not-found",
+        feedbackRoute: POST_FEEDBACK_ROUTE,
+        route: CREATE_ROOM_ROUTE,
+        wsRoute: ROOM_WS_ROUTE,
+      },
+      { status: 404 },
+    );
   },
 };
 

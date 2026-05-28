@@ -5,6 +5,7 @@ routes = [
   { pattern = "208848.xyz/api/rooms", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/rooms/*", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/feedback", zone_name = "208848.xyz" },
+  { pattern = "208848.xyz/api/feedback/*", zone_name = "208848.xyz" },
 ]
 
 [[durable_objects.bindings]]
@@ -15,6 +16,9 @@ class_name = "RoomDurableObject"
 binding = "FEEDBACK_DB"
 database_name = "game_feedback"
 database_id = "e919fa46-c72f-46d1-a021-91c8e1638f46"
+
+[vars]
+CLOUDFLARE_ZONE_ID = "80295a57107a9876fd4dd31911cdfecf"
 
 [[migrations]]
 tag = "v1"

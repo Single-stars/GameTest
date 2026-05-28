@@ -464,9 +464,7 @@ export function ResultScreen({
               }}
             />
 
-            <p className="feedback-privacy-note">谢谢你玩我的游戏！</p>
-
-            {feedbackSubmitState === "sent" ? <p className="feedback-status success">已收到。</p> : null}
+            {feedbackSubmitState === "sent" ? <p className="feedback-status success">已收到！谢谢你玩我的游戏~</p> : null}
             {feedbackSubmitState === "failed" && feedbackError ? <p className="feedback-status error">{feedbackError}</p> : null}
 
             <div className="feedback-actions">
