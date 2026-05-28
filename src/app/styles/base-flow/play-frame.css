@@ -163,40 +163,51 @@
     max(18px, env(safe-area-inset-right))
     max(18px, env(safe-area-inset-bottom))
     max(18px, env(safe-area-inset-left));
-  background: rgba(12, 15, 16, 0.62);
-  backdrop-filter: blur(12px);
+  background: rgba(12, 15, 16, 0.34);
+  backdrop-filter: blur(5px);
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .base-tutorial-panel {
-  width: min(100%, 520px);
-  max-width: 520px;
+  width: min(100%, 620px);
+  max-width: 620px;
   display: grid;
-  gap: 14px;
-  border: 1px solid rgba(255, 253, 248, 0.72);
-  border-radius: 8px;
-  padding: 22px;
-  background: #fffdf8;
-  color: var(--ink);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+  justify-items: center;
+  gap: 16px;
+  padding: 22px 18px;
+  background: transparent;
+  color: #fffdf8;
+  text-align: center;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.38);
 }
 
 .base-tutorial-panel h2 {
+  width: min(100%, 460px);
   margin: 0;
-  font-size: 28px;
+  font-size: clamp(34px, 8.2vw, 58px);
   line-height: 1.08;
+  text-align: center;
 }
 
 .base-tutorial-steps {
   display: grid;
   gap: 10px;
+  width: min(100%, 460px);
   margin: 0;
-  padding-inline-start: 20px;
-  color: var(--ink);
-  font-size: 15px;
-  line-height: 1.45;
-  font-weight: 800;
+  padding: 0;
+  list-style: none;
+  color: rgba(255, 253, 248, 0.94);
+  font-size: clamp(18px, 4.2vw, 26px);
+  line-height: 1.36;
+  font-weight: 900;
 }
 
-.base-tutorial-panel .primary-button {
-  width: 100%;
+.base-tutorial-start-hint {
+  width: min(100%, 460px);
+  color: rgba(255, 253, 248, 0.78);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
 }

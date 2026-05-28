@@ -50,7 +50,7 @@ export function AvatarLabScreen({
                   className={`avatar-lab-skin-row ${selectedSkin === skin ? "selected" : ""} ${unlock.unlocked ? "unlocked" : "locked"}`}
                   disabled={!unlock.unlocked}
                   key={skin}
-                  onPointerDown={() => {
+                  onClick={() => {
                     if (unlock.unlocked) onSelectSkin(skin);
                   }}
                   type="button"

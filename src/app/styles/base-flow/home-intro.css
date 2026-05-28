@@ -53,26 +53,35 @@
 }
 
 .intro-screen {
-  justify-content: end;
+  justify-content: center;
   align-items: stretch;
-  padding-block: 24px 76px;
+  padding-block: 24px;
   cursor: pointer;
   touch-action: manipulation;
 }
 
 .intro-card {
-  width: min(100%, 720px);
-  min-height: 42svh;
-  margin-inline: auto;
+  width: 100%;
+  min-height: min(720px, calc(100svh - 84px));
   display: grid;
-  align-content: end;
+  align-content: center;
+  justify-items: start;
+  justify-content: start;
   gap: 14px;
   padding: 4px;
+  text-align: left;
 }
 
 .intro-copy {
   display: grid;
+  justify-items: start;
   gap: 10px;
+  width: min(100%, 460px);
+  text-align: left;
+}
+
+.intro-copy h1 {
+  text-align: left;
 }
 
 .round-measure-pill {
@@ -92,8 +101,11 @@
 }
 
 .intro-start-hint {
+  display: block;
+  width: min(100%, 460px);
   color: var(--muted);
   font-size: 13px;
   font-weight: 850;
   line-height: 1.2;
+  text-align: left;
 }
