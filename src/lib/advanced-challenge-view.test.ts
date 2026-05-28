@@ -83,19 +83,26 @@ test("advanced challenge goal items are derived from challenge config instead of
 test("advanced mini-game goals follow level-group rules and fallback copy", () => {
   const searchLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 4));
   const searchLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 5));
+  const searchMovingLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 1));
   const memoryLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 4));
   const memoryLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 5));
   const stroopLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 1));
+  const stroopDangerLevel3 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 3));
   const stroopLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 4));
+  const stroopDangerLevel6 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 6));
   const patienceLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 1));
   const patienceLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 4));
 
+  assert.ok(searchMovingLevel1.every((goal) => !goal.text.includes("踩中所有")));
   assert.ok(searchLevel4.some((goal) => goal.text === "踩中所有平台"));
   assert.ok(searchLevel5.some((goal) => goal.text === "踩中 5/5 个高能平台"));
   assert.ok(memoryLevel4.some((goal) => goal.text === "收集所有道具"));
   assert.ok(memoryLevel5.some((goal) => goal.text === "收集 6/6 个道具"));
   assert.ok(stroopLevel1.every((goal) => goal.text !== "不能触碰到危险红点"));
+  assert.ok(stroopDangerLevel3.some((goal) => goal.text === "不能踩到危险平台"));
   assert.ok(stroopLevel4.some((goal) => goal.text === "不能触碰到危险红点"));
+  assert.ok(stroopLevel4.every((goal) => goal.text !== "不能踩到危险平台"));
+  assert.ok(stroopDangerLevel6.some((goal) => goal.text === "不能踩到危险平台"));
   assert.ok(patienceLevel1.some((goal) => goal.text === "在倒计时结束前丢出飞刀"));
   assert.ok(patienceLevel4.every((goal) => goal.text !== "在倒计时结束前丢出飞刀"));
 });

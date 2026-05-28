@@ -146,6 +146,10 @@ function toPositiveCount(value: unknown) {
   return Number.isFinite(count) && count > 0 ? Math.floor(count) : null;
 }
 
+function isFallDownDangerPlatformLevel(levelId: string) {
+  return levelId.includes("danger") || levelId.includes("final");
+}
+
 function riskPlatformGoalText(count: number | null) {
   if (count === null) return "踩中所有平台";
   return `踩中 ${count}/${count} 个高能平台`;
@@ -173,11 +177,12 @@ function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalIte
     ]);
   }
   if (config.dimension === "stroop") {
+    const dangerPlatformLevel = isFallDownDangerPlatformLevel(miniLevelId);
     return compactGoals([
       { icon: "flag", text: "到达终点平台" },
       { icon: "flag", text: "不能掉出场景外" },
       group === "258" || group === "369" || group === "10" ? { icon: "ban", text: "不能触碰到危险红点" } : null,
-      group === "369" || group === "10" ? { icon: "ban", text: "不能踩到危险平台" } : null,
+      dangerPlatformLevel ? { icon: "ban", text: "不能踩到危险平台" } : null,
     ]);
   }
   if (config.dimension === "rhythm") {

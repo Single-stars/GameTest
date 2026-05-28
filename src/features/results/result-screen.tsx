@@ -12,12 +12,12 @@ import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText,
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
-import { AvatarLabIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
+import { AvatarLabIcon, DonateIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type AvatarMenuItem = {
-  id: "share" | "restart" | "reset" | "homeworld" | "skin";
+  id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate";
   label: string;
   icon: ReactNode;
   onSelect: () => void;
@@ -34,6 +34,7 @@ export function ResultScreen({
   advancedUnlockPulseId,
   imageShareState,
   debugToolsVisible,
+  homeworldEntryVisible,
   onOpenAdvancedChallenge,
   onOpenAvatarLab,
   onOpenHomeworld,
@@ -48,6 +49,7 @@ export function ResultScreen({
   advancedUnlockPulseId: number;
   imageShareState: ImageShareState;
   debugToolsVisible: boolean;
+  homeworldEntryVisible: boolean;
   onOpenAdvancedChallenge: (roundId: RoundId) => void;
   onOpenAvatarLab: () => void;
   onOpenHomeworld: () => void;
@@ -58,6 +60,7 @@ export function ResultScreen({
 }) {
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
+  const [donatePanelOpen, setDonatePanelOpen] = useState(false);
   const avatarEntryTimerRef = useRef<number | null>(null);
   const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
@@ -112,7 +115,7 @@ export function ResultScreen({
   );
 
   const avatarEntryAction = avatarMenuFeedback ? "celebrate" : avatarMenuOpen ? "wonder" : "idle";
-  const avatarEntryEffect = avatarMenuFeedback ? "sparkles" : avatarMenuOpen ? "question" : "none";
+  const avatarEntryEffect = avatarMenuOpen && !avatarMenuFeedback ? "question" : "none";
   const avatarEntryExpression = avatarMenuFeedback ? "happy" : "neutral";
 
   const avatarMenuItems = [
@@ -130,11 +133,21 @@ export function ResultScreen({
       onSelect: onRestart,
     },
     {
-      id: "homeworld",
-      label: "家园",
-      icon: <HomeworldIcon />,
-      onSelect: onOpenHomeworld,
+      id: "donate",
+      label: "赞赏作者",
+      icon: <DonateIcon />,
+      onSelect: () => setDonatePanelOpen(true),
     },
+    ...(homeworldEntryVisible
+      ? [
+          {
+            id: "homeworld" as const,
+            label: "家园",
+            icon: <HomeworldIcon />,
+            onSelect: onOpenHomeworld,
+          },
+        ]
+      : []),
     ...(debugToolsVisible
       ? [
           {
@@ -279,6 +292,19 @@ export function ResultScreen({
           ) : null}
         </div>
       </div>
+
+      {donatePanelOpen ? (
+        <div className="donate-dialog" role="dialog" aria-modal="true" aria-labelledby="donate-dialog-title">
+          <div className="donate-card">
+            <button className="donate-close" type="button" aria-label="关闭赞赏面板" onClick={() => setDonatePanelOpen(false)}>
+              ×
+            </button>
+            <DonateIcon />
+            <h2 id="donate-dialog-title">赞赏作者</h2>
+            <p>感谢支持。发布前可以在这里配置收款码或赞赏链接。</p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="radar-card-shell">
         <RadarChart axis={result.axis} />

@@ -13,6 +13,7 @@ import {
   getAdvancedBrakeSchedulerStep,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
+  shouldShowHomeworldEntry,
   shouldShowPerfectClearShortcut,
   type AdvancedDifficulty,
 } from "./advanced-challenges.ts";
@@ -540,6 +541,18 @@ test("advanced completion evaluates replaced dimensions through mini-game challe
   const fallDownResult = evaluateAdvancedChallengeCompletion(fallDown, [
     trial("stroop", 0, { correct: true, value: { mode: "mini-game", miniGameId: "fall-down", miniLevelId: fallDown.params.miniLevelId, reason: "到达终点平台" } }),
   ]);
+  const fallDownDanger = getAdvancedStageConfig("stroop", 3);
+  const fallDownDangerResult = evaluateAdvancedChallengeCompletion(fallDownDanger, [
+    trial("stroop", 0, {
+      correct: false,
+      value: {
+        mode: "mini-game",
+        miniGameId: "fall-down",
+        miniLevelId: fallDownDanger.params.miniLevelId,
+        reason: "踩到危险",
+      },
+    }),
+  ]);
 
   const doodle = getAdvancedStageConfig("search", 3);
   const doodleResult = evaluateAdvancedChallengeCompletion(doodle, [
@@ -555,6 +568,7 @@ test("advanced completion evaluates replaced dimensions through mini-game challe
   assert.equal(doodleResult.requiredCorrect, 1);
   assert.equal(fallDownResult.passed, true);
   assert.equal(fallDownResult.reason, "通过");
+  assert.deepEqual(fallDownDangerResult.goalChecks, [false, true, false]);
   assert.equal(flappyResult.passed, true);
   assert.equal(flappyResult.reason, "通过");
 });
@@ -616,6 +630,14 @@ test("debug tools are hidden unless explicitly enabled by development mode or UR
   assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "" }), false);
   assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1" }), true);
   assert.equal(getDebugToolsVisibility({ nodeEnv: "development", search: "" }), true);
+});
+
+test("homeworld entry is development-only for the test release", () => {
+  assert.equal(shouldShowHomeworldEntry({ nodeEnv: "production", search: "" }), false);
+  assert.equal(shouldShowHomeworldEntry({ nodeEnv: "production", search: "?homeworld=1" }), false);
+  assert.equal(shouldShowHomeworldEntry({ nodeEnv: "production", search: "?debug=1" }), false);
+  assert.equal(shouldShowHomeworldEntry({ nodeEnv: "development", search: "" }), true);
+  assert.equal(shouldShowHomeworldEntry({ nodeEnv: "development", search: "?homeworld=1" }), true);
 });
 
 test("perfect-clear shortcut stays visible inside playable levels without debug tools", () => {

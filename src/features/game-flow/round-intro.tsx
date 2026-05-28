@@ -10,18 +10,14 @@ export function RoundIntro({
   onStart: () => void;
 }) {
   return (
-    <section className="intro-screen">
+    <section className="intro-screen" role="button" tabIndex={0} onKeyDown={(event) => {
+      if (event.key === "Enter" || event.key === " ") onStart();
+    }} onPointerDown={onStart}>
       <div className="intro-card">
         <div className="intro-copy">
           <h1>{round.title}</h1>
         </div>
-        <div className="intro-rule-card">
-          <p>{round.rule}</p>
-          {round.action ? <small>{round.action}</small> : null}
-        </div>
-        <button className="primary-button intro-start-button" type="button" onPointerDown={onStart}>
-          开始
-        </button>
+        <small className="intro-start-hint">点击任意位置开始</small>
       </div>
     </section>
   );

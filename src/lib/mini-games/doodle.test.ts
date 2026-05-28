@@ -175,6 +175,31 @@ test("doodle normal jump covers two layers without overshooting far beyond them"
   assert.doesNotMatch(doodleSource, /nextVy = 760 \*/);
 });
 
+test("doodle high-risk platforms stay far enough below the finish platform", () => {
+  for (const levelId of ["doodle-4", "doodle-5", "doodle-6", "doodle-10"]) {
+    const level = getMiniGameLevel("doodle", levelId);
+    const layout = generateDoodleWorldLayout(level, "risk-finish-spacing", {
+      playerSize: 32,
+      stageHeight: 640,
+      stageWidth: 360,
+    });
+    const riskJumpPeak = getDoodleJumpPeakHeight(
+      getDoodleBounceVelocity({
+        risk: true,
+        riskJumpMultiplier: Number(level.params.riskJumpMultiplier),
+      }),
+    );
+    const minFinishGap = riskJumpPeak + 64;
+    const riskPlatforms = layout.platforms.filter((platform) => platform.risk);
+
+    assert.equal(riskPlatforms.length, Number(level.params.requiredRiskPlatforms), levelId);
+    assert.ok(
+      riskPlatforms.every((platform) => layout.targetHeight - platform.y >= minFinishGap),
+      `${levelId} high-risk platforms should not sit within ${Math.round(minFinishGap)}px of the finish`,
+    );
+  }
+});
+
 test("doodle visible selectors cull used non-finish and off-screen world objects", () => {
   const layout = generateDoodleWorldLayout(getMiniGameLevel("doodle", "doodle-10"), "visibility-seed");
   const visiblePlatforms = selectVisibleDoodlePlatforms(layout.platforms, {

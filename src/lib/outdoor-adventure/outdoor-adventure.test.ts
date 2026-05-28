@@ -826,7 +826,7 @@ test("outdoor adventure screen keeps the fixed feedback UI compact", () => {
   assert.match(pageSource, /onCampNextDay=\{campToNextOutdoorDayAfterShownOutcome\}/);
   assert.doesNotMatch(pageSource, /onCampNextDay=\{\(\) => updateOutdoorAdventure\(campToNextOutdoorDay\(outdoorAdventureStateRef\.current\)\)\}/);
   assert.match(pageSource, /resetOutdoorAdventureAfterReturnHome/);
-  assert.match(pageSource, /clearPersistedOutdoorAdventureState\(window\.localStorage\)/);
+  assert.match(pageSource, /const storage = getBrowserStorage\(\);[\s\S]*clearPersistedOutdoorAdventureState\(storage\)/);
   assert.match(pageSource, /transitionToStageThenRun/);
   assert.match(pageSource, /onSettleAdventure=\{settleOutdoorAdventure\}/);
   assert.match(pageSource, /onDebugLoseSupplies=\{\(\) => updateOutdoorAdventure\(applyOutdoorDebugLoseSupplies\(outdoorAdventureStateRef\.current\)\)\}/);

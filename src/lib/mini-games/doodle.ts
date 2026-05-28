@@ -109,6 +109,7 @@ export function generateDoodleWorldLayout(
   const movingHazardSpeed = numberParam(level.params, "movingHazardSpeed", 0);
   const movingSpeed = numberParam(level.params, "movingPlatformSpeed", 0);
   const requiredRiskPlatforms = numberParam(level.params, "requiredRiskPlatforms", 0);
+  const riskJumpMultiplier = numberParam(level.params, "riskJumpMultiplier", 1);
   const riskWidth = numberParam(level.params, "riskPlatformWidth", 86);
   const platformGap = numberParam(level.params, "platformGap", 104);
   const rand = createSeededRandom(`${level.levelId}:${runSeed}:doodle-world`);
@@ -128,8 +129,11 @@ export function generateDoodleWorldLayout(
   const lanePattern = hardLayout ? [0.04, 0.96, 0.5, 0.8, 0.2] : [0.04, 0.96, 0.5, 0.8, 0.2];
   const laneOffset = Math.floor(rand() * lanePattern.length);
 
+  const riskFinishGap = getDoodleJumpPeakHeight(getDoodleBounceVelocity({ risk: true, riskJumpMultiplier })) + playerSize * 2;
+  const maxRiskIndex = clamp(Math.floor((targetHeight - startPlatformY - riskFinishGap) / platformGap) - 1, 2, platformCount - 4);
+  const riskIndexSpan = Math.max(1, maxRiskIndex - 1);
   for (let index = 1; index <= requiredRiskPlatforms; index += 1) {
-    riskIndexes.add(clamp(Math.round((index / (requiredRiskPlatforms + 1)) * (platformCount - 3)) + 1, 2, platformCount - 2));
+    riskIndexes.add(clamp(Math.round((index / (requiredRiskPlatforms + 1)) * riskIndexSpan) + 1, 2, maxRiskIndex));
   }
 
   const platforms: GeneratedDoodlePlatform[] = [];

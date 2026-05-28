@@ -264,7 +264,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(sessionSource, /case "homeworld-presence":/);
   assert.match(pageSource, /searchParams\.get\("homeworld"\)/);
   assert.match(pageSource, /readPersistedPlayerName/);
-  assert.match(pageSource, /writePersistedPlayerName/);
+  assert.doesNotMatch(pageSource, /writePersistedPlayerName/);
   assert.match(pageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
   assert.match(pageSource, /createSelfPlayer\(role, resolvedSkin, resolvedName\)/);
   assert.match(pageSource, /autoCreateHomeworldHostRef/);

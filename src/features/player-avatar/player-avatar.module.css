@@ -349,9 +349,9 @@
 }
 
 .root[data-action="celebrate"] .body {
-  border-color: rgba(62, 136, 91, 0.48);
+  border-color: var(--player-avatar-outline);
   box-shadow:
-    0 6px 12px rgba(48, 111, 75, 0.16),
+    0 6px 12px rgba(24, 24, 24, 0.12),
     inset 0 -2px 0 rgba(24, 24, 24, 0.05);
 }
 
@@ -373,7 +373,7 @@
 }
 
 .root[data-action="sleep"] .motion {
-  transform: translateY(2%) scaleX(1.04) scaleY(0.94);
+  transform: translateY(0) scale(1);
 }
 
 .root[data-effect="sparkles"] .sparkles,
@@ -391,8 +391,8 @@
   animation: playerAvatarQuestion 1100ms ease-in-out infinite;
 }
 
-.root[data-expression="happy"] {
-  --player-avatar-ink: color-mix(in srgb, currentColor 86%, #2f6f42 14%);
+.root[data-expression="happy"] .expressionSvg {
+  transform: scale(1);
 }
 
 .root[data-expression="sleepy"] .expressionSvg {

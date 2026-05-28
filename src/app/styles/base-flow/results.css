@@ -1,5 +1,6 @@
 .result-screen {
   position: relative;
+  min-height: 0;
   gap: 12px;
   padding-block: 8px;
   padding-bottom: max(18px, env(safe-area-inset-bottom));
@@ -80,9 +81,9 @@
 .rank-avatar-menu {
   --rank-avatar-menu-bg: rgba(255, 253, 248, 0.96);
   --rank-avatar-menu-border: rgba(24, 24, 24, 0.11);
-  --rank-avatar-action-size: 42px;
+  --rank-avatar-action-size: 48px;
   --rank-avatar-action-gap: 8px;
-  width: min(248px, calc(100vw - 24px));
+  width: min(280px, calc(100vw - 24px));
   position: absolute;
   z-index: 12;
   top: calc(100% + 10px);
@@ -149,6 +150,11 @@
     scale 120ms ease;
 }
 
+.rank-avatar-menu-action svg {
+  width: 28px;
+  height: 28px;
+}
+
 .rank-avatar-menu-action:hover {
   color: var(--cyan);
 }
@@ -170,6 +176,71 @@
 
 .rank-avatar-menu-action.danger:active {
   background: #ffe1dd;
+}
+
+.donate-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: rgba(12, 15, 16, 0.52);
+}
+
+.donate-card {
+  position: relative;
+  width: min(100%, 320px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px 20px 20px;
+  background: #fffdf8;
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.donate-card svg {
+  width: 36px;
+  height: 36px;
+  color: #c98910;
+}
+
+.donate-card h2,
+.donate-card p {
+  margin: 0;
+}
+
+.donate-card h2 {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.donate-card p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.donate-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .radar-card-shell {
@@ -515,9 +586,9 @@
   }
 
   .rank-avatar-menu {
-    --rank-avatar-action-size: 40px;
+    --rank-avatar-action-size: 44px;
     --rank-avatar-action-gap: 6px;
-    width: min(224px, calc(100vw - 20px));
+    width: min(252px, calc(100vw - 20px));
     top: calc(100% + 8px);
   }
 

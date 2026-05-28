@@ -19,15 +19,15 @@ import { HostRoom } from "@/features/multiplayer/host-room";
 import { JoinRoom } from "@/features/multiplayer/join-room";
 import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
 import { PlayerCard } from "@/features/multiplayer/player-card";
-import { PlayerAvatarSkinProvider, resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatarSkinProvider, isPlayerAvatarSkinUnlocked, resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
 import {
   readPersistedPlayerAvatarSkin,
   readPersistedPlayerName,
   writePersistedPlayerAvatarSkin,
-  writePersistedPlayerName,
 } from "@/features/player-avatar/player-avatar-storage";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
+import { createDefaultAdvancedProgress, readPersistedGameState, type AdvancedProgress } from "@/lib/advanced-progress";
 import {
   HOMEWORLD_INITIAL_PLAYER,
   createDefaultHomeworldState,
@@ -82,6 +82,15 @@ function createSeed() {
 
 function createPlayerId(role: SessionRole) {
   return `${role}-${createSeed().slice(0, 8)}`;
+}
+
+function getBrowserStorage() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function resolveLogicSize(selfPlayer: PlayerInfo | null, opponentPlayer: PlayerInfo | null) {
@@ -142,6 +151,7 @@ function MultiplayerPageContent() {
   const isHomeworldRoute = homeworldParam === "1";
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
+  const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [playerName, setPlayerName] = useState("");
   const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
   const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
@@ -526,8 +536,10 @@ function MultiplayerPageContent() {
   useEffect(() => {
     setSelectedSkin(readPersistedPlayerAvatarSkin());
     setPlayerName(readPersistedPlayerName());
-    if (typeof window !== "undefined") {
-      setHomeworldState(readPersistedHomeworldState(window.localStorage));
+    const storage = getBrowserStorage();
+    if (storage) {
+      setAdvancedProgress(readPersistedGameState(storage).advancedProgress);
+      setHomeworldState(readPersistedHomeworldState(storage));
     }
     setSkinHydrated(true);
   }, []);
@@ -537,6 +549,7 @@ function MultiplayerPageContent() {
   }, [selectedSkin]);
 
   const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
+    if (!isPlayerAvatarSkinUnlocked(skin, advancedProgress)) return;
     setSelectedSkin(skin);
     writePersistedPlayerAvatarSkin(skin);
     sessionRef.current?.updateSelfPlayerProfile({ skinId: skin });
@@ -558,22 +571,12 @@ function MultiplayerPageContent() {
         skinId: skin,
       });
     }
-  }, [playerName, snapshot.selfLevelSelectPresence]);
+  }, [advancedProgress, playerName, snapshot.selfLevelSelectPresence]);
 
-  const handlePlayerNameChange = useCallback((name: string) => {
-    setPlayerName(name);
-    writePersistedPlayerName(name);
-    sessionRef.current?.updateSelfPlayerProfile({ name });
-    const currentPresence = latestHomeworldPresenceRef.current;
-    if (!currentPresence) return;
-    const nextPresence: HomeworldPresence = {
-      ...currentPresence,
-      displayName: name,
-      skinId: currentPresence.skinId ?? selectedSkin,
-    };
-    latestHomeworldPresenceRef.current = nextPresence;
-    sessionRef.current?.reportHomeworldPresence(nextPresence);
-  }, [selectedSkin]);
+  useEffect(() => {
+    if (isPlayerAvatarSkinUnlocked(selectedSkin, advancedProgress)) return;
+    handleSelectAvatarSkin("cyan");
+  }, [advancedProgress, handleSelectAvatarSkin, selectedSkin]);
 
   useEffect(() => {
     if (isHomeworldRoute) return;
@@ -766,9 +769,10 @@ function MultiplayerPageContent() {
 
   const handleHomeworldStateChange = useCallback((state: HomeworldState) => {
     setHomeworldState(state);
-    if (typeof window !== "undefined") {
+    const storage = getBrowserStorage();
+    if (storage) {
       try {
-        writePersistedHomeworldState(window.localStorage, state);
+        writePersistedHomeworldState(storage, state);
       } catch {
         // Storage can be blocked; the session state still syncs in memory.
       }
@@ -931,9 +935,8 @@ function MultiplayerPageContent() {
             />
           ) : avatarLabOpen ? (
             <AvatarLabScreen
-              playerName={playerName}
+              advancedProgress={advancedProgress}
               selectedSkin={selectedSkin}
-              onPlayerNameChange={handlePlayerNameChange}
               onSelectSkin={handleSelectAvatarSkin}
               onBack={() => {
                 void transitionInPage(() => setAvatarLabOpen(false));

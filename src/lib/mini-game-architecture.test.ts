@@ -167,6 +167,13 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   assert.match(shareImageSource, /export const SHARE_IMAGE_WIDTH = 900;/);
   assert.match(shareImageSource, /export async function createShareImage/);
   assert.match(shareImageSource, /export async function copyTextToClipboard/);
+  assert.match(shareImageSource, /avatarDataUrl\?: string \| null/);
+  assert.match(shareImageSource, /drawShareAvatarScreenshot/);
+  assert.match(appPageSource, /captureShareAvatarDataUrl/);
+  assert.match(appPageSource, /await import\("html2canvas"\)/);
+  assert.match(appPageSource, /rootRef=\{shareAvatarCaptureRef\}/);
+  assert.match(appPageSource, /className="share-avatar-capture"/);
+  assert.match(appPageSource, /<PlayerAvatar[\s\S]*skin=\{selectedAvatarSkin\}[\s\S]*size=\{132\}/);
   assert.match(resultScreenSource, /from "@\/features\/results\/radar-chart"/);
   assert.match(radarChartSource, /export function RadarChart/);
 });
@@ -249,11 +256,13 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(luckCss, /luck-avatar-entry/);
 
   assert.match(resultSource, /PlayerAvatar, type PlayerAvatarSkin/);
+  assert.match(resultSource, /DonateIcon/);
   assert.match(resultSource, /HomeworldIcon/);
   assert.match(resultSource, /AvatarLabIcon/);
   assert.match(resultSource, /const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;/);
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
+  assert.match(resultSource, /homeworldEntryVisible:\s*boolean;/);
   assert.match(resultSource, /onOpenHomeworld:\s*\(\) => void;/);
   assert.match(resultSource, /const \[avatarMenuOpen, setAvatarMenuOpen\] = useState\(false\);/);
   assert.match(resultSource, /const \[avatarMenuFeedback, setAvatarMenuFeedback\] = useState\(false\);/);
@@ -266,9 +275,12 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /const avatarMenuItems = \[/);
   assert.match(resultSource, /onSelect: onShareImage/);
   assert.match(resultSource, /onSelect: onRestart/);
+  assert.match(resultSource, /id: "donate"/);
+  assert.match(resultSource, /icon: <DonateIcon \/>/);
   assert.match(resultSource, /id: "homeworld"/);
   assert.match(resultSource, /icon: <HomeworldIcon \/>/);
   assert.match(resultSource, /onSelect: onOpenHomeworld/);
+  assert.match(resultSource, /homeworldEntryVisible/);
   assert.doesNotMatch(resultSource, /id: "multiplayer"/);
   assert.doesNotMatch(resultSource, /window\.location\.assign\("\/multiplayer"\)/);
   assert.match(resultSource, /onSelect: onOpenAvatarLab/);
@@ -280,7 +292,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /aria-expanded=\{avatarMenuOpen\}/);
   assert.match(resultSource, /skin=\{avatarSkin\}/);
   assert.match(resultSource, /const avatarEntryAction = avatarMenuFeedback \? "celebrate" : avatarMenuOpen \? "wonder" : "idle";/);
-  assert.match(resultSource, /const avatarEntryEffect = avatarMenuFeedback \? "sparkles" : avatarMenuOpen \? "question" : "none";/);
+  assert.match(resultSource, /const avatarEntryEffect = avatarMenuOpen && !avatarMenuFeedback \? "question" : "none";/);
   assert.match(resultSource, /const avatarEntryExpression = avatarMenuFeedback \? "happy" : "neutral";/);
   assert.match(resultSource, /action=\{avatarEntryAction\}/);
   assert.match(resultSource, /effect=\{avatarEntryEffect\}/);
@@ -302,13 +314,15 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(resultSource, /className="radar-actions"/);
   assert.match(resultSource, /<RadarChart axis=\{result\.axis\} \/>/);
   assert.doesNotMatch(resultSource, /<div className="rank-actions"/);
+  assert.match(resultIconsSource, /export function DonateIcon/);
   assert.match(resultIconsSource, /export function AvatarLabIcon/);
   assert.match(resultIconsSource, /export function HomeworldIcon/);
   assert.doesNotMatch(resultIconsSource, /export function MultiplayerIcon/);
-  assert.match(resultIconsSource, /M12 5\.5/);
-  assert.match(resultIconsSource, /M8 16\.5c1\.1 1 2\.4 1\.5 4 1\.5/);
-  assert.match(resultIconsSource, /M8 14\.5 6\.5 16 5 14\.5/);
-  assert.match(resultIconsSource, /M16 14\.5 17\.5 16 19 14\.5/);
+  assert.match(resultIconsSource, /const GAME_ICON_PATHS =/);
+  assert.match(resultIconsSource, /viewBox="0 0 10 10"/);
+  assert.match(resultIconsSource, /fill="currentColor"/);
+  assert.match(resultIconsSource, /M5\.00049 1\.9751/);
+  assert.doesNotMatch(resultIconsSource, /viewBox="0 0 24 24"/);
   assert.match(resultCss, /\.rank-avatar-entry/);
   assert.match(resultCss, /\.rank-avatar-entry\.playing/);
   assert.match(resultCss, /\.rank-card\.menu-open\s*\{[\s\S]*z-index:\s*30;[\s\S]*contain:\s*none;/);
@@ -326,7 +340,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultCss, /\.result-screen\s*\{[\s\S]*overflow:\s*visible;/);
   assert.match(resultCss, /\.rank-avatar-entry\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*translate:\s*-12px 0;/);
   assert.match(resultCss, /\.rank-avatar-entry\.playing\s*\{[\s\S]*translate:\s*-12px -2px;[\s\S]*box-shadow:\s*none;/);
-  assert.match(resultCss, /\.rank-avatar-menu\s*\{[\s\S]*--rank-avatar-menu-bg:\s*rgba\(255, 253, 248, 0\.96\);[\s\S]*--rank-avatar-menu-border:\s*rgba\(24, 24, 24, 0\.11\);[\s\S]*--rank-avatar-action-size:\s*42px;[\s\S]*--rank-avatar-action-gap:\s*8px;[\s\S]*width:\s*min\(248px, calc\(100vw - 24px\)\);[\s\S]*z-index:\s*12;[\s\S]*top:\s*calc\(100% \+ 10px\);[\s\S]*left:\s*calc\(50% - 12px\);[\s\S]*translate:\s*-50% 0;[\s\S]*transform-origin:\s*50% 0;[\s\S]*animation:\s*rankAvatarMenuBubbleIn/);
+  assert.match(resultCss, /\.rank-avatar-menu\s*\{[\s\S]*--rank-avatar-menu-bg:\s*rgba\(255, 253, 248, 0\.96\);[\s\S]*--rank-avatar-menu-border:\s*rgba\(24, 24, 24, 0\.11\);[\s\S]*--rank-avatar-action-size:\s*48px;[\s\S]*--rank-avatar-action-gap:\s*8px;[\s\S]*width:\s*min\(280px, calc\(100vw - 24px\)\);[\s\S]*z-index:\s*12;[\s\S]*top:\s*calc\(100% \+ 10px\);[\s\S]*left:\s*calc\(50% - 12px\);[\s\S]*translate:\s*-50% 0;[\s\S]*transform-origin:\s*50% 0;[\s\S]*animation:\s*rankAvatarMenuBubbleIn/);
   assert.doesNotMatch(resultCss, /\.rank-avatar-menu\s*\{[\s\S]*filter:\s*drop-shadow/);
   assert.match(resultCss, /\.rank-avatar-menu-surface\s*\{[\s\S]*position:\s*absolute;[\s\S]*inset:\s*0;[\s\S]*overflow:\s*visible;[\s\S]*pointer-events:\s*none;/);
   assert.match(resultCss, /\.rank-avatar-menu-surface-path\s*\{[\s\S]*fill:\s*var\(--rank-avatar-menu-bg\);[\s\S]*stroke:\s*var\(--rank-avatar-menu-border\);[\s\S]*vector-effect:\s*non-scaling-stroke;/);
@@ -336,13 +350,14 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(resultCss, /\.rank-avatar-bubble\s*\{[\s\S]*overflow-x:\s*auto/);
   assert.doesNotMatch(resultCss, /\.rank-avatar-bubble\s*\{[\s\S]*backdrop-filter:/);
   assert.match(resultCss, /\.rank-avatar-menu-action\s*\{[\s\S]*width:\s*var\(--rank-avatar-action-size\);[\s\S]*height:\s*var\(--rank-avatar-action-size\);[\s\S]*border-radius:\s*14px;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action svg\s*\{[\s\S]*width:\s*28px;[\s\S]*height:\s*28px;/);
   assert.match(resultCss, /\.rank-avatar-menu-action\.danger\s*\{[\s\S]*color:\s*#b42318;[\s\S]*background:\s*#fff0ee;[\s\S]*box-shadow:\s*inset 0 0 0 1px rgba\(180, 35, 24, 0\.09\);/);
   assert.match(resultCss, /@keyframes rankAvatarMenuBubbleIn/);
   assert.doesNotMatch(resultCss, /@keyframes rank-avatar-menu-pop/);
   assert.match(resultCss, /@media \(max-width: 640px\)\s*\{[\s\S]*\.rank-avatar-menu\s*\{[\s\S]*right:\s*0;[\s\S]*left:\s*auto;[\s\S]*translate:\s*0;/);
   assert.match(resultCss, /@media \(max-width: 640px\)\s*\{[\s\S]*\.rank-avatar-menu-surface-path\.center\s*\{[\s\S]*display:\s*none;/);
   assert.match(resultCss, /@media \(max-width: 640px\)\s*\{[\s\S]*\.rank-avatar-menu-surface-path\.edge\s*\{[\s\S]*display:\s*block;/);
-  assert.match(resultCss, /@media \(max-width: 380px\)\s*\{[\s\S]*\.rank-avatar-menu\s*\{[\s\S]*--rank-avatar-action-size:\s*40px;[\s\S]*--rank-avatar-action-gap:\s*6px;[\s\S]*width:\s*min\(224px, calc\(100vw - 20px\)\);/);
+  assert.match(resultCss, /@media \(max-width: 380px\)\s*\{[\s\S]*\.rank-avatar-menu\s*\{[\s\S]*--rank-avatar-action-size:\s*44px;[\s\S]*--rank-avatar-action-gap:\s*6px;[\s\S]*width:\s*min\(252px, calc\(100vw - 20px\)\);/);
   assert.match(resultCss, /@media \(max-width: 380px\)\s*\{[\s\S]*\.rank-avatar-bubble\s*\{[\s\S]*padding:\s*17px 16px 12px;/);
   assert.match(tokensCss, /html\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*auto;/);
   assert.match(tokensCss, /body\s*\{[\s\S]*overflow-y:\s*visible;[\s\S]*overscroll-behavior-y:\s*auto;/);
@@ -351,26 +366,30 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(avatarLabSource, /export function AvatarLabScreen/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_SKINS/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_LABELS/);
-  assert.match(avatarLabSource, /PLAYER_AVATAR_ACTIONS/);
-  assert.match(avatarLabSource, /PLAYER_AVATAR_EXPRESSIONS/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_DESCRIPTIONS/);
+  assert.match(avatarLabSource, /getPlayerAvatarSkinUnlockState/);
+  assert.match(avatarLabSource, /advancedProgress:\s*AdvancedProgress;/);
+  assert.doesNotMatch(avatarLabSource, /PLAYER_AVATAR_ACTIONS/);
+  assert.doesNotMatch(avatarLabSource, /PLAYER_AVATAR_EXPRESSIONS/);
   assert.doesNotMatch(avatarLabSource, /const SKIN_LABELS/);
   assert.match(avatarLabSource, /selectedSkin:\s*PlayerAvatarSkin;/);
   assert.match(avatarLabSource, /onSelectSkin:\s*\(skin: PlayerAvatarSkin\) => void;/);
   assert.match(avatarLabSource, /<PlayerAvatar/);
-  assert.match(avatarLabSource, /action=\{activeAction\}/);
-  assert.match(avatarLabSource, /expression=\{activeExpression\}/);
-  assert.match(avatarLabSource, /id: "wonder"[\s\S]*action: "wonder"[\s\S]*effect: "question"/);
-  assert.match(avatarLabSource, /wonder:/);
-  assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{38\} \/>/);
-  assert.match(avatarLabSource, /playerName/);
-  assert.match(avatarLabSource, /onPlayerNameChange/);
-  assert.match(avatarLabSource, /className="avatar-lab-name-form"/);
-  assert.match(avatarLabSource, /maxLength=\{16\}/);
-  const avatarLabScenesSource = avatarLabSource.slice(
-    avatarLabSource.indexOf("const AVATAR_LAB_SCENES"),
-    avatarLabSource.indexOf("const ACTION_LABELS"),
-  );
-  assert.doesNotMatch(avatarLabScenesSource, /id: "jump"|id: "fall"/);
+  assert.doesNotMatch(avatarLabSource, /action=\{activeAction\}/);
+  assert.doesNotMatch(avatarLabSource, /expression=\{activeExpression\}/);
+  assert.doesNotMatch(avatarLabSource, /const AVATAR_LAB_SCENES/);
+  assert.doesNotMatch(avatarLabSource, /wonder:/);
+  assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{44\} \/>/);
+  assert.match(avatarLabSource, /disabled=\{!unlock\.unlocked\}/);
+  assert.match(avatarLabSource, /className=\{`avatar-lab-skin-row/);
+  assert.match(avatarLabSource, /onClick=\{\(\) => \{\s*if \(unlock\.unlocked\) onSelectSkin\(skin\);\s*\}\}/);
+  assert.doesNotMatch(avatarLabSource, /onPointerDown=\{\(\) => \{\s*if \(unlock\.unlocked\) onSelectSkin\(skin\);/);
+  assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_DESCRIPTIONS\[skin\]/);
+  assert.doesNotMatch(avatarLabSource, /playerName/);
+  assert.doesNotMatch(avatarLabSource, /onPlayerNameChange/);
+  assert.doesNotMatch(avatarLabSource, /className="avatar-lab-name-form"/);
+  assert.doesNotMatch(avatarLabSource, /maxLength=\{16\}/);
+  assert.doesNotMatch(avatarLabSource, /avatar-lab-button-grid/);
   assert.doesNotMatch(avatarLabSource, /mouth/i);
 
   assert.match(appPageSource, /import \{ AvatarLabScreen \}/);
@@ -379,7 +398,11 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(appPageSource, /readPersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /writePersistedPlayerAvatarSkin/);
   assert.match(appPageSource, /readPersistedPlayerName/);
-  assert.match(appPageSource, /writePersistedPlayerName/);
+  assert.doesNotMatch(appPageSource, /writePersistedPlayerName/);
+  assert.match(appPageSource, /shouldShowHomeworldEntry/);
+  assert.match(appPageSource, /const \[homeworldEntryVisible, setHomeworldEntryVisible\] = useState\(false\);/);
+  assert.match(appPageSource, /setHomeworldEntryVisible\(nextHomeworldEntryVisible\);/);
+  assert.match(appPageSource, /shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible/);
   assert.match(appPageSource, /const \[selectedAvatarSkin, setSelectedAvatarSkin\] = useState<PlayerAvatarSkin>\("cyan"\);/);
   assert.match(appPageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
   assert.match(appPageSource, /setSelectedAvatarSkin\(readPersistedPlayerAvatarSkin\(\)\);/);
@@ -388,13 +411,15 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
   assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
-  assert.match(appPageSource, /const handleChangePlayerName = useCallback/);
-  assert.match(appPageSource, /writePersistedPlayerName\(name\);/);
+  assert.doesNotMatch(appPageSource, /const handleChangePlayerName = useCallback/);
+  assert.doesNotMatch(appPageSource, /writePersistedPlayerName\(name\);/);
   assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
   assert.match(appPageSource, /transitionToStage\("avatar-lab"\)/);
   assert.match(appPageSource, /stage === "avatar-lab"/);
-  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
-  assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
+  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
+  assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}/);
+  assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}/);
+  assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*homeworldEntryVisible=\{homeworldEntryVisible\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
   assert.match(appPageSource, /const \[avatarLabReturnStage, setAvatarLabReturnStage\] = useState<"result" \| "homeworld">\("result"\);/);
   assert.match(appPageSource, /setAvatarLabReturnStage\("result"\);[\s\S]*transitionToStage\("avatar-lab"\)/);
   assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*transitionToStage\(avatarLabReturnStage\);[\s\S]*\}, \[avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop, transitionToStage\]\);/);
@@ -415,6 +440,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   const roundIntroUrl = new URL("../features/game-flow/round-intro.tsx", import.meta.url);
   const playFrameUrl = new URL("../features/game-flow/play-frame.tsx", import.meta.url);
   const shareImageScreenUrl = new URL("../features/results/share-image-screen.tsx", import.meta.url);
+  const homeIntroCssUrl = new URL("../app/styles/base-flow/home-intro.css", import.meta.url);
 
   assert.equal(existsSync(roundPlayerUrl), true);
   assert.equal(existsSync(homeScreenUrl), true);
@@ -431,6 +457,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   const roundIntroSource = readFileSync(roundIntroUrl, "utf8");
   const playFrameSource = readFileSync(playFrameUrl, "utf8");
   const shareImageScreenSource = readFileSync(shareImageScreenUrl, "utf8");
+  const homeIntroCss = readFileSync(homeIntroCssUrl, "utf8");
 
   assert.match(appPageSource, /from "@\/features\/rounds\/round-player"/);
   assert.match(appPageSource, /from "@\/features\/game-flow\/home-screen"/);
@@ -505,6 +532,18 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(homeworldStateSource, /export const HOMEWORLD_FURNITURE/);
   assert.match(homeworldStateSource, /export const HOMEWORLD_DOOR/);
   assert.match(roundIntroSource, /export function RoundIntro/);
+  assert.match(roundIntroSource, /onPointerDown=\{onStart\}/);
+  assert.match(roundIntroSource, /点击任意位置开始/);
+  assert.doesNotMatch(roundIntroSource, /\{round\.rule\}/);
+  assert.doesNotMatch(roundIntroSource, /\{round\.action\}/);
+  assert.doesNotMatch(roundIntroSource, /intro-rule-card/);
+  assert.doesNotMatch(roundIntroSource, /intro-start-button/);
+  assert.doesNotMatch(roundIntroSource, /primary-button/);
+  assert.match(homeIntroCss, /\.intro-start-hint/);
+  assert.match(homeIntroCss, /\.intro-card\s*\{[\s\S]*width:\s*100%;[\s\S]*align-content:\s*center;[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
+  assert.match(homeIntroCss, /\.intro-copy\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
+  assert.doesNotMatch(homeIntroCss, /\.intro-rule-card/);
+  assert.doesNotMatch(homeIntroCss, /\.intro-start-button/);
   assert.match(playFrameSource, /export function PlayFrame/);
   assert.match(shareImageScreenSource, /export function ShareImageScreen/);
 });
@@ -939,6 +978,13 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(chargeCssBlock, /transition:\s*transform 7[0-9]ms linear;/);
   assert.doesNotMatch(chargeCssBlock, /filter:|saturate|brightness/);
   assert.match(cssSource, /\[data-action="celebrate"\]/);
+  assert.doesNotMatch(cssSource, /rgba\(62,\s*136,\s*91/);
+  assert.doesNotMatch(cssSource, /rgba\(48,\s*111,\s*75/);
+  assert.doesNotMatch(cssSource, /#2f6f42/);
+  const sleepCssBlock = cssSource.match(/\.root\[data-action="sleep"\] \.motion \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.notEqual(sleepCssBlock, "");
+  assert.match(sleepCssBlock, /transform:\s*translateY\(0\) scale\(1\);/);
+  assert.doesNotMatch(sleepCssBlock, /scaleX|scaleY/);
   assert.match(cssSource, /\[data-action="wonder"\]\s+\.motion\s*\{[\s\S]*transform-origin:\s*12% 88%;[\s\S]*animation:\s*playerAvatarWonder 1[0-9]{3}ms ease-in-out infinite;/);
   assert.match(cssSource, /@keyframes playerAvatarWonder/);
   assert.match(cssSource, /\[data-effect="question"\]\s+\.questionMark\s*\{[\s\S]*opacity:\s*1;[\s\S]*animation:\s*playerAvatarQuestion/);
@@ -987,6 +1033,46 @@ test("avatar expression usage removes focused and maps gameplay focus to neutral
   assert.match(avatarRelatedSources, /view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
   assert.match(avatarRelatedSources, /view\.state === "jumping"\) return \{ action: "idle", expression: "neutral" \};/);
   assert.match(avatarRelatedSources, /view\.state === "falling"\) return \{ action: "idle", expression: "scared" \};/);
+});
+
+test("base play frame has a dismissible full-screen tutorial overlay", () => {
+  const playFrameSource = readFileSync(new URL("../features/game-flow/play-frame.tsx", import.meta.url), "utf8");
+  const playFrameCss = readFileSync(new URL("../app/styles/base-flow/play-frame.css", import.meta.url), "utf8");
+
+  assert.match(playFrameSource, /BASE_ROUND_TUTORIALS/);
+  assert.match(playFrameSource, /useState<string \| null>\(null\)/);
+  assert.match(playFrameSource, /const tutorialKey = `\$\{round\.id\}:\$\{index\}`;/);
+  assert.match(playFrameSource, /const tutorialVisible = dismissedTutorialKey !== tutorialKey;/);
+  assert.match(playFrameSource, /\{tutorialVisible \? null : children\}/);
+  assert.match(playFrameSource, /className="base-tutorial-overlay"/);
+  assert.match(playFrameSource, /className="base-tutorial-panel"/);
+  assert.match(playFrameSource, /className="base-tutorial-steps"/);
+  assert.match(playFrameSource, /点击任意位置开始游戏/);
+  assert.match(playFrameSource, /onPointerDown=\{dismissTutorial\}/);
+  assert.match(playFrameSource, /onKeyDown=\{handleTutorialKeyDown\}/);
+  assert.match(playFrameSource, /setDismissedTutorialKey\(tutorialKey\)/);
+  assert.doesNotMatch(playFrameSource, /<button className="primary-button"[\s\S]*开始[\s\S]*<\/button>/);
+  assert.match(playFrameSource, /reaction:[\s\S]*steps: \["看到绿色信号后立刻点击"\]/);
+  assert.match(playFrameSource, /aim:[\s\S]*点击屏幕向点击位置发射箭矢[\s\S]*使用最少的箭矢击中目标指定次数/);
+  assert.match(playFrameSource, /search:[\s\S]*长按左右屏幕控制移动方向[\s\S]*到达最高处终点平台/);
+  assert.match(playFrameSource, /stroop:[\s\S]*长按左右屏幕控制移动方向[\s\S]*到达最低处终点平台/);
+  assert.match(playFrameSource, /rhythm:[\s\S]*长按屏幕蓄力，松手跳跃[\s\S]*蓄力越久，跳得越远/);
+  assert.match(playFrameSource, /memory:[\s\S]*点击屏幕小方块会起跳[\s\S]*连续点击穿过障碍到达终点/);
+  assert.match(playFrameSource, /braking:[\s\S]*长按屏幕小方块前进[\s\S]*出现危险时松手停下来/);
+  assert.match(playFrameSource, /patience:[\s\S]*点击屏幕发射飞刀[\s\S]*需要避开已有飞刀/);
+  assert.doesNotMatch(playFrameSource, /steps:\s*\[[^\]]*。/);
+  assert.doesNotMatch(playFrameSource, /红色或未亮起/);
+  assert.doesNotMatch(playFrameSource, /base-tutorial-kicker/);
+  assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*position:\s*fixed;/);
+  assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*inset:\s*0;/);
+  assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*background:\s*rgba\(12, 15, 16, 0\.34\);[\s\S]*backdrop-filter:\s*blur\(5px\);/);
+  assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*max-width:\s*620px;[\s\S]*background:\s*transparent;/);
+  assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*text-align:\s*center;/);
+  assert.match(playFrameCss, /\.base-tutorial-start-hint/);
+  assert.doesNotMatch(playFrameCss, /box-shadow:\s*0 24px 70px/);
+  assert.doesNotMatch(playFrameCss, /border:\s*1px solid rgba\(255, 253, 248/);
+  assert.match(playFrameCss, /\.base-tutorial-steps/);
+  assert.doesNotMatch(playFrameCss, /\.base-tutorial-kicker/);
 });
 
 test("doodle player uses the shared avatar pilot without owning visual square markup", () => {
