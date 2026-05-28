@@ -417,6 +417,20 @@ function outcomeMemoryLines(event: OutdoorEventDefinition, optionId: string, out
   return lines;
 }
 
+function getVisibleChoiceDefinitions(event: OutdoorEventDefinition) {
+  const definitions = new Map<string, OutdoorEventOption>();
+  const baseEvent = OUTDOOR_ADVENTURE_EVENTS.find((item) => item.id === event.id);
+  for (const option of [
+    ...event.options,
+    ...(baseEvent?.options ?? []),
+    ...(event.rareChoice ? [event.rareChoice.option] : []),
+    ...(baseEvent?.rareChoice ? [baseEvent.rareChoice.option] : []),
+  ]) {
+    definitions.set(option.id, option);
+  }
+  return definitions;
+}
+
 function buildChoiceResult(
   before: OutdoorAdventureState,
   after: OutdoorAdventureState,
@@ -444,7 +458,7 @@ function buildChoiceResult(
   lines.push(...outcomeMemoryLines(event, option.id, outcome));
   if (lines.length === 0) lines.push("没有明显资源变化");
 
-  const allDefinedOptions = event.rareChoice ? [...event.options, event.rareChoice.option] : event.options;
+  const allDefinedOptions = getVisibleChoiceDefinitions(event);
   return {
     eventId: event.id,
     optionId: option.id,
@@ -455,7 +469,7 @@ function buildChoiceResult(
     lines,
     regionId: event.regionId,
     visibleChoices: visibleChoiceIds
-      ?.map((optionId) => allDefinedOptions.find((item) => item.id === optionId))
+      ?.map((optionId) => allDefinedOptions.get(optionId))
       .filter((item): item is OutdoorEventOption => Boolean(item))
       .slice(0, 2)
       .map((item) => ({ label: item.label, optionId: item.id })),

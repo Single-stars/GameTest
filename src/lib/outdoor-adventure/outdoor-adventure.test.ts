@@ -477,6 +477,19 @@ test("event outcome stays on the current scene until the player continues", () =
   assert.equal(continued.pendingSceneStaminaCost, undefined);
 });
 
+test("event outcome preserves the clicked scene choice snapshot when rare choice rerolls differently", () => {
+  const state = createDefaultOutdoorAdventureState();
+  state.currentNode = { kind: "event", eventId: "event_drunken_vending_machine" };
+
+  const result = applyOutdoorEventChoice(state, "event_drunken_vending_machine", "grab", {
+    forceRareChoice: "replaceB",
+    outcomeIndex: 0,
+    visibleChoiceIds: ["pickup_1982", "wake"],
+  });
+
+  assert.deepEqual(result.lastOutcome?.visibleChoices?.map((choice) => choice.optionId), ["pickup_1982", "wake"]);
+});
+
 test("event scene entry stamina cost can send the adventure to day end", () => {
   const state = createDefaultOutdoorAdventureState();
   state.currentNode = { kind: "event", eventId: "event_drunken_vending_machine" };

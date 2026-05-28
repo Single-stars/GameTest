@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 
@@ -186,6 +186,32 @@ test("homeworld skins are visual-only and cannot change room or furniture layout
     assert.equal(variant.background.width, HOMEWORLD_SCENE.width);
     assert.equal(variant.background.height, HOMEWORLD_SCENE.height);
   }
+});
+
+test("homeworld public skin directories are all registered by the state schema", () => {
+  const registeredSkinDirs = new Set<string>();
+  for (const asset of [
+    HOMEWORLD_SCENE.background,
+    ...HOMEWORLD_ROOM_VARIANTS.map((variant) => variant.background),
+    ...HOMEWORLD_FURNITURE.flatMap((definition) => [
+      definition.asset,
+      ...definition.variants.map((variant) => variant.asset),
+    ]),
+  ]) {
+    const skinDir = asset.src.match(/^\/homeworld\/skins\/([^/]+)\//)?.[1];
+    assert.ok(skinDir, asset.src);
+    registeredSkinDirs.add(skinDir);
+  }
+
+  const publicSkinDirs = readdirSync(
+    fileURLToPath(new URL("../../../public/homeworld/skins", import.meta.url)),
+    { withFileTypes: true },
+  )
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  assert.deepEqual(publicSkinDirs, [...registeredSkinDirs].sort());
 });
 
 test("homeworld mirror skin assets share the same canvas and content bounds", () => {
