@@ -10,8 +10,12 @@ import styles from "./player-avatar.module.css";
 
 export {
   PLAYER_AVATAR_FACELESS_SKINS,
+  PLAYER_AVATAR_SKIN_DESCRIPTIONS,
   PLAYER_AVATAR_SKIN_LABELS,
+  PLAYER_AVATAR_SKIN_UNLOCKS,
   PLAYER_AVATAR_SKINS,
+  getPlayerAvatarSkinUnlockState,
+  isPlayerAvatarSkinUnlocked,
   resolvePlayerAvatarSkin,
   type PlayerAvatarSkin,
 } from "./player-avatar-skin";

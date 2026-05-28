@@ -9,12 +9,14 @@ export const SHARE_IMAGE_HEIGHT = 820;
 export type ShareImageInput =
   | {
       kind: "result";
+      avatarDataUrl?: string | null;
       rankTitle: string;
       result: GameRankResult;
       url: string;
     }
   | {
       kind: "default";
+      avatarDataUrl?: string | null;
       url: string;
     };
 
@@ -64,10 +66,12 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
     width: 144,
   });
   const qrImage = await loadCanvasImage(qrDataUrl);
+  const avatarImage = input.avatarDataUrl ? await loadCanvasImage(input.avatarDataUrl) : null;
 
   if (input.kind === "default") {
     drawCard(ctx, 24, 24, 852, 510);
-    drawFittedText(ctx, "热血青铜", 58, 116, 784, 72, 48, "#181818");
+    drawFittedText(ctx, "热血青铜", 58, 116, 640, 72, 48, "#181818");
+    drawShareAvatarScreenshot(ctx, avatarImage, 704, 46, 132);
 
     drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 124);
 
@@ -76,7 +80,8 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
   }
 
   drawCard(ctx, 24, 24, 852, 144);
-  drawFittedText(ctx, input.rankTitle, 58, 116, 784, 72, 42, "#181818");
+  drawFittedText(ctx, input.rankTitle, 58, 116, 640, 72, 42, "#181818");
+  drawShareAvatarScreenshot(ctx, avatarImage, 724, 30, 132);
 
   drawCard(ctx, 24, 194, 852, 352);
   drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 112);
@@ -117,6 +122,17 @@ function drawQrFooter(ctx: CanvasRenderingContext2D, qrImage: HTMLImageElement, 
 
   drawText(ctx, title, 252, y + 86, "900 34px", "#181818");
   drawText(ctx, subtitle, 252, y + 132, "760 26px", "#665f55");
+}
+
+function drawShareAvatarScreenshot(
+  ctx: CanvasRenderingContext2D,
+  avatarImage: HTMLImageElement | null,
+  x: number,
+  y: number,
+  size: number,
+) {
+  if (!avatarImage) return;
+  ctx.drawImage(avatarImage, x, y, size, size);
 }
 
 function drawRadarOnCanvas(ctx: CanvasRenderingContext2D, axis: ScoreAxis[], centerX: number, centerY: number, radius: number) {

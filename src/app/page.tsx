@@ -13,6 +13,7 @@ import {
   evaluateAdvancedChallengeCompletion,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
+  shouldShowHomeworldEntry,
   shouldShowPerfectClearShortcut,
 } from "@/lib/advanced-challenges";
 import {
@@ -97,12 +98,11 @@ import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
 import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
-import { PlayerAvatarSkinProvider, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, PlayerAvatarSkinProvider, isPlayerAvatarSkinUnlocked, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import {
   readPersistedPlayerAvatarSkin,
   readPersistedPlayerName,
   writePersistedPlayerAvatarSkin,
-  writePersistedPlayerName,
 } from "@/features/player-avatar/player-avatar-storage";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
@@ -136,6 +136,15 @@ function shouldUseModeTransitionForStageChange(currentStage: Stage, nextStage: S
   return MODE_TRANSITION_STAGES.has(currentStage) && MODE_TRANSITION_STAGES.has(nextStage);
 }
 
+function getBrowserStorage() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
   const [roundIndex, setRoundIndex] = useState(0);
@@ -160,6 +169,7 @@ export default function Home() {
   const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
   const [localStateHydrated, setLocalStateHydrated] = useState(false);
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
+  const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const trialsRef = useRef<TrialEvent[]>([]);
@@ -168,6 +178,7 @@ export default function Home() {
   const outdoorAdventureStateRef = useRef(outdoorAdventureState);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
+  const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
@@ -261,23 +272,25 @@ export default function Home() {
   }, []);
 
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
-    if (typeof window === "undefined") return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
 
     try {
       const baseState = createDefaultPersistedGameState();
       const nextState = currentTrials
         ? setPersistedCurrentResult(baseState, currentTrials, progress)
         : clearPersistedCurrentResult({ ...baseState, advancedProgress: progress });
-      writePersistedGameState(window.localStorage, nextState);
+      writePersistedGameState(storage, nextState);
     } catch {
       // Storage can be unavailable in private mode; the game should still run.
     }
   }, []);
 
   const persistHomeworldState = useCallback((state: HomeworldState) => {
-    if (typeof window === "undefined") return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
     try {
-      writePersistedHomeworldState(window.localStorage, state);
+      writePersistedHomeworldState(storage, state);
     } catch {
       // Storage can be unavailable in private mode; the homeworld should still run.
     }
@@ -326,9 +339,10 @@ export default function Home() {
     resetCurrentRunState();
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
-    if (typeof window !== "undefined") {
+    const storage = getBrowserStorage();
+    if (storage) {
       try {
-        removePersistedGameState(window.localStorage);
+        removePersistedGameState(storage);
       } catch {
         // Storage can be unavailable in private mode; resetting visible state is still useful.
       }
@@ -363,10 +377,15 @@ export default function Home() {
     setSelectedAvatarSkin(readPersistedPlayerAvatarSkin());
     setPlayerName(readPersistedPlayerName());
     if (typeof window !== "undefined") {
-      setHomeworldState(readPersistedHomeworldState(window.localStorage));
-      const persistedOutdoorAdventure = readPersistedOutdoorAdventureState(window.localStorage);
-      if (persistedOutdoorAdventure) setOutdoorAdventureState(persistedOutdoorAdventure);
-      if (new URLSearchParams(window.location.search).get("homeworld") === "1") {
+      const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
+      setHomeworldEntryVisible(nextHomeworldEntryVisible);
+      const storage = getBrowserStorage();
+      if (storage) {
+        setHomeworldState(readPersistedHomeworldState(storage));
+        const persistedOutdoorAdventure = readPersistedOutdoorAdventureState(storage);
+        if (persistedOutdoorAdventure) setOutdoorAdventureState(persistedOutdoorAdventure);
+      }
+      if (nextHomeworldEntryVisible && new URLSearchParams(window.location.search).get("homeworld") === "1") {
         setStage("homeworld");
       }
     }
@@ -374,21 +393,25 @@ export default function Home() {
   }, []);
 
   const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
+    if (!isPlayerAvatarSkinUnlocked(skin, advancedProgressRef.current)) return;
     setSelectedAvatarSkin(skin);
     writePersistedPlayerAvatarSkin(skin);
   }, []);
 
-  const handleChangePlayerName = useCallback((name: string) => {
-    setPlayerName(name);
-    writePersistedPlayerName(name);
-  }, []);
+  useEffect(() => {
+    if (isPlayerAvatarSkinUnlocked(selectedAvatarSkin, advancedProgress)) return;
+    handleSelectAvatarSkin("cyan");
+  }, [advancedProgress, handleSelectAvatarSkin, selectedAvatarSkin]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
     setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
-    const shouldOpenHomeworldFromQuery = new URLSearchParams(window.location.search).get("homeworld") === "1";
+    setHomeworldEntryVisible(nextHomeworldEntryVisible);
+    const shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible && new URLSearchParams(window.location.search).get("homeworld") === "1";
 
-    const stored = readPersistedGameState(window.localStorage);
+    const storage = getBrowserStorage();
+    const stored = storage ? readPersistedGameState(storage) : createDefaultPersistedGameState();
     const storedTrials = stored.currentResult?.trials ?? [];
     let nextProgress = stored.advancedProgress;
 
@@ -409,6 +432,20 @@ export default function Home() {
       persistGameState(storedTrials.length > 0 ? storedTrials : null, nextProgress);
     }
   }, [persistGameState]);
+
+  const captureShareAvatarDataUrl = useCallback(async () => {
+    const node = shareAvatarCaptureRef.current;
+    if (!node) return null;
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    const { default: html2canvas } = await import("html2canvas");
+    const canvas = await html2canvas(node, {
+      backgroundColor: null,
+      logging: false,
+      scale: Math.min(3, window.devicePixelRatio || 2),
+      useCORS: true,
+    });
+    return canvas.toDataURL("image/png");
+  }, []);
 
   const completeRound = useCallback((roundTrials: TrialEvent[]) => {
     if (roundCompletionLockedRef.current) {
@@ -482,14 +519,15 @@ export default function Home() {
     }
 
     try {
-      const dataUrl = await createShareImage(input, APP_TAGLINE);
+      const avatarDataUrl = await captureShareAvatarDataUrl();
+      const dataUrl = await createShareImage({ ...input, avatarDataUrl }, APP_TAGLINE);
       setShareImageDataUrl(dataUrl);
       setImageShareState("saved");
     } catch {
       setShareImageDataUrl(null);
       setImageShareState("failed");
     }
-  }, [clearShareCopyToastTimer, showShareCopyToast, transitionToStage]);
+  }, [captureShareAvatarDataUrl, clearShareCopyToastTimer, showShareCopyToast, transitionToStage]);
 
   const openCurrentShareImage = useCallback(() => {
     const rankTitle = formatResultRankTitle(result.name, getAdvancedTotalStars(advancedProgressRef.current));
@@ -526,9 +564,10 @@ export default function Home() {
   }, [transitionToStage]);
 
   const openHomeworld = useCallback(() => {
+    if (!homeworldEntryVisible) return;
     releaseHistoryGuard();
     void transitionToStage("homeworld");
-  }, [releaseHistoryGuard, transitionToStage]);
+  }, [homeworldEntryVisible, releaseHistoryGuard, transitionToStage]);
 
   const openHomeworldAvatarLab = useCallback(() => {
     setHomeworldReturnPose(homeworldPlayerPoseRef.current);
@@ -698,12 +737,13 @@ export default function Home() {
   const persistOutdoorAdventureState = useCallback((state: OutdoorAdventureState) => {
     outdoorAdventureStateRef.current = state;
     setOutdoorAdventureState(state);
-    if (typeof window === "undefined") return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
     try {
       if (state.status === "settled" || state.status === "failed") {
-        clearPersistedOutdoorAdventureState(window.localStorage);
+        clearPersistedOutdoorAdventureState(storage);
       } else {
-        writePersistedOutdoorAdventureState(window.localStorage, state);
+        writePersistedOutdoorAdventureState(storage, state);
       }
     } catch {
       // Storage can be unavailable in private mode; the visible adventure should still run.
@@ -714,9 +754,10 @@ export default function Home() {
     setHomeworldReturnPose(homeworldPlayerPoseRef.current);
     persistHomeworldState(homeworldStateRef.current);
     let nextState = outdoorAdventureStateRef.current;
-    if (typeof window !== "undefined") {
+    const storage = getBrowserStorage();
+    if (storage) {
       try {
-        nextState = readPersistedOutdoorAdventureState(window.localStorage) ?? nextState;
+        nextState = readPersistedOutdoorAdventureState(storage) ?? nextState;
       } catch {
         // Keep the in-memory adventure if storage is unavailable.
       }
@@ -739,9 +780,10 @@ export default function Home() {
     const nextState = createDefaultOutdoorAdventureState();
     outdoorAdventureStateRef.current = nextState;
     setOutdoorAdventureState(nextState);
-    if (typeof window === "undefined") return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
     try {
-      clearPersistedOutdoorAdventureState(window.localStorage);
+      clearPersistedOutdoorAdventureState(storage);
     } catch {
       // Storage can be unavailable in private mode; the next in-memory entry still starts fresh.
     }
@@ -928,9 +970,8 @@ export default function Home() {
         />
       ) : stage === "avatar-lab" ? (
         <AvatarLabScreen
-          playerName={playerName}
+          advancedProgress={advancedProgress}
           selectedSkin={selectedAvatarSkin}
-          onPlayerNameChange={handleChangePlayerName}
           onSelectSkin={handleSelectAvatarSkin}
           onBack={requestAppBack}
         />
@@ -1016,6 +1057,7 @@ export default function Home() {
         <ResultScreen
           advancedProgress={advancedProgress}
           avatarSkin={selectedAvatarSkin}
+          homeworldEntryVisible={homeworldEntryVisible}
           trials={safeTrials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
@@ -1044,6 +1086,7 @@ export default function Home() {
         <ResultScreen
           advancedProgress={advancedProgress}
           avatarSkin={selectedAvatarSkin}
+          homeworldEntryVisible={homeworldEntryVisible}
           trials={trials}
           advancedUnlockPulseId={advancedUnlockPulseId}
           imageShareState={imageShareState}
@@ -1064,6 +1107,15 @@ export default function Home() {
         />
       ) : null}
       <ModeTransitionOverlay state={transitionState} />
+      <PlayerAvatar
+        action="idle"
+        className="share-avatar-capture"
+        effect="none"
+        expression="neutral"
+        rootRef={shareAvatarCaptureRef}
+        skin={selectedAvatarSkin}
+        size={132}
+      />
     </main>
     </PlayerAvatarSkinProvider>
   );

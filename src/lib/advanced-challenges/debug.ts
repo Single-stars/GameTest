@@ -9,6 +9,17 @@ export function getDebugToolsVisibility({
   return new URLSearchParams((search ?? "").replace(/^\?/, "")).get("debug") === "1";
 }
 
+export function shouldShowHomeworldEntry({
+  nodeEnv,
+  search,
+}: {
+  nodeEnv?: string;
+  search?: string;
+}) {
+  void search;
+  return nodeEnv === "development";
+}
+
 export function shouldShowPerfectClearShortcut({ debugToolsVisible }: { debugToolsVisible: boolean }) {
   void debugToolsVisible;
   return true;

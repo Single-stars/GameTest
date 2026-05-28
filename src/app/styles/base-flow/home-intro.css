@@ -53,18 +53,20 @@
 }
 
 .intro-screen {
-  justify-content: center;
+  justify-content: end;
   align-items: stretch;
-  padding-block: 24px;
+  padding-block: 24px 76px;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .intro-card {
   width: min(100%, 720px);
-  min-height: min(720px, calc(100svh - 84px));
+  min-height: 42svh;
   margin-inline: auto;
   display: grid;
-  align-content: center;
-  gap: 22px;
+  align-content: end;
+  gap: 14px;
   padding: 4px;
 }
 
@@ -89,29 +91,9 @@
   line-height: 1.1;
 }
 
-.intro-rule-card {
-  max-width: 620px;
-  display: grid;
-  gap: 10px;
-  border-block: 1px solid var(--line);
-  padding-block: 18px;
+.intro-start-hint {
   color: var(--muted);
-  font-size: 18px;
-  font-weight: 720;
-  line-height: 1.6;
-}
-
-.intro-rule-card p,
-.intro-rule-card small {
-  margin: 0;
-}
-
-.intro-rule-card small {
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 760;
-}
-
-.intro-start-button {
-  width: min(220px, 100%);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.2;
 }

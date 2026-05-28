@@ -49,6 +49,11 @@ function numberValue(value: TrialEvent["value"], key: string) {
   return Number.isFinite(raw) ? raw : null;
 }
 
+function isFallDownDangerPlatformChallenge(config: AdvancedStageConfig) {
+  const miniLevelId = String(config.params.miniLevelId ?? "");
+  return miniLevelId.includes("danger") || miniLevelId.includes("final");
+}
+
 function toScore(correctCount: number, requiredCorrect: number) {
   return Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100)));
 }
@@ -260,7 +265,7 @@ function evaluateMiniGameChallenge(config: AdvancedStageConfig, trials: TrialEve
     const steppedDangerPlatform = includesAny(reasonText, ["踩到危险"]);
     goalChecks = [reachedFinish, !fellOut];
     if (bandGroup === "258" || bandGroup === "369" || bandGroup === "10") goalChecks.push(!touchedDangerRed);
-    if (bandGroup === "369" || bandGroup === "10") goalChecks.push(!steppedDangerPlatform);
+    if (isFallDownDangerPlatformChallenge(config)) goalChecks.push(!steppedDangerPlatform);
   } else if (config.dimension === "rhythm") {
     const fellOut = includesAny(reasonText, ["掉下", "掉出", "飞出"]);
     const reachedFinish = passed || includesAny(reasonText, ["终点平台", "通过终点"]);

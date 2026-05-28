@@ -582,7 +582,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
   const miniKnifeScore = miniGameScore(trials.filter((trial) => trial.roundId === "patience"), "knife");
 
   const reaction = clamp(
-    scoreFromLowerIsBetter(metrics.reactionMedianMs, 175, 560, 38) * 0.8 +
+    scoreFromLowerIsBetter(metrics.reactionMedianMs, 240, 620, 38) * 0.8 +
       scoreFromLowerIsBetter(metrics.reactionConsistencyMs, 24, 150, 45) * 0.2 -
       metrics.earlyReactions * 14,
   );
@@ -652,17 +652,19 @@ export function buildScoreAxis(scores: ScoreSummary): ScoreAxis[] {
 }
 
 export function calculateRankScore(scores: ScoreSummary) {
-  const dimensions = [
-    scores.reaction,
-    scores.targeting,
-    scores.search,
-    scores.interference,
-    scores.rhythm,
-    scores.memory,
-    scores.braking,
-    scores.waiting,
+  const weightedDimensions = [
+    { score: scores.reaction, weight: 0.6 },
+    { score: scores.targeting, weight: 1 },
+    { score: scores.search, weight: 1 },
+    { score: scores.interference, weight: 1 },
+    { score: scores.rhythm, weight: 1 },
+    { score: scores.memory, weight: 1 },
+    { score: scores.braking, weight: 1 },
+    { score: scores.waiting, weight: 1 },
   ];
-  const equalAverage = dimensions.reduce((sum, score) => sum + score, 0) / dimensions.length;
+  const weightedTotal = weightedDimensions.reduce((sum, item) => sum + item.score * item.weight, 0);
+  const totalWeight = weightedDimensions.reduce((sum, item) => sum + item.weight, 0);
+  const weightedAverage = weightedTotal / totalWeight;
 
   const core = [
     scores.reaction,
@@ -680,7 +682,7 @@ export function calculateRankScore(scores: ScoreSummary) {
     Math.max(0, 45 - minCore) * 0.42;
   const confidencePenalty = Math.max(0, 100 - scores.confidence) * 0.35;
 
-  return clamp(equalAverage - weakPenalty - confidencePenalty);
+  return clamp(weightedAverage - weakPenalty - confidencePenalty);
 }
 
 export function rankFromScores(scores: ScoreSummary, rankScore = calculateRankScore(scores)): RankName {

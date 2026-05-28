@@ -248,7 +248,7 @@ test("complete strong data can reach the top rank only without obvious weaknesse
   assert.equal(result.axis.length, 8);
 });
 
-test("rank score gives each displayed axis the same base weight", () => {
+test("rank score lowers the reaction axis base weight", () => {
   const reactionHigh = {
     reaction: 100,
     targeting: 60,
@@ -266,7 +266,17 @@ test("rank score gives each displayed axis the same base weight", () => {
     targeting: 100,
   };
 
-  assert.equal(calculateRankScore(reactionHigh), calculateRankScore(targetingHigh));
+  assert.ok(calculateRankScore(targetingHigh) > calculateRankScore(reactionHigh));
+});
+
+test("solid base reaction timings can still display a full score", () => {
+  const scores = calculateScores([
+    trial("reaction", 0, { shownAt: 0, responseAt: 228 }),
+    trial("reaction", 1, { shownAt: 1000, responseAt: 1236 }),
+    trial("reaction", 2, { shownAt: 2000, responseAt: 2232 }),
+  ]);
+
+  assert.equal(scores.reaction, 100);
 });
 
 test("perfect normal all-correct rounds can display 100", () => {
