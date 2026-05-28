@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
   type PointerEvent,
   type ReactNode,
 } from "react";
@@ -12,21 +13,30 @@ import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText,
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
-import { AvatarLabIcon, DonateIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
+import { AvatarLabIcon, DonateIcon, FeedbackIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
+type FeedbackCategory = "bug" | "idea" | "chat";
+type FeedbackSubmitState = "idle" | "submitting" | "sent" | "failed";
 type AvatarMenuItem = {
-  id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate";
+  id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate" | "feedback";
   label: string;
   icon: ReactNode;
   onSelect: () => void;
-  tone: "share" | "restart" | "skin" | "donate" | "homeworld" | "reset";
+  tone: "share" | "restart" | "skin" | "donate" | "homeworld" | "reset" | "feedback";
   disabled?: boolean;
   danger?: boolean;
 };
 
 const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;
+const FEEDBACK_CONTENT_MAX_LENGTH = 250;
+const FEEDBACK_TYPES = [
+  { id: "bug", label: "BUG反馈" },
+  { id: "idea", label: "贡献你的想法" },
+  { id: "chat", label: "和作者聊聊天" },
+] as const satisfies ReadonlyArray<{ id: FeedbackCategory; label: string }>;
+const FEEDBACK_RATINGS = [1, 2, 3, 4, 5] as const;
 
 function roundFailureCount(trials: TrialEvent[], roundId: RoundId) {
   const roundTrials = trials.filter((item) => item.roundId === roundId);
@@ -76,6 +86,12 @@ export function ResultScreen({
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
   const [donatePanelOpen, setDonatePanelOpen] = useState(false);
+  const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
+  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("idea");
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackSubmitState, setFeedbackSubmitState] = useState<FeedbackSubmitState>("idle");
+  const [feedbackError, setFeedbackError] = useState("");
   const avatarEntryTimerRef = useRef<number | null>(null);
   const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
@@ -147,6 +163,58 @@ export function ResultScreen({
     setDonatePanelOpen(true);
   }, [onDonateAuthor]);
 
+  const openFeedbackPanel = useCallback(() => {
+    setFeedbackPanelOpen(true);
+    setFeedbackSubmitState("idle");
+    setFeedbackError("");
+  }, []);
+
+  const closeFeedbackPanel = useCallback(() => {
+    if (feedbackSubmitState === "submitting") return;
+    setFeedbackPanelOpen(false);
+  }, [feedbackSubmitState]);
+
+  const submitFeedback = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const content = feedbackContent.trim();
+      if (!content) {
+        setFeedbackSubmitState("failed");
+        setFeedbackError("写一句再发送。");
+        return;
+      }
+      if (content.length > FEEDBACK_CONTENT_MAX_LENGTH) {
+        setFeedbackSubmitState("failed");
+        setFeedbackError("最多 250 字。");
+        return;
+      }
+
+      setFeedbackSubmitState("submitting");
+      setFeedbackError("");
+
+      try {
+        const response = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            category: feedbackCategory,
+            content,
+            page: "result",
+            rating: feedbackRating,
+          }),
+        });
+
+        if (!response.ok) throw new Error("feedback-submit-failed");
+        setFeedbackContent("");
+        setFeedbackSubmitState("sent");
+      } catch {
+        setFeedbackSubmitState("failed");
+        setFeedbackError("没发出去，稍后再试。");
+      }
+    },
+    [feedbackCategory, feedbackContent, feedbackRating],
+  );
+
   const avatarMenuItems = [
     {
       id: "share",
@@ -176,6 +244,13 @@ export function ResultScreen({
       icon: <DonateIcon />,
       tone: "donate",
       onSelect: openDonatePanel,
+    },
+    {
+      id: "feedback",
+      label: "反馈",
+      icon: <FeedbackIcon />,
+      tone: "feedback",
+      onSelect: openFeedbackPanel,
     },
     ...(homeworldEntryVisible
       ? [
@@ -328,6 +403,81 @@ export function ResultScreen({
             <h2 id="donate-dialog-title">赞赏作者</h2>
             <p>感谢支持。发布前可以在这里配置收款码或赞赏链接。</p>
           </div>
+        </div>
+      ) : null}
+
+      {feedbackPanelOpen ? (
+        <div className="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-dialog-title">
+          <form className="feedback-card" onSubmit={submitFeedback}>
+            <button className="feedback-close" type="button" aria-label="关闭反馈面板" onClick={closeFeedbackPanel}>
+              ×
+            </button>
+            <FeedbackIcon />
+            <h2 id="feedback-dialog-title">反馈</h2>
+
+            <div className="feedback-rating-row">
+              <span>给游戏打个分</span>
+              <div className="feedback-rating" aria-label="体验评分">
+                {FEEDBACK_RATINGS.map((rating) => (
+                  <button
+                    aria-pressed={feedbackRating === rating}
+                    className={feedbackRating === rating ? "selected" : ""}
+                    key={rating}
+                    type="button"
+                    onClick={() => setFeedbackRating(rating)}
+                  >
+                    {rating}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="feedback-type-options" aria-label="反馈类型">
+              {FEEDBACK_TYPES.map((item) => (
+                <button
+                  aria-pressed={feedbackCategory === item.id}
+                  className={feedbackCategory === item.id ? "selected" : ""}
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFeedbackCategory(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="feedback-textarea-label" htmlFor="feedback-content">
+              <span>文本</span>
+              <small>{feedbackContent.length}/{FEEDBACK_CONTENT_MAX_LENGTH}</small>
+            </label>
+            <textarea
+              id="feedback-content"
+              maxLength={250}
+              placeholder="写下你遇到的问题或想法"
+              value={feedbackContent}
+              onChange={(event) => {
+                setFeedbackContent(event.target.value.slice(0, FEEDBACK_CONTENT_MAX_LENGTH));
+                if (feedbackSubmitState !== "submitting") {
+                  setFeedbackSubmitState("idle");
+                  setFeedbackError("");
+                }
+              }}
+            />
+
+            <p className="feedback-privacy-note">谢谢你玩我的游戏！</p>
+
+            {feedbackSubmitState === "sent" ? <p className="feedback-status success">已收到。</p> : null}
+            {feedbackSubmitState === "failed" && feedbackError ? <p className="feedback-status error">{feedbackError}</p> : null}
+
+            <div className="feedback-actions">
+              <button type="button" onClick={closeFeedbackPanel}>
+                取消
+              </button>
+              <button disabled={feedbackSubmitState === "submitting" || feedbackContent.trim().length === 0} type="submit">
+                {feedbackSubmitState === "submitting" ? "发送中" : "发送"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
 

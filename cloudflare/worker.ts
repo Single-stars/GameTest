@@ -2,10 +2,12 @@
 
 export interface Env {
   ROOMS: DurableObjectNamespace;
+  FEEDBACK_DB: D1Database;
   ALLOWED_ORIGIN?: string;
 }
 
 type SignalingRole = "host" | "guest";
+type FeedbackCategory = "bug" | "idea" | "chat";
 
 type RoomMetadata = {
   code: string;
@@ -22,9 +24,12 @@ const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
 const CREATE_ROOM_ROUTE = "POST /api/rooms";
+const POST_FEEDBACK_ROUTE = "POST /api/feedback";
 const ROOM_WS_ROUTE = "/api/rooms/:code/ws";
 const ENABLE_TURN = false;
 const ENABLE_RELAY = false;
+const FEEDBACK_CONTENT_MAX_LENGTH = 250;
+const FEEDBACK_CATEGORIES = new Set<FeedbackCategory>(["bug", "idea", "chat"]);
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
@@ -92,6 +97,83 @@ function originForbiddenResponse() {
   return jsonResponse({ error: "origin-forbidden" }, { status: 403 });
 }
 
+function isFeedbackCategory(value: unknown): value is FeedbackCategory {
+  return typeof value === "string" && FEEDBACK_CATEGORIES.has(value as FeedbackCategory);
+}
+
+function normalizeFeedbackContent(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, FEEDBACK_CONTENT_MAX_LENGTH + 1) : "";
+}
+
+function normalizeFeedbackPage(value: unknown) {
+  if (typeof value !== "string") return "result";
+  const normalized = value.trim().slice(0, 40);
+  return normalized || "result";
+}
+
+function normalizeFeedbackPayload(payload: unknown) {
+  if (typeof payload !== "object" || payload === null) {
+    return { error: "invalid-json" as const };
+  }
+
+  const record = payload as Record<string, unknown>;
+  const rating = Number(record.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return { error: "invalid-rating" as const };
+  }
+
+  if (!isFeedbackCategory(record.category)) {
+    return { error: "invalid-category" as const };
+  }
+
+  const content = normalizeFeedbackContent(record.content);
+  if (!content) {
+    return { error: "content-required" as const };
+  }
+  if (content.length > FEEDBACK_CONTENT_MAX_LENGTH) {
+    return { error: "content-too-long" as const };
+  }
+
+  return {
+    category: record.category,
+    content,
+    page: normalizeFeedbackPage(record.page),
+    rating,
+  };
+}
+
+async function saveFeedback(request: Request, env: Env) {
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return jsonResponse({ error: "invalid-json" }, { status: 400 });
+  }
+
+  const feedback = normalizeFeedbackPayload(payload);
+  if ("error" in feedback) {
+    return jsonResponse({ error: feedback.error }, { status: 400 });
+  }
+
+  const id = crypto.randomUUID();
+  await env.FEEDBACK_DB.prepare(
+    `INSERT INTO feedback (id, created_at, rating, category, content, page, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      id,
+      new Date().toISOString(),
+      feedback.rating,
+      feedback.category,
+      feedback.content,
+      feedback.page,
+      (request.headers.get("user-agent") ?? "").slice(0, 180),
+    )
+    .run();
+
+  return jsonResponse({ ok: true, id }, { status: 201 });
+}
+
 function getRoomCodeFromPath(pathname: string, suffix = "") {
   const prefix = "/api/rooms/";
   if (!pathname.startsWith(prefix)) return null;
@@ -134,6 +216,17 @@ const workerEntrypoint = {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/api/feedback") {
+      const response = await saveFeedback(request, env);
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          ...Object.fromEntries(response.headers),
+          ...corsHeaders(request, env),
+        },
+      });
+    }
+
     const wsRoomCode = getRoomCodeFromPath(url.pathname, "/ws");
     if (wsRoomCode && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       return env.ROOMS.get(env.ROOMS.idFromName(wsRoomCode)).fetch(request);
@@ -151,7 +244,7 @@ const workerEntrypoint = {
       });
     }
 
-    return jsonResponse({ error: "not-found", route: CREATE_ROOM_ROUTE, wsRoute: ROOM_WS_ROUTE }, { status: 404 });
+    return jsonResponse({ error: "not-found", feedbackRoute: POST_FEEDBACK_ROUTE, route: CREATE_ROOM_ROUTE, wsRoute: ROOM_WS_ROUTE }, { status: 404 });
   },
 };
 

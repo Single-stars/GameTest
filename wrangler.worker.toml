@@ -4,11 +4,17 @@ compatibility_date = "2026-05-22"
 routes = [
   { pattern = "208848.xyz/api/rooms", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/rooms/*", zone_name = "208848.xyz" },
+  { pattern = "208848.xyz/api/feedback", zone_name = "208848.xyz" },
 ]
 
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "RoomDurableObject"
+
+[[d1_databases]]
+binding = "FEEDBACK_DB"
+database_name = "game_feedback"
+database_id = "e919fa46-c72f-46d1-a021-91c8e1638f46"
 
 [[migrations]]
 tag = "v1"
