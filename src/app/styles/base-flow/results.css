@@ -146,6 +146,7 @@
   cursor: pointer;
   box-shadow: none;
   transition:
+    background 140ms ease,
     color 140ms ease,
     scale 120ms ease;
 }
@@ -156,7 +157,31 @@
 }
 
 .rank-avatar-menu-action:hover {
-  color: var(--cyan);
+  background: rgba(24, 24, 24, 0.045);
+}
+
+.rank-avatar-menu-action.tone-share {
+  color: #16899a;
+}
+
+.rank-avatar-menu-action.tone-restart {
+  color: #2f7f59;
+}
+
+.rank-avatar-menu-action.tone-skin {
+  color: #5a63a8;
+}
+
+.rank-avatar-menu-action.tone-donate {
+  color: #b7791f;
+}
+
+.rank-avatar-menu-action.tone-homeworld {
+  color: #6f7d38;
+}
+
+.rank-avatar-menu-action.tone-reset {
+  color: #b42318;
 }
 
 .rank-avatar-menu-action:disabled {

@@ -54,6 +54,10 @@ function isFallDownDangerPlatformChallenge(config: AdvancedStageConfig) {
   return miniLevelId.includes("danger") || miniLevelId.includes("final");
 }
 
+function isFlappyCollectibleChallenge(config: AdvancedStageConfig) {
+  return config.variant.includes("collectible-path") || config.variant.includes("final");
+}
+
 function toScore(correctCount: number, requiredCorrect: number) {
   return Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100)));
 }
@@ -132,8 +136,9 @@ function evaluateReaction(config: AdvancedStageConfig, trials: TrialEvent[]) {
       trial.correct === false,
   );
 
-  const noEarlyOrMiss = !hasEarlyClick && !hasMissedGreen && successfulGreen.length >= requiredGreenClicks;
   const noRedClick = hasRedTrap ? !hasRedClick : true;
+  const hasEnoughGreenClicks = successfulGreen.length >= requiredGreenClicks || !noRedClick;
+  const noEarlyOrMiss = !hasEarlyClick && !hasMissedGreen && hasEnoughGreenClicks;
   const avgPass = average !== null && average <= threshold;
   const goalChecks = hasRedTrap ? [noEarlyOrMiss, noRedClick, avgPass] : [noEarlyOrMiss, avgPass];
 
@@ -169,21 +174,21 @@ function evaluateReaction(config: AdvancedStageConfig, trials: TrialEvent[]) {
 function evaluateAim(config: AdvancedStageConfig, trials: TrialEvent[]) {
   const required = numberParam(config, "targetCount", numberParam(config, "arrowCount", 8));
   const hits = trials.filter((trial) => trial.correct === true || trial.value?.shotHit === true).length;
-  const interference = trials.find((trial) => trial.errorType === "collision" || trial.value?.hitDecoy === true);
-  const flyOut = trials.find((trial) => trial.errorType === "timeout" || trial.value?.flyOut === true);
-  const miss = trials.find(
-    (trial) =>
-      trial.errorType === "miss" ||
-      (trial.value?.shotHit === false &&
-        trial.errorType !== "timeout" &&
-        trial.errorType !== "collision" &&
-        trial.value?.flyOut !== true &&
-        trial.value?.hitDecoy !== true),
-  );
+  const firstFailure = trials
+    .map((trial) => {
+      if (trial.errorType === "miss") return "miss";
+      if (trial.errorType === "collision") return "interference";
+      if (trial.errorType === "timeout") return "flyOut";
+      if (trial.value?.hitDecoy === true) return "interference";
+      if (trial.value?.flyOut === true) return "flyOut";
+      if (trial.value?.shotHit === false) return "miss";
+      return null;
+    })
+    .find((failure): failure is "miss" | "interference" | "flyOut" => failure !== null);
 
-  const noInterference = !interference;
-  const hitBeforeFlyOut = !flyOut;
-  const noMiss = !miss && (hits >= required || !noInterference || !hitBeforeFlyOut);
+  const noInterference = firstFailure !== "interference";
+  const hitBeforeFlyOut = firstFailure !== "flyOut";
+  const noMiss = firstFailure !== "miss" && (hits >= required || firstFailure === "interference" || firstFailure === "flyOut");
   const group = resolveColumnGroup(config.level);
   const goalChecks =
     group === "147"
@@ -196,11 +201,11 @@ function evaluateAim(config: AdvancedStageConfig, trials: TrialEvent[]) {
 
   let passed = false;
   let reason = "通过";
-  if (interference) {
+  if (firstFailure === "interference") {
     reason = "失败：箭矢射中了干扰靶";
-  } else if (flyOut) {
+  } else if (firstFailure === "flyOut") {
     reason = "失败：目标飞出场景";
-  } else if (miss) {
+  } else if (firstFailure === "miss") {
     reason = "失败：箭矢射空";
   } else if (hits < required) {
     reason = `失败：少命中 ${required - hits} 个目标`;
@@ -252,40 +257,37 @@ function evaluateMiniGameChallenge(config: AdvancedStageConfig, trials: TrialEve
   if (config.dimension === "search") {
     const riskHit = numberValue(item.value, "riskHit");
     const riskTotal = numberValue(item.value, "riskTotal");
-    const reachedFinish = passed || includesAny(reasonText, ["终点平台", "通过终点", "站上最高终点平台"]);
     const fellOut = includesAny(reasonText, ["掉出", "掉太深", "飞出边界"]);
-    const touchedDangerRed = includesAny(reasonText, ["撞到危险", "碰到危险"]);
-    const completedRiskPlatforms = riskTotal === null || riskTotal <= 0 ? true : (riskHit ?? 0) >= riskTotal;
-    goalChecks = [reachedFinish, !fellOut, !touchedDangerRed];
-    if (bandGroup === "258" || bandGroup === "10") goalChecks.push(completedRiskPlatforms);
+    const touchedDangerRed = includesAny(reasonText, ["撞到危险", "碰到危险", "碰到移动障碍", "撞到移动障碍"]);
+    const missedRiskPlatforms =
+      includesAny(reasonText, ["漏踩高风险平台", "漏踩高能平台", "漏踩必踩平台"]) ||
+      (!passed && !fellOut && !touchedDangerRed && riskTotal !== null && riskTotal > 0 && (riskHit ?? 0) < riskTotal);
+    goalChecks = [!fellOut, !missedRiskPlatforms, !touchedDangerRed];
   } else if (config.dimension === "stroop") {
-    const reachedFinish = passed || includesAny(reasonText, ["终点平台", "成功下降", "通过终点"]);
     const fellOut = includesAny(reasonText, ["掉出", "掉太深", "太慢了", "飞出边界"]);
     const touchedDangerRed = includesAny(reasonText, ["下落危险", "危险红点"]);
     const steppedDangerPlatform = includesAny(reasonText, ["踩到危险"]);
-    goalChecks = [reachedFinish, !fellOut];
+    goalChecks = [!fellOut];
     if (bandGroup === "258" || bandGroup === "369" || bandGroup === "10") goalChecks.push(!touchedDangerRed);
     if (isFallDownDangerPlatformChallenge(config)) goalChecks.push(!steppedDangerPlatform);
   } else if (config.dimension === "rhythm") {
-    const fellOut = includesAny(reasonText, ["掉下", "掉出", "飞出"]);
     const reachedFinish = passed || includesAny(reasonText, ["终点平台", "通过终点"]);
-    goalChecks = [!fellOut, reachedFinish];
+    goalChecks = [reachedFinish];
   } else if (config.dimension === "memory") {
     const collected = numberValue(item.value, "collected");
     const collectibleCount = numberValue(item.value, "collectibleCount");
     const hitObstacle = includesAny(reasonText, ["撞到障碍", "撞到柱子"]);
     const fellOut = includesAny(reasonText, ["飞出边界", "掉出"]);
-    const collectedAll = collectibleCount === null || collectibleCount <= 0 ? true : (collected ?? 0) >= collectibleCount;
+    const missedCollectible =
+      includesAny(reasonText, ["漏收集道具"]) ||
+      (!passed && !hitObstacle && !fellOut && collectibleCount !== null && collectibleCount > 0 && (collected ?? 0) < collectibleCount);
     goalChecks = [!hitObstacle, !fellOut];
-    if (bandGroup === "258" || bandGroup === "10") goalChecks.push(collectedAll);
+    if (isFlappyCollectibleChallenge(config)) goalChecks.push(!missedCollectible);
   } else if (config.dimension === "patience") {
-    const fired = numberValue(item.value, "fired");
-    const shotCount = numberValue(item.value, "shotCount");
     const overlapped = includesAny(reasonText, ["撞到已插入长条", "飞刀重叠", "重叠"]);
     const countdownEnded = includesAny(reasonText, ["倒计时结束"]);
     const hitDangerZone = includesAny(reasonText, ["命中危险区域", "危险区域"]);
-    const threwAll = shotCount === null || shotCount <= 0 ? passed : (fired ?? 0) >= shotCount;
-    goalChecks = [!overlapped, threwAll];
+    goalChecks = [!overlapped];
     if (bandGroup === "147" || bandGroup === "10") goalChecks.push(!countdownEnded);
     if (bandGroup === "369" || bandGroup === "10") goalChecks.push(!hitDangerZone);
   }

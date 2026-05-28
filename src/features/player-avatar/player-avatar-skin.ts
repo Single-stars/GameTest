@@ -3,69 +3,82 @@ import type { RoundId } from "../../lib/scoring.ts";
 
 export type PlayerAvatarSkin =
   | "cyan"
+  | "signal"
+  | "target"
   | "mint"
-  | "amber"
-  | "rose"
   | "slate"
   | "basketball"
   | "pig"
-  | "aqua"
-  | "cocoa"
   | "sand"
   | "pine"
   | "ivory"
   | "arcade"
-  | "paw";
+  | "paw"
+  | "blade";
 
 export const PLAYER_AVATAR_SKINS = [
   "cyan",
+  "signal",
+  "target",
   "mint",
-  "amber",
-  "rose",
   "slate",
-  "basketball",
-  "pig",
-  "aqua",
-  "cocoa",
   "sand",
   "pine",
   "ivory",
-  "arcade",
+  "blade",
   "paw",
+  "pig",
+  "basketball",
+  "arcade",
 ] as const satisfies readonly PlayerAvatarSkin[];
+
+const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
+  "cyan",
+  "signal",
+  "target",
+  "mint",
+  "slate",
+  "sand",
+  "pine",
+  "ivory",
+  "blade",
+  "paw",
+  "pig",
+  "basketball",
+  "arcade",
+] as const satisfies readonly PlayerAvatarSkin[];
+const PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX = new Map(PLAYER_AVATAR_SKIN_DISPLAY_ORDER.map((skin, index) => [skin, index]));
 
 export const PLAYER_AVATAR_SKIN_LABELS = {
   arcade: "手柄",
-  amber: "琥珀",
-  aqua: "海沫",
   basketball: "篮球",
-  cocoa: "可可",
+  blade: "飞刀",
   cyan: "青蓝",
   ivory: "象牙",
   mint: "薄荷",
   paw: "猫爪",
   pig: "猪猪",
   pine: "松绿",
-  rose: "玫瑰",
   sand: "沙丘",
+  signal: "绿灯",
   slate: "石板",
+  target: "靶心",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
-  arcade: "完成耐心最终挑战后解锁，带一点街机按钮质感。",
-  amber: "默认解锁，偏暖色的小方块皮肤。",
-  aqua: "完成一路向上最终挑战后解锁，适合清爽路线。",
-  basketball: "完成反应力最终挑战后解锁，球面纹理外观。",
-  cocoa: "完成一路向下最终挑战后解锁，稳重的深色外观。",
-  cyan: "默认解锁，最基础的小方块皮肤。",
-  ivory: "完成控制最终挑战后解锁，浅色高对比外观。",
-  mint: "默认解锁，柔和的绿色外观。",
-  paw: "默认解锁，带脚印纹理的灰色外观。",
-  pig: "完成准度最终挑战后解锁，粉色小猪外观。",
-  pine: "完成记忆最终挑战后解锁，低饱和绿色外观。",
-  rose: "默认解锁，偏粉色的小方块皮肤。",
-  sand: "完成节奏最终挑战后解锁，带砂砾纹理。",
-  slate: "默认解锁，偏冷静的石板色外观。",
+  arcade: "谢谢你支持我的游戏！",
+  basketball: "哇真的是你呀",
+  blade: "块狠话不多",
+  cyan: "原装方块，干净耐看。",
+  ivory: "成功方块，尊贵优雅",
+  mint: "清清凉凉，冰冰爽爽",
+  paw: "喵~",
+  pig: "作者本体",
+  pine: "是薄荷的长辈",
+  sand: "脸上的痕迹不是皱纹",
+  signal: "从不闯红灯的乖方块",
+  slate: "沉着稳重",
+  target: "很难被打中的小方块",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 type PlayerAvatarSkinUnlock =
@@ -77,23 +90,38 @@ type PlayerAvatarSkinUnlock =
       kind: "advanced-final";
       label: string;
       roundId: RoundId;
+    }
+  | {
+      kind: "donation";
+      label: string;
+    }
+  | {
+      kind: "king-rank";
+      label: string;
+    }
+  | {
+      kind: "legend-100";
+      label: string;
+    }
+  | {
+      kind: "luck-100";
+      label: string;
     };
 
 export const PLAYER_AVATAR_SKIN_UNLOCKS = {
-  arcade: { kind: "advanced-final", label: "完成耐心进阶最终挑战解锁", roundId: "patience" },
-  amber: { kind: "default", label: "默认解锁" },
-  aqua: { kind: "advanced-final", label: "完成一路向上进阶最终挑战解锁", roundId: "search" },
-  basketball: { kind: "advanced-final", label: "完成反应力进阶最终挑战解锁", roundId: "reaction" },
-  cocoa: { kind: "advanced-final", label: "完成一路向下进阶最终挑战解锁", roundId: "stroop" },
+  arcade: { kind: "donation", label: "赞赏作者后解锁" },
+  basketball: { kind: "legend-100", label: "传奇王者 100 星解锁" },
+  blade: { kind: "advanced-final", label: "通关丢飞刀最终试炼", roundId: "patience" },
   cyan: { kind: "default", label: "默认解锁" },
-  ivory: { kind: "advanced-final", label: "完成控制进阶最终挑战解锁", roundId: "braking" },
-  mint: { kind: "default", label: "默认解锁" },
-  paw: { kind: "default", label: "默认解锁" },
-  pig: { kind: "advanced-final", label: "完成准度进阶最终挑战解锁", roundId: "aim" },
-  pine: { kind: "advanced-final", label: "完成记忆进阶最终挑战解锁", roundId: "memory" },
-  rose: { kind: "default", label: "默认解锁" },
-  sand: { kind: "advanced-final", label: "完成节奏进阶最终挑战解锁", roundId: "rhythm" },
-  slate: { kind: "default", label: "默认解锁" },
+  ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
+  mint: { kind: "advanced-final", label: "通关一路向上最终试炼", roundId: "search" },
+  paw: { kind: "luck-100", label: "运气达到 100" },
+  pig: { kind: "king-rank", label: "达成最强王者" },
+  pine: { kind: "advanced-final", label: "通关一路向前最终试炼", roundId: "memory" },
+  sand: { kind: "advanced-final", label: "通关跳一跳最终试炼", roundId: "rhythm" },
+  signal: { kind: "advanced-final", label: "通关绿灯行最终试炼", roundId: "reaction" },
+  slate: { kind: "advanced-final", label: "通关一路向下最终试炼", roundId: "stroop" },
+  target: { kind: "advanced-final", label: "通关移动靶最终试炼", roundId: "aim" },
 } as const satisfies Record<PlayerAvatarSkin, PlayerAvatarSkinUnlock>;
 
 export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw"] as readonly PlayerAvatarSkin[];
@@ -104,11 +132,30 @@ export function resolvePlayerAvatarSkin(skinId: string | null | undefined): Play
 
 export function getPlayerAvatarSkinUnlockState(skin: PlayerAvatarSkin, progress: AdvancedProgress) {
   const unlock = PLAYER_AVATAR_SKIN_UNLOCKS[skin];
-  if (unlock.kind === "default") return { label: unlock.label, unlocked: true };
-  return {
-    label: unlock.label,
-    unlocked: getAdvancedDimensionLevel(progress, unlock.roundId) >= 10,
-  };
+  switch (unlock.kind) {
+    case "default":
+      return { label: unlock.label, unlocked: true };
+    case "advanced-final":
+      return { label: unlock.label, unlocked: getAdvancedDimensionLevel(progress, unlock.roundId) >= 10 };
+    case "donation":
+      return { label: unlock.label, unlocked: progress.authorDonated === true };
+    case "king-rank":
+      return { label: unlock.label, unlocked: progress.unlocked === true };
+    case "legend-100":
+      return { label: unlock.label, unlocked: progress.legend100SkinUnlocked === true };
+    case "luck-100":
+      return { label: unlock.label, unlocked: progress.luckBestScore >= 100 };
+  }
+}
+
+export function getPlayerAvatarSkinDisplayItems(progress: AdvancedProgress) {
+  return PLAYER_AVATAR_SKINS.map((skin) => ({
+    skin,
+    unlock: getPlayerAvatarSkinUnlockState(skin, progress),
+  })).sort((a, b) => {
+    if (a.unlock.unlocked !== b.unlock.unlocked) return a.unlock.unlocked ? -1 : 1;
+    return (PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(a.skin) ?? 999) - (PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(b.skin) ?? 999);
+  });
 }
 
 export function isPlayerAvatarSkinUnlocked(skin: PlayerAvatarSkin, progress: AdvancedProgress) {

@@ -192,11 +192,37 @@ test("advanced aim flashes success and failure feedback around the play field", 
 
   assert.match(advancedAimSource, /const \[feedbackTone, setFeedbackTone\] = useState<"idle" \| "good" \| "bad">\("idle"\);/);
   assert.match(advancedAimSource, /showAimFeedback\("good"\)/);
-  assert.match(advancedAimSource, /showAimFeedback\("bad"\)/);
+  assert.match(advancedAimSource, /showAimFeedback\("bad"(?:, true)?\)/);
   assert.match(advancedAimSource, /advanced-aim \$\{config\.variant\} mode-\$\{mode\} feedback-\$\{feedbackTone\}/);
   assert.match(cssSource, /\.advanced-aim\.feedback-good::after/);
   assert.match(cssSource, /\.advanced-aim\.feedback-bad::after/);
   assert.match(cssSource, /@keyframes advanced-aim-feedback/);
+});
+
+test("advanced aim settles immediately with persistent failure feedback when an arrow misses", () => {
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const advancedAimSource = sourceBetween(aimSource, "export function AdvancedAimRound", "const AIM_REQUIRED_HITS");
+  const missBranch = sourceBetween(advancedAimSource, "if (advancedArrowOutOfField(movedArrow, rect)) {", 'return { ...movedArrow, status: "flying" as const };');
+
+  assert.match(advancedAimSource, /let missed = false;/);
+  assert.match(missBranch, /errorType:\s*"miss"/);
+  assert.match(missBranch, /showAimFeedback\("bad", true\);/);
+  assert.match(missBranch, /missed = true;/);
+  assert.match(advancedAimSource, /publishArrows\(nextArrows\);[\s\S]*if \(missed\) \{[\s\S]*finish\(\);[\s\S]*return;[\s\S]*\}/);
+});
+
+test("base aim unlimited arrow misses do not settle the round", () => {
+  const aimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const advancedAimSource = sourceBetween(aimSource, "export function AdvancedAimRound", "const AIM_REQUIRED_HITS");
+  const baseAimSource = sourceBetween(aimSource, "const BASIC_AIM_CONFIG", "export function AimRound");
+  const missBranch = sourceBetween(advancedAimSource, "if (advancedArrowOutOfField(movedArrow, rect)) {", 'return { ...movedArrow, status: "flying" as const };');
+
+  assert.match(baseAimSource, /unlimitedArrows:\s*true/);
+  assert.match(
+    missBranch,
+    /if \(unlimitedArrows\) \{[\s\S]*showAimFeedback\("bad"\);[\s\S]*return \{ \.\.\.movedArrow, active: false, status: "miss" as const, settledAt: frameNow \};[\s\S]*\}/,
+  );
+  assert.match(missBranch, /showAimFeedback\("bad", true\);[\s\S]*missed = true;/);
 });
 
 test("base aim keeps the target size but enlarges only the bottom shooter visual", () => {
@@ -311,7 +337,7 @@ test("advanced goal copy follows grouped level rules with fallback text", () => 
   assert.match(viewSource, /function resolveColumnGroup/);
   assert.match(viewSource, /function riskPlatformGoalText/);
   assert.match(viewSource, /function collectibleGoalText/);
-  assert.match(viewSource, /getMiniGameLevel\(miniGameId, miniLevelId\)/);
+  assert.doesNotMatch(viewSource, /getMiniGameLevel\(miniGameId, miniLevelId\)/);
   assert.match(viewSource, /config\.dimension === "search"/);
   assert.match(viewSource, /config\.dimension === "stroop"/);
   assert.match(viewSource, /config\.dimension === "memory"/);

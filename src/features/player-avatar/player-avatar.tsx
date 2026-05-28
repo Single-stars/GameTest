@@ -139,6 +139,44 @@ function renderAvatarExpression(expression: PlayerAvatarExpression): ReactNode {
 }
 
 function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
+  if (skin === "signal") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.signalGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <circle className={styles.signalHalo} cx="32" cy="32" r="14" />
+        <circle className={styles.signalDot} cx="17" cy="16" r="5" />
+        <circle className={styles.signalDot} cx="32" cy="13" r="5" />
+        <circle className={styles.signalDot} cx="47" cy="16" r="5" />
+        <circle className={styles.signalDot} cx="12" cy="32" r="5" />
+        <circle className={styles.signalDot} cx="52" cy="32" r="5" />
+        <circle className={styles.signalDot} cx="17" cy="48" r="5" />
+        <circle className={styles.signalDot} cx="32" cy="51" r="5" />
+        <circle className={styles.signalDot} cx="47" cy="48" r="5" />
+      </svg>
+    );
+  }
+
+  if (skin === "target") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.targetGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <circle className={styles.targetRing} cx="32" cy="32" r="20" />
+        <circle className={styles.targetRing} cx="32" cy="32" r="11" />
+        <path className={styles.targetCrosshair} d="M32 8 V19 M32 45 V56 M8 32 H19 M45 32 H56" />
+        <circle className={styles.targetCenter} cx="32" cy="32" r="4.5" />
+      </svg>
+    );
+  }
+
+  if (skin === "blade") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.bladeGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <path className={styles.bladeSlash} d="M14 49 L47 16" />
+        <path className={styles.bladeSlash} d="M26 54 L54 26" />
+        <path className={styles.bladeShine} d="M22 42 L41 23" />
+        <path className={styles.bladeChip} d="M43 16 L50 14 L48 21" />
+      </svg>
+    );
+  }
+
   if (skin === "pig") {
     return (
       <svg className={`${styles.skinSvg} ${styles.pigSvg}`} viewBox="0 0 64 64" aria-hidden="true">

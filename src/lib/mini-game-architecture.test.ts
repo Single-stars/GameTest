@@ -169,6 +169,8 @@ test("app page delegates mini-game rounds and result helpers to feature modules"
   assert.match(shareImageSource, /export async function copyTextToClipboard/);
   assert.match(shareImageSource, /avatarDataUrl\?: string \| null/);
   assert.match(shareImageSource, /drawShareAvatarScreenshot/);
+  assert.match(shareImageSource, /drawShareAvatarScreenshot\(ctx, avatarImage, 688, 54, 112\)/);
+  assert.match(shareImageSource, /drawShareAvatarScreenshot\(ctx, avatarImage, 696, 40, 112\)/);
   assert.match(appPageSource, /captureShareAvatarDataUrl/);
   assert.match(appPageSource, /await import\("html2canvas"\)/);
   assert.match(appPageSource, /rootRef=\{shareAvatarCaptureRef\}/);
@@ -246,6 +248,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   const tokensCss = readFileSync(new URL("../app/styles/base-flow/tokens.css", import.meta.url), "utf8");
   const luckCss = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
   const resultCss = readFileSync(new URL("../app/styles/base-flow/results.css", import.meta.url), "utf8");
+  const overlaysResponsiveCss = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
   const resultIconsSource = readFileSync(new URL("../features/results/result-icons.tsx", import.meta.url), "utf8");
   const labCssUrl = new URL("../app/styles/base-flow/avatar-lab.css", import.meta.url);
 
@@ -262,6 +265,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;/);
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
+  assert.match(resultSource, /onDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /homeworldEntryVisible:\s*boolean;/);
   assert.match(resultSource, /onOpenHomeworld:\s*\(\) => void;/);
   assert.match(resultSource, /const \[avatarMenuOpen, setAvatarMenuOpen\] = useState\(false\);/);
@@ -273,10 +277,19 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /setAvatarMenuFeedback\(false\);/);
   assert.match(resultSource, /action\(\);/);
   assert.match(resultSource, /const avatarMenuItems = \[/);
+  assert.match(resultSource, /const avatarMenuItems = \[[\s\S]*id: "share"[\s\S]*id: "restart"[\s\S]*id: "skin"[\s\S]*id: "donate"[\s\S]*id: "homeworld"[\s\S]*id: "reset"/);
   assert.match(resultSource, /onSelect: onShareImage/);
   assert.match(resultSource, /onSelect: onRestart/);
+  assert.match(resultSource, /id: "skin"[\s\S]*tone: "skin"[\s\S]*onSelect: onOpenAvatarLab/);
   assert.match(resultSource, /id: "donate"/);
+  assert.match(resultSource, /id: "share"[\s\S]*tone: "share"/);
+  assert.match(resultSource, /id: "restart"[\s\S]*tone: "restart"/);
+  assert.match(resultSource, /id: "donate"[\s\S]*tone: "donate"/);
+  assert.match(resultSource, /id: "homeworld"[\s\S]*tone: "homeworld"/);
   assert.match(resultSource, /icon: <DonateIcon \/>/);
+  assert.match(resultSource, /const openDonatePanel = useCallback/);
+  assert.match(resultSource, /onDonateAuthor\(\);/);
+  assert.match(resultSource, /onSelect: openDonatePanel/);
   assert.match(resultSource, /id: "homeworld"/);
   assert.match(resultSource, /icon: <HomeworldIcon \/>/);
   assert.match(resultSource, /onSelect: onOpenHomeworld/);
@@ -308,7 +321,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /className="rank-avatar-menu-surface-path center"/);
   assert.match(resultSource, /className="rank-avatar-menu-surface-path edge"/);
   assert.match(resultSource, /className="rank-avatar-bubble"/);
-  assert.match(resultSource, /className=\{`rank-avatar-menu-action \$\{item\.danger \? "danger" : ""\}`\}/);
+  assert.match(resultSource, /className=\{`rank-avatar-menu-action tone-\$\{item\.tone\} \$\{item\.danger \? "danger" : ""\}`\}/);
   assert.match(resultSource, /item\.id === "skin" \? <AvatarLabIcon \/> : item\.icon/);
   assert.match(resultSource, /onClick=\{\(\) => runAvatarMenuAction\(item\.onSelect\)\}/);
   assert.doesNotMatch(resultSource, /className="radar-actions"/);
@@ -338,6 +351,8 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(resultCss, /\.rank-avatar-bubble::after/);
   assert.match(resultCss, /\.rank-avatar-menu-action/);
   assert.match(resultCss, /\.result-screen\s*\{[\s\S]*overflow:\s*visible;/);
+  assert.match(resultCss, /\.result-screen\s*\{[\s\S]*min-height:\s*0;/);
+  assert.match(overlaysResponsiveCss, /@media \(max-width: 760px\)\s*\{[\s\S]*\.result-screen\s*\{[\s\S]*min-height:\s*0;/);
   assert.match(resultCss, /\.rank-avatar-entry\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*translate:\s*-12px 0;/);
   assert.match(resultCss, /\.rank-avatar-entry\.playing\s*\{[\s\S]*translate:\s*-12px -2px;[\s\S]*box-shadow:\s*none;/);
   assert.match(resultCss, /\.rank-avatar-menu\s*\{[\s\S]*--rank-avatar-menu-bg:\s*rgba\(255, 253, 248, 0\.96\);[\s\S]*--rank-avatar-menu-border:\s*rgba\(24, 24, 24, 0\.11\);[\s\S]*--rank-avatar-action-size:\s*48px;[\s\S]*--rank-avatar-action-gap:\s*8px;[\s\S]*width:\s*min\(280px, calc\(100vw - 24px\)\);[\s\S]*z-index:\s*12;[\s\S]*top:\s*calc\(100% \+ 10px\);[\s\S]*left:\s*calc\(50% - 12px\);[\s\S]*translate:\s*-50% 0;[\s\S]*transform-origin:\s*50% 0;[\s\S]*animation:\s*rankAvatarMenuBubbleIn/);
@@ -351,6 +366,11 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(resultCss, /\.rank-avatar-bubble\s*\{[\s\S]*backdrop-filter:/);
   assert.match(resultCss, /\.rank-avatar-menu-action\s*\{[\s\S]*width:\s*var\(--rank-avatar-action-size\);[\s\S]*height:\s*var\(--rank-avatar-action-size\);[\s\S]*border-radius:\s*14px;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
   assert.match(resultCss, /\.rank-avatar-menu-action svg\s*\{[\s\S]*width:\s*28px;[\s\S]*height:\s*28px;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action\.tone-share\s*\{[\s\S]*color:\s*#16899a;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action\.tone-restart\s*\{[\s\S]*color:\s*#2f7f59;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action\.tone-skin\s*\{[\s\S]*color:\s*#5a63a8;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action\.tone-donate\s*\{[\s\S]*color:\s*#b7791f;/);
+  assert.match(resultCss, /\.rank-avatar-menu-action\.tone-homeworld\s*\{[\s\S]*color:\s*#6f7d38;/);
   assert.match(resultCss, /\.rank-avatar-menu-action\.danger\s*\{[\s\S]*color:\s*#b42318;[\s\S]*background:\s*#fff0ee;[\s\S]*box-shadow:\s*inset 0 0 0 1px rgba\(180, 35, 24, 0\.09\);/);
   assert.match(resultCss, /@keyframes rankAvatarMenuBubbleIn/);
   assert.doesNotMatch(resultCss, /@keyframes rank-avatar-menu-pop/);
@@ -363,11 +383,12 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(tokensCss, /body\s*\{[\s\S]*overflow-y:\s*visible;[\s\S]*overscroll-behavior-y:\s*auto;/);
 
   const avatarLabSource = readFileSync(avatarLabUrl, "utf8");
+  const labCss = readFileSync(labCssUrl, "utf8");
   assert.match(avatarLabSource, /export function AvatarLabScreen/);
-  assert.match(avatarLabSource, /PLAYER_AVATAR_SKINS/);
+  assert.match(avatarLabSource, /getPlayerAvatarSkinDisplayItems/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_LABELS/);
   assert.match(avatarLabSource, /PLAYER_AVATAR_SKIN_DESCRIPTIONS/);
-  assert.match(avatarLabSource, /getPlayerAvatarSkinUnlockState/);
+  assert.doesNotMatch(avatarLabSource, /PLAYER_AVATAR_SKINS\.map/);
   assert.match(avatarLabSource, /advancedProgress:\s*AdvancedProgress;/);
   assert.doesNotMatch(avatarLabSource, /PLAYER_AVATAR_ACTIONS/);
   assert.doesNotMatch(avatarLabSource, /PLAYER_AVATAR_EXPRESSIONS/);
@@ -391,6 +412,11 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(avatarLabSource, /maxLength=\{16\}/);
   assert.doesNotMatch(avatarLabSource, /avatar-lab-button-grid/);
   assert.doesNotMatch(avatarLabSource, /mouth/i);
+  assert.match(labCss, /\.avatar-lab-screen\s*\{[\s\S]*height:\s*calc\(100svh - \(var\(--page-pad-y\) \* 2\)\);[\s\S]*grid-template-rows:\s*auto auto minmax\(0, 1fr\);[\s\S]*overflow:\s*hidden;/);
+  assert.match(labCss, /\.avatar-lab-controls\s*\{[\s\S]*min-height:\s*0;[\s\S]*overflow:\s*hidden;/);
+  assert.match(labCss, /\.avatar-lab-skin-list\s*\{[\s\S]*min-height:\s*0;[\s\S]*overflow-y:\s*auto;[\s\S]*scrollbar-width:\s*none;/);
+  assert.match(labCss, /\.avatar-lab-skin-list::-webkit-scrollbar\s*\{[\s\S]*display:\s*none;/);
+  assert.match(labCss, /@media \(max-width: 760px\)\s*\{[\s\S]*\.avatar-lab-screen\s*\{[\s\S]*height:\s*calc\(100svh - 24px\);/);
 
   assert.match(appPageSource, /import \{ AvatarLabScreen \}/);
   assert.match(appPageSource, /type PlayerAvatarSkin/);
@@ -411,6 +437,8 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
   assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
+  assert.match(appPageSource, /const handleDonateAuthor = useCallback/);
+  assert.match(appPageSource, /markAuthorDonated\(advancedProgressRef\.current\)/);
   assert.doesNotMatch(appPageSource, /const handleChangePlayerName = useCallback/);
   assert.doesNotMatch(appPageSource, /writePersistedPlayerName\(name\);/);
   assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
@@ -420,6 +448,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}/);
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}/);
   assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*homeworldEntryVisible=\{homeworldEntryVisible\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
+  assert.match(appPageSource, /<ResultScreen[\s\S]*onDonateAuthor=\{handleDonateAuthor\}/);
   assert.match(appPageSource, /const \[avatarLabReturnStage, setAvatarLabReturnStage\] = useState<"result" \| "homeworld">\("result"\);/);
   assert.match(appPageSource, /setAvatarLabReturnStage\("result"\);[\s\S]*transitionToStage\("avatar-lab"\)/);
   assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*transitionToStage\(avatarLabReturnStage\);[\s\S]*\}, \[avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop, transitionToStage\]\);/);
@@ -534,6 +563,8 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(roundIntroSource, /export function RoundIntro/);
   assert.match(roundIntroSource, /onPointerDown=\{onStart\}/);
   assert.match(roundIntroSource, /点击任意位置开始/);
+  assert.match(roundIntroSource, /<div className="intro-rule-lines" aria-hidden="true">/);
+  assert.match(roundIntroSource, /<span \/>/);
   assert.doesNotMatch(roundIntroSource, /\{round\.rule\}/);
   assert.doesNotMatch(roundIntroSource, /\{round\.action\}/);
   assert.doesNotMatch(roundIntroSource, /intro-rule-card/);
@@ -542,6 +573,9 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(homeIntroCss, /\.intro-start-hint/);
   assert.match(homeIntroCss, /\.intro-card\s*\{[\s\S]*width:\s*100%;[\s\S]*align-content:\s*center;[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
   assert.match(homeIntroCss, /\.intro-copy\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
+  assert.match(homeIntroCss, /\.intro-rule-lines\s*\{[\s\S]*justify-self:\s*stretch;[\s\S]*width:\s*100%;/);
+  assert.match(homeIntroCss, /\.intro-rule-lines span\s*\{[\s\S]*position:\s*fixed;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*width:\s*auto;[\s\S]*height:\s*1px;[\s\S]*background:\s*#ded6c8;/);
+  assert.doesNotMatch(homeIntroCss, /\.intro-rule-lines[\s\S]*linear-gradient/);
   assert.doesNotMatch(homeIntroCss, /\.intro-rule-card/);
   assert.doesNotMatch(homeIntroCss, /\.intro-start-button/);
   assert.match(playFrameSource, /export function PlayFrame/);
@@ -654,6 +688,7 @@ test("global CSS is split by app flow, mini-games, and overlays without renaming
   assert.match(baseFlowChunks, /overflow-y: auto;/);
   const baseAppShellBlock = shellCss.match(/\.app-shell \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(baseAppShellBlock, /overflow/);
+  assert.match(shellCss, /\.app-shell\s*>\s*\.share-avatar-capture\s*\{[\s\S]*position:\s*fixed;/);
   assert.match(baseFlowChunks, /\.app-shell\.app-shell-play \{/);
   assert.doesNotMatch(baseFlowChunks, /body:has\(\.play-screen\)/);
   assert.match(baseFlowChunks, /:root \{/);
@@ -814,21 +849,20 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   const cssSource = readFileSync(cssUrl, "utf8");
   const expectedSkins = [
     "cyan",
+    "signal",
+    "target",
     "mint",
-    "amber",
-    "rose",
     "slate",
-    "basketball",
-    "pig",
-    "aqua",
-    "cocoa",
     "sand",
     "pine",
     "ivory",
-    "arcade",
+    "blade",
     "paw",
+    "pig",
+    "basketball",
+    "arcade",
   ] as const;
-  const removedSkins = ["jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
+  const removedSkins = ["amber", "rose", "aqua", "cocoa", "jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
 
   assert.match(componentSource, /export type PlayerAvatarAction =/);
   assert.match(componentSource, /export type PlayerAvatarExpression =/);
@@ -846,6 +880,9 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /export const PLAYER_AVATAR_ACTIONS = \["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_EXPRESSIONS = \["neutral", "happy", "sleepy", "scared", "hurt"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_EFFECTS = \["none", "shield", "sparkles", "question"\]/);
+  assert.match(componentSource, /skin === "signal"[\s\S]*styles\.signalGlyph[\s\S]*styles\.signalDot/);
+  assert.match(componentSource, /skin === "target"[\s\S]*styles\.targetGlyph[\s\S]*styles\.targetRing/);
+  assert.match(componentSource, /skin === "blade"[\s\S]*styles\.bladeGlyph[\s\S]*styles\.bladeSlash/);
   const skinArrayMatch = skinSource.match(/export const PLAYER_AVATAR_SKINS = \[([\s\S]*?)\] as const/);
   assert.notEqual(skinArrayMatch, null);
   assert.equal((skinArrayMatch?.[1].match(/"/g)?.length ?? 0) / 2, expectedSkins.length);
@@ -862,8 +899,21 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.doesNotMatch(cssSource, /\/assets\/avatar-skins\//);
   assert.match(cssSource, /--player-avatar-texture-inset:\s*0;/);
   assert.match(cssSource, /--player-avatar-texture-blend-mode:\s*multiply;/);
+  assert.match(cssSource, /--player-avatar-texture-repeat:\s*repeat;/);
   assert.match(cssSource, /--player-avatar-texture-animation:\s*none;/);
-  assert.match(cssSource, /\.body::before\s*\{[\s\S]*inset:\s*var\(--player-avatar-texture-inset\);[\s\S]*background-position:\s*var\(--player-avatar-texture-position\);[\s\S]*animation:\s*var\(--player-avatar-texture-animation\);[\s\S]*mix-blend-mode:\s*var\(--player-avatar-texture-blend-mode\);[\s\S]*will-change:\s*transform,\s*background-position,\s*opacity;/);
+  assert.match(cssSource, /\.body::before\s*\{[\s\S]*inset:\s*var\(--player-avatar-texture-inset\);[\s\S]*background-repeat:\s*var\(--player-avatar-texture-repeat\);[\s\S]*background-position:\s*var\(--player-avatar-texture-position\);[\s\S]*animation:\s*var\(--player-avatar-texture-animation\);[\s\S]*mix-blend-mode:\s*var\(--player-avatar-texture-blend-mode\);[\s\S]*will-change:\s*transform,\s*background-position,\s*opacity;/);
+  assert.match(skinSource, /arcade:\s*\{\s*kind:\s*"donation"/);
+  assert.match(skinSource, /pig:\s*\{\s*kind:\s*"king-rank"/);
+  assert.match(skinSource, /basketball:\s*\{\s*kind:\s*"legend-100"/);
+  assert.match(skinSource, /paw:\s*\{\s*kind:\s*"luck-100"/);
+  assert.match(skinSource, /signal:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"reaction"/);
+  assert.match(skinSource, /target:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"aim"/);
+  assert.match(skinSource, /mint:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"search"/);
+  assert.match(skinSource, /slate:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"stroop"/);
+  assert.match(skinSource, /blade:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"patience"/);
+  assert.match(cssSource, /\.signalDot\s*\{[\s\S]*fill:/);
+  assert.match(cssSource, /\.targetRing\s*\{[\s\S]*stroke:/);
+  assert.match(cssSource, /\.bladeSlash\s*\{[\s\S]*stroke:/);
   assert.match(cssSource, /\.root\[data-skin="sand"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*42px 39px,\s*57px 51px,\s*68px 44px;/);
   assert.match(cssSource, /\.root\[data-skin="arcade"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*58px 54px,\s*74px 63px,\s*92px 81px;[\s\S]*--player-avatar-texture-inset:\s*-34%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
   assert.match(cssSource, /\.root\[data-skin="paw"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*72px 62px,\s*79px 70px,\s*88px 78px,\s*67px 74px;[\s\S]*--player-avatar-texture-inset:\s*-28%;/);

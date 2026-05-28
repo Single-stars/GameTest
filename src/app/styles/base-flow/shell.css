@@ -24,7 +24,7 @@
   flex-direction: column;
 }
 
-.share-avatar-capture {
+.app-shell > .share-avatar-capture {
   position: fixed;
   left: -10000px;
   top: 0;

@@ -1,6 +1,9 @@
 .avatar-lab-screen {
+  height: calc(100svh - (var(--page-pad-y) * 2));
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 18px;
+  overflow: hidden;
 }
 
 .avatar-lab-stage {
@@ -33,13 +36,18 @@
 }
 
 .avatar-lab-controls {
+  min-height: 0;
   display: grid;
   gap: 14px;
+  overflow: hidden;
 }
 
 .avatar-lab-section {
+  min-height: 0;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .avatar-lab-section h2 {
@@ -50,8 +58,19 @@
 }
 
 .avatar-lab-skin-list {
+  min-height: 0;
   display: grid;
+  align-content: start;
   gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.avatar-lab-skin-list::-webkit-scrollbar {
+  display: none;
 }
 
 .avatar-lab-skin-row {
@@ -124,5 +143,11 @@
   .avatar-lab-skin-row {
     grid-template-columns: 50px minmax(0, 1fr) 26px;
     min-height: 88px;
+  }
+}
+
+@media (max-width: 760px) {
+  .avatar-lab-screen {
+    height: calc(100svh - 24px);
   }
 }

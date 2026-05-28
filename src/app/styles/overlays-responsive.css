@@ -199,6 +199,10 @@
     min-height: calc(100svh - 24px);
   }
 
+  .result-screen {
+    min-height: 0;
+  }
+
   .home-screen,
   .intro-screen {
     gap: 18px;

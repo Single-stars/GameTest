@@ -6,8 +6,7 @@ import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
 import {
   PLAYER_AVATAR_SKIN_DESCRIPTIONS,
   PLAYER_AVATAR_SKIN_LABELS,
-  PLAYER_AVATAR_SKINS,
-  getPlayerAvatarSkinUnlockState,
+  getPlayerAvatarSkinDisplayItems,
   type PlayerAvatarSkin,
 } from "@/features/player-avatar/player-avatar-skin";
 
@@ -22,6 +21,8 @@ export function AvatarLabScreen({
   onSelectSkin: (skin: PlayerAvatarSkin) => void;
   selectedSkin: PlayerAvatarSkin;
 }) {
+  const skinItems = getPlayerAvatarSkinDisplayItems(advancedProgress);
+
   return (
     <section className="avatar-lab-screen">
       <header className="advanced-topbar">
@@ -42,8 +43,7 @@ export function AvatarLabScreen({
         <section className="avatar-lab-section">
           <h2>皮肤</h2>
           <div className="avatar-lab-skin-list">
-            {PLAYER_AVATAR_SKINS.map((skin) => {
-              const unlock = getPlayerAvatarSkinUnlockState(skin, advancedProgress);
+            {skinItems.map(({ skin, unlock }) => {
               return (
                 <button
                   aria-pressed={selectedSkin === skin}

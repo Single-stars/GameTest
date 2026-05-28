@@ -21,11 +21,24 @@ type AvatarMenuItem = {
   label: string;
   icon: ReactNode;
   onSelect: () => void;
+  tone: "share" | "restart" | "skin" | "donate" | "homeworld" | "reset";
   disabled?: boolean;
   danger?: boolean;
 };
 
 const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;
+
+function roundFailureCount(trials: TrialEvent[], roundId: RoundId) {
+  const roundTrials = trials.filter((item) => item.roundId === roundId);
+  if (roundTrials.length === 0) return null;
+
+  const reportedFailures = roundTrials
+    .map((item) => Number(item.value?.failures))
+    .find((value) => Number.isFinite(value));
+
+  if (reportedFailures !== undefined) return Math.max(0, Math.round(reportedFailures));
+  return roundTrials.filter((item) => item.correct === false).length;
+}
 
 export function ResultScreen({
   advancedProgress,
@@ -39,6 +52,7 @@ export function ResultScreen({
   onOpenAvatarLab,
   onOpenHomeworld,
   onOpenLuckDraw,
+  onDonateAuthor,
   onResetTestData,
   onShareImage,
   onRestart,
@@ -54,6 +68,7 @@ export function ResultScreen({
   onOpenAvatarLab: () => void;
   onOpenHomeworld: () => void;
   onOpenLuckDraw: () => void;
+  onDonateAuthor: () => void;
   onResetTestData: () => void;
   onShareImage: () => void;
   onRestart: () => void;
@@ -64,9 +79,18 @@ export function ResultScreen({
   const avatarEntryTimerRef = useRef<number | null>(null);
   const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
-
-  const dinoSafeStops = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.safeStop === true).length;
-  const dinoCollisions = brakingTrials.filter((item) => item.value?.mode === "dino" && item.value?.collision === true).length;
+  const dinoTrials = brakingTrials.filter((item) => item.value?.mode === "dino" || item.value?.signal === "threat");
+  const aimMisses = result.metrics.aimTotal > 0 ? Math.max(0, result.metrics.aimTotal - result.metrics.aimHits) : null;
+  const stroopFailures = roundFailureCount(trials, "stroop");
+  const rhythmFailures = roundFailureCount(trials, "rhythm");
+  const memoryFailures = roundFailureCount(trials, "memory");
+  const patienceFailures = roundFailureCount(trials, "patience");
+  const brakingFailures =
+    dinoTrials.length > 0
+      ? dinoTrials.filter((item) => item.correct !== true && item.value?.safeStop !== true).length
+      : brakingTrials.length > 0
+        ? brakingTrials.filter((item) => item.correct === false).length
+        : null;
   const advancedUnlocked = advancedProgress.unlocked || result.name === "最强王者";
 
   const advancedStars = getAdvancedTotalStars(advancedProgress);
@@ -118,25 +142,40 @@ export function ResultScreen({
   const avatarEntryEffect = avatarMenuOpen && !avatarMenuFeedback ? "question" : "none";
   const avatarEntryExpression = avatarMenuFeedback ? "happy" : "neutral";
 
+  const openDonatePanel = useCallback(() => {
+    onDonateAuthor();
+    setDonatePanelOpen(true);
+  }, [onDonateAuthor]);
+
   const avatarMenuItems = [
     {
       id: "share",
       label: "生成分享图片",
       icon: <ShareIcon />,
       disabled: imageShareState === "sharing",
+      tone: "share",
       onSelect: onShareImage,
     },
     {
       id: "restart",
       label: "重新测试",
       icon: <RestartIcon />,
+      tone: "restart",
       onSelect: onRestart,
+    },
+    {
+      id: "skin",
+      label: "皮肤动作测试",
+      icon: null,
+      tone: "skin",
+      onSelect: onOpenAvatarLab,
     },
     {
       id: "donate",
       label: "赞赏作者",
       icon: <DonateIcon />,
-      onSelect: () => setDonatePanelOpen(true),
+      tone: "donate",
+      onSelect: openDonatePanel,
     },
     ...(homeworldEntryVisible
       ? [
@@ -144,6 +183,7 @@ export function ResultScreen({
             id: "homeworld" as const,
             label: "家园",
             icon: <HomeworldIcon />,
+            tone: "homeworld" as const,
             onSelect: onOpenHomeworld,
           },
         ]
@@ -155,16 +195,11 @@ export function ResultScreen({
             label: "重置测试数据",
             icon: <ResetDataIcon />,
             onSelect: onResetTestData,
+            tone: "reset" as const,
             danger: true,
           },
         ]
       : []),
-    {
-      id: "skin",
-      label: "皮肤动作测试",
-      icon: null,
-      onSelect: onOpenAvatarLab,
-    },
   ] satisfies AvatarMenuItem[];
 
   const rows = [
@@ -178,7 +213,7 @@ export function ResultScreen({
       roundId: "aim",
       label: ROUND_DISPLAY_BY_ID.aim.label,
       score: result.scores.targeting,
-      detail: result.metrics.aimTotal > 0 ? `命中 ${result.metrics.aimHits}/${result.metrics.aimTotal}` : "不足",
+      detail: aimMisses !== null ? `未命中 ${aimMisses}` : "不足",
     },
     {
       roundId: "search",
@@ -190,41 +225,31 @@ export function ResultScreen({
       roundId: "stroop",
       label: ROUND_DISPLAY_BY_ID.stroop.label,
       score: result.scores.interference,
-      detail: result.metrics.stroopAccuracy !== null ? `${Math.round(result.metrics.stroopAccuracy * 100)}%` : "不足",
+      detail: stroopFailures !== null ? `失误 ${stroopFailures}` : "不足",
     },
     {
       roundId: "rhythm",
       label: ROUND_DISPLAY_BY_ID.rhythm.label,
       score: result.scores.rhythm,
-      detail:
-        result.metrics.rhythmAvgOffsetMs !== null
-          ? `${Math.round(result.metrics.rhythmAvgOffsetMs)}ms`
-          : result.metrics.rhythmAccuracy !== null
-            ? `${Math.round(result.metrics.rhythmAccuracy * 100)}%`
-            : "不足",
+      detail: rhythmFailures !== null ? `失误 ${rhythmFailures}` : "不足",
     },
     {
       roundId: "memory",
       label: ROUND_DISPLAY_BY_ID.memory.label,
       score: result.scores.memory,
-      detail: result.metrics.memoryAccuracy !== null ? `${Math.round(result.metrics.memoryAccuracy * 100)}%` : "不足",
+      detail: memoryFailures !== null ? `失误 ${memoryFailures}` : "不足",
     },
     {
       roundId: "braking",
       label: ROUND_DISPLAY_BY_ID.braking.label,
       score: result.scores.braking,
-      detail:
-        result.metrics.dinoSafeStopRate !== null
-          ? `急停 ${dinoSafeStops}/${brakingTrials.length}${dinoCollisions ? ` · 撞 ${dinoCollisions}` : ""}`
-          : result.metrics.stopFalseAlarmRate !== null
-            ? `${Math.round(result.metrics.stopFalseAlarmRate * 100)}%误按`
-            : "不足",
+      detail: brakingFailures !== null ? `失误 ${brakingFailures}` : "不足",
     },
     {
       roundId: "patience",
       label: ROUND_DISPLAY_BY_ID.patience.label,
       score: result.scores.waiting,
-      detail: result.metrics.patiencePct !== null ? `${Math.round(result.metrics.patiencePct)}%` : "不足",
+      detail: patienceFailures !== null ? `失误 ${patienceFailures}` : "不足",
     },
   ] as const satisfies ReadonlyArray<{ roundId: RoundId; label: string; score: number; detail: string }>;
 
@@ -277,7 +302,7 @@ export function ResultScreen({
                 {avatarMenuItems.map((item) => (
                   <button
                     aria-label={item.label}
-                    className={`rank-avatar-menu-action ${item.danger ? "danger" : ""}`}
+                    className={`rank-avatar-menu-action tone-${item.tone} ${item.danger ? "danger" : ""}`}
                     disabled={avatarMenuFeedback || item.disabled}
                     key={item.id}
                     role="menuitem"

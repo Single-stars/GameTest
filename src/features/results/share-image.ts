@@ -71,7 +71,7 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
   if (input.kind === "default") {
     drawCard(ctx, 24, 24, 852, 510);
     drawFittedText(ctx, "热血青铜", 58, 116, 640, 72, 48, "#181818");
-    drawShareAvatarScreenshot(ctx, avatarImage, 704, 46, 132);
+    drawShareAvatarScreenshot(ctx, avatarImage, 688, 54, 112);
 
     drawRadarOnCanvas(ctx, defaultShareAxis(), 450, 342, 124);
 
@@ -81,7 +81,7 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
 
   drawCard(ctx, 24, 24, 852, 144);
   drawFittedText(ctx, input.rankTitle, 58, 116, 640, 72, 42, "#181818");
-  drawShareAvatarScreenshot(ctx, avatarImage, 724, 30, 132);
+  drawShareAvatarScreenshot(ctx, avatarImage, 696, 40, 112);
 
   drawCard(ctx, 24, 194, 852, 352);
   drawRadarOnCanvas(ctx, input.result.axis, 450, 374, 112);

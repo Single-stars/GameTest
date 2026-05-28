@@ -15,15 +15,17 @@ export function getAdvancedBrakeCorrectAction(level: number, event: AdvancedBrak
   const grayCount = (event.top === "gray" ? 1 : 0) + (event.bottom === "gray" ? 1 : 0);
   const brakeVariantIndex = getBrakeVariantIndex(level);
 
+  if (level === 9) return "hold";
   if (brakeVariantIndex === 3) return level === 6 ? (redCount === 2 ? "release" : "hold") : redCount === 1 ? "release" : "hold";
   if (level === 10) return redCount === 1 && grayCount === 0 ? "release" : "hold";
   return event.top === "gray" || event.bottom === "gray" ? "hold" : "release";
 }
 
 export function getAdvancedBrakeRuleHint(level: number, dualRule?: unknown) {
-  if (level === 10) return "规则：单红松手，双红和灰色按住";
-  if (dualRule === "single-red-stop") return "规则：单红松手，双红按住";
-  if (dualRule === "double-red-stop") return "规则：双红松手，单红按住";
+  if (level === 10) return "规则：只有一个危险单独出现时是真危险";
+  if (level === 9) return "规则：所有危险都是假的";
+  if (dualRule === "single-red-stop") return "规则：两个红色危险同时出现是安全的";
+  if (dualRule === "double-red-stop") return "规则：只有两个红色危险出现时是危险的";
   return null;
 }
 
@@ -134,6 +136,5 @@ export function getAdvancedBrakeSchedulerStep({
 export function getAdvancedBrakeReleaseOutcome(event: (AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }) | null): AdvancedBrakeReleaseOutcome {
   if (!event) return { outcome: "failure" as const, errorType: "early_stop" as const };
   if (event.correctAction === "release") return { outcome: "success" as const };
-  const hasGray = event.top === "gray" || event.bottom === "gray";
-  return { outcome: "failure" as const, errorType: hasGray ? "false_alarm" : "early_stop" };
+  return { outcome: "failure" as const, errorType: "false_alarm" as const };
 }

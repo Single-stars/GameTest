@@ -129,7 +129,7 @@ test("reaction configs match the MD signal counts and average ms thresholds", ()
   const boss = getAdvancedStageConfig("reaction", 10);
   assert.equal(boss.variant, "reaction-grid-boss");
   assert.equal(boss.params.requiredGreenClicks, 8);
-  assert.equal(boss.params.avgMsThreshold, 250);
+  assert.equal(boss.params.avgMsThreshold, 300);
 });
 
 test("advanced aim configs describe real archery target types and arrow parity", () => {
@@ -298,7 +298,8 @@ test("advanced braking correct action follows single red, gray fake, and dual-li
   assert.equal(getAdvancedBrakeCorrectAction(3, { top: "red", bottom: "red" }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(6, { top: "red", bottom: null }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(6, { top: "red", bottom: "red" }), "release");
-  assert.equal(getAdvancedBrakeCorrectAction(9, { top: null, bottom: "red" }), "release");
+  assert.equal(getAdvancedBrakeCorrectAction(9, { top: null, bottom: "red" }), "hold");
+  assert.equal(getAdvancedBrakeCorrectAction(9, { top: "red", bottom: null }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(9, { top: "red", bottom: "red" }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: null }), "release");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: "red" }), "hold");
@@ -308,10 +309,10 @@ test("advanced braking correct action follows single red, gray fake, and dual-li
 
 test("advanced braking exposes in-round rule hints for rule-tale variants", () => {
   assert.equal(getAdvancedBrakeRuleHint(1, undefined), null);
-  assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "规则：单红松手，双红按住");
-  assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "规则：双红松手，单红按住");
-  assert.equal(getAdvancedBrakeRuleHint(9, "single-red-stop"), "规则：单红松手，双红按住");
-  assert.equal(getAdvancedBrakeRuleHint(10, undefined), "规则：单红松手，双红和灰色按住");
+  assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "规则：两个红色危险同时出现是安全的");
+  assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "规则：只有两个红色危险出现时是危险的");
+  assert.equal(getAdvancedBrakeRuleHint(9, "fake-all"), "规则：所有危险都是假的");
+  assert.equal(getAdvancedBrakeRuleHint(10, undefined), "规则：只有一个危险单独出现时是真危险");
 });
 
 test("advanced braking positions danger by reaction window and wins when block right edge reaches finish", () => {
@@ -406,7 +407,11 @@ test("advanced braking release outcome fails early stops before danger and when 
   });
   assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "red", bottom: "red", correctAction: "hold" }), {
     outcome: "failure",
-    errorType: "early_stop",
+    errorType: "false_alarm",
+  });
+  assert.deepEqual(getAdvancedBrakeReleaseOutcome({ top: "red", bottom: null, correctAction: "hold" }), {
+    outcome: "failure",
+    errorType: "false_alarm",
   });
 });
 
@@ -490,6 +495,22 @@ test("advanced completion keeps reaction red-click failure isolated from early-o
   assert.deepEqual(result.goalChecks, [true, false, true]);
 });
 
+test("advanced completion treats direct red click as red-only failure", () => {
+  const config = getAdvancedStageConfig("reaction", 10);
+  const result = evaluateAdvancedChallengeCompletion(config, [
+    trial("reaction", 0, {
+      correct: false,
+      errorType: "false_alarm",
+      responseAt: 120,
+      value: { signalColor: "red" },
+    }),
+  ]);
+
+  assert.equal(result.passed, false);
+  assert.equal(result.reason, "失败：点到了红灯");
+  assert.deepEqual(result.goalChecks, [true, false, false]);
+});
+
 test("advanced completion evaluates aim goals by miss, fly-out and decoy independently", () => {
   const incomingConfig = getAdvancedStageConfig("aim", 2);
   const incomingFlyOut = evaluateAdvancedChallengeCompletion(incomingConfig, [
@@ -526,6 +547,22 @@ test("advanced completion evaluates aim goals by miss, fly-out and decoy indepen
   assert.equal(bossMiss.passed, false);
   assert.equal(bossMiss.reason, "失败：箭矢射空");
   assert.deepEqual(bossMiss.goalChecks, [false, true, true]);
+
+  const bossMissBeforeFlyOut = evaluateAdvancedChallengeCompletion(bossConfig, [
+    trial("aim", 0, {
+      correct: false,
+      errorType: "miss",
+      value: { mode: "arrow", shotHit: false },
+    }),
+    trial("aim", 1, {
+      correct: false,
+      errorType: "timeout",
+      value: { mode: "arrow", shotHit: false, flyOut: true },
+    }),
+  ]);
+  assert.equal(bossMissBeforeFlyOut.passed, false);
+  assert.equal(bossMissBeforeFlyOut.reason, "失败：箭矢射空");
+  assert.deepEqual(bossMissBeforeFlyOut.goalChecks, [false, true, true]);
 });
 
 test("advanced completion evaluates replaced dimensions through mini-game challenge outcomes", () => {
@@ -536,6 +573,7 @@ test("advanced completion evaluates replaced dimensions through mini-game challe
 
   assert.equal(rhythmResult.passed, false);
   assert.equal(rhythmResult.reason, "失败：掉下去了");
+  assert.deepEqual(rhythmResult.goalChecks, [false]);
 
   const fallDown = getAdvancedStageConfig("stroop", 2);
   const fallDownResult = evaluateAdvancedChallengeCompletion(fallDown, [
@@ -568,14 +606,14 @@ test("advanced completion evaluates replaced dimensions through mini-game challe
   assert.equal(doodleResult.requiredCorrect, 1);
   assert.equal(fallDownResult.passed, true);
   assert.equal(fallDownResult.reason, "通过");
-  assert.deepEqual(fallDownDangerResult.goalChecks, [false, true, false]);
+  assert.deepEqual(fallDownDangerResult.goalChecks, [true, false]);
   assert.equal(flappyResult.passed, true);
   assert.equal(flappyResult.reason, "通过");
 });
 
 test("advanced completion maps mini-game advanced goals into ordered goal checks", () => {
   const doodle = getAdvancedStageConfig("search", 5);
-  const doodleResult = evaluateAdvancedChallengeCompletion(doodle, [
+  const doodleDangerResult = evaluateAdvancedChallengeCompletion(doodle, [
     trial("search", 0, {
       correct: false,
       errorType: "collision",
@@ -589,7 +627,51 @@ test("advanced completion maps mini-game advanced goals into ordered goal checks
       },
     }),
   ]);
-  assert.deepEqual(doodleResult.goalChecks, [false, true, false, true]);
+  assert.deepEqual(doodleDangerResult.goalChecks, [true, true, false]);
+
+  const doodleRiskResult = evaluateAdvancedChallengeCompletion(doodle, [
+    trial("search", 0, {
+      correct: false,
+      value: {
+        mode: "mini-game",
+        miniGameId: "doodle",
+        miniLevelId: String(doodle.params.miniLevelId),
+        reason: "漏踩高风险平台 3/5",
+        riskHit: 3,
+        riskTotal: 5,
+      },
+    }),
+  ]);
+  assert.deepEqual(doodleRiskResult.goalChecks, [true, false, true]);
+
+  const doodleFallResult = evaluateAdvancedChallengeCompletion(doodle, [
+    trial("search", 0, {
+      correct: false,
+      value: {
+        mode: "mini-game",
+        miniGameId: "doodle",
+        miniLevelId: String(doodle.params.miniLevelId),
+        reason: "掉出屏幕底部",
+        riskHit: 5,
+        riskTotal: 5,
+      },
+    }),
+  ]);
+  assert.deepEqual(doodleFallResult.goalChecks, [false, true, true]);
+
+  const fallDownFinal = getAdvancedStageConfig("stroop", 10);
+  const fallDownFinalDangerResult = evaluateAdvancedChallengeCompletion(fallDownFinal, [
+    trial("stroop", 0, {
+      correct: false,
+      value: {
+        mode: "mini-game",
+        miniGameId: "fall-down",
+        miniLevelId: String(fallDownFinal.params.miniLevelId),
+        reason: "踩到危险",
+      },
+    }),
+  ]);
+  assert.deepEqual(fallDownFinalDangerResult.goalChecks, [true, true, false]);
 
   const flappy = getAdvancedStageConfig("memory", 5);
   const flappyResult = evaluateAdvancedChallengeCompletion(flappy, [
@@ -608,6 +690,41 @@ test("advanced completion maps mini-game advanced goals into ordered goal checks
   ]);
   assert.deepEqual(flappyResult.goalChecks, [true, true, false]);
 
+  for (const level of [2, 8, 10]) {
+    const collectibleFlappy = getAdvancedStageConfig("memory", level);
+    const collectibleFlappyResult = evaluateAdvancedChallengeCompletion(collectibleFlappy, [
+      trial("memory", 0, {
+        correct: false,
+        errorType: "collision",
+        value: {
+          mode: "mini-game",
+          miniGameId: "flappy",
+          miniLevelId: String(collectibleFlappy.params.miniLevelId),
+          reason: "漏收集道具 2/4",
+          collected: 2,
+          collectibleCount: 4,
+        },
+      }),
+    ]);
+    assert.deepEqual(collectibleFlappyResult.goalChecks, [true, true, false], `memory level ${level}`);
+  }
+
+  const flappyCollisionResult = evaluateAdvancedChallengeCompletion(flappy, [
+    trial("memory", 0, {
+      correct: false,
+      errorType: "collision",
+      value: {
+        mode: "mini-game",
+        miniGameId: "flappy",
+        miniLevelId: String(flappy.params.miniLevelId),
+        reason: "撞到柱子",
+        collected: 2,
+        collectibleCount: 6,
+      },
+    }),
+  ]);
+  assert.deepEqual(flappyCollisionResult.goalChecks, [false, true, true]);
+
   const knife = getAdvancedStageConfig("patience", 10);
   const knifeResult = evaluateAdvancedChallengeCompletion(knife, [
     trial("patience", 0, {
@@ -623,7 +740,7 @@ test("advanced completion maps mini-game advanced goals into ordered goal checks
       },
     }),
   ]);
-  assert.deepEqual(knifeResult.goalChecks, [true, false, false, true]);
+  assert.deepEqual(knifeResult.goalChecks, [true, false, true]);
 });
 
 test("debug tools are hidden unless explicitly enabled by development mode or URL flag", () => {

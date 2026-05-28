@@ -23,11 +23,13 @@ import {
   getAdvancedTotalStars,
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
+  markAuthorDonated,
   readAppBackHistoryLayer,
   resolveAppBackNavigation,
   shouldGuardAppBack,
   markAdvancedUnlocked,
   parsePersistedGameState,
+  markLegend100SkinUnlocked,
   recordAdvancedChallengeResult,
   recordLuckDraw,
   recordLuckDrawBatch,
@@ -95,6 +97,8 @@ test("default advanced progress starts locked with 0 shown for every metric", ()
   const progress = createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z");
 
   assert.equal(progress.unlocked, false);
+  assert.equal(progress.authorDonated, false);
+  assert.equal(progress.legend100SkinUnlocked, false);
   assert.equal(getAdvancedTotalStars(progress), 0);
   assert.equal(progress.luckStars, 0);
   assert.equal(progress.luckBestScore, 0);
@@ -646,6 +650,7 @@ test("persisted state parser falls back safely and clamps progress shape", () =>
 
   assert.equal(parsed.currentResult?.trials.length, 1);
   assert.equal(getAdvancedDimensionLevel(parsed.advancedProgress, "memory"), 10);
+  assert.equal(parsed.advancedProgress.authorDonated, false);
   assert.equal(parsed.advancedProgress.luckStars, 20);
   assert.equal(parsed.advancedProgress.luckBestScore, 100);
   assert.equal(parsed.advancedProgress.luckDrawChances, 0);
@@ -665,4 +670,31 @@ test("storage helpers round-trip through a browser-like storage object", () => {
   assert.equal(storage.getItem(GAME_STATE_STORAGE_KEY)?.includes("currentResult"), true);
   assert.equal(loaded.currentResult?.trials[0]?.roundId, "patience");
   assert.equal(loaded.advancedProgress.unlocked, true);
+});
+
+test("author donation unlock state persists with advanced progress", () => {
+  const storage = memoryStorage();
+  const donated = markAuthorDonated(createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z"), "2026-05-10T00:00:01.000Z");
+  const state = setPersistedCurrentResult(createDefaultPersistedGameState(), [makeTrial("reaction")], donated);
+
+  writePersistedGameState(storage, state);
+  const loaded = readPersistedGameState(storage);
+
+  assert.equal(donated.authorDonated, true);
+  assert.equal(loaded.advancedProgress.authorDonated, true);
+});
+
+test("legend 100 skin unlock state persists only after explicit displayed unlock", () => {
+  const storage = memoryStorage();
+  const progress = advancedProgressWithClearedLevels(80, { luckStars: 20, luckBestScore: 100 });
+  const unlocked = markLegend100SkinUnlocked(progress, "2026-05-10T00:00:01.000Z");
+  const state = setPersistedCurrentResult(createDefaultPersistedGameState(), [makeTrial("reaction")], unlocked);
+
+  assert.equal(progress.legend100SkinUnlocked, false);
+  assert.equal(unlocked.legend100SkinUnlocked, true);
+
+  writePersistedGameState(storage, state);
+  const loaded = readPersistedGameState(storage);
+
+  assert.equal(loaded.advancedProgress.legend100SkinUnlocked, true);
 });

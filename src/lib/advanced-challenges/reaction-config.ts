@@ -37,9 +37,9 @@ export function reactionConfigs() {
     );
   }
   levels.push(
-    config(10, "reaction-grid-boss", "过关要求：不可提前点击或漏点，红灯不可点击，平均反应 ≤ 250ms。", {
+    config(10, "reaction-grid-boss", "过关要求：不可提前点击或漏点，红灯不可点击，平均反应 ≤ 300ms。", {
       requiredGreenClicks: 8,
-      avgMsThreshold: 250,
+      avgMsThreshold: 300,
       lanes: 4,
       maxLitCells: 2,
     }),

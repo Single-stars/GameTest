@@ -586,6 +586,18 @@
   list-style: none;
 }
 
+.advanced-result-perfect {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
 .advanced-result-goal {
   min-height: 46px;
   display: grid;
@@ -616,6 +628,10 @@
 }
 
 .advanced-result-goal.complete .advanced-result-goal-box {
+  color: #2f7f59;
+}
+
+.advanced-result-perfect .advanced-result-goal-box {
   color: #2f7f59;
 }
 

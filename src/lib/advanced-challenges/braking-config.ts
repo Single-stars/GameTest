@@ -31,7 +31,7 @@ export function brakingConfigs() {
       maxEventDelayMs: 1900,
       finishSafeDistance: 12,
     }),
-    config(3, "braking-dual-red-rule", "过关要求：单个红色松手，两个红色继续按住，到终点。", {
+    config(3, "braking-dual-red-rule", "过关要求：请遵守游戏内特殊规则。", {
       hazardCount: 4,
       eventCountMin: 4,
       eventCountMax: 5,
@@ -75,7 +75,7 @@ export function brakingConfigs() {
       maxEventDelayMs: 1500,
       finishSafeDistance: 12,
     }),
-    config(6, "braking-dual-red-rule", "过关要求：两个红色松手，单个红色继续按住，到终点。", {
+    config(6, "braking-dual-red-rule", "过关要求：请遵守游戏内特殊规则。", {
       hazardCount: 6,
       eventCountMin: 6,
       eventCountMax: 7,
@@ -119,7 +119,7 @@ export function brakingConfigs() {
       maxEventDelayMs: 1250,
       finishSafeDistance: 12,
     }),
-    config(9, "braking-dual-red-rule", "过关要求：单个红色松手，两个红色继续按住，高压到终点。", {
+    config(9, "braking-dual-red-rule", "过关要求：请遵守游戏内特殊规则。", {
       hazardCount: 8,
       eventCountMin: 8,
       eventCountMax: 9,
@@ -132,9 +132,9 @@ export function brakingConfigs() {
       minEventDelayMs: 650,
       maxEventDelayMs: 1250,
       finishSafeDistance: 12,
-      dualRule: "single-red-stop",
+      dualRule: "fake-all",
     }),
-    config(10, "braking-final-red-gray", "过关要求：单红松手，双红和灰色继续按住，到终点。", {
+    config(10, "braking-final-red-gray", "过关要求：请遵守游戏内特殊规则。", {
       hazardCount: 10,
       eventCountMin: 10,
       eventCountMax: 12,

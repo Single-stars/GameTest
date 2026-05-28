@@ -557,12 +557,14 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
         return;
       }
 
-      let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
-      let blocked = false;
-      const nextArrows = arrowsRef.current
-        .map((arrow) => {
-          if (!arrow.active) return arrow;
-          const result = resolveAdvancedAimArrowStep({
+      let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      let blocked = false;
+      let missed = false;
+      const nextArrows = arrowsRef.current
+        .map((arrow) => {
+          if (!arrow.active) return arrow;
+          if (blocked || missed) return arrow;
+          const result = resolveAdvancedAimArrowStep({
             arrow,
             deltaMs,
             targets: nextTargets.filter((entity) => entity.active).map(advancedAimCollisionEntity),
@@ -585,7 +587,12 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
                   ...aimAttemptValue(),
                 },
               });
-              showAimFeedback("bad");
+              if (unlimitedArrows) {
+                showAimFeedback("bad");
+                return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
+              }
+              showAimFeedback("bad", true);
+              missed = true;
               return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
             }
             return { ...movedArrow, status: "flying" as const };
@@ -665,10 +672,15 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
             arrow !== null && (arrow.active || frameNow - (arrow.settledAt ?? frameNow) < ADVANCED_AIM_ARROW_PRUNE_MS),
         );
 
-      publishTargets(nextTargets);
-      publishDistractors(nextDistractors);
-      publishArrows(nextArrows);
-
+      publishTargets(nextTargets);
+      publishDistractors(nextDistractors);
+      publishArrows(nextArrows);
+
+      if (missed) {
+        finish();
+        return;
+      }
+
       if (blocked) {
         finish();
         return;

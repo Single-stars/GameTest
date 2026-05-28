@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  getAdvancedChallengeRuleItems,
   getAdvancedChallengeGoalItems,
+  getAdvancedFailedResultGoalItems,
   getAdvancedLobbyLevelItems,
+  getAdvancedLobbySliderOffsetRatio,
   getAdvancedLobbyUnlockedLevel,
   resolveAdvancedLobbyClickLevel,
   resolveAdvancedLobbySliderLevel,
@@ -58,6 +61,14 @@ test("advanced lobby slider continuously maps to the requested unlocked level", 
   assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 0 }), 1);
 });
 
+test("advanced lobby slider visual offset uses the full ten-level track", () => {
+  assert.equal(getAdvancedLobbySliderOffsetRatio(1), 0);
+  assert.equal(getAdvancedLobbySliderOffsetRatio(2), 1 / 9);
+  assert.equal(getAdvancedLobbySliderOffsetRatio(10), 1);
+  assert.equal(getAdvancedLobbySliderOffsetRatio(99), 1);
+  assert.equal(getAdvancedLobbySliderOffsetRatio(0), 0);
+});
+
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
   const reaction = getAdvancedStageConfig("reaction", 2);
   assert.deepEqual(getAdvancedChallengeGoalItems(reaction), [
@@ -74,9 +85,9 @@ test("advanced challenge goal items are derived from challenge config instead of
 
   const miniGame = getAdvancedStageConfig("search", 3);
   assert.deepEqual(getAdvancedChallengeGoalItems(miniGame), [
-    { icon: "flag", text: "到达终点平台" },
     { icon: "flag", text: "不能掉出场景外" },
-    { icon: "ban", text: "不能触碰到危险红点" },
+    { icon: "target", text: "必须踩中所有高能平台" },
+    { icon: "ban", text: "不能撞到危险" },
   ]);
 });
 
@@ -84,27 +95,106 @@ test("advanced mini-game goals follow level-group rules and fallback copy", () =
   const searchLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 4));
   const searchLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 5));
   const searchMovingLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("search", 1));
+  const memoryLevel2 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 2));
   const memoryLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 4));
   const memoryLevel5 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 5));
+  const memoryLevel8 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 8));
+  const memoryLevel10 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("memory", 10));
   const stroopLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 1));
   const stroopDangerLevel3 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 3));
   const stroopLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 4));
   const stroopDangerLevel6 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 6));
+  const rhythmLevel10 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("rhythm", 10));
   const patienceLevel1 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 1));
   const patienceLevel4 = getAdvancedChallengeGoalItems(getAdvancedStageConfig("patience", 4));
 
-  assert.ok(searchMovingLevel1.every((goal) => !goal.text.includes("踩中所有")));
-  assert.ok(searchLevel4.some((goal) => goal.text === "踩中所有平台"));
-  assert.ok(searchLevel5.some((goal) => goal.text === "踩中 5/5 个高能平台"));
-  assert.ok(memoryLevel4.some((goal) => goal.text === "收集所有道具"));
-  assert.ok(memoryLevel5.some((goal) => goal.text === "收集 6/6 个道具"));
+  assert.ok(searchMovingLevel1.some((goal) => goal.text === "必须踩中所有高能平台"));
+  assert.ok(searchLevel4.some((goal) => goal.text === "必须踩中所有高能平台"));
+  assert.ok(searchLevel5.some((goal) => goal.text === "必须踩中所有高能平台"));
+  assert.ok(memoryLevel2.some((goal) => goal.text === "收集所有道具"));
+  assert.ok(memoryLevel4.every((goal) => goal.text !== "收集所有道具"));
+  assert.ok(memoryLevel5.some((goal) => goal.text === "收集所有道具"));
+  assert.ok(memoryLevel8.some((goal) => goal.text === "收集所有道具"));
+  assert.ok(memoryLevel10.some((goal) => goal.text === "收集所有道具"));
   assert.ok(stroopLevel1.every((goal) => goal.text !== "不能触碰到危险红点"));
+  assert.ok(stroopLevel1.every((goal) => goal.text !== "到达终点平台"));
   assert.ok(stroopDangerLevel3.some((goal) => goal.text === "不能踩到危险平台"));
   assert.ok(stroopLevel4.some((goal) => goal.text === "不能触碰到危险红点"));
   assert.ok(stroopLevel4.every((goal) => goal.text !== "不能踩到危险平台"));
   assert.ok(stroopDangerLevel6.some((goal) => goal.text === "不能踩到危险平台"));
+  assert.ok(getAdvancedChallengeGoalItems(getAdvancedStageConfig("stroop", 10)).every((goal) => goal.text !== "到达终点平台"));
+  assert.deepEqual(rhythmLevel10, [{ icon: "flag", text: "到达终点平台" }]);
   assert.ok(patienceLevel1.some((goal) => goal.text === "在倒计时结束前丢出飞刀"));
+  assert.ok(patienceLevel1.every((goal) => goal.text !== "丢出所有飞刀"));
   assert.ok(patienceLevel4.every((goal) => goal.text !== "在倒计时结束前丢出飞刀"));
+  assert.ok(patienceLevel4.every((goal) => goal.text !== "丢出所有飞刀"));
+});
+
+test("advanced lobby rule items describe only the selected stage special rule", () => {
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("rhythm", 1)), [
+    { icon: "target", text: "部分平台会随机移动" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("patience", 2)), [
+    { icon: "target", text: "转盘速度会来回变化" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("braking", 2)), [
+    { icon: "target", text: "红色松手，灰色继续按住" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("braking", 3)), [
+    { icon: "target", text: "请遵守游戏内特殊规则" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("braking", 6)), [
+    { icon: "target", text: "请遵守游戏内特殊规则" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("braking", 9)), [
+    { icon: "target", text: "请遵守游戏内特殊规则" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("braking", 10)), [
+    { icon: "target", text: "请遵守游戏内特殊规则" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("rhythm", 10)), [
+    { icon: "target", text: "部分平台会随机移动" },
+    { icon: "target", text: "空中可以再次蓄力二段跳" },
+    { icon: "target", text: "出现会改变重力的特殊平台" },
+  ]);
+  assert.deepEqual(getAdvancedChallengeRuleItems(getAdvancedStageConfig("patience", 10)), [
+    { icon: "target", text: "每发飞刀都有倒计时" },
+    { icon: "target", text: "转盘速度会来回变化" },
+    { icon: "target", text: "飞刀不能插进危险区域" },
+  ]);
+});
+
+test("advanced result goal items keep only failed checks", () => {
+  const items = getAdvancedFailedResultGoalItems([
+    { icon: "target", text: "部分平台会随机移动", complete: true },
+    { icon: "flag", text: "不能掉出场景外", complete: false },
+    { icon: "flag", text: "到达终点平台", complete: true },
+  ]);
+
+  assert.deepEqual(items, [{ icon: "flag", text: "不能掉出场景外", complete: false }]);
+});
+
+test("advanced result only shows reaction average when other reaction goals passed", () => {
+  const earlyAndAverage = getAdvancedFailedResultGoalItems([
+    { icon: "target", text: "不可提前点击或漏点", complete: false },
+    { icon: "ban", text: "红灯不可点击", complete: true },
+    { icon: "bolt", text: "平均反应 --/250ms", complete: false },
+  ]);
+  assert.deepEqual(earlyAndAverage, [{ icon: "target", text: "不可提前点击或漏点", complete: false }]);
+
+  const redAndAverage = getAdvancedFailedResultGoalItems([
+    { icon: "target", text: "不可提前点击或漏点", complete: true },
+    { icon: "ban", text: "红灯不可点击", complete: false },
+    { icon: "bolt", text: "平均反应 260/250ms", complete: false },
+  ]);
+  assert.deepEqual(redAndAverage, [{ icon: "ban", text: "红灯不可点击", complete: false }]);
+
+  const averageOnly = getAdvancedFailedResultGoalItems([
+    { icon: "target", text: "不可提前点击或漏点", complete: true },
+    { icon: "ban", text: "红灯不可点击", complete: true },
+    { icon: "bolt", text: "平均反应 260/250ms", complete: false },
+  ]);
+  assert.deepEqual(averageOnly, [{ icon: "bolt", text: "平均反应 260/250ms", complete: false }]);
 });
 
 test("advanced challenge screen uses the focused lobby with base replay and click-only support", () => {
@@ -178,7 +268,8 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.match(screenSource, /const selectedTone = getAdvancedLevelToneForState\(selectedState,\s*selectedLevel\);/);
   assert.match(screenSource, /const sliderVisualRef = React\.useRef<HTMLDivElement \| null>\(null\);/);
   assert.match(screenSource, /const \[sliderTravelPx,\s*setSliderTravelPx\] = React\.useState\(0\);/);
-  assert.match(screenSource, /const sliderThumbOffsetPx = unlockedLevel > 1 \? \(sliderTravelPx \* \(selectedLevel - 1\)\) \/ \(unlockedLevel - 1\) : 0;/);
+  assert.match(screenSource, /getAdvancedLobbySliderOffsetRatio/);
+  assert.match(screenSource, /const sliderThumbOffsetPx = sliderTravelPx \* getAdvancedLobbySliderOffsetRatio\(selectedLevel\);/);
   assert.match(screenSource, /sliderVisual\.clientWidth/);
   assert.match(screenSource, /new ResizeObserver\(updateSliderTravel\)/);
   assert.match(screenSource, /function AdvancedLevelSelectionPanel/);
@@ -198,7 +289,7 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.doesNotMatch(screenSource, /advanced-lobby-slider-number/);
   assert.match(screenSource, /type="range"/);
   assert.match(screenSource, /min=\{1\}/);
-  assert.match(screenSource, /max=\{unlockedLevel\}/);
+  assert.match(screenSource, /max=\{10\}/);
   assert.match(screenSource, /step=\{1\}/);
   assert.match(screenSource, /value=\{selectedLevel\}/);
 

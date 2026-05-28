@@ -1,6 +1,6 @@
 import type { AdvancedStageConfig } from "./advanced-challenges.ts";
 import { getAdvancedLevelState, type AdvancedLevelState } from "./advanced-progress.ts";
-import { getMiniGameLevel, type MiniGameId } from "./mini-games/index.ts";
+import type { MiniGameId } from "./mini-games/index.ts";
 
 const ADVANCED_LEVEL_MIN = 1;
 const ADVANCED_LEVEL_MAX = 10;
@@ -19,6 +19,10 @@ export type AdvancedLobbyLevelItem = {
 export type AdvancedChallengeGoalItem = {
   icon: AdvancedGoalIcon;
   text: string;
+};
+
+export type AdvancedResultGoalItem = AdvancedChallengeGoalItem & {
+  complete: boolean;
 };
 
 function clampInteger(value: number, min: number, max: number) {
@@ -66,6 +70,72 @@ function fallbackGoal(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] 
 function compactGoals(items: Array<AdvancedChallengeGoalItem | null>) {
   const goals = items.filter((item): item is AdvancedChallengeGoalItem => item !== null && item.text.trim().length > 0);
   return goals.length > 0 ? goals : [];
+}
+
+function ruleItems(...texts: string[]): AdvancedChallengeGoalItem[] {
+  return texts.map((text) => ({ icon: "target", text }));
+}
+
+function stripRuleDescription(passText: string) {
+  const description = passText.replace(/^过关要求：[^。]*。/, "").replace(/。$/, "").trim();
+  return description.length > 0 ? description : stripPassText(passText);
+}
+
+function getMiniGameRuleItems(config: AdvancedStageConfig, miniGameId: MiniGameId) {
+  const variant = config.variant;
+  if (miniGameId === "doodle") {
+    if (variant.includes("moving-platform")) return ruleItems(Number(config.params.movingPlatformRatio) >= 1 ? "所有平台都会随机移动" : "部分平台会随机移动");
+    if (variant.includes("risk-platform")) return ruleItems("必须踩中高能平台");
+    if (variant.includes("moving-obstacle")) return ruleItems("移动障碍会干扰跳跃路线");
+    if (variant.includes("final")) return ruleItems("所有平台都会随机移动", "必须踩中高能平台", "移动障碍会干扰跳跃路线");
+  }
+  if (miniGameId === "flappy") {
+    if (variant.includes("moving-gate")) return ruleItems("部分障碍门会上下移动");
+    if (variant.includes("collectible-path")) return ruleItems("必须收集路径道具");
+    if (variant.includes("reverse-gravity")) return ruleItems("重力和方向会反转");
+    if (variant.includes("final")) return ruleItems("部分障碍门会上下移动", "重力和方向会反转", "必须收集路径道具");
+  }
+  if (miniGameId === "knife") {
+    if (variant.includes("countdown")) return ruleItems("每发飞刀都有倒计时");
+    if (variant.includes("sine-rotation")) return ruleItems("转盘速度会来回变化");
+    if (variant.includes("forbidden-zone")) return ruleItems("飞刀不能插进危险区域");
+    if (variant.includes("final")) return ruleItems("每发飞刀都有倒计时", "转盘速度会来回变化", "飞刀不能插进危险区域");
+  }
+  if (miniGameId === "square-jump") {
+    if (variant.includes("moving-landing")) return ruleItems("部分平台会随机移动");
+    if (variant.includes("double-jump")) return ruleItems("空中可以再次蓄力二段跳");
+    if (variant.includes("gravity-platform")) return ruleItems("出现会改变重力的特殊平台");
+    if (variant.includes("final")) return ruleItems("部分平台会随机移动", "空中可以再次蓄力二段跳", "出现会改变重力的特殊平台");
+  }
+  if (miniGameId === "fall-down") {
+    if (variant.includes("moving-layer")) return ruleItems("部分平台会随机移动");
+    if (variant.includes("fragile-layer")) return ruleItems("脆弱层板踩上后会碎裂");
+    if (variant.includes("danger-layer")) return ruleItems("红色危险层板不能踩");
+    if (variant.includes("final")) return ruleItems("部分平台会随机移动", "脆弱层板踩上后会碎裂", "红色危险层板不能踩");
+  }
+  return ruleItems(stripRuleDescription(config.passText));
+}
+
+function getNativeRuleItems(config: AdvancedStageConfig) {
+  if (config.dimension === "reaction") {
+    if (config.variant.includes("grid")) return ruleItems("多个格子会同时变化", "红灯出现时不能点击");
+    if (config.variant.includes("dual-trap")) return ruleItems("双区域里会混入红灯");
+    if (config.variant.includes("dual-green")) return ruleItems("两个区域都会出现绿灯");
+    return ruleItems("红灯出现时不能点击");
+  }
+  if (config.dimension === "aim") {
+    if (config.variant.includes("boss")) return ruleItems("移动靶会改变路线", "会出现干扰靶", "靶子飞出算失败");
+    if (config.variant.includes("incoming")) return ruleItems("靶子会从场外飞入");
+    if (config.variant.includes("decoy")) return ruleItems("会出现干扰靶");
+    return ruleItems("靶子会沿轨迹移动");
+  }
+  if (config.dimension === "braking") {
+    if (config.variant.includes("final") || typeof config.params.dualRule === "string") return ruleItems("请遵守游戏内特殊规则");
+    if (config.params.allowGray === true) return ruleItems("红色松手，灰色继续按住");
+    return ruleItems("红色危险出现时松手");
+  }
+  if (config.dimension === "patience") return ruleItems("等待期间不能中断");
+  return ruleItems(stripRuleDescription(config.passText));
 }
 
 function getReactionGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
@@ -141,23 +211,20 @@ function resolveBandGroup(level: number): GroupKey {
   return "369";
 }
 
-function toPositiveCount(value: unknown) {
-  const count = Number(value);
-  return Number.isFinite(count) && count > 0 ? Math.floor(count) : null;
-}
-
 function isFallDownDangerPlatformLevel(levelId: string) {
   return levelId.includes("danger") || levelId.includes("final");
 }
 
-function riskPlatformGoalText(count: number | null) {
-  if (count === null) return "踩中所有平台";
-  return `踩中 ${count}/${count} 个高能平台`;
+function isFlappyCollectibleLevel(config: AdvancedStageConfig) {
+  return config.variant.includes("collectible-path") || config.variant.includes("final");
 }
 
-function collectibleGoalText(count: number | null) {
-  if (count === null) return "收集所有道具";
-  return `收集 ${count}/${count} 个道具`;
+function riskPlatformGoalText() {
+  return "必须踩中所有高能平台";
+}
+
+function collectibleGoalText() {
+  return "收集所有道具";
 }
 
 function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
@@ -165,21 +232,17 @@ function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalIte
   const miniLevelId = config.params.miniLevelId;
   if (!isMiniGameId(miniGameId) || typeof miniLevelId !== "string") return [];
 
-  const level = getMiniGameLevel(miniGameId, miniLevelId);
   const group = resolveBandGroup(config.level);
   if (config.dimension === "search") {
-    const requiredRiskPlatforms = toPositiveCount(level.params.requiredRiskPlatforms);
     return compactGoals([
-      { icon: "flag", text: "到达终点平台" },
       { icon: "flag", text: "不能掉出场景外" },
-      { icon: "ban", text: "不能触碰到危险红点" },
-      group === "258" || group === "10" ? { icon: "target", text: riskPlatformGoalText(requiredRiskPlatforms) } : null,
+      { icon: "target", text: riskPlatformGoalText() },
+      { icon: "ban", text: "不能撞到危险" },
     ]);
   }
   if (config.dimension === "stroop") {
     const dangerPlatformLevel = isFallDownDangerPlatformLevel(miniLevelId);
     return compactGoals([
-      { icon: "flag", text: "到达终点平台" },
       { icon: "flag", text: "不能掉出场景外" },
       group === "258" || group === "369" || group === "10" ? { icon: "ban", text: "不能触碰到危险红点" } : null,
       dangerPlatformLevel ? { icon: "ban", text: "不能踩到危险平台" } : null,
@@ -187,22 +250,19 @@ function getMiniGameGoals(config: AdvancedStageConfig): AdvancedChallengeGoalIte
   }
   if (config.dimension === "rhythm") {
     return [
-      { icon: "flag", text: "不能掉出场景外" },
       { icon: "flag", text: "到达终点平台" },
     ];
   }
   if (config.dimension === "memory") {
-    const collectibleCount = toPositiveCount(level.params.collectibleCount);
     return compactGoals([
       { icon: "ban", text: "不能撞到柱子" },
       { icon: "flag", text: "不能掉出场景外" },
-      group === "258" || group === "10" ? { icon: "target", text: collectibleGoalText(collectibleCount) } : null,
+      isFlappyCollectibleLevel(config) ? { icon: "target", text: collectibleGoalText() } : null,
     ]);
   }
   if (config.dimension === "patience") {
     return compactGoals([
       { icon: "ban", text: "转盘上的飞刀不能重叠" },
-      { icon: "target", text: "丢出所有飞刀" },
       group === "147" || group === "10" ? { icon: "bolt", text: "在倒计时结束前丢出飞刀" } : null,
       group === "369" || group === "10" ? { icon: "ban", text: "飞刀不能丢进危险区域" } : null,
     ]);
@@ -280,4 +340,20 @@ export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): Adva
             : [];
 
   return goals.length > 0 ? goals : fallbackGoal(config);
+}
+
+export function getAdvancedChallengeRuleItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
+  const miniGameId = config.params.miniGameId;
+  if (isMiniGameId(miniGameId)) return getMiniGameRuleItems(config, miniGameId);
+  return getNativeRuleItems(config);
+}
+
+export function getAdvancedFailedResultGoalItems<T extends AdvancedResultGoalItem>(goalItems: T[]): T[] {
+  const failedGoals = goalItems.filter((goal) => !goal.complete);
+  if (failedGoals.length <= 1) return failedGoals;
+  return failedGoals.filter((goal) => !(goal.icon === "bolt" && goal.text.includes("平均反应")));
+}
+
+export function getAdvancedLobbySliderOffsetRatio(selectedLevel: number) {
+  return (clampDisplayLevel(selectedLevel) - ADVANCED_LEVEL_MIN) / (ADVANCED_LEVEL_MAX - ADVANCED_LEVEL_MIN);
 }

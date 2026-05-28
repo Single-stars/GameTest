@@ -43,6 +43,8 @@ export type AdvancedDimensionProgress = {
 export type AdvancedProgress = {
   schemaVersion: typeof GAME_STATE_SCHEMA_VERSION;
   unlocked: boolean;
+  authorDonated: boolean;
+  legend100SkinUnlocked: boolean;
   dimensions: Record<RoundId, AdvancedDimensionProgress>;
   luckStars: number;
   luckBestScore: number;
@@ -208,6 +210,8 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp()): Adva
   return {
     schemaVersion: GAME_STATE_SCHEMA_VERSION,
     unlocked: source.unlocked === true,
+    authorDonated: source.authorDonated === true,
+    legend100SkinUnlocked: source.legend100SkinUnlocked === true,
     dimensions,
     luckStars,
     luckBestScore: clampInteger(source.luckBestScore, Math.min(100, luckStars * 5), 100),
@@ -245,6 +249,8 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
   return {
     schemaVersion: GAME_STATE_SCHEMA_VERSION,
     unlocked: false,
+    authorDonated: false,
+    legend100SkinUnlocked: false,
     dimensions: Object.fromEntries(ADVANCED_ROUND_IDS.map((roundId) => [roundId, createDefaultDimensionProgress()])) as Record<
       RoundId,
       AdvancedDimensionProgress
@@ -301,6 +307,22 @@ export function markAdvancedUnlocked(progress: AdvancedProgress, updatedAt = tim
   return {
     ...sanitizeAdvancedProgress(progress, updatedAt),
     unlocked: true,
+    updatedAt,
+  };
+}
+
+export function markAuthorDonated(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  return {
+    ...sanitizeAdvancedProgress(progress, updatedAt),
+    authorDonated: true,
+    updatedAt,
+  };
+}
+
+export function markLegend100SkinUnlocked(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  return {
+    ...sanitizeAdvancedProgress(progress, updatedAt),
+    legend100SkinUnlocked: true,
     updatedAt,
   };
 }
