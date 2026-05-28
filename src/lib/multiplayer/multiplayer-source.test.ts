@@ -201,18 +201,21 @@ test("co-op multiplayer settles from the shared character result without waiting
   assert.match(sessionSource, /opponentResult,[\s\S]*selfResult: this\.snapshot\.selfResult \?\? opponentResult/);
 });
 
-test("co-op multiplayer uses host-authoritative shared character state while guests only send input", () => {
+test("co-op multiplayer uses input-only shared control without host-authoritative position playback", () => {
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const doodleSource = readSource("../../features/mini-games/doodle.tsx");
   const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
   const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
 
-  assert.match(runtimeSource, /const coOpInputOnly = coOpMode && selfRole === "guest";/);
-  assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = coOpInputOnly \? opponentStateSubscription : null;/);
-  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null;/);
-  assert.doesNotMatch(runtimeSource, /const coOpAuthoritativeState = coOpInputOnly \? opponentState : null;/);
+  assert.match(runtimeSource, /const coOpInputOnly = coOpMode;/);
+  assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = null;/);
+  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpMode \? opponentStateSubscription : null;/);
+  assert.doesNotMatch(runtimeSource, /coOpInputOnly = coOpMode && selfRole === "guest"/);
+  assert.doesNotMatch(runtimeSource, /coOpAuthoritativeStateSubscription = coOpInputOnly \? opponentStateSubscription : null/);
+  assert.match(runtimeSource, /const inputOnlySync = playMode === "co-op";/);
+  assert.match(runtimeSource, /if \(playMode === "co-op"\) \{[\s\S]*reportInput/);
   assert.match(runtimeSource, /syncRef\.current\?\.update\(inputOnlyState, \{ immediate: inputChanged, signature: multiplayerStateSignature\(inputOnlyState\) \}\);/);
-  assert.match(runtimeSource, /if \(coOpInputOnly\) return;/);
+  assert.doesNotMatch(runtimeSource, /if \(coOpInputOnly\) return;/);
   assert.match(runtimeSource, /authoritativeStateSubscription=\{coOpAuthoritativeStateSubscription\}/);
   assert.match(runtimeSource, /coOpInputStateSubscription=\{coOpInputStateSubscription\}/);
   assert.match(doodleSource, /authoritativeStateSubscription\?: \(\(listener: \(state: SelfGameState\) => void\) => \(\(\) => void\)\) \| null;/);
@@ -930,13 +933,15 @@ test("co-op countdown explains the player's split control assignment", () => {
   assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel span/);
 });
 
-test("co-op guests render only host authoritative state instead of local prediction", () => {
+test("co-op players keep local simulation active instead of rendering host authoritative playback", () => {
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const doodleSource = readSource("../../features/mini-games/doodle.tsx");
   const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
   const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
 
-  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null/);
+  assert.match(runtimeSource, /const coOpInputStateSubscription = coOpMode \? opponentStateSubscription : null/);
+  assert.match(runtimeSource, /const coOpAuthoritativeStateSubscription = null/);
+  assert.doesNotMatch(runtimeSource, /const coOpInputStateSubscription = coOpInputOnly \? null : coOpMode \? opponentStateSubscription : null/);
   assert.match(doodleSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);
   assert.match(doodleSource, /if \(authoritativePlayback\) return;/);
   assert.match(fallDownSource, /const authoritativePlayback = Boolean\(authoritativeStateSubscription\)/);

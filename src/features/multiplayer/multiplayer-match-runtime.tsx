@@ -214,10 +214,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     cleanupSync();
     localResultSentRef.current = false;
     lastReportedInputSignatureRef.current = undefined;
-    const inputOnlySync = playMode === "co-op" && selfRole === "guest";
+    const inputOnlySync = playMode === "co-op";
     const syncIntervalMs = inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;
     const sync = new SimpleGameSync((state: SelfGameState) => {
-      if (playMode === "co-op" && selfRole === "guest") {
+      if (playMode === "co-op") {
         reportInput({
           charge: state.charge,
           direction: state.direction,
@@ -234,7 +234,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     syncRef.current = sync;
     sync.start();
     return cleanupSync;
-  }, [cleanupSync, playMode, reportInput, reportState, selfRole]);
+  }, [cleanupSync, playMode, reportInput, reportState]);
 
   useEffect(() => {
     if (!opponentStateSubscription) return;
@@ -278,9 +278,9 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   }, [readOpponentStateMetrics]);
 
   const coOpMode = playMode === "co-op";
-  const coOpInputOnly = coOpMode && selfRole === "guest";
-  const coOpAuthoritativeStateSubscription = coOpInputOnly ? opponentStateSubscription : null;
-  const coOpInputStateSubscription = coOpInputOnly ? null : coOpMode ? opponentStateSubscription : null;
+  const coOpInputOnly = coOpMode;
+  const coOpAuthoritativeStateSubscription = null;
+  const coOpInputStateSubscription = coOpMode ? opponentStateSubscription : null;
 
   const publishRuntimeState = useCallback(
     (runtime: MultiplayerRuntimeState, score: number) => {
@@ -313,15 +313,16 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
       if (coOpInputOnly) {
         const inputOnlyState: SelfGameState = {
           ...nextState,
-          status: "playing",
+          status,
         };
         const inputSignature = `${inputOnlyState.direction ?? "none"}:${inputOnlyState.charge ?? ""}:${inputOnlyState.phase ?? ""}:${inputOnlyState.status}`;
         const inputChanged = lastReportedInputSignatureRef.current !== inputSignature;
         lastReportedInputSignatureRef.current = inputSignature;
         syncRef.current?.update(inputOnlyState, { immediate: inputChanged, signature: multiplayerStateSignature(inputOnlyState) });
       }
-      if (coOpInputOnly) return;
-      syncRef.current?.update(nextState, { immediate: true, signature: multiplayerStateSignature(nextState) });
+      if (!coOpInputOnly) {
+        syncRef.current?.update(nextState, { immediate: true, signature: multiplayerStateSignature(nextState) });
+      }
       if (nextState.status === "playing") return;
       syncRef.current?.flush({ force: true });
       if (localResultSentRef.current) return;
