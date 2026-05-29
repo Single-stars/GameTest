@@ -508,7 +508,9 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(appPageSource, /stage === "homeworld"/);
   assert.match(appPageSource, /const openHomeworld = useCallback/);
   assert.match(appPageSource, /transitionToStage\("homeworld"\)/);
-  assert.match(appPageSource, /new URLSearchParams\(window\.location\.search\)\.get\("homeworld"\) === "1"/);
+  assert.match(appPageSource, /sanitizeHomeworldQuery\(nextHomeworldEntryVisible\)/);
+  assert.match(appPageSource, /new URLSearchParams\(currentSearch\)\.get\("homeworld"\) === "1"/);
+  assert.match(appPageSource, /\.searchParams\.delete\("homeworld"\)/);
   assert.match(appPageSource, /const \[localStateHydrated, setLocalStateHydrated\] = useState\(false\)/);
   assert.match(appPageSource, /if \(!localStateHydrated\)/);
   assert.match(appPageSource, /setLocalStateHydrated\(true\)/);
@@ -1191,6 +1193,8 @@ test("base play frame has a dismissible full-screen tutorial overlay", () => {
   assert.doesNotMatch(playFrameSource, /base-tutorial-kicker/);
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*position:\s*fixed;/);
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*inset:\s*0;/);
+  assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);/);
+  assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*overflow-y:\s*auto;/);
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*background:\s*rgba\(12, 15, 16, 0\.34\);[\s\S]*backdrop-filter:\s*blur\(5px\);/);
   assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*max-width:\s*calc\(100vw - 36px\);[\s\S]*background:\s*transparent;/);
   assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*text-align:\s*center;/);

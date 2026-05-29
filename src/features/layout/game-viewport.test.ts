@@ -21,6 +21,23 @@ test("game viewport resolver ignores collapsed mobile viewport readings", async 
   );
 });
 
+test("game viewport resolver trusts normal visual viewport browser chrome corrections", async () => {
+  assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
+  const { resolveGameViewportSize } = await import("./game-viewport.ts");
+
+  assert.deepEqual(
+    resolveGameViewportSize({
+      clientHeight: 844,
+      clientWidth: 390,
+      innerHeight: 844,
+      innerWidth: 390,
+      visualViewportHeight: 690,
+      visualViewportWidth: 390,
+    }),
+    { height: 690, width: 390 },
+  );
+});
+
 test("game viewport lock rejects address-bar height churn but accepts real corrections", async () => {
   assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
   const { shouldCommitGameViewportSize } = await import("./game-viewport.ts");

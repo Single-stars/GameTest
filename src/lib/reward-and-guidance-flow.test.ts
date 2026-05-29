@@ -179,13 +179,15 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
   assert.match(resultSource, /幸运币/);
 });
 
-test("donation flow opens a placeholder payment link and unlocks only after explicit confirmation", () => {
+test("donation flow avoids placeholder navigation and unlocks only after explicit confirmation", () => {
   const pageSource = readSource("../app/page.tsx");
   const resultSource = readSource("../features/results/result-screen.tsx");
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
 
   assert.match(pageSource, /DONATE_AUTHOR_URL/);
-  assert.match(pageSource, /window\.open\(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer"\)/);
+  assert.match(pageSource, /const DONATE_AUTHOR_URL: string = "";/);
+  assert.match(pageSource, /if \(DONATE_AUTHOR_URL\) \{[\s\S]*window\.open\(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer"\)/);
+  assert.doesNotMatch(pageSource, /example\.com\/alipay-donate-placeholder/);
   assert.match(pageSource, /const confirmDonateAuthor = useCallback/);
   assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void/);
   assert.match(resultSource, /我已赞赏/);
@@ -193,6 +195,7 @@ test("donation flow opens a placeholder payment link and unlocks only after expl
   assert.match(resultSource, /item\.id === "donate" \? item\.onSelect\(\) : runAvatarMenuAction\(item\.onSelect\)/);
   assert.match(headersSource, /Content-Security-Policy/);
   assert.match(headersSource, /frame-ancestors 'none'/);
+  assert.doesNotMatch(headersSource, /example\.com/);
 });
 
 test("result cards become full-card advanced and luck entry buttons after king unlock", () => {
@@ -225,6 +228,51 @@ test("advanced lobby supports one-level swipe and first-three-level tutorial ove
   assert.match(advancedScreenSource, /advanced-tutorial-overlay/);
   assert.match(advancedScreenSource, /getAdvancedChallengeRuleItems\(playingConfig\)/);
   assert.match(advancedCss, /\.advanced-lobby-carousel[\s\S]*touch-action:\s*none;/);
+});
+
+test("advanced in-round top-right actions restart the current challenge instead of navigating back", () => {
+  const advancedScreenSource = readSource("../features/advanced/advanced-challenge-screen.tsx");
+  const playingSource = advancedScreenSource.slice(
+    advancedScreenSource.indexOf('if (challenge.mode === "playing")'),
+    advancedScreenSource.indexOf('if (challenge.mode === "base-playing")'),
+  );
+  const basePlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "base-playing")');
+  const basePlayingSource = advancedScreenSource.slice(
+    basePlayingStart,
+    advancedScreenSource.indexOf("<AdvancedLobbyContent", basePlayingStart),
+  );
+
+  assert.match(playingSource, /onPointerDown=\{\(\) => onStartLevel\(challenge\.level\)\}/);
+  assert.doesNotMatch(playingSource, /onPointerDown=\{onBack\}/);
+  assert.match(basePlayingSource, /onPointerDown=\{\(\) => onRestartBaseRound\(challenge\.level\)\}/);
+  assert.doesNotMatch(basePlayingSource, /onPointerDown=\{onBack\}/);
+});
+
+test("bubble expansion surfaces use the measured viewport and internal scrolling for mobile browsers", () => {
+  const resultsCss = readSource("../app/styles/base-flow/results.css");
+  const overlaysCss = readSource("../app/styles/overlays-responsive.css");
+  const rewardsCss = readSource("../app/styles/base-flow/rewards.css");
+  const shellCss = readSource("../app/styles/base-flow/shell.css");
+  const homeIntroCss = readSource("../app/styles/base-flow/home-intro.css");
+
+  assert.match(shellCss, /\.app-shell\s*{[\s\S]*min-height:\s*var\(--game-viewport-height,\s*100svh\);/);
+  assert.match(homeIntroCss, /\.home-screen\s*{[\s\S]*min-height:\s*calc\(var\(--game-viewport-height,\s*100svh\) - 36px\);/);
+  assert.match(overlaysCss, /\.share-image-screen\s*{[\s\S]*min-height:\s*calc\(var\(--game-viewport-height,\s*100svh\) - 36px\);/);
+  assert.match(overlaysCss, /\.share-image-preview\s*{[\s\S]*max-height:\s*calc\(var\(--game-viewport-height,\s*100svh\) - 190px\);/);
+  assert.match(overlaysCss, /\.restart-dialog-backdrop\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
+  assert.match(resultsCss, /\.feedback-dialog\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
+  assert.match(resultsCss, /\.feedback-card\s*{[\s\S]*max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) - 36px - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\)\);[\s\S]*overflow:\s*auto;/);
+  assert.match(resultsCss, /\.donate-dialog\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
+  assert.match(rewardsCss, /\.reward-overlay\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
+});
+
+test("production home route strips stale homeworld query parameters instead of opening hidden routes", () => {
+  const pageSource = readSource("../app/page.tsx");
+
+  assert.match(pageSource, /sanitizeHomeworldQuery/);
+  assert.match(pageSource, /new URL\(window\.location\.href\)/);
+  assert.match(pageSource, /\.searchParams\.delete\("homeworld"\)/);
+  assert.match(pageSource, /window\.history\.replaceState\(window\.history\.state,\s*"",\s*cleanedHomeworldUrl\)/);
 });
 
 test("mobile horizontal swipe guard blocks accidental browser back gestures on game surfaces", () => {

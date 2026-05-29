@@ -11,8 +11,10 @@ import {
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
+  isAdvancedBrakeRuleDangerEvent,
   isAdvancedBrakeFakeEvent,
   pickAdvancedBrakeEvent,
+  shouldForceAdvancedBrakeRuleDangerEvent,
   shouldForceAdvancedBrakeFakeEvent,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
@@ -94,16 +96,16 @@ test("advanced stage configs cover every dimension with the required 10-level ma
   }
 });
 
-test("reaction configs match the MD signal counts and average ms thresholds", () => {
+test("reaction configs use the launch green-light thresholds by level group", () => {
   assert.deepEqual(
     [1, 4, 7].map((level) => {
       const config = getAdvancedStageConfig("reaction", level);
       return [config.variant, config.params.signalCount, config.params.avgMsThreshold];
     }),
     [
-      ["reaction-red-trap", 5, 350],
-      ["reaction-red-trap", 6, 300],
-      ["reaction-red-trap", 7, 250],
+      ["reaction-red-trap", 5, 400],
+      ["reaction-red-trap", 6, 350],
+      ["reaction-red-trap", 7, 300],
     ],
   );
   assert.deepEqual(
@@ -112,9 +114,9 @@ test("reaction configs match the MD signal counts and average ms thresholds", ()
       return [config.variant, config.params.requiredGreenClicks, config.params.avgMsThreshold];
     }),
     [
-      ["reaction-dual-green", 5, 350],
-      ["reaction-dual-green", 6, 300],
-      ["reaction-dual-green", 7, 250],
+      ["reaction-dual-green", 5, 400],
+      ["reaction-dual-green", 6, 350],
+      ["reaction-dual-green", 7, 300],
     ],
   );
   assert.deepEqual(
@@ -123,9 +125,9 @@ test("reaction configs match the MD signal counts and average ms thresholds", ()
       return [config.variant, config.params.signalCount, config.params.avgMsThreshold];
     }),
     [
-      ["reaction-dual-trap", 5, 350],
-      ["reaction-dual-trap", 6, 300],
-      ["reaction-dual-trap", 7, 250],
+      ["reaction-dual-trap", 5, 400],
+      ["reaction-dual-trap", 6, 350],
+      ["reaction-dual-trap", 7, 300],
     ],
   );
 
@@ -323,6 +325,40 @@ test("advanced braking fake-danger levels force at least one fake event before t
   assert.equal(pickAdvancedBrakeEvent(redGrayOptions, { forceFake: false, randomValue: 0 }).top, "red");
 });
 
+test("advanced braking rule-tale levels force the relevant true-danger event before the finish", () => {
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 1, ruleDangerEventUsed: false, eventIndex: 4, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 3, ruleDangerEventUsed: true, eventIndex: 4, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 3, ruleDangerEventUsed: false, eventIndex: 3, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 3, ruleDangerEventUsed: false, eventIndex: 4, eventCount: 6 }), true);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 6, ruleDangerEventUsed: false, eventIndex: 6, eventCount: 8 }), true);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 9, ruleDangerEventUsed: false, eventIndex: 6, eventCount: 8 }), false);
+  assert.equal(shouldForceAdvancedBrakeRuleDangerEvent({ level: 10, ruleDangerEventUsed: false, eventIndex: 8, eventCount: 10 }), true);
+
+  const level3Forced = pickAdvancedBrakeEvent(getAdvancedBrakeEventOptions(3), {
+    forceFake: false,
+    forceRuleDanger: true,
+    level: 3,
+    randomValue: 0.99,
+  });
+  assert.equal(isAdvancedBrakeRuleDangerEvent(3, level3Forced), true);
+
+  const level6Forced = pickAdvancedBrakeEvent(getAdvancedBrakeEventOptions(6), {
+    forceFake: false,
+    forceRuleDanger: true,
+    level: 6,
+    randomValue: 0,
+  });
+  assert.deepEqual([level6Forced.top, level6Forced.bottom, level6Forced.correctAction], ["red", "red", "release"]);
+
+  const level10Forced = pickAdvancedBrakeEvent(getAdvancedBrakeEventOptions(10, { eventIndex: 9, eventCount: 10 }), {
+    forceFake: false,
+    forceRuleDanger: true,
+    level: 10,
+    randomValue: 0.99,
+  });
+  assert.equal(isAdvancedBrakeRuleDangerEvent(10, level10Forced), true);
+});
+
 test("advanced braking exposes in-round rule hints for rule-tale variants", () => {
   assert.equal(getAdvancedBrakeRuleHint(1, undefined), null);
   assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "规则：两个红色危险同时出现是安全的");
@@ -448,15 +484,15 @@ test("advanced completion evaluates reaction by green-click average and clear fa
   assert.equal(passing.reason, "通过");
   assert.deepEqual(passing.goalChecks, [true, true, true]);
   assert.equal(passing.reactionAverageMs, 290);
-  assert.equal(passing.reactionThresholdMs, 300);
+  assert.equal(passing.reactionThresholdMs, 350);
 
   const slow = evaluateAdvancedChallengeCompletion(config, [
-    trial("reaction", 0, { shownAt: 0, responseAt: 317, value: { signalColor: "green" } }),
+    trial("reaction", 0, { shownAt: 0, responseAt: 367, value: { signalColor: "green" } }),
   ]);
   assert.equal(slow.passed, false);
-  assert.equal(slow.reason, "失败：平均反应 317ms，要求 ≤ 300ms");
+  assert.equal(slow.reason, "失败：平均反应 367ms，要求 ≤ 350ms");
   assert.deepEqual(slow.goalChecks, [true, true, false]);
-  assert.equal(slow.reactionAverageMs, 317);
+  assert.equal(slow.reactionAverageMs, 367);
 
   const redClick = evaluateAdvancedChallengeCompletion(config, [
     trial("reaction", 0, {

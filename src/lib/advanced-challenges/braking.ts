@@ -33,6 +33,16 @@ export function isAdvancedBrakeFakeEvent(event: Pick<AdvancedBrakeEvent, "top" |
   return event?.top === "gray" || event?.bottom === "gray";
 }
 
+export function isAdvancedBrakeRuleDangerEvent(
+  level: number,
+  event: (Pick<AdvancedBrakeEvent, "top" | "bottom"> & { correctAction?: AdvancedBrakeAction }) | null | undefined,
+) {
+  if (!event) return false;
+  const brakeVariantIndex = getBrakeVariantIndex(level);
+  if (level !== 10 && brakeVariantIndex !== 3) return false;
+  return event.correctAction === "release";
+}
+
 export function shouldForceAdvancedBrakeFakeEvent({
   allowGray,
   fakeEventUsed,
@@ -48,19 +58,45 @@ export function shouldForceAdvancedBrakeFakeEvent({
   return eventIndex >= Math.max(1, eventCount - 2);
 }
 
+export function shouldForceAdvancedBrakeRuleDangerEvent({
+  level,
+  ruleDangerEventUsed,
+  eventIndex,
+  eventCount,
+}: {
+  level: number;
+  ruleDangerEventUsed: boolean;
+  eventIndex: number;
+  eventCount: number;
+}) {
+  if (ruleDangerEventUsed) return false;
+  const brakeVariantIndex = getBrakeVariantIndex(level);
+  if (level !== 10 && brakeVariantIndex !== 3) return false;
+  if (level === 9) return false;
+  return eventIndex >= Math.max(1, eventCount - 2);
+}
+
 export function pickAdvancedBrakeEvent<T extends AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }>(
   options: readonly T[],
   {
     forceFake,
+    forceRuleDanger = false,
+    level = 1,
     randomValue,
   }: {
     forceFake: boolean;
+    forceRuleDanger?: boolean;
+    level?: number;
     randomValue: number;
   },
 ) {
   if (forceFake) {
     const fake = options.find(isAdvancedBrakeFakeEvent);
     if (fake) return fake;
+  }
+  if (forceRuleDanger) {
+    const ruleDanger = options.find((event) => isAdvancedBrakeRuleDangerEvent(level, event));
+    if (ruleDanger) return ruleDanger;
   }
   return options[Math.floor(randomValue * options.length)] ?? options[0];
 }

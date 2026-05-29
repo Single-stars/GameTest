@@ -73,14 +73,14 @@ test("advanced challenge goal items are derived from challenge config instead of
   const reaction = getAdvancedStageConfig("reaction", 2);
   assert.deepEqual(getAdvancedChallengeGoalItems(reaction), [
     { icon: "target", text: "不可提前点击或漏点" },
-    { icon: "bolt", text: "平均反应 ≤ 350ms" },
+    { icon: "bolt", text: "平均反应 ≤ 400ms" },
   ]);
 
   const redTrap = getAdvancedStageConfig("reaction", 1);
   assert.deepEqual(getAdvancedChallengeGoalItems(redTrap), [
     { icon: "target", text: "不可提前点击或漏点" },
     { icon: "ban", text: "红灯不可点击" },
-    { icon: "bolt", text: "平均反应 ≤ 350ms" },
+    { icon: "bolt", text: "平均反应 ≤ 400ms" },
   ]);
 
   const miniGame = getAdvancedStageConfig("search", 3);
@@ -272,6 +272,18 @@ test("advanced lobby level selection supports click and immediate one-step swipe
   assert.match(cssSource, /\.advanced-lobby-carousel\s*\{[\s\S]*touch-action:\s*none;/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transform:/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transition:\s*transform/);
+});
+
+test("advanced lobby tap selection survives carousel pointer capture", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+
+  assert.match(screenSource, /lobbyPointerDownLevelRef/);
+  assert.match(screenSource, /event\.target instanceof Element[\s\S]*closest<HTMLButtonElement>\("\.advanced-lobby-level"\)/);
+  assert.match(screenSource, /lobbyPointerDownLevelRef\.current = Number\.isFinite\(pointerDownLevel\) \? pointerDownLevel : null;/);
+  assert.match(screenSource, /const tappedLevel = lobbyPointerDownLevelRef\.current;/);
+  assert.match(screenSource, /if \(tappedLevel !== null\) \{[\s\S]*handleLevelClick\(tappedLevel\);[\s\S]*suppressNextLevelClickRef\.current = true;/);
+  assert.match(screenSource, /lobbyPointerDownLevelRef\.current = null;/);
+  assert.match(screenSource, /onPointerCancel=\{handleLobbyPointerCancel\}/);
 });
 
 test("advanced lobby slider is controlled by the same selected level as circular clicks", () => {

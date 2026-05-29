@@ -32,9 +32,13 @@ export {
 
   getAdvancedBrakeSchedulerStep,
 
+  isAdvancedBrakeRuleDangerEvent,
+
   isAdvancedBrakeFakeEvent,
 
   pickAdvancedBrakeEvent,
+
+  shouldForceAdvancedBrakeRuleDangerEvent,
 
   shouldForceAdvancedBrakeFakeEvent,
 

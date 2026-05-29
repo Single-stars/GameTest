@@ -24,6 +24,7 @@ const VIEWPORT_JITTER_PX = 2;
 export const GAME_VIEWPORT_WIDTH_CHANGE_PX = 24;
 const LOCKED_HEIGHT_CORRECTION_RATIO = 1.35;
 export const MINI_GAME_STAGE_COLLAPSE_RATIO = 0.55;
+const COLLAPSED_VISUAL_VIEWPORT_RATIO = 0.55;
 
 function finitePositive(value: number | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -37,7 +38,12 @@ function maxFinite(values: Array<number | undefined>) {
 
 export function resolveGameViewportSize(metrics: GameViewportMetrics): GameViewportSize | null {
   const width = maxFinite([metrics.visualViewportWidth, metrics.innerWidth, metrics.clientWidth]);
-  const height = maxFinite([metrics.visualViewportHeight, metrics.innerHeight, metrics.clientHeight]);
+  const layoutHeight = maxFinite([metrics.innerHeight, metrics.clientHeight]);
+  const visualHeight = finitePositive(metrics.visualViewportHeight) ? Math.round(metrics.visualViewportHeight) : 0;
+  const height =
+    visualHeight > 0 && (layoutHeight === 0 || visualHeight >= layoutHeight * COLLAPSED_VISUAL_VIEWPORT_RATIO)
+      ? visualHeight
+      : Math.max(visualHeight, layoutHeight);
   if (width < MIN_GAME_VIEWPORT_WIDTH || height < MIN_GAME_VIEWPORT_HEIGHT) return null;
   return { height, width };
 }

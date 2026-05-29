@@ -211,15 +211,21 @@
   position: fixed;
   inset: 0;
   z-index: 90;
+  width: 100%;
+  height: var(--game-viewport-height, 100dvh);
   display: grid;
   place-items: center;
   padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(12, 15, 16, 0.52);
+  -webkit-overflow-scrolling: touch;
 }
 
 .donate-card {
   position: relative;
   width: min(100%, 320px);
+  max-height: calc(var(--game-viewport-height, 100dvh) - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   display: grid;
   justify-items: center;
   gap: 10px;
@@ -228,8 +234,10 @@
   padding: 24px 20px 20px;
   background: #fffdf8;
   color: var(--ink);
+  overflow: auto;
   text-align: center;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+  -webkit-overflow-scrolling: touch;
 }
 
 .donate-card svg {
@@ -293,15 +301,21 @@
   position: fixed;
   inset: 0;
   z-index: 92;
+  width: 100%;
+  height: var(--game-viewport-height, 100dvh);
   display: grid;
   place-items: center;
   padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(12, 15, 16, 0.52);
+  -webkit-overflow-scrolling: touch;
 }
 
 .feedback-card {
   position: relative;
   width: min(100%, 360px);
+  max-height: calc(var(--game-viewport-height, 100dvh) - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   display: grid;
   gap: 12px;
   border: 1px solid var(--line);
@@ -309,7 +323,9 @@
   padding: 24px 18px 18px;
   background: #fffdf8;
   color: var(--ink);
+  overflow: auto;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+  -webkit-overflow-scrolling: touch;
 }
 
 .feedback-card > svg {
@@ -358,6 +374,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 10px;
   color: var(--muted);
   font-size: 14px;

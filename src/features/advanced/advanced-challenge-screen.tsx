@@ -355,6 +355,7 @@ function AdvancedLevelSelectionPanel({
   const activeLobbyPointerIdRef = React.useRef<number | null>(null);
   const lobbySwipeStartXRef = React.useRef(0);
   const lobbySwipeConsumedRef = React.useRef(false);
+  const lobbyPointerDownLevelRef = React.useRef<number | null>(null);
   const suppressNextLevelClickRef = React.useRef(false);
   const selectedLevelRef = React.useRef(selectedLevel);
   const [trackStepPx, setTrackStepPx] = React.useState(DEFAULT_LOBBY_TRACK_STEP_PX);
@@ -430,6 +431,9 @@ function AdvancedLevelSelectionPanel({
 
   const handleLobbyPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    const levelButton = event.target instanceof Element ? event.target.closest<HTMLButtonElement>(".advanced-lobby-level") : null;
+    const pointerDownLevel = levelButton && !levelButton.disabled ? Number(levelButton.dataset.level) : Number.NaN;
+    lobbyPointerDownLevelRef.current = Number.isFinite(pointerDownLevel) ? pointerDownLevel : null;
     activeLobbyPointerIdRef.current = event.pointerId;
     lobbySwipeStartXRef.current = event.clientX;
     lobbySwipeConsumedRef.current = false;
@@ -462,6 +466,7 @@ function AdvancedLevelSelectionPanel({
 
   const handleLobbyPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+    const tappedLevel = lobbyPointerDownLevelRef.current;
     if (lobbySwipeConsumedRef.current) {
       event.preventDefault();
       window.setTimeout(() => {
@@ -469,9 +474,26 @@ function AdvancedLevelSelectionPanel({
       }, 0);
     } else {
       suppressNextLevelClickRef.current = false;
+      if (tappedLevel !== null) {
+        handleLevelClick(tappedLevel);
+        suppressNextLevelClickRef.current = true;
+        window.setTimeout(() => {
+          suppressNextLevelClickRef.current = false;
+        }, 0);
+      }
     }
     activeLobbyPointerIdRef.current = null;
+    lobbyPointerDownLevelRef.current = null;
     lobbySwipeConsumedRef.current = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  const handleLobbyPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+    activeLobbyPointerIdRef.current = null;
+    lobbyPointerDownLevelRef.current = null;
+    lobbySwipeConsumedRef.current = false;
+    suppressNextLevelClickRef.current = false;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
@@ -480,7 +502,7 @@ function AdvancedLevelSelectionPanel({
       <div
         className="advanced-lobby-carousel"
         ref={carouselRef}
-        onPointerCancel={handleLobbyPointerUp}
+        onPointerCancel={handleLobbyPointerCancel}
         onPointerDown={handleLobbyPointerDown}
         onPointerMove={handleLobbyPointerMove}
         onPointerUp={handleLobbyPointerUp}
@@ -708,8 +730,8 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-              返回
+            <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
+              重试
             </button>
             {shouldShowPerfectClearShortcut({ debugToolsVisible }) ? (
               <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(onBuildPerfectTrials(playingConfig))}>
@@ -763,8 +785,8 @@ export function AdvancedChallengeScreen({
             <p className="eyebrow">{round.measure}基础关</p>
             <h1>{round.title}</h1>
           </div>
-          <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-            返回
+          <button className="advanced-back-button" type="button" onPointerDown={() => onRestartBaseRound(challenge.level)}>
+            重试
           </button>
         </header>
         {renderRound({

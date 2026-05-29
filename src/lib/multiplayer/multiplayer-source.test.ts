@@ -280,7 +280,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /const handleOpenHomeworldMultiplayerEntry = useCallback/);
   assert.match(pageSource, /const handleJoinHomeworldRoom = useCallback/);
   assert.match(pageSource, /const handleExitHomeworldRoom = useCallback/);
-  assert.match(pageSource, /transitionToRoute\("\/\?homeworld=1"/);
+  assert.match(pageSource, /transitionToRoute\("\/"/);
   assert.match(pageSource, /<main className="app-shell app-shell-play">/);
   assert.match(pageSource, /if \(!skinHydrated\) \{[\s\S]*<ModeTransitionOverlay state=\{transitionState\} \/>[\s\S]*<\/PlayerAvatarSkinProvider>[\s\S]*\}/);
   assert.match(pageSource, /const homeworldDoorMode = snapshot\.role === "host" && snapshot\.status !== "idle" \? "room" : guestInHostHome \? "room" : "single-player"/);
@@ -303,12 +303,12 @@ test("homeworld guests stay in their own home until the host room is connected",
   assert.match(pageSource, /doorMode=\{homeworldDoorMode\}/);
 });
 
-test("standalone multiplayer entry redirects into the homeworld multiplayer flow", () => {
+test("standalone multiplayer entry no longer redirects users into homeworld query URLs", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
 
-  assert.match(pageSource, /if \(isHomeworldRoute\) return;/);
-  assert.match(pageSource, /router\.replace\(roomParam \? `\/multiplayer\?homeworld=1&room=\$\{encodeURIComponent\(roomParam\)\}` : "\/\?homeworld=1"\)/);
-  assert.match(pageSource, /if \(!isHomeworldRoute\) \{[\s\S]*route-blackout-shell/);
+  assert.doesNotMatch(pageSource, /router\.replace\(roomParam \? `\/multiplayer\?homeworld=1&room=\$\{encodeURIComponent\(roomParam\)\}` : "\/\?homeworld=1"\)/);
+  assert.doesNotMatch(pageSource, /if \(isHomeworldRoute\) return;[\s\S]*router\.replace/);
+  assert.doesNotMatch(pageSource, /if \(!isHomeworldRoute\) \{[\s\S]*route-blackout-shell/);
   assert.doesNotMatch(pageSource, /正在进入家园联机/);
 });
 

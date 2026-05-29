@@ -430,7 +430,7 @@ function MultiplayerPageContent() {
 
   const handleExitHomeworldRoom = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
-    void transitionToRoute("/?homeworld=1", () => {
+    void transitionToRoute("/", () => {
       sessionRef.current?.leave(leaveReason);
       cleanupSession();
       setSnapshot(buildInitialSnapshot());
@@ -577,11 +577,6 @@ function MultiplayerPageContent() {
     if (isPlayerAvatarSkinUnlocked(selectedSkin, advancedProgress)) return;
     handleSelectAvatarSkin("cyan");
   }, [advancedProgress, handleSelectAvatarSkin, selectedSkin]);
-
-  useEffect(() => {
-    if (isHomeworldRoute) return;
-    router.replace(roomParam ? `/multiplayer?homeworld=1&room=${encodeURIComponent(roomParam)}` : "/?homeworld=1");
-  }, [isHomeworldRoute, roomParam, router]);
 
   useEffect(() => {
     if (!skinHydrated) return;
@@ -801,7 +796,7 @@ function MultiplayerPageContent() {
     autoJoinRoomRef.current = null;
     autoCreateHomeworldHostRef.current = false;
     setSnapshot(buildInitialSnapshot());
-    router.replace("/multiplayer?homeworld=1");
+    router.replace("/multiplayer");
   }, [cleanupSession, isHomeworldRoute, router, snapshot.errorMessage, snapshot.status]);
 
   const guestInHostHome =
@@ -848,14 +843,6 @@ function MultiplayerPageContent() {
     !snapshot.role &&
     snapshot.status === "idle" &&
     (hostHomeworldParam === "1" || Boolean(roomParam));
-
-  if (!isHomeworldRoute) {
-    return (
-      <main className="app-shell app-shell-play route-blackout-shell">
-        <ModeTransitionOverlay state={transitionState} />
-      </main>
-    );
-  }
 
   if (!skinHydrated) {
     return (

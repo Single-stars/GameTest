@@ -200,6 +200,8 @@
   position: fixed;
   inset: 0;
   z-index: 80;
+  width: 100%;
+  height: var(--game-viewport-height, 100dvh);
   display: grid;
   place-items: center;
   padding:
@@ -207,10 +209,13 @@
     max(18px, env(safe-area-inset-right))
     max(18px, env(safe-area-inset-bottom))
     max(18px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(12, 15, 16, 0.34);
   backdrop-filter: blur(5px);
   cursor: pointer;
   touch-action: manipulation;
+  -webkit-overflow-scrolling: touch;
 }
 
 .base-tutorial-panel {

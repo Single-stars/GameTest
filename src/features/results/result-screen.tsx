@@ -413,7 +413,7 @@ export function ResultScreen({
             </button>
             <DonateIcon />
             <h2 id="donate-dialog-title">赞赏作者</h2>
-            <p>已打开赞赏链接。金额由你自己决定，完成后回到这里确认即可解锁赞赏皮肤。</p>
+            <p>如已打开赞赏链接，金额由你自己决定；完成后回到这里确认即可解锁赞赏皮肤。</p>
             <button className="donate-confirm" type="button" onClick={confirmDonate}>
               我已赞赏
             </button>

@@ -123,7 +123,7 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
-const DONATE_AUTHOR_URL = "https://example.com/alipay-donate-placeholder";
+const DONATE_AUTHOR_URL: string = "";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -153,6 +153,17 @@ function getBrowserStorage() {
   } catch {
     return null;
   }
+}
+
+function sanitizeHomeworldQuery(homeworldEntryVisible: boolean) {
+  if (typeof window === "undefined") return "";
+  if (homeworldEntryVisible) return window.location.search;
+  const homeworldUrl = new URL(window.location.href);
+  if (homeworldUrl.searchParams.get("homeworld") !== "1") return window.location.search;
+  homeworldUrl.searchParams.delete("homeworld");
+  const cleanedHomeworldUrl = `${homeworldUrl.pathname}${homeworldUrl.search}${homeworldUrl.hash}`;
+  window.history.replaceState(window.history.state, "", cleanedHomeworldUrl);
+  return homeworldUrl.search;
 }
 
 function markLegend100SkinUnlockedWhenDisplayed(
@@ -450,6 +461,7 @@ export default function Home() {
     setPlayerName(readPersistedPlayerName());
     if (typeof window !== "undefined") {
       const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
+      const currentSearch = sanitizeHomeworldQuery(nextHomeworldEntryVisible);
       setHomeworldEntryVisible(nextHomeworldEntryVisible);
       const storage = getBrowserStorage();
       if (storage) {
@@ -457,7 +469,7 @@ export default function Home() {
         const persistedOutdoorAdventure = readPersistedOutdoorAdventureState(storage);
         if (persistedOutdoorAdventure) setOutdoorAdventureState(persistedOutdoorAdventure);
       }
-      if (nextHomeworldEntryVisible && new URLSearchParams(window.location.search).get("homeworld") === "1") {
+      if (nextHomeworldEntryVisible && new URLSearchParams(currentSearch).get("homeworld") === "1") {
         setStage("homeworld");
       }
     }
@@ -472,7 +484,9 @@ export default function Home() {
 
   const handleDonateAuthor = useCallback(() => {
     if (typeof window === "undefined") return;
-    window.open(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer");
+    if (DONATE_AUTHOR_URL) {
+      window.open(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer");
+    }
   }, []);
 
   const confirmDonateAuthor = useCallback(() => {
@@ -492,9 +506,10 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
+    const currentSearch = sanitizeHomeworldQuery(nextHomeworldEntryVisible);
     setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
     setHomeworldEntryVisible(nextHomeworldEntryVisible);
-    const shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible && new URLSearchParams(window.location.search).get("homeworld") === "1";
+    const shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible && new URLSearchParams(currentSearch).get("homeworld") === "1";
 
     const storage = getBrowserStorage();
     const stored = storage ? readPersistedGameState(storage) : createDefaultPersistedGameState();

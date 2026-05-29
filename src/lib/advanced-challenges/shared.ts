@@ -4,7 +4,7 @@ import type { AdvancedDifficulty, AdvancedStageConfig, ConfigInput } from "./typ
 
 export const difficultyByBand = ["easy", "medium", "hard"] as const;
 
-export const reactionThresholds = [350, 300, 250] as const;
+export const reactionThresholds = [400, 350, 300] as const;
 
 export const reactionCounts = [5, 6, 7] as const;
 

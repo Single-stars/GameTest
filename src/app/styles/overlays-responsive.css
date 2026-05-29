@@ -2,10 +2,15 @@
   position: fixed;
   z-index: 40;
   inset: 0;
+  width: 100%;
+  height: var(--game-viewport-height, 100dvh);
   display: grid;
   place-items: center;
   padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(24, 24, 24, 0.28);
+  -webkit-overflow-scrolling: touch;
 }
 
 .restart-dialog {
@@ -45,6 +50,7 @@
 }
 
 .share-image-screen {
+  min-height: calc(var(--game-viewport-height, 100svh) - 36px);
   gap: 14px;
   padding-block: 8px;
 }
@@ -81,7 +87,7 @@
 
 .share-image-preview {
   width: min(100%, 430px);
-  max-height: calc(100svh - 190px);
+  max-height: calc(var(--game-viewport-height, 100svh) - 190px);
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 18px 48px rgba(24, 24, 24, 0.16);
@@ -196,7 +202,7 @@
   .share-image-screen,
   .advanced-screen,
   .luck-screen {
-    min-height: calc(100svh - 24px);
+    min-height: calc(var(--game-viewport-height, 100svh) - 24px);
   }
 
   .result-screen {
@@ -209,7 +215,7 @@
   }
 
   .intro-card {
-    min-height: calc(100svh - 64px);
+    min-height: calc(var(--game-viewport-height, 100svh) - 64px);
     gap: 18px;
   }
 

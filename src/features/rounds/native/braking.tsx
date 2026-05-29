@@ -19,8 +19,10 @@ import {
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
+  isAdvancedBrakeRuleDangerEvent,
   isAdvancedBrakeFakeEvent,
   pickAdvancedBrakeEvent,
+  shouldForceAdvancedBrakeRuleDangerEvent,
   shouldForceAdvancedBrakeFakeEvent,
   type AdvancedBrakeAction,
   type AdvancedBrakeEvent,
@@ -116,6 +118,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
   const previousHazardRef = useRef<AdvancedBrakeEvent | null>(null);
   const fakeEventUsedRef = useRef(false);
+  const ruleDangerEventUsedRef = useRef(false);
 
   const trialsRef = useRef<TrialEvent[]>([]);
 
@@ -330,11 +333,17 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
         eventIndex: hazardIndexRef.current,
         eventCount: eventCountTarget,
       }),
+      forceRuleDanger: shouldForceAdvancedBrakeRuleDangerEvent({
+        level: config.level,
+        ruleDangerEventUsed: ruleDangerEventUsedRef.current,
+        eventIndex: hazardIndexRef.current,
+        eventCount: eventCountTarget,
+      }),
+      level: config.level,
       randomValue: Math.random(),
     });
 
     if (!picked) return;
-    if (isAdvancedBrakeFakeEvent(picked)) fakeEventUsedRef.current = true;
 
     const hazardLeft = getAdvancedBrakeDangerLeft({
 
@@ -357,6 +366,9 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
       return;
 
     }
+
+    if (isAdvancedBrakeFakeEvent(picked)) fakeEventUsedRef.current = true;
+    if (isAdvancedBrakeRuleDangerEvent(config.level, picked)) ruleDangerEventUsedRef.current = true;
 
     const nextHazard: AdvancedBrakeHazard = {
 
