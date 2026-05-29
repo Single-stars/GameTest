@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 function readSource(path: string) {
@@ -183,6 +183,7 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   const pageSource = readSource("../app/page.tsx");
   const resultSource = readSource("../features/results/result-screen.tsx");
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
+  const donateAssetNames = readdirSync(new URL("../../public/donate", import.meta.url)).sort();
 
   assert.match(pageSource, /DONATE_AUTHOR_URL/);
   assert.match(pageSource, /const DONATE_AUTHOR_URL: string = "";/);
@@ -200,8 +201,20 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   assert.match(resultSource, /投喂食材选项/);
   assert.match(resultSource, /useState<DonationFeedOption\["id"\] \| null>\(null\)/);
   assert.match(resultSource, /selectedDonationFeed \? \(/);
-  assert.match(resultSource, /\/donate\/alipay-mixue\.jpg/);
-  assert.match(resultSource, /\/donate\/wechat-free\.png/);
+  assert.match(resultSource, /\/donate\/alipay-pay-mixue-6-yuan\.jpg/);
+  assert.match(resultSource, /\/donate\/wechat-pay-mixue-6-yuan\.png/);
+  assert.match(resultSource, /\/donate\/wechat-pay-pork-rice-18-yuan\.png/);
+  assert.match(resultSource, /\/donate\/wechat-pay-free\.png/);
+  assert.doesNotMatch(resultSource, /\/donate\/wechat-(mixue|pork-rice|free)\.png/);
+  assert.doesNotMatch(resultSource, /\/donate\/alipay-(mixue|pork-rice|free)\.(jpg|png)/);
+  assert.deepEqual(donateAssetNames, [
+    "alipay-pay-free.jpg",
+    "alipay-pay-mixue-6-yuan.jpg",
+    "alipay-pay-pork-rice-18-yuan.jpg",
+    "wechat-pay-free.png",
+    "wechat-pay-mixue-6-yuan.png",
+    "wechat-pay-pork-rice-18-yuan.png",
+  ]);
   assert.match(resultSource, /className=\{`donate-qr-image platform-\$\{platform\.id\}`\}/);
   assert.doesNotMatch(resultSource, /crypto\.subtle/);
   assert.doesNotMatch(resultSource, /DONATION_QR_ASSET/);
@@ -226,6 +239,7 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   assert.match(resultSource, /item\.id === "donate" \? item\.onSelect\(\) : runAvatarMenuAction\(item\.onSelect\)/);
   assert.match(headersSource, /Content-Security-Policy/);
   assert.match(headersSource, /frame-ancestors 'none'/);
+  assert.match(headersSource, /\/donate\/\*\s+Cache-Control: no-store/);
   assert.doesNotMatch(headersSource, /example\.com/);
 });
 

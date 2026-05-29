@@ -46,8 +46,8 @@ const DONATION_FEED_OPTIONS = [
     label: "蜜雪冰城",
     note: "清凉补给",
     qrImages: {
-      alipay: "/donate/alipay-mixue.jpg",
-      wechat: "/donate/wechat-mixue.png",
+      alipay: "/donate/alipay-pay-mixue-6-yuan.jpg",
+      wechat: "/donate/wechat-pay-mixue-6-yuan.png",
     },
   },
   {
@@ -55,8 +55,8 @@ const DONATION_FEED_OPTIONS = [
     label: "大份猪脚饭",
     note: "回血套餐",
     qrImages: {
-      alipay: "/donate/alipay-pork-rice.jpg",
-      wechat: "/donate/wechat-pork-rice.png",
+      alipay: "/donate/alipay-pay-pork-rice-18-yuan.jpg",
+      wechat: "/donate/wechat-pay-pork-rice-18-yuan.png",
     },
   },
   {
@@ -64,8 +64,8 @@ const DONATION_FEED_OPTIONS = [
     label: "随意加餐",
     note: "能吃就行",
     qrImages: {
-      alipay: "/donate/alipay-free.jpg",
-      wechat: "/donate/wechat-free.png",
+      alipay: "/donate/alipay-pay-free.jpg",
+      wechat: "/donate/wechat-pay-free.png",
     },
   },
 ] as const satisfies ReadonlyArray<DonationFeedOption>;

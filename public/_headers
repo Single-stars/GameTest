@@ -10,6 +10,9 @@
 /*.png
   Cache-Control: public, max-age=86400
 
+/donate/*
+  Cache-Control: no-store
+
 /*.webp
   Cache-Control: public, max-age=86400
 
