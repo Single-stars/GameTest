@@ -107,7 +107,7 @@
   z-index: 20;
   left: 50%;
   top: 50%;
-  translate: -50% -50%;
+  transform: translate(-50%, -50%);
   min-height: 42px;
   display: grid;
   place-items: center;
@@ -125,18 +125,18 @@
 @keyframes toast-fade {
   0% {
     opacity: 0;
-    transform: scale(0.96);
+    transform: translate(-50%, -50%) scale(0.96);
   }
 
   15%,
   78% {
     opacity: 1;
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
 
   100% {
     opacity: 0;
-    transform: scale(0.98);
+    transform: translate(-50%, -50%) scale(0.98);
   }
 }
 
@@ -218,6 +218,7 @@
   }
 
   .hero-copy.compact h1 {
+    max-width: min(100%, 640px);
     font-size: 42px;
   }
 
@@ -269,11 +270,16 @@
     font-size: 22px;
   }
 
+  .app-shell-play .round-header-actions {
+    flex-wrap: nowrap;
+  }
+
   .app-shell-play .round-measure-pill,
   .app-shell-play .advanced-back-button {
     min-height: 32px;
     padding-inline: 10px;
     font-size: 12px;
+    white-space: nowrap;
   }
 
   .score-grid {
@@ -294,6 +300,24 @@
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+
+  .home-main {
+    padding-top: 50px;
+  }
+
+  .hero-copy.compact h1 {
+    max-width: min(100%, 360px);
+    font-size: 38px;
+  }
+
+  .home-consent-row {
+    font-size: 12px;
+  }
+
+  .home-consent-check input {
+    width: 16px;
+    height: 16px;
   }
 
   .score-grid {
@@ -378,4 +402,20 @@
     min-height: 210px;
   }
 
+}
+
+@media (max-height: 700px) {
+  .home-screen {
+    gap: 12px;
+    padding-block: 12px;
+  }
+
+  .home-main {
+    gap: 16px;
+    padding-top: 46px;
+  }
+
+  .hero-copy.compact h1 {
+    font-size: 36px;
+  }
 }

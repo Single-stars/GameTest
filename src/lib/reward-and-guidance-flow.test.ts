@@ -39,9 +39,10 @@ test("base native rounds require a successful practice attempt before formal sco
 
   assert.match(playFrameCss, /\.base-practice-wrap/);
   assert.match(playFrameCss, /\.base-practice-message\s*{[\s\S]*z-index:\s*1;/);
-  assert.match(playFrameCss, /\.base-practice-message\s*{[\s\S]*top:\s*calc\(50% - clamp\(108px,\s*14vh,\s*150px\)\);/);
+  assert.match(playFrameCss, /\.base-practice-message\s*{[\s\S]*top:\s*clamp\(72px,\s*20%,\s*132px\);/);
   assert.doesNotMatch(playFrameCss, /\.base-practice-message\s*{[^}]*bottom:/);
   assert.match(playFrameCss, /\.base-practice-message\s*{[\s\S]*font-size:\s*clamp\(20px,\s*4\.8vw,\s*28px\);/);
+  assert.match(playFrameCss, /\.base-practice-message\s*{[\s\S]*transform:\s*translateX\(-50%\);/);
   assert.doesNotMatch(playFrameCss, /\.base-practice-message\s*{[^}]*background:/);
 });
 

@@ -138,7 +138,7 @@
   z-index: 22;
   left: 50%;
   top: 34%;
-  translate: -50% -50%;
+  transform: translate(-50%, -50%);
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -166,16 +166,16 @@
 @keyframes prototype-feedback-pop {
   0% {
     opacity: 0;
-    transform: scale(0.84);
+    transform: translate(-50%, -50%) scale(0.84);
   }
   18%,
   78% {
     opacity: 1;
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(1.04);
+    transform: translate(-50%, -50%) scale(1.04);
   }
 }
 

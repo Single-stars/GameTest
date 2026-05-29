@@ -87,3 +87,36 @@ test("feedback admin page lists D1 feedback with rating and category filters", (
   assert.match(adminCss, /\.filters/);
   assert.match(adminCss, /\.feedbackList/);
 });
+
+test("home screen requires privacy and disclaimer confirmation before starting", () => {
+  const appPageSource = readSource("../app/page.tsx");
+  const homeScreenSource = readSource("../features/game-flow/home-screen.tsx");
+  const homeIntroCss = readSource("../app/styles/base-flow/home-intro.css");
+  const consentPanel = homeScreenSource.match(/<section className="home-consent-panel"[\s\S]*?<\/section>/)?.[0] ?? "";
+
+  assert.match(appPageSource, /const \[homeConsentAccepted, setHomeConsentAccepted\] = useState\(false\)/);
+  assert.match(appPageSource, /<HomeScreen[\s\S]*consentAccepted=\{homeConsentAccepted\}[\s\S]*onConsentChange=\{setHomeConsentAccepted\}/);
+  assert.match(homeScreenSource, /home-consent-panel/);
+  assert.match(homeScreenSource, /type="checkbox"/);
+  assert.match(homeScreenSource, /data-consent-ready=\{consentAccepted \? "true" : "false"\}/);
+  assert.doesNotMatch(homeScreenSource, /\sdisabled=\{!consentAccepted\}/);
+  assert.doesNotMatch(homeScreenSource, /aria-disabled=\{!consentAccepted\}/);
+  assert.match(homeScreenSource, /home-consent-toast/);
+  assert.match(homeScreenSource, /setTimeout\(\(\) => setConsentWarningId\(0\), 1800\)/);
+  assert.match(homeScreenSource, /请先勾选隐私与免责声明/);
+  assert.match(homeScreenSource, /home-disclaimer-screen/);
+  assert.match(homeScreenSource, /home-disclaimer-link/);
+  assert.match(homeScreenSource, /本测试仅供娱乐，不是专业能力、心理、医疗、教育或职业评估/);
+  assert.match(homeScreenSource, /测试结果只代表本次浏览器操作表现/);
+  assert.match(homeScreenSource, /localStorage/);
+  assert.match(homeScreenSource, /分享图片在本机浏览器生成/);
+  assert.match(homeScreenSource, /反馈功能会提交反馈文本、评分、反馈类型、页面信息和浏览器 user-agent/);
+  assert.match(homeScreenSource, /请勿在反馈中填写手机号、微信、真实姓名、身份证、地址等敏感信息/);
+  assert.match(homeScreenSource, /开始测试即代表确认以上说明/);
+  assert.doesNotMatch(consentPanel, /本测试仅供娱乐/);
+  assert.match(homeIntroCss, /\.home-consent-panel/);
+  assert.match(homeIntroCss, /\.home-consent-check/);
+  assert.match(homeIntroCss, /\.home-consent-toast\s*\{[\s\S]*position:\s*fixed;/);
+  assert.doesNotMatch(homeIntroCss, /\.home-consent-warning/);
+  assert.match(homeIntroCss, /\.home-disclaimer-screen/);
+});

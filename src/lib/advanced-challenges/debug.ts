@@ -21,6 +21,5 @@ export function shouldShowHomeworldEntry({
 }
 
 export function shouldShowPerfectClearShortcut({ debugToolsVisible }: { debugToolsVisible: boolean }) {
-  void debugToolsVisible;
-  return true;
+  return debugToolsVisible;
 }

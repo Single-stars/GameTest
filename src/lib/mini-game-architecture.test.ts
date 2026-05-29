@@ -1192,7 +1192,7 @@ test("base play frame has a dismissible full-screen tutorial overlay", () => {
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*position:\s*fixed;/);
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*inset:\s*0;/);
   assert.match(playFrameCss, /\.base-tutorial-overlay\s*\{[\s\S]*background:\s*rgba\(12, 15, 16, 0\.34\);[\s\S]*backdrop-filter:\s*blur\(5px\);/);
-  assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*max-width:\s*620px;[\s\S]*background:\s*transparent;/);
+  assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*max-width:\s*calc\(100vw - 36px\);[\s\S]*background:\s*transparent;/);
   assert.match(playFrameCss, /\.base-tutorial-panel\s*\{[\s\S]*text-align:\s*center;/);
   assert.match(playFrameCss, /\.base-tutorial-start-hint/);
   assert.doesNotMatch(playFrameCss, /box-shadow:\s*0 24px 70px/);

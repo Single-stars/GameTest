@@ -238,6 +238,28 @@ test("base aim keeps the target size but enlarges only the bottom shooter visual
   assert.match(aimSource, /const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 38;/);
 });
 
+test("mobile gameplay centering avoids unsupported individual transform properties", () => {
+  const playFrameCss = read(new URL("../app/styles/base-flow/play-frame.css", import.meta.url));
+  const aimCss = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+  const knifeCss = read(new URL("../app/styles/mini-games/knife.css", import.meta.url));
+  const commonCss = read(new URL("../app/styles/mini-games/common.css", import.meta.url));
+  const doodleCss = read(new URL("../app/styles/mini-games/doodle.css", import.meta.url));
+
+  assert.match(cssBlock(playFrameCss, ".base-practice-message"), /transform:\s*translateX\(-50%\);/);
+  assert.match(cssBlock(playFrameCss, ".base-practice-message"), /overflow-wrap:\s*anywhere;/);
+  assert.match(cssBlock(aimCss, ".advanced-aim-shooter"), /transform:\s*translateX\(-50%\);/);
+  assert.match(cssBlock(aimCss, ".advanced-aim-shooter.firing"), /transform:\s*translateX\(-50%\) translateY\(-4px\) scale\(1\.08\);/);
+  assert.match(cssBlock(knifeCss, ".knife-wheel-wrap"), /position:\s*absolute;/);
+  assert.match(cssBlock(knifeCss, ".knife-wheel-wrap"), /transform:\s*translateX\(-50%\);/);
+  assert.match(cssBlock(knifeCss, ".knife-launcher"), /transform:\s*translateX\(-50%\);/);
+  assert.match(knifeCss, /transform:\s*translateX\(-50%\) translateY\(calc\(-1 \* var\(--knife-flight-distance, 276px\)\)\);/);
+  assert.match(cssBlock(commonCss, ".prototype-feedback"), /transform:\s*translate\(-50%, -50%\);/);
+  assert.match(cssBlock(doodleCss, ".doodle-platform.risk::after"), /transform:\s*translate\(-50%, -58%\);/);
+  assert.doesNotMatch(playFrameCss, /base-practice-message[\s\S]*translate:\s*-50% 0;/);
+  assert.doesNotMatch(aimCss, /translate:\s*-50% 0;/);
+  assert.doesNotMatch(knifeCss, /translate:\s*-50% 0;|rotate:\s*0deg;/);
+});
+
 test("advanced braking mirrors base stop feedback for early release, crash, and success", () => {
   const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
   const cssSource = read(new URL("../app/styles/base-flow/native-braking.css", import.meta.url));

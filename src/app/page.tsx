@@ -205,6 +205,7 @@ export default function Home() {
   const [shareImageTitle, setShareImageTitle] = useState<string | null>(null);
   const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
   const [avatarLabReturnStage, setAvatarLabReturnStage] = useState<"result" | "homeworld">("result");
+  const [homeConsentAccepted, setHomeConsentAccepted] = useState(false);
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
   const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
@@ -1204,7 +1205,13 @@ export default function Home() {
           selfSkin={selectedAvatarSkin}
         />
       ) : stage === "home" ? (
-        <HomeScreen onShareImage={openDefaultShareImage} onStart={beginTest} title={APP_TITLE} />
+        <HomeScreen
+          consentAccepted={homeConsentAccepted}
+          onConsentChange={setHomeConsentAccepted}
+          onShareImage={openDefaultShareImage}
+          onStart={beginTest}
+          title={APP_TITLE}
+        />
       ) : !currentRound || stage === "result" ? (
         <ResultScreen
           advancedProgress={advancedProgress}

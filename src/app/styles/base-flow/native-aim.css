@@ -62,14 +62,14 @@
   height: 72px;
   display: grid;
   place-items: center;
-  translate: -50% 0;
   pointer-events: none;
+  transform: translateX(-50%);
   transform-origin: 50% 80%;
   transition: transform 140ms ease, filter 140ms ease;
 }
 
 .advanced-aim-shooter.firing {
-  transform: translateY(-4px) scale(1.08);
+  transform: translateX(-50%) translateY(-4px) scale(1.08);
   filter: drop-shadow(0 8px 14px rgba(27, 154, 170, 0.22));
 }
 
@@ -94,7 +94,7 @@
   top: -8px;
   width: 18px;
   height: 18px;
-  translate: -50% 0;
+  transform: translateX(-50%);
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
   background: inherit;
 }
@@ -106,7 +106,7 @@
   bottom: -6px;
   width: 18px;
   height: 12px;
-  translate: -50% 0;
+  transform: translateX(-50%);
   border-radius: 2px;
   background:
     linear-gradient(135deg, transparent 45%, currentColor 46% 54%, transparent 55%),

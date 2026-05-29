@@ -773,7 +773,7 @@ test("homeworld entry is development-only for the test release", () => {
   assert.equal(shouldShowHomeworldEntry({ nodeEnv: "development", search: "?homeworld=1" }), true);
 });
 
-test("perfect-clear shortcut stays visible inside playable levels without debug tools", () => {
-  assert.equal(shouldShowPerfectClearShortcut({ debugToolsVisible: false }), true);
+test("perfect-clear shortcut is only visible with debug tools", () => {
+  assert.equal(shouldShowPerfectClearShortcut({ debugToolsVisible: false }), false);
   assert.equal(shouldShowPerfectClearShortcut({ debugToolsVisible: true }), true);
 });
