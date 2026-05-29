@@ -1,0 +1,286 @@
+.reward-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding:
+    max(18px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+  background: rgba(15, 18, 20, 0.48);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  perspective: 1200px;
+  animation: reward-overlay-fade-in 180ms ease both;
+}
+
+.reward-overlay-card {
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  min-height: 320px;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
+  overflow: visible;
+  border: 1px solid rgba(255, 253, 248, 0.68);
+  border-radius: 8px;
+  padding: 28px 22px;
+  background: #fffdf8;
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 30px 90px rgba(11, 14, 15, 0.32);
+  transform-style: preserve-3d;
+  animation: reward-card-flip 920ms cubic-bezier(0.18, 0.82, 0.24, 1) both;
+  will-change: opacity, transform;
+}
+
+.reward-overlay-card.is-settled {
+  opacity: 1;
+  transform: rotateY(0deg) scale(1);
+  animation: none;
+}
+
+button.reward-overlay-card {
+  border: 1px solid rgba(255, 253, 248, 0.68);
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.reward-overlay-eyebrow {
+  color: #8d6120;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.reward-skin-card {
+  grid-template-rows: auto auto auto;
+  gap: 14px;
+  padding: 26px 22px 24px;
+}
+
+.reward-skin-avatar-frame {
+  width: 168px;
+  height: 168px;
+  display: grid;
+  place-items: center;
+}
+
+.reward-skin-copy {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.reward-skin-card strong {
+  font-size: clamp(30px, 8vw, 48px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.reward-skin-card small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.reward-skin-card .reward-overlay-eyebrow,
+.reward-skin-avatar-frame,
+.reward-skin-copy {
+  opacity: 0;
+  animation: reward-content-reveal 360ms 980ms ease both;
+}
+
+.reward-skin-card.is-settled .reward-overlay-eyebrow,
+.reward-skin-card.is-settled .reward-skin-avatar-frame,
+.reward-skin-card.is-settled .reward-skin-copy {
+  opacity: 1;
+  transform: translateY(0);
+  animation: none;
+}
+
+.reward-skin-avatar-frame {
+  animation-delay: 1060ms;
+}
+
+.reward-skin-copy {
+  animation-delay: 1180ms;
+}
+
+.reward-rank-card {
+  width: min(100%, 620px);
+  aspect-ratio: auto;
+  min-height: 0;
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 14px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  transform-style: flat;
+  animation: none;
+}
+
+.reward-rank-eyebrow {
+  color: #fffdf8;
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.38);
+}
+
+.reward-rank-card.is-settled {
+  transform: none;
+  animation: none;
+}
+
+.reward-rank-switch {
+  width: 100%;
+  min-height: clamp(96px, 20vw, 132px);
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+.reward-rank-value {
+  grid-area: 1 / 1;
+  color: #fffdf8;
+  font-size: clamp(42px, 10.5vw, 78px);
+  font-weight: 950;
+  line-height: 1.05;
+  white-space: nowrap;
+  text-shadow: 0 4px 26px rgba(0, 0, 0, 0.42);
+  will-change: opacity, transform, filter;
+}
+
+.reward-rank-old {
+  opacity: 1;
+  animation: reward-rank-switch-old 1080ms 160ms cubic-bezier(0.18, 0.82, 0.24, 1) both;
+}
+
+.reward-rank-new {
+  color: #f5c15d;
+  opacity: 0;
+  animation: reward-rank-switch-new 1080ms 160ms cubic-bezier(0.18, 0.82, 0.24, 1) both;
+}
+
+.reward-rank-card.is-settled .reward-rank-old {
+  opacity: 0;
+  transform: translateY(-16px) scale(0.98);
+  animation: none;
+}
+
+.reward-rank-card.is-settled .reward-rank-new {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: none;
+  animation: none;
+}
+
+@keyframes reward-overlay-fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes reward-card-flip {
+  0% {
+    opacity: 0;
+    transform: rotateY(1080deg) scale(0.86);
+  }
+
+  72% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1.018);
+  }
+
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes reward-content-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reward-rank-switch-old {
+  0%,
+  42% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.98);
+    filter: blur(2px);
+  }
+}
+
+@keyframes reward-rank-switch-new {
+  0%,
+  52% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+    filter: blur(2px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reward-overlay,
+  .reward-overlay-card,
+  .reward-skin-card .reward-overlay-eyebrow,
+  .reward-skin-avatar-frame,
+  .reward-skin-copy,
+  .reward-rank-old,
+  .reward-rank-new {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .reward-skin-card .reward-overlay-eyebrow,
+  .reward-skin-avatar-frame,
+  .reward-skin-copy {
+    opacity: 1;
+    transform: none;
+  }
+
+  .reward-rank-old {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.98);
+    filter: none;
+  }
+
+  .reward-rank-new {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

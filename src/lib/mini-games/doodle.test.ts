@@ -190,9 +190,18 @@ test("doodle high-risk platforms stay far enough below the finish platform", () 
       }),
     );
     const minFinishGap = riskJumpPeak + 64;
+    const minRiskGap = riskJumpPeak - 56;
     const riskPlatforms = layout.platforms.filter((platform) => platform.risk);
 
     assert.equal(riskPlatforms.length, Number(level.params.requiredRiskPlatforms), levelId);
+    for (let index = 1; index < riskPlatforms.length; index += 1) {
+      const previous = riskPlatforms[index - 1];
+      const current = riskPlatforms[index];
+      assert.ok(
+        current.y - previous.y >= minRiskGap,
+        `${levelId} high-risk platform ${index} should be at least ${Math.round(minRiskGap)}px after the previous one`,
+      );
+    }
     assert.ok(
       riskPlatforms.every((platform) => layout.targetHeight - platform.y >= minFinishGap),
       `${levelId} high-risk platforms should not sit within ${Math.round(minFinishGap)}px of the finish`,

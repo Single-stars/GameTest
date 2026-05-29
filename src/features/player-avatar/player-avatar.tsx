@@ -14,6 +14,8 @@ export {
   PLAYER_AVATAR_SKIN_LABELS,
   PLAYER_AVATAR_SKIN_UNLOCKS,
   PLAYER_AVATAR_SKINS,
+  getNewlyUnlockedPlayerAvatarSkins,
+  getUnlockedSkinFromAdvancedClear,
   getPlayerAvatarSkinUnlockState,
   isPlayerAvatarSkinUnlocked,
   resolvePlayerAvatarSkin,
@@ -197,6 +199,37 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
         <path d="M32 0 C45 16 45 48 32 64" />
         <path d="M4 7 C17 19 47 19 60 7" />
         <path d="M4 57 C17 45 47 45 60 57" />
+      </svg>
+    );
+  }
+
+  if (skin === "starfall") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.starfallGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorOne}`}>
+          <path className={styles.starfallStar} d="M19 18 Q21 12.7 23.5 18 Q29.1 18.4 24.8 22.1 Q26.2 27.5 21.4 24.4 Q16.8 27.4 18.1 22.1 Q13.9 18.4 19 18 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorTwo}`}>
+          <path className={styles.starfallStar} d="M47 17 Q49.5 10.7 52.4 17 Q59 17.4 54 21.9 Q55.6 28.2 50.1 24.6 Q44.6 28 46.2 21.9 Q41.1 17.4 47 17 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorThree}`}>
+          <path className={styles.starfallStar} d="M20 45 Q22.1 39.5 24.7 45 Q30.4 45.4 26 49.2 Q27.4 54.7 22.5 51.5 Q17.8 54.6 19.1 49.2 Q14.7 45.4 20 45 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorFour}`}>
+          <path className={styles.starfallStar} d="M51 35 Q52.8 30.1 55.1 35 Q60.2 35.4 56.3 38.8 Q57.6 43.7 53.3 40.9 Q49 43.7 50.2 38.8 Q46.3 35.4 51 35 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorFive}`}>
+          <path className={styles.starfallStar} d="M33 34 Q35.3 28.3 38 34 Q44.1 34.4 39.4 38.5 Q40.9 44.2 35.8 40.9 Q30.8 44.1 32.2 38.5 Q27.5 34.4 33 34 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorSix}`}>
+          <path className={styles.starfallStar} d="M8 52 Q11.2 44.4 14.7 52 Q22.4 52.6 16.5 57.7 Q18.4 65.1 11.9 60.8 Q5.5 65 7.3 57.7 Q1.5 52.6 8 52 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorSeven}`}>
+          <path className={styles.starfallStar} d="M39 51 Q41.1 45.7 43.7 51 Q49.2 51.4 45 55.1 Q46.3 60.5 41.7 57.4 Q37.1 60.4 38.4 55.1 Q34.2 51.4 39 51 Z" />
+        </g>
+        <g className={`${styles.starfallMeteor} ${styles.starfallMeteorEight}`}>
+          <path className={styles.starfallStar} d="M9 5 Q11.6 -1.8 14.8 5 Q22 5.5 16.5 10.3 Q18.2 17.1 12.3 13.2 Q6.5 17 8.1 10.3 Q2.7 5.5 9 5 Z" />
+        </g>
       </svg>
     );
   }

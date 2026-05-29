@@ -243,6 +243,104 @@
   stroke-width: 2.4;
 }
 
+.starfallGlyph {
+  opacity: 1;
+  fill: none;
+  stroke: none;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 2px 5px rgba(77, 45, 6, 0.28));
+}
+
+.starfallMeteor {
+  --starfall-offset-x: 0%;
+  --starfall-offset-y: 0%;
+  --starfall-scale: 1;
+  --starfall-spin-start: -8deg;
+  --starfall-spin-end: 12deg;
+  opacity: 0;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  will-change: opacity, transform;
+}
+
+.starfallMeteorOne {
+  --starfall-offset-x: -19%;
+  --starfall-offset-y: 6%;
+  --starfall-scale: 1.7;
+  --starfall-spin-start: -12deg;
+  --starfall-spin-end: 18deg;
+}
+
+.starfallMeteorTwo {
+  --starfall-offset-x: 3%;
+  --starfall-offset-y: -21%;
+  --starfall-scale: 2.45;
+  --starfall-spin-start: 8deg;
+  --starfall-spin-end: -16deg;
+  opacity: 0;
+}
+
+.starfallMeteorThree {
+  --starfall-offset-x: -29%;
+  --starfall-offset-y: 24%;
+  --starfall-scale: 1.56;
+  --starfall-spin-start: 18deg;
+  --starfall-spin-end: -8deg;
+  opacity: 0;
+}
+
+.starfallMeteorFour {
+  --starfall-offset-x: 22%;
+  --starfall-offset-y: 0%;
+  --starfall-scale: 1.42;
+  --starfall-spin-start: -20deg;
+  --starfall-spin-end: 10deg;
+  opacity: 0;
+}
+
+.starfallMeteorFive {
+  --starfall-offset-x: -3%;
+  --starfall-offset-y: -9%;
+  --starfall-scale: 1.76;
+  --starfall-spin-start: 11deg;
+  --starfall-spin-end: 28deg;
+  opacity: 0;
+}
+
+.starfallMeteorSix {
+  --starfall-offset-x: 13%;
+  --starfall-offset-y: 18%;
+  --starfall-scale: 2.12;
+  --starfall-spin-start: -4deg;
+  --starfall-spin-end: 22deg;
+  opacity: 0;
+}
+
+.starfallMeteorSeven {
+  --starfall-offset-x: -34%;
+  --starfall-offset-y: -13%;
+  --starfall-scale: 1.46;
+  --starfall-spin-start: 22deg;
+  --starfall-spin-end: -12deg;
+  opacity: 0;
+}
+
+.starfallMeteorEight {
+  --starfall-offset-x: 17%;
+  --starfall-offset-y: -30%;
+  --starfall-scale: 1.98;
+  --starfall-spin-start: -18deg;
+  --starfall-spin-end: 16deg;
+  opacity: 0;
+}
+
+.starfallStar {
+  fill: rgba(255, 216, 73, 0.96);
+  stroke: rgba(103, 63, 8, 0.46);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
 .signalGlyph {
   opacity: 0.94;
   fill: none;
@@ -615,6 +713,23 @@
   --player-avatar-skin-line: rgba(92, 43, 9, 0.66);
 }
 
+.root[data-skin="starfall"] {
+  --player-avatar-body: #46546f;
+  --player-avatar-outline: rgba(55, 58, 72, 0.72);
+  --player-avatar-ink: rgba(32, 34, 45, 0.95);
+  --player-avatar-skin-line: rgba(255, 217, 96, 0.58);
+  --player-avatar-texture:
+    radial-gradient(circle at 18% 18%, rgba(255, 229, 124, 0.48) 0 2.4px, transparent 3.5px),
+    radial-gradient(circle at 67% 38%, rgba(255, 238, 173, 0.34) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 42% 78%, rgba(255, 205, 63, 0.3) 0 1.5px, transparent 2.4px),
+    radial-gradient(circle at 82% 18%, rgba(255, 247, 198, 0.2) 0 2px, transparent 3.2px);
+  --player-avatar-texture-opacity: 0.62;
+  --player-avatar-texture-size: 118px 110px, 96px 92px, 142px 130px, 160px 146px;
+  --player-avatar-texture-position: -20px -24px, 18px -31px, -36px 21px, 46px -51px;
+  --player-avatar-texture-inset: -46%;
+  --player-avatar-texture-blend-mode: screen;
+}
+
 .root[data-skin="arcade"] {
   --player-avatar-body: #14566a;
   --player-avatar-outline: rgba(15, 50, 62, 0.66);
@@ -637,6 +752,70 @@
 
 .root[data-skin="arcade"] .arcadeGlyph {
   animation: playerAvatarArcadeControlsPulse 900ms ease-in-out infinite;
+}
+
+.root[data-skin="starfall"] .body::before {
+  animation: playerAvatarStarfallTextureDrift 1.25s linear infinite;
+}
+
+.root[data-skin="starfall"] .body::after {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 235, 144, 0.24) 0 9%, transparent 28%),
+    radial-gradient(circle at 73% 67%, rgba(255, 183, 52, 0.2) 0 11%, transparent 31%),
+    linear-gradient(135deg, transparent 0 27%, rgba(255, 232, 121, 0.12) 43%, transparent 60%),
+    linear-gradient(45deg, rgba(255, 247, 190, 0.08), transparent 44%, rgba(255, 177, 45, 0.12));
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0.58;
+  animation: playerAvatarStarfallSkyGlow 1.85s ease-in-out infinite;
+  will-change: opacity, transform, background-position;
+}
+
+.root[data-skin="starfall"] .starfallMeteor {
+  animation: playerAvatarStarfallMeteor 760ms linear infinite;
+}
+
+.root[data-skin="starfall"] .starfallMeteorOne {
+  animation-delay: -130ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorTwo {
+  animation-delay: -610ms;
+  animation-duration: 1040ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorThree {
+  animation-delay: -280ms;
+  animation-duration: 610ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorFour {
+  animation-delay: -830ms;
+  animation-duration: 880ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorFive {
+  animation-delay: -450ms;
+  animation-duration: 700ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorSix {
+  animation-delay: -980ms;
+  animation-duration: 1120ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorSeven {
+  animation-delay: -520ms;
+  animation-duration: 930ms;
+}
+
+.root[data-skin="starfall"] .starfallMeteorEight {
+  animation-delay: -220ms;
+  animation-duration: 670ms;
 }
 
 .root[data-skin="paw"] .body::before {
@@ -669,6 +848,41 @@
     background-position: 59px 35px, -39px 73px, 55px -54px;
     opacity: 0.68;
     transform: translate3d(18%, 15%, 0) rotate(-5deg) scale(1.04);
+  }
+}
+
+@keyframes playerAvatarStarfallTextureDrift {
+  0% {
+    background-position: -18px -22px, 13px -34px, -29px 17px, 44px -49px;
+    opacity: 0.56;
+    transform: translate3d(-17%, -22%, 0) scale(1.04);
+  }
+
+  44% {
+    background-position: 20px 19px, 49px 7px, 8px 56px, 11px -3px;
+    opacity: 1;
+    transform: translate3d(5%, 7%, 0) scale(1.12);
+  }
+
+  100% {
+    background-position: 58px 60px, 85px 48px, 45px 95px, -22px 43px;
+    opacity: 0.56;
+    transform: translate3d(20%, 26%, 0) scale(1.04);
+  }
+}
+
+@keyframes playerAvatarStarfallSkyGlow {
+  0%,
+  100% {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+    opacity: 0.46;
+    transform: translate3d(-2%, -2%, 0) scale(1.02);
+  }
+
+  48% {
+    background-position: 5px 7px, -7px -3px, 8px 0, -4px 6px;
+    opacity: 0.78;
+    transform: translate3d(3%, 4%, 0) scale(1.08);
   }
 }
 
@@ -710,6 +924,27 @@
   50% {
     opacity: 1;
     transform: translateY(-2%) rotate(3deg) scale(1.08);
+  }
+}
+
+@keyframes playerAvatarStarfallMeteor {
+  0% {
+    opacity: 0;
+    transform: translate3d(-78%, -78%, 0) translate3d(var(--starfall-offset-x), var(--starfall-offset-y), 0) rotate(var(--starfall-spin-start)) scale(var(--starfall-scale));
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  72% {
+    opacity: 1;
+    transform: translate3d(54%, 54%, 0) translate3d(var(--starfall-offset-x), var(--starfall-offset-y), 0) rotate(var(--starfall-spin-end)) scale(var(--starfall-scale));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(124%, 124%, 0) translate3d(var(--starfall-offset-x), var(--starfall-offset-y), 0) rotate(var(--starfall-spin-end)) scale(var(--starfall-scale));
   }
 }
 
@@ -884,12 +1119,14 @@
   .root .skinSvg,
   .root .rotator,
   .root .shield,
-  .root .questionMark {
+  .root .questionMark,
+  .root .starfallMeteor {
     animation: none !important;
     transition: none !important;
   }
 
   .root[data-skin="arcade"] .body::before,
+  .root[data-skin="starfall"] .body::after,
   .root[data-skin="paw"] .body::before,
   .body::before {
     animation: none;

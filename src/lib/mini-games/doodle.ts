@@ -121,8 +121,9 @@ export function generateDoodleWorldLayout(
     .split("|")
     .filter((motion): motion is DoodleMovementPattern => allMotions.includes(motion as DoodleMovementPattern));
   const patterns = movementPatterns.length > 0 ? movementPatterns : allMotions.slice(0, 1);
-  const riskIndexes = new Set<number>();
   const hardLayout = targetScreens >= 8 || level.levelId === "doodle-10";
+  const minPlatformGap = clamp(platformGap - (hardLayout ? 14 : 20), 80, 116);
+  const maxPlatformGap = clamp(platformGap + (hardLayout ? 18 : 22), minPlatformGap + 10, 130);
   const gapNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
   const xNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
   const widthNoisePoints = makeDoodleNoisePoints(rand, platformCount + 6);
@@ -130,23 +131,21 @@ export function generateDoodleWorldLayout(
   const laneOffset = Math.floor(rand() * lanePattern.length);
 
   const riskFinishGap = getDoodleJumpPeakHeight(getDoodleBounceVelocity({ risk: true, riskJumpMultiplier })) + playerSize * 2;
-  const maxRiskIndex = clamp(Math.floor((targetHeight - startPlatformY - riskFinishGap) / platformGap) - 1, 2, platformCount - 4);
-  const riskIndexSpan = Math.max(1, maxRiskIndex - 1);
-  for (let index = 1; index <= requiredRiskPlatforms; index += 1) {
-    riskIndexes.add(clamp(Math.round((index / (requiredRiskPlatforms + 1)) * riskIndexSpan) + 1, 2, maxRiskIndex));
-  }
+  const maxRiskPlatformY = targetHeight - riskFinishGap;
+  const riskJumpPeak = getDoodleJumpPeakHeight(getDoodleBounceVelocity({ risk: true, riskJumpMultiplier }));
+  const minRiskGap = Math.max(platformGap * 2, riskJumpPeak - playerSize * 1.75);
 
   const platforms: GeneratedDoodlePlatform[] = [];
   let previousX = stageWidth / 2;
   let previousY = startPlatformY;
 
   for (let index = 0; index < platformCount; index += 1) {
-    const risk = riskIndexes.has(index);
+    const risk = false;
     const baseWidth = hardLayout ? 72 : 86;
     const widthNoise = doodleSmoothNoise(widthNoisePoints, index * 0.53);
     const width = index === 0 ? 112 : risk ? clamp(riskWidth + (widthNoise - 0.5) * 10, 52, 94) : clamp(baseWidth + (widthNoise - 0.5) * 18, 62, 98);
-    const minGap = clamp(platformGap - (hardLayout ? 14 : 20), 80, 116);
-    const maxGap = clamp(platformGap + (hardLayout ? 18 : 22), minGap + 10, 130);
+    const minGap = minPlatformGap;
+    const maxGap = maxPlatformGap;
     const gapNoise = doodleSmoothNoise(gapNoisePoints, index * 0.61);
     const gap = index === 0 ? 0 : minGap + gapNoise * (maxGap - minGap);
     const xNoise = doodleSmoothNoise(xNoisePoints, index * 0.47);
@@ -173,6 +172,36 @@ export function generateDoodleWorldLayout(
       range: moving ? (risk ? 38 : 52) + rand() * 24 : 0,
       speed: moving ? (movingSpeed / 18) * (0.86 + rand() * 0.28) : 0,
     });
+  }
+
+  if (requiredRiskPlatforms > 0) {
+    const riskCandidates = platforms.filter((platform) => !platform.start && platform.y <= maxRiskPlatformY);
+    const firstRiskY = riskCandidates[0]?.y ?? startPlatformY;
+    const selectedRiskPlatforms: GeneratedDoodlePlatform[] = [];
+
+    for (let index = 0; index < requiredRiskPlatforms; index += 1) {
+      const remainingSlots = requiredRiskPlatforms - selectedRiskPlatforms.length - 1;
+      const minAllowedY =
+        selectedRiskPlatforms.length === 0 ? firstRiskY : selectedRiskPlatforms[selectedRiskPlatforms.length - 1].y + minRiskGap;
+      const maxAllowedY = Math.max(minAllowedY, maxRiskPlatformY - remainingSlots * minRiskGap);
+      const targetRatio = requiredRiskPlatforms <= 1 ? 0 : index / (requiredRiskPlatforms - 1);
+      const targetY = clamp(firstRiskY + targetRatio * (maxRiskPlatformY - firstRiskY), minAllowedY, maxAllowedY);
+      const candidate = riskCandidates
+        .filter((platform) => !selectedRiskPlatforms.includes(platform) && platform.y >= minAllowedY && platform.y <= maxAllowedY)
+        .reduce<GeneratedDoodlePlatform | null>(
+          (best, platform) => (best === null || Math.abs(platform.y - targetY) < Math.abs(best.y - targetY) ? platform : best),
+          null,
+        );
+
+      if (candidate) selectedRiskPlatforms.push(candidate);
+    }
+
+    for (const platform of selectedRiskPlatforms) {
+      const riskPlatformWidth = clamp(riskWidth + (doodleSmoothNoise(widthNoisePoints, platform.id * 0.53) - 0.5) * 10, 52, 94);
+      platform.risk = true;
+      platform.width = riskPlatformWidth;
+      platform.x = clamp(platform.x, riskPlatformWidth / 2 + 20, stageWidth - riskPlatformWidth / 2 - 20);
+    }
   }
 
   const safePlatforms = platforms.filter((platform) => platform.start || platform.y < targetHeight - playerSize * 2);

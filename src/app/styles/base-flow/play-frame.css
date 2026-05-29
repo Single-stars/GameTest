@@ -113,10 +113,42 @@
 .play-screen > .test-pad,
 .play-screen > .game-area,
 .play-screen > .braking-panel,
+.play-screen > .base-practice-wrap,
 .play-screen > .advanced-reaction-grid,
 .play-screen > .prototype-game-wrap {
   min-height: 0;
   align-self: stretch;
+}
+
+.base-practice-wrap {
+  position: relative;
+  min-height: 0;
+  display: grid;
+}
+
+.base-practice-wrap > .test-pad,
+.base-practice-wrap > .game-area,
+.base-practice-wrap > .braking-panel {
+  min-height: 0;
+  align-self: stretch;
+}
+
+.base-practice-message {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: calc(50% - clamp(108px, 14vh, 150px));
+  width: min(520px, calc(100% - 24px));
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-size: clamp(20px, 4.8vw, 28px);
+  font-weight: 950;
+  line-height: 1.15;
+  text-align: center;
+  translate: -50% 0;
+  text-shadow: 0 3px 10px rgba(255, 253, 248, 0.88);
+  pointer-events: none;
 }
 
 .advanced-play-screen .game-area,

@@ -255,6 +255,23 @@
   line-height: 1.45;
 }
 
+.donate-card small {
+  color: #2f7f59;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.donate-confirm {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: #c98910;
+  color: #fffdf8;
+  font-weight: 950;
+  cursor: pointer;
+}
+
 .donate-close {
   position: absolute;
   top: 8px;
@@ -528,6 +545,32 @@
   background: var(--surface);
 }
 
+.score-item-button {
+  position: relative;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.score-item-button.with-advanced {
+  cursor: pointer;
+}
+
+.score-item-button:disabled {
+  cursor: default;
+}
+
+.advanced-unlock-pulse .score-item-button.with-advanced::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 2px solid rgba(201, 137, 16, 0.18);
+  border-radius: inherit;
+  pointer-events: none;
+  animation: advanced-card-breath 1800ms ease-in-out infinite;
+}
+
 .score-item.with-advanced {
   grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
@@ -614,7 +657,8 @@
   line-height: 1;
 }
 
-.advanced-entry-button {
+.advanced-entry-button,
+.advanced-entry-indicator {
   position: relative;
   isolation: isolate;
   width: 42px;
@@ -631,17 +675,20 @@
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.42);
 }
 
-.advanced-entry-button:disabled {
+.advanced-entry-button:disabled,
+.advanced-entry-indicator:disabled {
   cursor: default;
   opacity: 0.42;
   transform: none;
 }
 
-.advanced-unlock-pulse .advanced-entry-button {
+.advanced-unlock-pulse .advanced-entry-button,
+.advanced-unlock-pulse .advanced-entry-indicator {
   animation: advanced-entry-pop 1200ms cubic-bezier(0.16, 0.9, 0.24, 1.08) both;
 }
 
-.advanced-unlock-pulse .advanced-entry-button::after {
+.advanced-unlock-pulse .advanced-entry-button::after,
+.advanced-unlock-pulse .advanced-entry-indicator::after {
   content: "";
   position: absolute;
   inset: -7px;
@@ -651,11 +698,11 @@
   animation: advanced-entry-halo 1800ms ease-in-out infinite;
 }
 
-.advanced-unlock-pulse .score-item:nth-child(1) .advanced-entry-button {
+.advanced-unlock-pulse .score-item:nth-child(1) .advanced-entry-indicator {
   animation-delay: 0ms;
 }
 
-.advanced-unlock-pulse .score-item:nth-child(2) .advanced-entry-button {
+.advanced-unlock-pulse .score-item:nth-child(2) .advanced-entry-indicator {
   animation-delay: 90ms;
 }
 
@@ -663,7 +710,15 @@
   animation-delay: 180ms;
 }
 
+.advanced-unlock-pulse .score-item:nth-child(3) .advanced-entry-indicator {
+  animation-delay: 180ms;
+}
+
 .advanced-unlock-pulse .score-item:nth-child(4) .advanced-entry-button {
+  animation-delay: 270ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(4) .advanced-entry-indicator {
   animation-delay: 270ms;
 }
 
@@ -671,7 +726,15 @@
   animation-delay: 360ms;
 }
 
+.advanced-unlock-pulse .score-item:nth-child(5) .advanced-entry-indicator {
+  animation-delay: 360ms;
+}
+
 .advanced-unlock-pulse .score-item:nth-child(6) .advanced-entry-button {
+  animation-delay: 450ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(6) .advanced-entry-indicator {
   animation-delay: 450ms;
 }
 
@@ -679,12 +742,37 @@
   animation-delay: 540ms;
 }
 
+.advanced-unlock-pulse .score-item:nth-child(7) .advanced-entry-indicator {
+  animation-delay: 540ms;
+}
+
 .advanced-unlock-pulse .score-item:nth-child(8) .advanced-entry-button {
+  animation-delay: 630ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(8) .advanced-entry-indicator {
   animation-delay: 630ms;
 }
 
 .advanced-unlock-pulse .score-item:nth-child(9) .advanced-entry-button {
   animation-delay: 720ms;
+}
+
+.advanced-unlock-pulse .score-item:nth-child(9) .advanced-entry-indicator {
+  animation-delay: 720ms;
+}
+
+@keyframes advanced-card-breath {
+  0%,
+  100% {
+    opacity: 0.36;
+    transform: scale(0.985);
+  }
+
+  50% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
 }
 
 @keyframes advanced-entry-pop {
@@ -813,5 +901,15 @@
 
   .rank-avatar-bubble {
     padding: 17px 16px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advanced-unlock-pulse .score-item-button.with-advanced::after,
+  .advanced-unlock-pulse .advanced-entry-button,
+  .advanced-unlock-pulse .advanced-entry-indicator,
+  .advanced-unlock-pulse .advanced-entry-button::after,
+  .advanced-unlock-pulse .advanced-entry-indicator::after {
+    animation: none !important;
   }
 }

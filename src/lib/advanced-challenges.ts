@@ -32,6 +32,12 @@ export {
 
   getAdvancedBrakeSchedulerStep,
 
+  isAdvancedBrakeFakeEvent,
+
+  pickAdvancedBrakeEvent,
+
+  shouldForceAdvancedBrakeFakeEvent,
+
 } from "./advanced-challenges/braking.ts";
 
 export { ADVANCED_STAGE_CONFIGS, getAdvancedStageConfig } from "./advanced-challenges/stage-configs.ts";

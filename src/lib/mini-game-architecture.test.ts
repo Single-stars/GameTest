@@ -234,7 +234,8 @@ test("luck draw rule tooltip uses readable copy instead of placeholder question 
   const luckDrawScreenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
 
   assert.doesNotMatch(luckDrawScreenSource, /LUCK_RULE_TEXT\s*=\s*"[^"]*\?{4,}[^"]*"/);
-  assert.match(luckDrawScreenSource, /完成进阶挑战/);
+  assert.match(luckDrawScreenSource, /首次通关进阶关/);
+  assert.match(luckDrawScreenSource, /幸运币/);
   assert.match(luckDrawScreenSource, /0-100/);
   assert.match(luckDrawScreenSource, /历史最高值/);
 });
@@ -266,6 +267,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
   assert.match(resultSource, /onDonateAuthor:\s*\(\) => void;/);
+  assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /homeworldEntryVisible:\s*boolean;/);
   assert.match(resultSource, /onOpenHomeworld:\s*\(\) => void;/);
   assert.match(resultSource, /const \[avatarMenuOpen, setAvatarMenuOpen\] = useState\(false\);/);
@@ -323,7 +325,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /className="rank-avatar-bubble"/);
   assert.match(resultSource, /className=\{`rank-avatar-menu-action tone-\$\{item\.tone\} \$\{item\.danger \? "danger" : ""\}`\}/);
   assert.match(resultSource, /item\.id === "skin" \? <AvatarLabIcon \/> : item\.icon/);
-  assert.match(resultSource, /onClick=\{\(\) => runAvatarMenuAction\(item\.onSelect\)\}/);
+  assert.match(resultSource, /onClick=\{\(\) => \(item\.id === "donate" \? item\.onSelect\(\) : runAvatarMenuAction\(item\.onSelect\)\)\}/);
   assert.doesNotMatch(resultSource, /className="radar-actions"/);
   assert.match(resultSource, /<RadarChart axis=\{result\.axis\} \/>/);
   assert.doesNotMatch(resultSource, /<div className="rank-actions"/);
@@ -438,7 +440,8 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
   assert.match(appPageSource, /const handleDonateAuthor = useCallback/);
-  assert.match(appPageSource, /markAuthorDonated\(advancedProgressRef\.current\)/);
+  assert.match(appPageSource, /const previousProgress = advancedProgressRef\.current;[\s\S]*markAuthorDonated\(previousProgress\)/);
+  assert.match(appPageSource, /enqueueRewardItems\(createSkinRewardItems\(previousProgress,\s*nextProgress,\s*"donation"\)\)/);
   assert.doesNotMatch(appPageSource, /const handleChangePlayerName = useCallback/);
   assert.doesNotMatch(appPageSource, /writePersistedPlayerName\(name\);/);
   assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
@@ -860,6 +863,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
     "paw",
     "pig",
     "basketball",
+    "starfall",
     "arcade",
   ] as const;
   const removedSkins = ["amber", "rose", "aqua", "cocoa", "jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
@@ -904,7 +908,8 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.body::before\s*\{[\s\S]*inset:\s*var\(--player-avatar-texture-inset\);[\s\S]*background-repeat:\s*var\(--player-avatar-texture-repeat\);[\s\S]*background-position:\s*var\(--player-avatar-texture-position\);[\s\S]*animation:\s*var\(--player-avatar-texture-animation\);[\s\S]*mix-blend-mode:\s*var\(--player-avatar-texture-blend-mode\);[\s\S]*will-change:\s*transform,\s*background-position,\s*opacity;/);
   assert.match(skinSource, /arcade:\s*\{\s*kind:\s*"donation"/);
   assert.match(skinSource, /pig:\s*\{\s*kind:\s*"king-rank"/);
-  assert.match(skinSource, /basketball:\s*\{\s*kind:\s*"legend-100"/);
+  assert.match(skinSource, /basketball:\s*\{\s*kind:\s*"legend-50"/);
+  assert.match(skinSource, /starfall:\s*\{\s*kind:\s*"legend-100"/);
   assert.match(skinSource, /paw:\s*\{\s*kind:\s*"luck-100"/);
   assert.match(skinSource, /signal:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"reaction"/);
   assert.match(skinSource, /target:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"aim"/);
@@ -916,18 +921,50 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.bladeSlash\s*\{[\s\S]*stroke:/);
   assert.match(cssSource, /\.root\[data-skin="sand"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*42px 39px,\s*57px 51px,\s*68px 44px;/);
   assert.match(cssSource, /\.root\[data-skin="arcade"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*58px 54px,\s*74px 63px,\s*92px 81px;[\s\S]*--player-avatar-texture-inset:\s*-34%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*118px 110px,\s*96px 92px,\s*142px 130px,\s*160px 146px;[\s\S]*--player-avatar-texture-inset:\s*-46%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
   assert.match(cssSource, /\.root\[data-skin="paw"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*72px 62px,\s*79px 70px,\s*88px 78px,\s*67px 74px;[\s\S]*--player-avatar-texture-inset:\s*-28%;/);
   assert.match(cssSource, /\.root\[data-skin="arcade"\]\s+\.body::before\s*\{[\s\S]*animation:\s*playerAvatarArcadeTextureDrift 1\.45s linear infinite;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.body::before\s*\{[\s\S]*animation:\s*playerAvatarStarfallTextureDrift 1\.25s linear infinite;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.body::after\s*\{[\s\S]*animation:\s*playerAvatarStarfallSkyGlow 1\.85s ease-in-out infinite;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.starfallMeteor\s*\{[\s\S]*animation:\s*playerAvatarStarfallMeteor 760ms linear infinite;/);
+  assert.doesNotMatch(cssSource, /playerAvatarStarfallGlyphFall/);
   assert.match(cssSource, /\.root\[data-skin="paw"\]\s+\.body::before\s*\{[\s\S]*animation:\s*playerAvatarPawTextureWander 2\.2s ease-in-out infinite;/);
   assert.match(cssSource, /\.arcadeGlyph/);
   assert.match(cssSource, /\.arcadeDpad/);
   assert.match(cssSource, /\.arcadeButton/);
+  assert.match(cssSource, /\.starfallGlyph/);
+  assert.match(cssSource, /\.starfallMeteor/);
+  assert.match(cssSource, /\.starfallMeteorOne/);
+  assert.match(cssSource, /\.starfallMeteorFour/);
+  assert.match(cssSource, /\.starfallMeteorFive/);
+  assert.match(cssSource, /\.starfallMeteorSix/);
+  assert.match(cssSource, /\.starfallMeteorSeven/);
+  assert.match(cssSource, /\.starfallMeteorEight/);
+  assert.doesNotMatch(cssSource, /\.starfallTrail/);
+  assert.match(cssSource, /\.starfallStar/);
+  assert.match(cssSource, /\.starfallStar\s*\{[\s\S]*stroke-linejoin:\s*round;/);
+  assert.match(cssSource, /\.starfallMeteorOne\s*\{[\s\S]*--starfall-scale:\s*1\.7;/);
+  assert.match(cssSource, /\.starfallMeteorTwo\s*\{[\s\S]*--starfall-scale:\s*2\.45;/);
+  assert.match(cssSource, /\.starfallMeteorSix\s*\{[\s\S]*--starfall-scale:\s*2\.12;/);
+  assert.match(cssSource, /\.starfallMeteorEight\s*\{[\s\S]*--starfall-scale:\s*1\.98;/);
+  assert.match(cssSource, /\.starfallMeteorFour\s*\{[\s\S]*--starfall-offset-x:\s*22%;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.starfallMeteorTwo\s*\{[\s\S]*animation-duration:\s*1040ms;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.starfallMeteorThree\s*\{[\s\S]*animation-duration:\s*610ms;/);
+  assert.match(cssSource, /\.root\[data-skin="starfall"\]\s+\.starfallMeteorSeven\s*\{[\s\S]*animation-duration:\s*930ms;/);
   assert.match(cssSource, /\.pawGlyph/);
   assert.match(cssSource, /\.pawPad/);
   assert.match(cssSource, /\.pawToe/);
   assert.match(cssSource, /@keyframes playerAvatarArcadeTextureDrift/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallTextureDrift/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallSkyGlow/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallMeteor/);
   assert.match(cssSource, /@keyframes playerAvatarPawTextureWander/);
   assert.match(cssSource, /@keyframes playerAvatarArcadeTextureDrift\s*\{[\s\S]*transform:\s*translate3d\(/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallTextureDrift\s*\{[\s\S]*transform:\s*translate3d\(/);
+  assert.doesNotMatch(cssSource.match(/@keyframes playerAvatarStarfallTextureDrift\s*\{[\s\S]*?\n\}/)?.[0] ?? "", /rotate\(/);
+  assert.doesNotMatch(cssSource.match(/\.root\[data-skin="starfall"\]\s*\{[\s\S]*?\n\}/)?.[0] ?? "", /repeating-linear-gradient/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallMeteor\s*\{[\s\S]*translate3d\(-78%,\s*-78%,\s*0\)[\s\S]*translate3d\(124%,\s*124%,\s*0\)/);
+  assert.match(cssSource, /@keyframes playerAvatarStarfallMeteor\s*\{[\s\S]*var\(--starfall-offset-x\)[\s\S]*var\(--starfall-scale\)/);
   assert.match(cssSource, /@keyframes playerAvatarPawTextureWander\s*\{[\s\S]*transform:\s*translate3d\(/);
   assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.body::before\s*\{[\s\S]*animation:\s*none;/);
   assert.match(componentSource, /createContext<PlayerAvatarSkin>\("cyan"\)/);
@@ -974,6 +1011,17 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /styles\.arcadeGlyph/);
   assert.match(componentSource, /styles\.arcadeDpad/);
   assert.match(componentSource, /styles\.arcadeButton/);
+  assert.match(componentSource, /styles\.starfallGlyph/);
+  assert.match(componentSource, /styles\.starfallMeteor/);
+  assert.match(componentSource, /styles\.starfallMeteorOne/);
+  assert.match(componentSource, /styles\.starfallMeteorFour/);
+  assert.match(componentSource, /styles\.starfallMeteorFive/);
+  assert.match(componentSource, /styles\.starfallMeteorSix/);
+  assert.match(componentSource, /styles\.starfallMeteorSeven/);
+  assert.match(componentSource, /styles\.starfallMeteorEight/);
+  assert.doesNotMatch(componentSource, /styles\.starfallTrail/);
+  assert.match(componentSource, /styles\.starfallStar/);
+  assert.match(componentSource, /className=\{styles\.starfallStar\}\s+d="[^"]*Q[^"]*"/);
   assert.match(componentSource, /styles\.pawGlyph/);
   assert.match(componentSource, /styles\.pawPad/);
   assert.match(componentSource, /styles\.pawToe/);
@@ -1178,6 +1226,7 @@ test("base flow CSS is split into ordered focused chunks", () => {
     '@import "./base-flow/advanced.css";',
     '@import "./base-flow/luck.css";',
     '@import "./base-flow/avatar-lab.css";',
+    '@import "./base-flow/rewards.css";',
   ];
 
   assert.deepEqual(

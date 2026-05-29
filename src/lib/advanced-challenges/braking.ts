@@ -29,6 +29,42 @@ export function getAdvancedBrakeRuleHint(level: number, dualRule?: unknown) {
   return null;
 }
 
+export function isAdvancedBrakeFakeEvent(event: Pick<AdvancedBrakeEvent, "top" | "bottom"> | null | undefined) {
+  return event?.top === "gray" || event?.bottom === "gray";
+}
+
+export function shouldForceAdvancedBrakeFakeEvent({
+  allowGray,
+  fakeEventUsed,
+  eventIndex,
+  eventCount,
+}: {
+  allowGray: boolean;
+  fakeEventUsed: boolean;
+  eventIndex: number;
+  eventCount: number;
+}) {
+  if (!allowGray || fakeEventUsed) return false;
+  return eventIndex >= Math.max(1, eventCount - 2);
+}
+
+export function pickAdvancedBrakeEvent<T extends AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }>(
+  options: readonly T[],
+  {
+    forceFake,
+    randomValue,
+  }: {
+    forceFake: boolean;
+    randomValue: number;
+  },
+) {
+  if (forceFake) {
+    const fake = options.find(isAdvancedBrakeFakeEvent);
+    if (fake) return fake;
+  }
+  return options[Math.floor(randomValue * options.length)] ?? options[0];
+}
+
 export function getAdvancedBrakeEventOptions(
   level: number,
   context: { eventIndex?: number; eventCount?: number; previousEvent?: AdvancedBrakeEvent | null } = {},

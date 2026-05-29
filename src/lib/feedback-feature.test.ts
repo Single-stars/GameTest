@@ -49,7 +49,7 @@ test("result screen feedback entry opens a 250 character text feedback modal", (
   assert.match(resultSource, /maxLength=\{250\}/);
   assert.doesNotMatch(resultSource, /includeResultData|愿意附带本次结果数据|当前只发送/);
   assert.match(resultSource, /\/api\/feedback/);
-  assert.ok(resultSource.indexOf('id: "donate"') < resultSource.indexOf('id: "feedback"'));
+  assert.ok(resultSource.indexOf('id: "feedback"') < resultSource.indexOf('id: "donate"'));
   assert.match(iconsSource, /feedback:/);
   assert.match(iconsSource, /export function FeedbackIcon/);
   assert.match(resultCss, /\.rank-avatar-menu-action\.tone-feedback/);

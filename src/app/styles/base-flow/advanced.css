@@ -201,6 +201,9 @@
   min-height: 230px;
   position: relative;
   overflow: hidden;
+  touch-action: none;
+  overscroll-behavior-x: contain;
+  user-select: none;
 }
 
 .advanced-lobby-track {
@@ -440,6 +443,7 @@
 }
 
 .advanced-entry-button.advanced-empty,
+.advanced-entry-indicator.advanced-empty,
 .advanced-lobby-level.advanced-empty {
   border-color: rgba(24, 24, 24, 0.14);
   background: #f6f2eb;
@@ -447,6 +451,7 @@
 }
 
 .advanced-entry-button.advanced-tier-1,
+.advanced-entry-indicator.advanced-tier-1,
 .advanced-lobby-level.advanced-tier-1 {
   border-color: #2f7f59;
   background: #ddf1e6;
@@ -454,6 +459,7 @@
 }
 
 .advanced-entry-button.advanced-tier-2,
+.advanced-entry-indicator.advanced-tier-2,
 .advanced-lobby-level.advanced-tier-2 {
   border-color: #2a78a8;
   background: #dceefa;
@@ -461,6 +467,7 @@
 }
 
 .advanced-entry-button.advanced-tier-3,
+.advanced-entry-indicator.advanced-tier-3,
 .advanced-lobby-level.advanced-tier-3 {
   border-color: #b54872;
   background: #f6dfe8;
@@ -468,11 +475,71 @@
 }
 
 .advanced-entry-button.advanced-gold,
+.advanced-entry-indicator.advanced-gold,
 .advanced-lobby-level.advanced-gold {
   border-color: #c98910;
   background: linear-gradient(145deg, #ffe49a, #d9a01d);
   color: #3f2600;
   box-shadow: 0 8px 18px rgba(169, 112, 14, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.48);
+}
+
+.advanced-tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 82;
+  display: grid;
+  place-items: center;
+  padding:
+    max(18px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+  background: rgba(12, 15, 16, 0.34);
+  backdrop-filter: blur(5px);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.advanced-tutorial-panel {
+  width: min(100%, 620px);
+  max-width: 620px;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 22px 18px;
+  color: #fffdf8;
+  text-align: center;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.38);
+}
+
+.advanced-tutorial-panel h2 {
+  width: min(100%, 460px);
+  margin: 0;
+  font-size: clamp(32px, 7.6vw, 54px);
+  line-height: 1.08;
+  text-align: center;
+}
+
+.advanced-tutorial-steps {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 460px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: rgba(255, 253, 248, 0.94);
+  font-size: clamp(18px, 4.2vw, 26px);
+  line-height: 1.36;
+  font-weight: 900;
+}
+
+.advanced-tutorial-start-hint {
+  width: min(100%, 460px);
+  color: rgba(255, 253, 248, 0.78);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .advanced-goal-card {
@@ -637,6 +704,47 @@
 
 .advanced-result-goal.incomplete .advanced-result-goal-box {
   color: #8f3b35;
+}
+
+.advanced-luck-coin-card {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  justify-items: stretch;
+  border: 1px solid rgba(201, 137, 16, 0.32);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff7dc;
+  box-shadow: 0 14px 34px rgba(169, 112, 14, 0.13);
+}
+
+.advanced-luck-coin-card strong {
+  color: #3f2600;
+  font-size: clamp(17px, 4.8vw, 20px);
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.advanced-reward-luck-link {
+  min-height: 36px;
+  justify-self: end;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #3f2600;
+  color: #fff7dc;
+  font-size: 14px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.advanced-reward-luck-link:active {
+  transform: translateY(1px);
 }
 
 .advanced-actions {

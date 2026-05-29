@@ -723,6 +723,6 @@ export function getGameRankResult(trials: TrialEvent[]): GameRankResult {
 
 export function buildShareText(result: GameRankResult | null, url?: string, displayRankName?: string) {
   const rankName = displayRankName ?? result?.name;
-  const text = rankName ? `8个小游戏测测你的段位，我的段位是【${rankName}】。来挑战我吧！` : "8个小游戏测测你的段位";
+  const text = rankName ? `我的段位是【${rankName}】，来挑战我吧！` : "来挑战我吧！";
   return url ? `${text}\n${url}` : text;
 }

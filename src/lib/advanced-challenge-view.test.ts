@@ -197,7 +197,7 @@ test("advanced result only shows reaction average when other reaction goals pass
   assert.deepEqual(averageOnly, [{ icon: "bolt", text: "平均反应 260/250ms", complete: false }]);
 });
 
-test("advanced challenge screen uses the focused lobby with base replay and click-only support", () => {
+test("advanced challenge screen uses the focused lobby with base replay and direct level controls", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
@@ -232,27 +232,44 @@ test("advanced base replay completion carries its own round and level instead of
   assert.match(pageSource, /setAdvancedChallenge\(\{\s*mode:\s*"intro",\s*roundId:\s*record\.roundId,\s*level:\s*record\.level\s*}\)/);
 });
 
-test("advanced lobby level selection is click-only without carousel drag handlers", () => {
+test("advanced lobby level selection supports click and immediate one-step swipe", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
 
   assert.match(screenSource, /handleLevelClick/);
-  assert.match(screenSource, /onClick=\{\(\) => handleLevelClick\(item\.level\)\}/);
+  assert.match(screenSource, /handleLevelButtonClick/);
+  assert.match(screenSource, /onClick=\{\(event\) => handleLevelButtonClick\(event,\s*item\.level\)\}/);
+  assert.match(screenSource, /if \(clickedLevel !== null\) onPickLevel\(clickedLevel\);/);
+  assert.doesNotMatch(screenSource, /handleLevelClick[\s\S]{0,240}onStartLevel\(clickedLevel\)/);
   assert.match(screenSource, /disabled=\{!item\.selectable\}/);
   assert.match(screenSource, /advanced-lobby-track/);
   assert.match(screenSource, /lobbyTrackStyle/);
+  assert.match(screenSource, /ADVANCED_LOBBY_SWIPE_STEP_PX/);
+  assert.match(screenSource, /activeLobbyPointerIdRef/);
+  assert.match(screenSource, /lobbySwipeConsumedRef/);
+  assert.match(screenSource, /suppressNextLevelClickRef/);
+  assert.doesNotMatch(screenSource, /lobbyPointerStartLevelRef/);
+  assert.doesNotMatch(screenSource, /getLobbyPointerTargetLevel/);
+  assert.match(screenSource, /handleLobbyPointerDown/);
+  assert.match(screenSource, /handleLobbyPointerMove/);
+  assert.match(screenSource, /handleLobbyPointerUp/);
+  assert.match(screenSource, /lobbySwipeConsumedRef\.current = false/);
+  assert.match(screenSource, /if \(lobbySwipeConsumedRef\.current\) return;/);
+  assert.match(screenSource, /lobbySwipeConsumedRef\.current = true;/);
+  assert.match(screenSource, /suppressNextLevelClickRef\.current = true;/);
+  assert.match(screenSource, /event\.preventDefault\(\);[\s\S]*window\.setTimeout\(\(\) => \{/);
+  assert.match(screenSource, /onPointerDown=\{handleLobbyPointerDown\}/);
+  assert.match(screenSource, /onPointerMove=\{handleLobbyPointerMove\}/);
+  assert.match(screenSource, /onPointerUp=\{handleLobbyPointerUp\}/);
 
-  assert.doesNotMatch(screenSource, /pointerDownLevelRef/);
-  assert.doesNotMatch(screenSource, /activeLobbyPointerIdRef/);
   assert.doesNotMatch(screenSource, /dragStartXRef|dragVelocityXRef|dragTotalDeltaXRef|dragAnimationFrameRef|lobbyMomentumFrameRef/);
-  assert.doesNotMatch(screenSource, /handleLobbyPointerDown|handleLobbyPointerMove|handleLobbyPointerUp|handleLobbyPointerCancel/);
-  assert.doesNotMatch(screenSource, /onLostPointerCapture|onPointerCancel|onPointerDown=\{handleLobbyPointerDown\}|onPointerMove=\{handleLobbyPointerMove\}|onPointerUp=\{handleLobbyPointerUp\}/);
-  assert.doesNotMatch(screenSource, /setPointerCapture|releasePointerCapture|requestAnimationFrame/);
+  assert.doesNotMatch(screenSource, /requestAnimationFrame/);
   assert.doesNotMatch(screenSource, /resolveAdvancedLobbyDragOffset|resolveAdvancedLobbyMomentumFrame|shouldAdvancedLobbyUseReleaseMomentum/);
 
   assert.doesNotMatch(cssSource, /--advanced-lobby-drag/);
   assert.doesNotMatch(cssSource, /\.advanced-lobby-carousel\.dragging/);
   assert.doesNotMatch(cssSource, /cursor:\s*grab|cursor:\s*grabbing|touch-action:\s*pan-y/);
+  assert.match(cssSource, /\.advanced-lobby-carousel\s*\{[\s\S]*touch-action:\s*none;/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transform:/);
   assert.match(cssSource, /\.advanced-lobby-track\s*{[\s\S]*transition:\s*transform/);
 });
@@ -275,7 +292,7 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.match(screenSource, /function AdvancedLevelSelectionPanel/);
   assert.match(screenSource, /useBrowserLayoutEffect\(\(\) => \{[\s\S]*sliderVisualRef\.current[\s\S]*}, \[unlockedLevel\]\);/);
   assert.match(screenSource, /handleLevelClick/);
-  assert.match(screenSource, /onClick=\{\(\) => handleLevelClick\(item\.level\)\}/);
+  assert.match(screenSource, /onClick=\{\(event\) => handleLevelButtonClick\(event,\s*item\.level\)\}/);
   assert.match(screenSource, /handleLevelSliderInput/);
   assert.match(screenSource, /onChange=\{handleLevelSliderInput\}/);
   assert.match(screenSource, /className=\{`advanced-lobby-slider \$\{selectedState\} \$\{selectedTone\}`\}/);

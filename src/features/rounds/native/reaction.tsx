@@ -272,7 +272,11 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
   );
 }
 
-export function ReactionRound({ onComplete }: RoundProps) {
+function ReactionRoundCore({
+  onComplete,
+  onPracticeSuccess,
+  trialCount = 3,
+}: RoundProps & { onPracticeSuccess?: () => void; trialCount?: number }) {
   const [status, setStatus] = useState<"waiting" | "ready" | "feedback">("waiting");
   const [feedbackTone, setFeedbackTone] = useState<"idle" | "good" | "early">("idle");
   const [message, setMessage] = useState("");
@@ -332,7 +336,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
       setFeedbackTone("early");
       setMessage("");
       transitionTimerRef.current = window.setTimeout(() => {
-        if (nextStep >= 3) {
+        if (nextStep >= trialCount) {
           finishedRef.current = true;
           onComplete(trialsRef.current);
         } else {
@@ -340,7 +344,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
         }
       }, 360);
     }, delay + 1800);
-  }, [onComplete]);
+  }, [onComplete, trialCount]);
 
   useEffect(() => {
     startStep(1);
@@ -374,7 +378,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
       setFeedbackTone("early");
       setMessage("");
       transitionTimerRef.current = window.setTimeout(() => {
-        if (stepRef.current >= 3) {
+        if (stepRef.current >= trialCount) {
           finishedRef.current = true;
           onComplete(trialsRef.current);
         } else {
@@ -399,10 +403,12 @@ export function ReactionRound({ onComplete }: RoundProps) {
       );
       setStatus("feedback");
       setFeedbackTone("good");
-      setMessage(`${Math.round(responseAt - shownAtRef.current)} ms`);
+      onPracticeSuccess?.();
+
+      setMessage(`${Math.round(responseAt - shownAtRef.current)} ms`);
 
       transitionTimerRef.current = window.setTimeout(() => {
-        if (stepRef.current >= 3) {
+        if (stepRef.current >= trialCount) {
           finishedRef.current = true;
           onComplete(trialsRef.current);
         } else {
@@ -425,4 +431,43 @@ export function ReactionRound({ onComplete }: RoundProps) {
       {message ? <span className="reaction-result-text">{message}</span> : null}
     </div>
   );
+}
+
+function reactionPracticeMessage(trials: TrialEvent[]) {
+  const first = trials[0];
+  if (first?.correct === true) return "";
+  if (first?.errorType === "early") return "太早了，看到绿灯再点。再试一次";
+  if (first?.errorType === "timeout") return "慢了，绿灯出现后要立刻点。再试一次";
+  return "看到绿灯再点。再试一次";
+}
+
+export function ReactionRound({ onComplete }: RoundProps) {
+  const [practicePassed, setPracticePassed] = useState(false);
+  const [practiceKey, setPracticeKey] = useState(0);
+  const [practiceMessage, setPracticeMessage] = useState("试一次：看到绿灯后点一下");
+
+  const completePractice = useCallback((practiceTrials: TrialEvent[]) => {
+    if (practiceTrials.some((item) => item.correct === true)) {
+      setPracticePassed(true);
+      return;
+    }
+    setPracticeMessage(reactionPracticeMessage(practiceTrials));
+    setPracticeKey((current) => current + 1);
+  }, []);
+
+  if (!practicePassed) {
+    return (
+      <div className="base-practice-wrap">
+        <ReactionRoundCore
+          key={`reaction-practice-${practiceKey}`}
+          onComplete={completePractice}
+          onPracticeSuccess={() => setPracticeMessage("")}
+          trialCount={1}
+        />
+        <small className="base-practice-message">{practiceMessage}</small>
+      </div>
+    );
+  }
+
+  return <ReactionRoundCore onComplete={onComplete} />;
 }

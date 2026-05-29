@@ -100,7 +100,13 @@ import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
 import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
-import { PlayerAvatar, PlayerAvatarSkinProvider, isPlayerAvatarSkinUnlocked, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import {
+  PlayerAvatar,
+  PlayerAvatarSkinProvider,
+  getNewlyUnlockedPlayerAvatarSkins,
+  isPlayerAvatarSkinUnlocked,
+  type PlayerAvatarSkin,
+} from "@/features/player-avatar/player-avatar";
 import {
   readPersistedPlayerAvatarSkin,
   readPersistedPlayerName,
@@ -108,6 +114,7 @@ import {
 } from "@/features/player-avatar/player-avatar-storage";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
+import { RewardOverlay, type RewardOverlayItem } from "@/features/rewards/reward-overlay";
 import { ShareImageScreen } from "@/features/results/share-image-screen";
 import { copyTextToClipboard, createShareImage, type ShareImageInput } from "@/features/results/share-image";
 
@@ -116,6 +123,7 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
+const DONATE_AUTHOR_URL = "https://example.com/alipay-donate-placeholder";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -157,6 +165,36 @@ function markLegend100SkinUnlockedWhenDisplayed(
   return displayedResult?.name === "最强王者" ? markLegend100SkinUnlocked(progress) : progress;
 }
 
+function createSkinRewardItems(previousProgress: AdvancedProgress, nextProgress: AdvancedProgress, source: string): RewardOverlayItem[] {
+  return getNewlyUnlockedPlayerAvatarSkins(previousProgress, nextProgress).map((skin) => ({
+    id: `${source}-skin-${skin}`,
+    kind: "skin",
+    skin,
+  }));
+}
+
+function createRankRewardItem({
+  afterRank,
+  beforeRank,
+  source,
+}: {
+  afterRank: string;
+  beforeRank: string;
+  source: string;
+}): RewardOverlayItem | null {
+  if (beforeRank === afterRank) return null;
+  return {
+    id: `${source}-rank-${beforeRank}-${afterRank}`,
+    kind: "rank",
+    before: beforeRank,
+    after: afterRank,
+  };
+}
+
+function compactRewardItems(items: Array<RewardOverlayItem | null | undefined>) {
+  return items.filter((item): item is RewardOverlayItem => item !== null && item !== undefined);
+}
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
   const [roundIndex, setRoundIndex] = useState(0);
@@ -173,6 +211,7 @@ export default function Home() {
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
+  const [rewardQueue, setRewardQueue] = useState<RewardOverlayItem[]>([]);
   const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
   const [playerName, setPlayerName] = useState("");
   const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
@@ -190,6 +229,7 @@ export default function Home() {
   const outdoorAdventureStateRef = useRef(outdoorAdventureState);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
+  const pendingLuckRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
@@ -200,6 +240,7 @@ export default function Home() {
   const currentRound = rounds[roundIndex];
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
+  const activeRewardItem = rewardQueue[0] ?? null;
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
   const playShellActive =
     stage === "homeworld" ||
@@ -260,6 +301,22 @@ export default function Home() {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
   }, []);
+
+  const enqueueRewardItems = useCallback((items: RewardOverlayItem[]) => {
+    if (items.length === 0) return;
+    setRewardQueue((current) => [...current, ...items]);
+  }, []);
+
+  const dismissRewardItem = useCallback(() => {
+    setRewardQueue((current) => current.slice(1));
+  }, []);
+
+  const revealPendingLuckRewards = useCallback((_outcome: LuckDrawOutcome) => {
+    void _outcome;
+    const items = pendingLuckRewardItemsRef.current;
+    pendingLuckRewardItemsRef.current = [];
+    enqueueRewardItems(items);
+  }, [enqueueRewardItems]);
 
   const releaseHistoryGuard = useCallback((mode: "silent" | "browser-back" = "silent") => {
     if (!appHistoryActiveRef.current) return;
@@ -323,6 +380,8 @@ export default function Home() {
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge(null);
     setLuckDrawOutcome(null);
+    pendingLuckRewardItemsRef.current = [];
+    setRewardQueue([]);
     roundCompletionLockedRef.current = false;
   }, [clearShareCopyToastTimer]);
 
@@ -411,11 +470,18 @@ export default function Home() {
   }, []);
 
   const handleDonateAuthor = useCallback(() => {
-    const nextProgress = markAuthorDonated(advancedProgressRef.current);
+    if (typeof window === "undefined") return;
+    window.open(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const confirmDonateAuthor = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = markAuthorDonated(previousProgress);
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
-  }, [persistGameState]);
+    enqueueRewardItems(createSkinRewardItems(previousProgress, nextProgress, "donation"));
+  }, [enqueueRewardItems, persistGameState]);
 
   useEffect(() => {
     if (isPlayerAvatarSkinUnlocked(selectedAvatarSkin, advancedProgress)) return;
@@ -450,8 +516,9 @@ export default function Home() {
     setAdvancedProgress(nextProgress);
     if (nextProgress !== stored.advancedProgress) {
       persistGameState(storedTrials.length > 0 ? storedTrials : null, nextProgress);
+      enqueueRewardItems(createSkinRewardItems(stored.advancedProgress, nextProgress, "stored-result"));
     }
-  }, [persistGameState]);
+  }, [enqueueRewardItems, persistGameState]);
 
   const captureShareAvatarDataUrl = useCallback(async () => {
     const node = shareAvatarCaptureRef.current;
@@ -499,6 +566,7 @@ export default function Home() {
         if (nextProgress !== previousProgress) {
           advancedProgressRef.current = nextProgress;
           setAdvancedProgress(nextProgress);
+          enqueueRewardItems(createSkinRewardItems(previousProgress, nextProgress, "base-result"));
         }
         persistGameState(nextTrials, nextProgress);
         void transitionToStage("result");
@@ -510,7 +578,7 @@ export default function Home() {
       setRoundIndex(nextIndex);
       void transitionToStage("intro");
     }, 320);
-  }, [persistGameState, transitionToStage]);
+  }, [enqueueRewardItems, persistGameState, transitionToStage]);
 
   const startCurrentRound = () => {
     void transitionToStage("playing", () => {
@@ -579,6 +647,7 @@ export default function Home() {
   const openLuckDraw = useCallback(() => {
     setAdvancedUnlockPulseId(0);
     setLuckDrawOutcome(null);
+    pendingLuckRewardItemsRef.current = [];
     void transitionToStage("luck");
   }, [transitionToStage]);
 
@@ -586,6 +655,14 @@ export default function Home() {
     setAvatarLabReturnStage("result");
     void transitionToStage("avatar-lab");
   }, [transitionToStage]);
+
+  const openAvatarLabWithSkin = useCallback((skin: PlayerAvatarSkin) => {
+    handleSelectAvatarSkin(skin);
+    setAvatarLabReturnStage("result");
+    setAdvancedChallenge(null);
+    releaseHistoryGuard();
+    void transitionToStage("avatar-lab");
+  }, [handleSelectAvatarSkin, releaseHistoryGuard, transitionToStage]);
 
   const openHomeworld = useCallback(() => {
     if (!homeworldEntryVisible) return;
@@ -611,34 +688,59 @@ export default function Home() {
 
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
+    pendingLuckRewardItemsRef.current = [];
     releaseHistoryGuard();
     scrollResultToTop();
     void transitionToStage("result");
   }, [releaseHistoryGuard, scrollResultToTop, transitionToStage]);
 
   const drawLuck = useCallback(() => {
-    const result = recordLuckDraw(advancedProgressRef.current, Math.floor(Math.random() * 101));
+    const previousProgress = advancedProgressRef.current;
+    const beforeStars = getAdvancedTotalStars(previousProgress);
+    const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
+    const result = recordLuckDraw(previousProgress, Math.floor(Math.random() * 101));
     if (!result.outcome) return null;
     const nextProgress = markLegend100SkinUnlockedWhenDisplayed(result.progress, trialsRef.current);
+    const afterStars = getAdvancedTotalStars(nextProgress);
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
     setLuckDrawOutcome(result.outcome);
+    pendingLuckRewardItemsRef.current = compactRewardItems([
+      ...createSkinRewardItems(previousProgress, nextProgress, "luck-draw"),
+      createRankRewardItem({
+        afterRank: formatResultRankTitle(baseRankName, afterStars),
+        beforeRank: formatResultRankTitle(baseRankName, beforeStars),
+        source: "luck-draw",
+      }),
+    ]);
     return result.outcome;
   }, [persistGameState]);
 
   const drawLuckBatch = useCallback(() => {
-    const baseDrawCount = advancedProgressRef.current.luckDrawCount;
+    const previousProgress = advancedProgressRef.current;
+    const beforeStars = getAdvancedTotalStars(previousProgress);
+    const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
+    const baseDrawCount = previousProgress.luckDrawCount;
     const scores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 101));
-    const result = recordLuckDrawBatch(advancedProgressRef.current, scores);
+    const result = recordLuckDrawBatch(previousProgress, scores);
     if (!result.outcome) return null;
     const displayScores = (result.outcome.originalScores ?? scores.map((score, index) => (baseDrawCount + index + 1 >= 80 ? 100 : score)));
     const outcome: LuckDrawDisplayOutcome = { ...result.outcome, displayScores };
     const nextProgress = markLegend100SkinUnlockedWhenDisplayed(result.progress, trialsRef.current);
+    const afterStars = getAdvancedTotalStars(nextProgress);
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
     setLuckDrawOutcome(outcome);
+    pendingLuckRewardItemsRef.current = compactRewardItems([
+      ...createSkinRewardItems(previousProgress, nextProgress, "luck-batch"),
+      createRankRewardItem({
+        afterRank: formatResultRankTitle(baseRankName, afterStars),
+        beforeRank: formatResultRankTitle(baseRankName, beforeStars),
+        source: "luck-batch",
+      }),
+    ]);
     return outcome;
   }, [persistGameState]);
 
@@ -707,8 +809,11 @@ export default function Home() {
 
       const config = getAdvancedStageConfig(current.roundId, current.level);
       const evaluation = evaluateAdvancedChallengeCompletion(config, roundTrials);
-      const beforeLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
-      let nextProgress = recordAdvancedChallengeResult(advancedProgressRef.current, {
+      const previousProgress = advancedProgressRef.current;
+      const beforeLevel = getAdvancedDimensionLevel(previousProgress, current.roundId);
+      const beforeStars = getAdvancedTotalStars(advancedProgressRef.current);
+      const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
+      let nextProgress = recordAdvancedChallengeResult(previousProgress, {
         roundId: current.roundId,
         level: current.level,
         score: evaluation.score,
@@ -718,10 +823,24 @@ export default function Home() {
       });
       nextProgress = markLegend100SkinUnlockedWhenDisplayed(nextProgress, trialsRef.current);
       const afterLevel = getAdvancedDimensionLevel(nextProgress, current.roundId);
+      const afterStars = getAdvancedTotalStars(nextProgress);
+      const rankBefore = formatResultRankTitle(baseRankName, beforeStars);
+      const rankAfter = formatResultRankTitle(baseRankName, afterStars);
+      const rankReward = afterLevel > beforeLevel
+        ? createRankRewardItem({
+            afterRank: rankAfter,
+            beforeRank: rankBefore,
+            source: `advanced-${current.roundId}-${current.level}`,
+          })
+        : null;
 
       advancedProgressRef.current = nextProgress;
       setAdvancedProgress(nextProgress);
       persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+      enqueueRewardItems([
+        ...createSkinRewardItems(previousProgress, nextProgress, `advanced-${current.roundId}-${current.level}`),
+        ...compactRewardItems([rankReward]),
+      ]);
       setAdvancedChallenge({
         mode: "complete",
         roundId: current.roundId,
@@ -733,13 +852,17 @@ export default function Home() {
         correctCount: evaluation.correctCount,
         requiredCorrect: evaluation.requiredCorrect,
         reason: evaluation.reason,
+        starsBefore: beforeStars,
+        starsAfter: afterStars,
+        rankBefore,
+        rankAfter,
         goalChecks: evaluation.goalChecks,
         reactionAverageMs: evaluation.reactionAverageMs,
         reactionThresholdMs: evaluation.reactionThresholdMs,
       });
       void transitionToStage("advanced");
     },
-    [persistGameState, transitionToStage],
+    [enqueueRewardItems, persistGameState, transitionToStage],
   );
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
@@ -1009,6 +1132,7 @@ export default function Home() {
           onBack={requestAppBack}
           onDraw={drawLuck}
           onDrawBatch={drawLuckBatch}
+          onRevealRewards={revealPendingLuckRewards}
         />
       ) : stage === "advanced" && advancedChallenge ? (
         <AdvancedChallengeScreen
@@ -1019,6 +1143,7 @@ export default function Home() {
           onBuildPerfectTrials={buildAdvancedPerfectTrials}
           onCompleteBaseRound={completeAdvancedBaseReplay}
           onCompleteRound={completeAdvancedLevel}
+          onOpenLuckDraw={openLuckDraw}
           onPickLevel={pickAdvancedLevel}
           onRestartBaseRound={startAdvancedBaseReplay}
           onStartLevel={startAdvancedLevel}
@@ -1093,6 +1218,7 @@ export default function Home() {
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onDonateAuthor={handleDonateAuthor}
+          onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
@@ -1123,6 +1249,7 @@ export default function Home() {
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onDonateAuthor={handleDonateAuthor}
+          onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
           onShareImage={openCurrentShareImage}
@@ -1135,6 +1262,11 @@ export default function Home() {
           onConfirm={confirmRestartToHome}
         />
       ) : null}
+      <RewardOverlay
+        item={activeRewardItem}
+        onDismiss={dismissRewardItem}
+        onOpenAvatarLabSkin={openAvatarLabWithSkin}
+      />
       <ModeTransitionOverlay state={transitionState} />
       <PlayerAvatar
         action="idle"

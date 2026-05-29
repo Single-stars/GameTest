@@ -86,25 +86,25 @@ test("reaction rounds show the shared player avatar with red closed eyes and gre
   assert.match(cssSource, /\.reaction-pad-avatar/);
 });
 
-test("base reaction skips practice and hides all prompt copy before the result time", () => {
+test("base reaction starts with a successful practice click before formal scoring", () => {
   const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
   const baseReactionSource = reactionSource.slice(reactionSource.indexOf("export function ReactionRound"));
-  const baseReactionSetupSource = sourceBetween(reactionSource, "export function ReactionRound", "const tap =");
+  const baseReactionCoreSource = sourceBetween(reactionSource, "function ReactionRoundCore", "export function ReactionRound");
   const baseReactionRenderSource = baseReactionSource.slice(baseReactionSource.indexOf("return ("));
+  const baseReactionCoreRenderSource = baseReactionCoreSource.slice(baseReactionCoreSource.indexOf("return ("));
 
-  assert.match(baseReactionSetupSource, /const stepRef = useRef\(1\);/);
-  assert.match(baseReactionSource, /startStep\(1\);/);
-  assert.match(baseReactionSetupSource, /const \[message, setMessage\] = useState\(""\);/);
-  assert.match(baseReactionSource, /setMessage\(""\);/);
-  assert.match(baseReactionSource, /setMessage\(`\$\{Math\.round\(responseAt - shownAtRef\.current\)\} ms`\);/);
-  assert.doesNotMatch(baseReactionSource, /startStep\(0\)/);
-  assert.doesNotMatch(baseReactionSource, /nextStep === 0/);
-  assert.doesNotMatch(baseReactionSource, /practice:\s*(?:nextStep|stepRef\.current) === 0/);
-  assert.doesNotMatch(baseReactionSource, /setMessage\("[^"]+"\);/);
-  assert.doesNotMatch(baseReactionRenderSource, /<small>/);
-  assert.doesNotMatch(baseReactionRenderSource, /\$\{step\}\/3/);
+  assert.match(baseReactionCoreSource, /const stepRef = useRef\(1\);/);
+  assert.match(baseReactionCoreSource, /startStep\(1\);/);
+  assert.match(baseReactionCoreSource, /const \[message, setMessage\] = useState\(""\);/);
+  assert.match(baseReactionCoreSource, /setMessage\(""\);/);
+  assert.match(baseReactionCoreSource, /setMessage\(`\$\{Math\.round\(responseAt - shownAtRef\.current\)\} ms`\);/);
+  assert.match(baseReactionSource, /trialCount=\{1\}/);
+  assert.match(baseReactionSource, /setPracticePassed\(true\)/);
+  assert.match(reactionSource, /再试一次/);
+  assert.match(baseReactionRenderSource, /<small className="base-practice-message">/);
+  assert.match(baseReactionRenderSource, /\{practiceMessage\}/);
   assert.doesNotMatch(baseReactionRenderSource, /<span>\{message\}<\/span>/);
-  assert.match(baseReactionRenderSource, /\{message \? <span className="reaction-result-text">\{message\}<\/span> : null\}/);
+  assert.match(baseReactionCoreRenderSource, /\{message \? <span className="reaction-result-text">\{message\}<\/span> : null\}/);
 });
 
 test("reaction rounds use full-area shared-avatar eyes and only render ms after clicks", () => {

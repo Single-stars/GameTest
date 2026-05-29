@@ -19,12 +19,16 @@ import {
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
+  isAdvancedBrakeFakeEvent,
+  pickAdvancedBrakeEvent,
+  shouldForceAdvancedBrakeFakeEvent,
   type AdvancedBrakeAction,
   type AdvancedBrakeEvent,
 } from "@/lib/advanced-challenges";
 import { DINO_SAFE_STOP_WINDOW_MS, resolveDinoStop } from "@/lib/scoring";
 import {
   clamp,
+  getParamBoolean,
   getParamNumber,
   now,
   pointerKind,
@@ -79,6 +83,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
   const speedPerSecond = getParamNumber(config, "speedPerSecond", 10);
 
   const finishSafeDistance = getParamNumber(config, "finishSafeDistance", 12);
+  const allowGray = getParamBoolean(config, "allowGray", false);
   const ruleHint = getAdvancedBrakeRuleHint(config.level, config.params.dualRule);
 
   const eventCountTarget = useMemo(
@@ -110,6 +115,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
   const hazardIndexRef = useRef(0);
 
   const previousHazardRef = useRef<AdvancedBrakeEvent | null>(null);
+  const fakeEventUsedRef = useRef(false);
 
   const trialsRef = useRef<TrialEvent[]>([]);
 
@@ -317,9 +323,18 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
     });
 
-    const picked = options[Math.floor(rand(0, options.length))] ?? options[0];
+    const picked = pickAdvancedBrakeEvent(options, {
+      forceFake: shouldForceAdvancedBrakeFakeEvent({
+        allowGray,
+        fakeEventUsed: fakeEventUsedRef.current,
+        eventIndex: hazardIndexRef.current,
+        eventCount: eventCountTarget,
+      }),
+      randomValue: Math.random(),
+    });
 
     if (!picked) return;
+    if (isAdvancedBrakeFakeEvent(picked)) fakeEventUsedRef.current = true;
 
     const hazardLeft = getAdvancedBrakeDangerLeft({
 
@@ -415,6 +430,7 @@ export function AdvancedBrakingRound({ advancedConfig, onComplete }: RoundProps)
 
   }, [
 
+    allowGray,
     config.level,
 
     eventCountTarget,
@@ -756,7 +772,11 @@ function resolveDinoAvatarView(status: DinoStatus): PlayerAvatarView {
   }
 }
 
-export function BrakingRound({ onComplete }: RoundProps) {
+function BrakingRoundCore({
+  onComplete,
+  onPracticeSuccess,
+  trialCount = DINO_TRIAL_COUNT,
+}: RoundProps & { onPracticeSuccess?: () => void; trialCount?: number }) {
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<DinoStatus>("ready");
   const [progress, setProgress] = useState(8);
@@ -889,11 +909,11 @@ export function BrakingRound({ onComplete }: RoundProps) {
     (correct: boolean) => {
       const delayMs = correct ? 520 : DINO_FAILURE_FEEDBACK_MS;
       transitionTimerRef.current = window.setTimeout(() => {
-        if (index >= DINO_TRIAL_COUNT - 1) onComplete([...trialsRef.current]);
+        if (index >= trialCount - 1) onComplete([...trialsRef.current]);
         else start(index + 1);
       }, delayMs);
     },
-    [index, onComplete, start],
+    [index, onComplete, start, trialCount],
   );
 
   const completeTrial = useCallback(
@@ -918,7 +938,7 @@ export function BrakingRound({ onComplete }: RoundProps) {
     hazardShownAtRef.current = now();
     const options = getAdvancedBrakeEventOptions(1, {
       eventIndex: index,
-      eventCount: DINO_TRIAL_COUNT,
+      eventCount: trialCount,
       previousEvent: previousHazardRef.current,
     });
     const picked = options.find((option) => option.correctAction === "release") ?? options[0] ?? {
@@ -983,7 +1003,7 @@ export function BrakingRound({ onComplete }: RoundProps) {
         },
       });
     }, DINO_SAFE_STOP_WINDOW_MS);
-  }, [completeTrial, index, trackMetrics.hazardWidthPercent, trackMetrics.runnerWidthPercent]);
+  }, [completeTrial, index, trackMetrics.hazardWidthPercent, trackMetrics.runnerWidthPercent, trialCount]);
 
 
   const beginRun = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1063,6 +1083,7 @@ export function BrakingRound({ onComplete }: RoundProps) {
       }),
     );
     previousHazardRef.current = releasedHazard;
+    if (safeStop) onPracticeSuccess?.();
     scheduleDinoNext(safeStop);
   };
 
@@ -1079,7 +1100,7 @@ export function BrakingRound({ onComplete }: RoundProps) {
     >
       <div className="mini-score">
 
-        <span>{index + 1}/{DINO_TRIAL_COUNT}</span>
+        <span>{index + 1}/{trialCount}</span>
       </div>
 
       <div className="advanced-brake-track" aria-hidden="true" ref={trackRef}>
@@ -1105,4 +1126,43 @@ export function BrakingRound({ onComplete }: RoundProps) {
 
   );
 
+}
+
+function brakingPracticeMessage(trials: TrialEvent[]) {
+  const first = trials[0];
+  if (first?.correct === true) return "";
+  if (first?.errorType === "early_stop") return "太早松手了，再试一次";
+  if (first?.errorType === "collision") return "撞到危险了，再试一次";
+  return "等危险出现再松手，再试一次";
+}
+
+export function BrakingRound({ onComplete }: RoundProps) {
+  const [practicePassed, setPracticePassed] = useState(false);
+  const [practiceKey, setPracticeKey] = useState(0);
+  const [practiceMessage, setPracticeMessage] = useState("试一次：危险出现时松手停下");
+
+  const completePractice = useCallback((practiceTrials: TrialEvent[]) => {
+    if (practiceTrials.some((item) => item.correct === true)) {
+      setPracticePassed(true);
+      return;
+    }
+    setPracticeMessage(brakingPracticeMessage(practiceTrials));
+    setPracticeKey((current) => current + 1);
+  }, []);
+
+  if (!practicePassed) {
+    return (
+      <div className="base-practice-wrap">
+        <BrakingRoundCore
+          key={`braking-practice-${practiceKey}`}
+          onComplete={completePractice}
+          onPracticeSuccess={() => setPracticeMessage("")}
+          trialCount={1}
+        />
+        <small className="base-practice-message">{practiceMessage}</small>
+      </div>
+    );
+  }
+
+  return <BrakingRoundCore onComplete={onComplete} />;
 }

@@ -414,9 +414,9 @@ test("luck score helpers produce display copy for locked, ready and empty states
   );
   assert.equal(
     getLuckDrawStatusText(true, progressWithTwoDraws),
-    "抽取次数 2",
+    "幸运币 2",
   );
-  assert.equal(getLuckDrawStatusText(true, createDefaultAdvancedProgress()), "完成进阶挑战获得运气抽取");
+  assert.equal(getLuckDrawStatusText(true, createDefaultAdvancedProgress()), "首次通关进阶关获得幸运币");
   assert.equal(
     formatLuckDrawOutcomeText({ score: 37, stars: 7, improved: false, guaranteed: false }),
     "运气保留历史最高",
@@ -586,9 +586,9 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
 
 test("advanced completion actions adapt to first clears, replays, failures and max level", () => {
   assert.deepEqual(getAdvancedCompletionActions({ passed: false, gained: false, level: 3 }), ["retry"]);
-  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: false, level: 3 }), ["retry"]);
-  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: true, level: 3 }), ["retry", "next"]);
-  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: true, level: 10 }), ["maxed"]);
+  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: false, level: 3 }), ["back"]);
+  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: true, level: 3 }), ["next"]);
+  assert.deepEqual(getAdvancedCompletionActions({ passed: true, gained: true, level: 10 }), ["back"]);
 });
 
 test("result rank title only folds stars into the king title when stars are above zero", () => {

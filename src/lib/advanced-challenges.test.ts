@@ -11,6 +11,9 @@ import {
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
+  isAdvancedBrakeFakeEvent,
+  pickAdvancedBrakeEvent,
+  shouldForceAdvancedBrakeFakeEvent,
   getAdvancedStageConfig,
   getDebugToolsVisibility,
   shouldShowHomeworldEntry,
@@ -305,6 +308,19 @@ test("advanced braking correct action follows single red, gray fake, and dual-li
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "red", bottom: "red" }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: null }), "hold");
   assert.equal(getAdvancedBrakeCorrectAction(10, { top: "gray", bottom: "gray" }), "hold");
+});
+
+test("advanced braking fake-danger levels force at least one fake event before the finish", () => {
+  assert.equal(shouldForceAdvancedBrakeFakeEvent({ allowGray: false, fakeEventUsed: false, eventIndex: 4, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeFakeEvent({ allowGray: true, fakeEventUsed: true, eventIndex: 4, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeFakeEvent({ allowGray: true, fakeEventUsed: false, eventIndex: 3, eventCount: 6 }), false);
+  assert.equal(shouldForceAdvancedBrakeFakeEvent({ allowGray: true, fakeEventUsed: false, eventIndex: 4, eventCount: 6 }), true);
+
+  const redGrayOptions = getAdvancedBrakeEventOptions(5, { eventIndex: 5, eventCount: 7 });
+  const forced = pickAdvancedBrakeEvent(redGrayOptions, { forceFake: true, randomValue: 0 });
+
+  assert.equal(isAdvancedBrakeFakeEvent(forced), true);
+  assert.equal(pickAdvancedBrakeEvent(redGrayOptions, { forceFake: false, randomValue: 0 }).top, "red");
 });
 
 test("advanced braking exposes in-round rule hints for rule-tale variants", () => {

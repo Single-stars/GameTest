@@ -667,27 +667,26 @@ test("five base braking trials count as a completed scoring dimension", () => {
 
 test("base braking source uses five rounds with advanced danger placement and graphics", () => {
   const source = nativeRoundsSource();
+  const brakingFileSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
   const styles = readAppCssSource();
-  const brakingStart = source.indexOf("export function BrakingRound");
-  assert.notEqual(brakingStart, -1, "missing source marker: export function BrakingRound");
-  const brakingSource = source.slice(brakingStart);
+  const brakingCoreSource = sourceBetween(brakingFileSource, "function BrakingRoundCore", "function brakingPracticeMessage");
 
   assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
   assert.match(source, /DINO_FAILURE_FEEDBACK_MS/);
-  assert.match(brakingSource, /AdvancedBrakeHazard/);
-  assert.match(brakingSource, /getAdvancedBrakeDangerLeft/);
-  assert.match(brakingSource, /getAdvancedBrakeEventOptions/);
-  assert.match(brakingSource, /advanced-brake-track/);
-  assert.match(brakingSource, /advanced-hazard/);
-  assert.match(brakingSource, /scheduleDinoNext/);
-  assert.match(brakingSource, /const trackRef = useRef<HTMLDivElement \| null>\(null\);/);
-  assert.match(brakingSource, /const \[trackMetrics, setTrackMetrics\] = useState\(\{ runnerWidthPercent: 8, hazardWidthPercent: 6 \}\);/);
-  assert.match(brakingSource, /runnerWidthPercent: trackMetrics\.runnerWidthPercent,/);
-  assert.match(brakingSource, /hazardWidthPercent: trackMetrics\.hazardWidthPercent,/);
-  assert.match(brakingSource, /ref=\{trackRef\}/);
-  assert.doesNotMatch(brakingSource, /rand\(10,\s*16\)/);
-  assert.doesNotMatch(brakingSource, /runnerWidthPercent: DINO_RUNNER_WIDTH_PERCENT/);
-  assert.doesNotMatch(brakingSource, /hazardWidthPercent: DINO_HAZARD_WIDTH_PERCENT/);
+  assert.match(brakingFileSource, /AdvancedBrakeHazard/);
+  assert.match(brakingCoreSource, /getAdvancedBrakeDangerLeft/);
+  assert.match(brakingCoreSource, /getAdvancedBrakeEventOptions/);
+  assert.match(brakingCoreSource, /advanced-brake-track/);
+  assert.match(brakingCoreSource, /advanced-hazard/);
+  assert.match(brakingCoreSource, /scheduleDinoNext/);
+  assert.match(brakingCoreSource, /const trackRef = useRef<HTMLDivElement \| null>\(null\);/);
+  assert.match(brakingCoreSource, /const \[trackMetrics, setTrackMetrics\] = useState\(\{ runnerWidthPercent: 8, hazardWidthPercent: 6 \}\);/);
+  assert.match(brakingCoreSource, /runnerWidthPercent: trackMetrics\.runnerWidthPercent,/);
+  assert.match(brakingCoreSource, /hazardWidthPercent: trackMetrics\.hazardWidthPercent,/);
+  assert.match(brakingCoreSource, /ref=\{trackRef\}/);
+  assert.doesNotMatch(brakingCoreSource, /rand\(10,\s*16\)/);
+  assert.doesNotMatch(brakingCoreSource, /runnerWidthPercent: DINO_RUNNER_WIDTH_PERCENT/);
+  assert.doesNotMatch(brakingCoreSource, /hazardWidthPercent: DINO_HAZARD_WIDTH_PERCENT/);
   assert.match(styles, /\.dino-panel\.crashed \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.early \.advanced-runner/);
   assert.match(styles, /\.dino-panel\.crashed \.advanced-hazard/);
@@ -695,20 +694,21 @@ test("base braking source uses five rounds with advanced danger placement and gr
 
 test("braking runners use the shared avatar without warning or a separate hold button", () => {
   const source = nativeRoundsSource();
+  const brakingFileSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
   const styles = readAppCssSource();
-  const advancedStart = source.indexOf("export function AdvancedBrakingRound");
-  const baseStart = source.indexOf("export function BrakingRound");
+  const advancedStart = brakingFileSource.indexOf("export function AdvancedBrakingRound");
+  const baseStart = brakingFileSource.indexOf("function BrakingRoundCore");
   assert.notEqual(advancedStart, -1, "missing source marker: export function AdvancedBrakingRound");
-  assert.notEqual(baseStart, -1, "missing source marker: export function BrakingRound");
-  const advancedSource = source.slice(advancedStart, baseStart);
-  const baseSource = source.slice(baseStart);
+  assert.notEqual(baseStart, -1, "missing source marker: function BrakingRoundCore");
+  const advancedSource = brakingFileSource.slice(advancedStart, baseStart);
+  const baseSource = sourceBetween(brakingFileSource, "function BrakingRoundCore", "function brakingPracticeMessage");
   const advancedStateSource = source.slice(
     source.indexOf("type AdvancedBrakingFeedback"),
     source.indexOf("export function AdvancedBrakingRound"),
   );
-  const baseStateSource = source.slice(
-    source.indexOf("function resolveDinoAvatarView"),
-    source.indexOf("export function BrakingRound"),
+  const baseStateSource = brakingFileSource.slice(
+    brakingFileSource.indexOf("function resolveDinoAvatarView"),
+    brakingFileSource.indexOf("function BrakingRoundCore"),
   );
 
   assert.match(source, /from "@\/features\/player-avatar\/player-avatar"/);
@@ -900,10 +900,10 @@ test("buildShareText uses game rank challenge copy without old wording", () => {
   const textWithLink = buildShareText(result, "https://example.com/test");
   const advancedText = buildShareText(result, undefined, "至圣王者⭐10");
 
-  assert.equal(text, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！`);
-  assert.equal(textWithLink, `8个小游戏测测你的段位，我的段位是【${result.name}】。来挑战我吧！\nhttps://example.com/test`);
-  assert.equal(advancedText, "8个小游戏测测你的段位，我的段位是【至圣王者⭐10】。来挑战我吧！");
-  assert.equal(buildShareText(null, "https://example.com/test"), "8个小游戏测测你的段位\nhttps://example.com/test");
+  assert.equal(text, `我的段位是【${result.name}】，来挑战我吧！`);
+  assert.equal(textWithLink, `我的段位是【${result.name}】，来挑战我吧！\nhttps://example.com/test`);
+  assert.equal(advancedText, "我的段位是【至圣王者⭐10】，来挑战我吧！");
+  assert.equal(buildShareText(null, "https://example.com/test"), "来挑战我吧！\nhttps://example.com/test");
   const removedTerms = ["人" + "格", "画" + "像"];
   assert.equal(removedTerms.some((term) => textWithLink.includes(term)), false);
   assert.equal(text.includes("responseAt"), false);

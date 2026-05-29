@@ -87,7 +87,7 @@ export type AdvancedLevelChallengeSnapshot = {
 export type AdvancedLevelState = "completed" | "current" | "locked";
 export type AdvancedBackSource = "select" | "intro" | "playing" | "base-playing" | "complete";
 export type AdvancedBackDestination = "result" | "challenge";
-export type AdvancedCompletionAction = "retry" | "next" | "maxed";
+export type AdvancedCompletionAction = "retry" | "next" | "back";
 export type AppStage = "home" | "homeworld" | "outdoor-adventure" | "intro" | "playing" | "result" | "share" | "advanced" | "luck" | "avatar-lab";
 export type AppBackNavigation = "unhandled" | "release" | "guard";
 export type AppBackHistoryLayer = 0 | 1 | 2;
@@ -522,8 +522,9 @@ export function getAdvancedCompletionActions({
   gained: boolean;
   level: number;
 }): AdvancedCompletionAction[] {
-  if (!passed || !gained) return ["retry"];
-  return clampInteger(level, 1, ADVANCED_LEVEL_COUNT) >= ADVANCED_LEVEL_COUNT ? ["maxed"] : ["retry", "next"];
+  if (!passed) return ["retry"];
+  if (!gained) return ["back"];
+  return clampInteger(level, 1, ADVANCED_LEVEL_COUNT) >= ADVANCED_LEVEL_COUNT ? ["back"] : ["next"];
 }
 
 export function formatResultRankTitle(rankName: RankName, stars: number) {
@@ -560,7 +561,7 @@ export function getLuckDrawStatusText(unlocked: boolean, progress: AdvancedProgr
   const sanitized = sanitizeAdvancedProgress(progress);
   if (sanitized.luckStars >= ADVANCED_STAR_LIMITS.luckStars || sanitized.luckBestScore >= 100) return "已满运气，继续抽取不会降低历史最高";
   const chances = sanitized.luckDrawChances;
-  return chances > 0 ? `抽取次数 ${chances}` : "完成进阶挑战获得运气抽取";
+  return chances > 0 ? `幸运币 ${chances}` : "首次通关进阶关获得幸运币";
 }
 
 export function canUseLuckDraw(unlocked: boolean, progress: AdvancedProgress) {

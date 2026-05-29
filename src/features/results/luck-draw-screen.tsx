@@ -18,7 +18,7 @@ import {
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
 
-const LUCK_RULE_TEXT = "完成进阶挑战可获得抽取次数。每次抽取会得到 0-100 运气分，运气只保留历史最高值，不会因低分下降。第 80 次抽取必定补满运气。";
+const LUCK_RULE_TEXT = "首次通关进阶关可获得幸运币。老虎机每次消耗 1 枚幸运币，会得到 0-100 运气分，运气只保留历史最高值，不会因低分下降。第 80 次抽取必定补满运气。";
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 export function LuckDrawScreen({
@@ -27,12 +27,14 @@ export function LuckDrawScreen({
   onBack,
   onDraw,
   onDrawBatch,
+  onRevealRewards,
 }: {
   advancedProgress: AdvancedProgress;
   lastOutcome: LuckDrawOutcome | null;
   onBack: () => void;
   onDraw: () => LuckDrawOutcome | null;
   onDrawBatch: () => LuckDrawOutcome | null;
+  onRevealRewards?: (outcome: LuckDrawOutcome) => void;
 }) {
   const [visibleOutcome, setVisibleOutcome] = useState<LuckDrawOutcome | null>(lastOutcome);
   const [pendingOutcome, setPendingOutcome] = useState<LuckDrawOutcome | null>(null);
@@ -92,10 +94,11 @@ export function LuckDrawScreen({
         setPendingOutcome(null);
         setDisplayScore(null);
         setSpinMessage(null);
-        setSpinning(false);
-        setSettledReels(3);
-        spinTimersRef.current = [];
-      }, step.atMs),
+        setSpinning(false);
+        setSettledReels(3);
+        spinTimersRef.current = [];
+        onRevealRewards?.(outcome);
+      }, step.atMs),
     );
   };
 
@@ -160,14 +163,14 @@ export function LuckDrawScreen({
             <strong>{advancedProgress.luckDrawCount}/80</strong>
           </div>
           <div>
-            <span>抽取次数</span>
+            <span>幸运币</span>
             <strong>{advancedProgress.luckDrawChances}</strong>
           </div>
         </div>
 
         <div className="luck-draw-actions">
           <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onPointerDown={draw}>
-            {spinning ? "抽取中" : "抽取运气"}
+            {spinning ? "抽取中" : "消耗 1 枚幸运币"}
           </button>
           {advancedProgress.luckDrawChances >= 10 ? (
             <button className="secondary-button luck-draw-button" disabled={!canDrawBatch} type="button" onPointerDown={drawBatch}>

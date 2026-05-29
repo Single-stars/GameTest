@@ -63,6 +63,7 @@ export function ResultScreen({
   onOpenHomeworld,
   onOpenLuckDraw,
   onDonateAuthor,
+  onConfirmDonateAuthor,
   onResetTestData,
   onShareImage,
   onRestart,
@@ -79,6 +80,7 @@ export function ResultScreen({
   onOpenHomeworld: () => void;
   onOpenLuckDraw: () => void;
   onDonateAuthor: () => void;
+  onConfirmDonateAuthor: () => void;
   onResetTestData: () => void;
   onShareImage: () => void;
   onRestart: () => void;
@@ -86,6 +88,7 @@ export function ResultScreen({
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
   const [donatePanelOpen, setDonatePanelOpen] = useState(false);
+  const [donateConfirmed, setDonateConfirmed] = useState(false);
   const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
   const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("idea");
@@ -159,9 +162,17 @@ export function ResultScreen({
   const avatarEntryExpression = avatarMenuFeedback ? "happy" : "neutral";
 
   const openDonatePanel = useCallback(() => {
+    clearAvatarEntryTimer();
+    setAvatarMenuOpen(false);
+    setDonateConfirmed(false);
     onDonateAuthor();
     setDonatePanelOpen(true);
-  }, [onDonateAuthor]);
+  }, [clearAvatarEntryTimer, onDonateAuthor]);
+
+  const confirmDonate = useCallback(() => {
+    onConfirmDonateAuthor();
+    setDonateConfirmed(true);
+  }, [onConfirmDonateAuthor]);
 
   const openFeedbackPanel = useCallback(() => {
     setFeedbackPanelOpen(true);
@@ -239,18 +250,18 @@ export function ResultScreen({
       onSelect: onOpenAvatarLab,
     },
     {
-      id: "donate",
-      label: "赞赏作者",
-      icon: <DonateIcon />,
-      tone: "donate",
-      onSelect: openDonatePanel,
-    },
-    {
       id: "feedback",
       label: "反馈",
       icon: <FeedbackIcon />,
       tone: "feedback",
       onSelect: openFeedbackPanel,
+    },
+    {
+      id: "donate",
+      label: "赞赏作者",
+      icon: <DonateIcon />,
+      tone: "donate",
+      onSelect: openDonatePanel,
     },
     ...(homeworldEntryVisible
       ? [
@@ -374,6 +385,7 @@ export function ResultScreen({
                 />
               </svg>
               <div className="rank-avatar-bubble">
+                {/* eslint-disable-next-line react-hooks/refs -- Menu callbacks run from click handlers; rendering the memoized list does not read refs. */}
                 {avatarMenuItems.map((item) => (
                   <button
                     aria-label={item.label}
@@ -382,7 +394,7 @@ export function ResultScreen({
                     key={item.id}
                     role="menuitem"
                     type="button"
-                    onClick={() => runAvatarMenuAction(item.onSelect)}
+                    onClick={() => (item.id === "donate" ? item.onSelect() : runAvatarMenuAction(item.onSelect))}
                   >
                     {item.id === "skin" ? <AvatarLabIcon /> : item.icon}
                   </button>
@@ -401,7 +413,11 @@ export function ResultScreen({
             </button>
             <DonateIcon />
             <h2 id="donate-dialog-title">赞赏作者</h2>
-            <p>感谢支持。发布前可以在这里配置收款码或赞赏链接。</p>
+            <p>已打开赞赏链接。金额由你自己决定，完成后回到这里确认即可解锁赞赏皮肤。</p>
+            <button className="donate-confirm" type="button" onClick={confirmDonate}>
+              我已赞赏
+            </button>
+            {donateConfirmed ? <small>赞赏皮肤已解锁</small> : null}
           </div>
         </div>
       ) : null}
@@ -486,9 +502,16 @@ export function ResultScreen({
       <div className={`score-grid ${advancedUnlockPulseId > 0 ? "advanced-unlock-pulse" : ""}`}>
         {rows.map((row) => {
           const advancedLevel = getAdvancedDimensionLevel(advancedProgress, row.roundId);
+          const ScoreEntryTag = advancedUnlocked ? "button" : "div";
 
           return (
-            <div className={`score-item ${advancedUnlocked ? "with-advanced" : ""}`} key={row.roundId}>
+            <ScoreEntryTag
+              aria-label={advancedUnlocked ? `进入${row.label}进阶挑战，当前进阶${advancedLevel}` : undefined}
+              className={`score-item score-item-button ${advancedUnlocked ? "with-advanced" : ""}`}
+              key={row.roundId}
+              onClick={advancedUnlocked ? () => onOpenAdvancedChallenge(row.roundId) : undefined}
+              type={advancedUnlocked ? "button" : undefined}
+            >
               <div className="score-copy">
                 <span>{row.label}</span>
                 <strong>{row.score}</strong>
@@ -496,37 +519,33 @@ export function ResultScreen({
               </div>
 
               {advancedUnlocked ? (
-                <button
-                  aria-label={`进入${row.label}进阶挑战，当前进阶${advancedLevel}`}
-                  className={`advanced-entry-button ${getAdvancedLevelTone(advancedLevel)}`}
-                  type="button"
-                  onClick={() => onOpenAdvancedChallenge(row.roundId)}
-                >
+                <span className={`advanced-entry-indicator ${getAdvancedLevelTone(advancedLevel)}`} aria-hidden="true">
                   {advancedLevel}
-                </button>
+                </span>
               ) : null}
-            </div>
+            </ScoreEntryTag>
           );
         })}
 
-        <div className={`score-item luck-score-item ${advancedUnlocked ? "with-advanced" : "locked"}`}>
+        <button
+          aria-label={advancedUnlocked ? `进入运气抽取，当前运气${advancedProgress.luckStars}星` : undefined}
+          className={`score-item score-item-button luck-score-item ${advancedUnlocked ? "with-advanced" : "locked"}`}
+          disabled={!advancedUnlocked}
+          type="button"
+          onClick={advancedUnlocked ? onOpenLuckDraw : undefined}
+        >
           <div className="score-copy luck-copy">
             <span>运气</span>
             <strong>{advancedProgress.luckBestScore}</strong>
-            <small>{luckStatus}</small>
+            <small aria-label="幸运币状态">{luckStatus}</small>
           </div>
 
           {advancedUnlocked ? (
-            <button
-              aria-label={`进入运气抽取，当前运气${advancedProgress.luckStars}星`}
-              className={`advanced-entry-button luck-entry-button ${getLuckLevelTone(advancedProgress.luckStars)}`}
-              type="button"
-              onClick={onOpenLuckDraw}
-            >
+            <span className={`advanced-entry-indicator luck-entry-button ${getLuckLevelTone(advancedProgress.luckStars)}`} aria-hidden="true">
               {advancedProgress.luckStars}
-            </button>
+            </span>
           ) : null}
-        </div>
+        </button>
       </div>
     </section>
   );

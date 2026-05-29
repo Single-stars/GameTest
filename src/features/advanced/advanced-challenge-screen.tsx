@@ -39,6 +39,10 @@ export type AdvancedChallengeState =
       correctCount: number;
       requiredCorrect: number;
       reason: string;
+      starsBefore: number;
+      starsAfter: number;
+      rankBefore: string;
+      rankAfter: string;
       goalChecks?: boolean[];
       reactionAverageMs?: number | null;
       reactionThresholdMs?: number | null;
@@ -62,6 +66,7 @@ type AdvancedRoundRenderProps =
 type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" }>;
 
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
+const ADVANCED_LOBBY_SWIPE_STEP_PX = 28;
 const ADVANCED_TITLE_MIN_FONT_SIZE_PX = 14;
 const ADVANCED_TITLE_MAX_FONT_SIZE_PX = 22;
 const ADVANCED_HERO_TITLE_MIN_FONT_SIZE_PX = 22;
@@ -252,12 +257,14 @@ function AdvancedResultCard({
   challenge,
   goalItems,
   onBack,
+  onOpenLuckDraw,
   onStartLevel,
 }: {
   config: AdvancedStageConfig;
   challenge: Extract<AdvancedChallengeState, { mode: "complete" }>;
   goalItems: AdvancedChallengeGoalItem[];
   onBack: () => void;
+  onOpenLuckDraw: () => void;
   onStartLevel: (level: number) => void;
 }) {
   const completionActions = getAdvancedCompletionActions({ passed: challenge.passed, gained: challenge.gained, level: challenge.level });
@@ -276,41 +283,51 @@ function AdvancedResultCard({
   const outcomeTitle = `进阶${challenge.level}·${challenge.passed ? "挑战成功" : "挑战失败"}`;
 
   return (
-    <div className={`advanced-result-card ${challenge.passed ? "passed" : "failed"}`}>
-      <p className="eyebrow">{outcomeTitle}</p>
-      {challenge.passed ? (
-        <div className="advanced-result-perfect">
-          <span className="advanced-result-goal-box" aria-hidden="true">✓</span>
-          <span>完美通关</span>
+    <>
+      <div className={`advanced-result-card ${challenge.passed ? "passed" : "failed"}`}>
+        <p className="eyebrow">{outcomeTitle}</p>
+        {challenge.passed ? (
+          <div className="advanced-result-perfect">
+            <span className="advanced-result-goal-box" aria-hidden="true">✓</span>
+            <span>完美通关</span>
+          </div>
+        ) : failedGoalItems.length > 0 ? (
+          <ul className="advanced-result-goals">
+            {failedGoalItems.map((goal) => (
+              <li className="advanced-result-goal incomplete" key={`${goal.icon}-${goal.text}`}>
+                <span className="advanced-result-goal-box" aria-hidden="true">×</span>
+                <span>{goal.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className={`advanced-actions advanced-actions-${completionActions.length}`}>
+          {completionActions.includes("retry") ? (
+            <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
+              重试
+            </button>
+          ) : null}
+          {completionActions.includes("next") ? (
+            <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level + 1)}>
+              下一阶
+            </button>
+          ) : null}
+          {completionActions.includes("back") ? (
+            <button className="primary-button" type="button" onPointerDown={onBack}>
+              返回
+            </button>
+          ) : null}
         </div>
-      ) : failedGoalItems.length > 0 ? (
-        <ul className="advanced-result-goals">
-          {failedGoalItems.map((goal) => (
-            <li className="advanced-result-goal incomplete" key={`${goal.icon}-${goal.text}`}>
-              <span className="advanced-result-goal-box" aria-hidden="true">×</span>
-              <span>{goal.text}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className={`advanced-actions advanced-actions-${completionActions.length}`}>
-        {completionActions.includes("retry") ? (
-          <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
-            重试
-          </button>
-        ) : null}
-        {completionActions.includes("next") ? (
-          <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level + 1)}>
-            下一阶
-          </button>
-        ) : null}
-        {completionActions.includes("maxed") ? (
-          <button className="primary-button" type="button" onPointerDown={onBack}>
-            已满阶
-          </button>
-        ) : null}
       </div>
-    </div>
+      {challenge.passed && challenge.gained ? (
+        <div className="advanced-luck-coin-card" aria-live="polite">
+          <strong>获得【幸运币】*1</strong>
+          <button className="advanced-reward-luck-link" type="button" onPointerDown={onOpenLuckDraw}>
+            前往抽奖
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -335,6 +352,11 @@ function AdvancedLevelSelectionPanel({
 }) {
   const carouselRef = React.useRef<HTMLDivElement | null>(null);
   const sliderVisualRef = React.useRef<HTMLDivElement | null>(null);
+  const activeLobbyPointerIdRef = React.useRef<number | null>(null);
+  const lobbySwipeStartXRef = React.useRef(0);
+  const lobbySwipeConsumedRef = React.useRef(false);
+  const suppressNextLevelClickRef = React.useRef(false);
+  const selectedLevelRef = React.useRef(selectedLevel);
   const [trackStepPx, setTrackStepPx] = React.useState(DEFAULT_LOBBY_TRACK_STEP_PX);
   const [sliderTravelPx, setSliderTravelPx] = React.useState(0);
   const levelItems = getAdvancedLobbyLevelItems({ currentLevel, selectedLevel });
@@ -346,6 +368,10 @@ function AdvancedLevelSelectionPanel({
   const lobbyTrackStyle = {
     "--advanced-lobby-anchor": `${(selectedLevel - 1) * trackStepPx}px`,
   } as React.CSSProperties;
+
+  React.useEffect(() => {
+    selectedLevelRef.current = selectedLevel;
+  }, [selectedLevel]);
 
   React.useEffect(() => {
     const carousel = carouselRef.current;
@@ -393,9 +419,72 @@ function AdvancedLevelSelectionPanel({
     if (sliderLevel !== selectedLevel) onPickLevel(sliderLevel);
   };
 
+  const handleLevelButtonClick = (event: React.MouseEvent<HTMLButtonElement>, level: number) => {
+    if (suppressNextLevelClickRef.current) {
+      suppressNextLevelClickRef.current = false;
+      event.preventDefault();
+      return;
+    }
+    handleLevelClick(level);
+  };
+
+  const handleLobbyPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    activeLobbyPointerIdRef.current = event.pointerId;
+    lobbySwipeStartXRef.current = event.clientX;
+    lobbySwipeConsumedRef.current = false;
+    suppressNextLevelClickRef.current = false;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleLobbyPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+    if (lobbySwipeConsumedRef.current) return;
+
+    const deltaX = event.clientX - lobbySwipeStartXRef.current;
+    if (Math.abs(deltaX) < ADVANCED_LOBBY_SWIPE_STEP_PX) return;
+    lobbySwipeConsumedRef.current = true;
+    suppressNextLevelClickRef.current = true;
+
+    const direction = deltaX < 0 ? 1 : -1;
+    const nextLevel = resolveAdvancedLobbySliderLevel({
+      currentLevel,
+      requestedLevel: selectedLevelRef.current + direction,
+    });
+
+    lobbySwipeStartXRef.current = event.clientX;
+    if (nextLevel !== selectedLevelRef.current) {
+      selectedLevelRef.current = nextLevel;
+      onPickLevel(nextLevel);
+    }
+    event.preventDefault();
+  };
+
+  const handleLobbyPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeLobbyPointerIdRef.current !== event.pointerId) return;
+    if (lobbySwipeConsumedRef.current) {
+      event.preventDefault();
+      window.setTimeout(() => {
+        suppressNextLevelClickRef.current = false;
+      }, 0);
+    } else {
+      suppressNextLevelClickRef.current = false;
+    }
+    activeLobbyPointerIdRef.current = null;
+    lobbySwipeConsumedRef.current = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
   return (
     <div className="advanced-panel advanced-lobby-panel">
-      <div className="advanced-lobby-carousel" ref={carouselRef}>
+      <div
+        className="advanced-lobby-carousel"
+        ref={carouselRef}
+        onPointerCancel={handleLobbyPointerUp}
+        onPointerDown={handleLobbyPointerDown}
+        onPointerMove={handleLobbyPointerMove}
+        onPointerUp={handleLobbyPointerUp}
+      >
         <div className="advanced-lobby-track" style={lobbyTrackStyle}>
           {levelItems.map((item) => {
             const selected = item.position === "selected";
@@ -409,7 +498,7 @@ function AdvancedLevelSelectionPanel({
                 disabled={!item.selectable}
                 key={item.level}
                 type="button"
-                onClick={() => handleLevelClick(item.level)}
+                onClick={(event) => handleLevelButtonClick(event, item.level)}
               >
                 {item.state === "completed" ? (
                   <span className="advanced-lobby-badge" aria-hidden="true">
@@ -476,6 +565,7 @@ function AdvancedLobbyContent({
   round,
   unlockedLevel,
   onBack,
+  onOpenLuckDraw,
   onPickLevel,
   onRestartBaseRound,
   onStartLevel,
@@ -485,6 +575,7 @@ function AdvancedLobbyContent({
   round: AdvancedRoundConfig;
   unlockedLevel: number;
   onBack: () => void;
+  onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
   onRestartBaseRound: (level: number) => void;
   onStartLevel: (level: number) => void;
@@ -541,7 +632,14 @@ function AdvancedLobbyContent({
       </div>
 
       {challenge.mode === "complete" ? (
-        <AdvancedResultCard config={activeConfig} challenge={challenge} goalItems={goalItems} onBack={onBack} onStartLevel={onStartLevel} />
+        <AdvancedResultCard
+          config={activeConfig}
+          challenge={challenge}
+          goalItems={goalItems}
+          onBack={onBack}
+          onOpenLuckDraw={onOpenLuckDraw}
+          onStartLevel={onStartLevel}
+        />
       ) : (
         <AdvancedLevelSelectionPanel
           activeConfig={activeConfig}
@@ -566,6 +664,7 @@ export function AdvancedChallengeScreen({
   onBuildPerfectTrials,
   onCompleteBaseRound,
   onCompleteRound,
+  onOpenLuckDraw,
   onPickLevel,
   onRestartBaseRound,
   onStartLevel,
@@ -578,6 +677,7 @@ export function AdvancedChallengeScreen({
   onBuildPerfectTrials: (config: AdvancedStageConfig) => TrialEvent[];
   onCompleteBaseRound: (record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => void;
   onCompleteRound: (trials: TrialEvent[]) => void;
+  onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
   onRestartBaseRound: (level: number) => void;
   onStartLevel: (level: number) => void;
@@ -586,9 +686,18 @@ export function AdvancedChallengeScreen({
   const round = getRoundConfig(challenge.roundId);
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
   const unlockedLevel = getAdvancedLobbyUnlockedLevel(currentLevel);
+  const [dismissedAdvancedTutorialKey, setDismissedAdvancedTutorialKey] = React.useState("");
 
   if (challenge.mode === "playing") {
     const playingConfig = getAdvancedStageConfig(challenge.roundId, challenge.level);
+    const advancedTutorialKey = `${challenge.roundId}-${challenge.level}-${challenge.attemptId}`;
+    const advancedTutorialVisible = challenge.level <= 3 && dismissedAdvancedTutorialKey !== advancedTutorialKey;
+    const advancedTutorialItems = getAdvancedChallengeRuleItems(playingConfig);
+    const dismissAdvancedTutorial = () => setDismissedAdvancedTutorialKey(advancedTutorialKey);
+    const handleAdvancedTutorialKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key === "Enter" || event.key === " ") dismissAdvancedTutorial();
+    };
+
     return (
       <section className="play-screen advanced-play-screen" aria-live="polite">
         <header className="round-header advanced-round-header">
@@ -612,13 +721,36 @@ export function AdvancedChallengeScreen({
         <div className="progress-track" aria-hidden="true">
           <span style={{ width: `${challenge.level * 10}%` }} />
         </div>
-        {renderRound({
-          key: `advanced-${challenge.roundId}-${challenge.level}-${challenge.attemptId}`,
-          phase: "advanced",
-          advancedConfig: playingConfig,
-          round: challenge.roundId,
-          onComplete: onCompleteRound,
-        })}
+        {advancedTutorialVisible
+          ? null
+          : renderRound({
+              key: `advanced-${challenge.roundId}-${challenge.level}-${challenge.attemptId}`,
+              phase: "advanced",
+              advancedConfig: playingConfig,
+              round: challenge.roundId,
+              onComplete: onCompleteRound,
+            })}
+        {advancedTutorialVisible ? (
+          <div
+            className="advanced-tutorial-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="advanced-tutorial-title"
+            tabIndex={0}
+            onKeyDown={handleAdvancedTutorialKeyDown}
+            onPointerDown={dismissAdvancedTutorial}
+          >
+            <div className="advanced-tutorial-panel">
+              <h2 id="advanced-tutorial-title">{playingConfig.stageTitle}</h2>
+              <ul className="advanced-tutorial-steps">
+                {advancedTutorialItems.map((item) => (
+                  <li key={`${item.icon}-${item.text}`}>{item.text}</li>
+                ))}
+              </ul>
+              <small className="advanced-tutorial-start-hint">点击任意位置开始挑战</small>
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -652,6 +784,7 @@ export function AdvancedChallengeScreen({
       round={round}
       unlockedLevel={unlockedLevel}
       onBack={onBack}
+      onOpenLuckDraw={onOpenLuckDraw}
       onPickLevel={onPickLevel}
       onRestartBaseRound={onRestartBaseRound}
       onStartLevel={onStartLevel}

@@ -367,7 +367,11 @@ function paintAdvancedAimArrowElements(arrows: AdvancedAimArrowView[], elements:
   }
 }
 
-export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
+export function AdvancedAimRound({
+  advancedConfig,
+  onComplete,
+  onPracticeSuccess,
+}: RoundProps & { onPracticeSuccess?: () => void }) {
   const config = advancedConfig!;
   const mode = getAdvancedAimMode(config);
   const arrowCount = getParamNumber(config, "arrowCount", 8);
@@ -686,6 +690,7 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
         return;
       }
       if (hitCountRef.current >= requiredHits) {
+        onPracticeSuccess?.();
         showAimFeedback("good", true);
         finish();
         return;
@@ -712,7 +717,8 @@ export function AdvancedAimRound({ advancedConfig, onComplete }: RoundProps) {
     finish,
     keepTargetOnHit,
     mode,
-    recordAimTrial,
+    onPracticeSuccess,
+    recordAimTrial,
     spawnIntervalMs,
     publishArrows,
     publishDistractors,
@@ -870,6 +876,46 @@ const BASIC_AIM_CONFIG: AdvancedStageConfig = {
   },
 };
 
+const PRACTICE_AIM_CONFIG: AdvancedStageConfig = {
+  ...BASIC_AIM_CONFIG,
+  stageTitle: "试一次",
+  params: {
+    ...BASIC_AIM_CONFIG.params,
+    arrowCount: 1,
+    targetCount: 1,
+    requiredHits: 1,
+    unlimitedArrows: false,
+    targetSpeedMultiplier: 0.8,
+  },
+};
+
 export function AimRound({ onComplete }: RoundProps) {
+  const [practicePassed, setPracticePassed] = useState(false);
+  const [practiceKey, setPracticeKey] = useState(0);
+  const [practiceMessage, setPracticeMessage] = useState("试一次：先命中一次靶子");
+
+  const completePractice = useCallback((practiceTrials: TrialEvent[]) => {
+    if (practiceTrials.some((item) => item.correct === true)) {
+      setPracticePassed(true);
+      return;
+    }
+    setPracticeMessage("没射中靶子，再试一次");
+    setPracticeKey((current) => current + 1);
+  }, []);
+
+  if (!practicePassed) {
+    return (
+      <div className="base-practice-wrap">
+        <AdvancedAimRound
+          key={`aim-practice-${practiceKey}`}
+          advancedConfig={PRACTICE_AIM_CONFIG}
+          onComplete={completePractice}
+          onPracticeSuccess={() => setPracticeMessage("")}
+        />
+        <small className="base-practice-message">{practiceMessage}</small>
+      </div>
+    );
+  }
+
   return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} />;
 }

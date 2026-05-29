@@ -1,4 +1,4 @@
-import { getAdvancedDimensionLevel, type AdvancedProgress } from "../../lib/advanced-progress.ts";
+import { getAdvancedDimensionLevel, getAdvancedTotalStars, type AdvancedProgress } from "../../lib/advanced-progress.ts";
 import type { RoundId } from "../../lib/scoring.ts";
 
 export type PlayerAvatarSkin =
@@ -8,6 +8,7 @@ export type PlayerAvatarSkin =
   | "mint"
   | "slate"
   | "basketball"
+  | "starfall"
   | "pig"
   | "sand"
   | "pine"
@@ -29,6 +30,7 @@ export const PLAYER_AVATAR_SKINS = [
   "paw",
   "pig",
   "basketball",
+  "starfall",
   "arcade",
 ] as const satisfies readonly PlayerAvatarSkin[];
 
@@ -45,6 +47,7 @@ const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
   "paw",
   "pig",
   "basketball",
+  "starfall",
   "arcade",
 ] as const satisfies readonly PlayerAvatarSkin[];
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX = new Map(PLAYER_AVATAR_SKIN_DISPLAY_ORDER.map((skin, index) => [skin, index]));
@@ -62,6 +65,7 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   sand: "沙丘",
   signal: "绿灯",
   slate: "石板",
+  starfall: "星陨",
   target: "靶心",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
@@ -78,6 +82,7 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   sand: "脸上的痕迹不是皱纹",
   signal: "从不闯红灯的乖方块",
   slate: "沉着稳重",
+  starfall: "三百颗够吗？",
   target: "很难被打中的小方块",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
@@ -100,6 +105,10 @@ type PlayerAvatarSkinUnlock =
       label: string;
     }
   | {
+      kind: "legend-50";
+      label: string;
+    }
+  | {
       kind: "legend-100";
       label: string;
     }
@@ -110,7 +119,7 @@ type PlayerAvatarSkinUnlock =
 
 export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   arcade: { kind: "donation", label: "赞赏作者后解锁" },
-  basketball: { kind: "legend-100", label: "传奇王者 100 星解锁" },
+  basketball: { kind: "legend-50", label: "荣耀王者 50 星解锁" },
   blade: { kind: "advanced-final", label: "通关丢飞刀最终试炼", roundId: "patience" },
   cyan: { kind: "default", label: "默认解锁" },
   ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
@@ -121,6 +130,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   sand: { kind: "advanced-final", label: "通关跳一跳最终试炼", roundId: "rhythm" },
   signal: { kind: "advanced-final", label: "通关绿灯行最终试炼", roundId: "reaction" },
   slate: { kind: "advanced-final", label: "通关一路向下最终试炼", roundId: "stroop" },
+  starfall: { kind: "legend-100", label: "传奇王者 100 星解锁" },
   target: { kind: "advanced-final", label: "通关移动靶最终试炼", roundId: "aim" },
 } as const satisfies Record<PlayerAvatarSkin, PlayerAvatarSkinUnlock>;
 
@@ -141,6 +151,8 @@ export function getPlayerAvatarSkinUnlockState(skin: PlayerAvatarSkin, progress:
       return { label: unlock.label, unlocked: progress.authorDonated === true };
     case "king-rank":
       return { label: unlock.label, unlocked: progress.unlocked === true };
+    case "legend-50":
+      return { label: unlock.label, unlocked: getAdvancedTotalStars(progress) >= 50 };
     case "legend-100":
       return { label: unlock.label, unlocked: progress.legend100SkinUnlocked === true };
     case "luck-100":
@@ -160,4 +172,18 @@ export function getPlayerAvatarSkinDisplayItems(progress: AdvancedProgress) {
 
 export function isPlayerAvatarSkinUnlocked(skin: PlayerAvatarSkin, progress: AdvancedProgress) {
   return getPlayerAvatarSkinUnlockState(skin, progress).unlocked;
+}
+
+export function getNewlyUnlockedPlayerAvatarSkins(before: AdvancedProgress, after: AdvancedProgress): PlayerAvatarSkin[] {
+  return PLAYER_AVATAR_SKINS.filter((skin) => {
+    if (skin === "cyan") return false;
+    return !getPlayerAvatarSkinUnlockState(skin, before).unlocked && getPlayerAvatarSkinUnlockState(skin, after).unlocked;
+  });
+}
+
+export function getUnlockedSkinFromAdvancedClear(roundId: RoundId, before: AdvancedProgress, after: AdvancedProgress): PlayerAvatarSkin | undefined {
+  return getNewlyUnlockedPlayerAvatarSkins(before, after).find((skin) => {
+    const unlock = PLAYER_AVATAR_SKIN_UNLOCKS[skin];
+    return unlock.kind === "advanced-final" && unlock.roundId === roundId;
+  });
 }
