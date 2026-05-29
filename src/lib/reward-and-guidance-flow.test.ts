@@ -182,7 +182,6 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
 test("donation flow uses feed choices with personal collection-code guidance", () => {
   const pageSource = readSource("../app/page.tsx");
   const resultSource = readSource("../features/results/result-screen.tsx");
-  const qrAssetSource = readSource("../features/results/donation-qr-assets.ts");
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
 
   assert.match(pageSource, /DONATE_AUTHOR_URL/);
@@ -201,14 +200,13 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   assert.match(resultSource, /投喂食材选项/);
   assert.match(resultSource, /useState<DonationFeedOption\["id"\] \| null>\(null\)/);
   assert.match(resultSource, /selectedDonationFeed \? \(/);
-  assert.match(resultSource, /DONATION_QR_ASSET_BY_SRC/);
-  assert.match(qrAssetSource, /alipay-mixue\.jpg/);
+  assert.match(resultSource, /\/donate\/alipay-mixue\.jpg/);
+  assert.match(resultSource, /\/donate\/wechat-free\.png/);
   assert.match(resultSource, /className=\{`donate-qr-image platform-\$\{platform\.id\}`\}/);
-  assert.match(resultSource, /crypto\.subtle\.digest\("SHA-256"/);
-  assert.match(resultSource, /selectedDonationQrAssetsVerified/);
-  assert.match(resultSource, /qrStatus === "valid"/);
-  assert.match(resultSource, /收款码校验失败，请不要付款/);
-  assert.match(resultSource, /正在校验收款码/);
+  assert.doesNotMatch(resultSource, /crypto\.subtle/);
+  assert.doesNotMatch(resultSource, /DONATION_QR_ASSET/);
+  assert.doesNotMatch(resultSource, /selectedDonationQrAssetsVerified/);
+  assert.doesNotMatch(resultSource, /qrStatus/);
   assert.match(resultSource, /支付宝收款码/);
   assert.match(resultSource, /微信收款码/);
   assert.match(resultSource, /长按保存图片，打开支付宝\/微信扫一扫相册识别/);

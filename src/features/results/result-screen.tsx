@@ -15,13 +15,13 @@ import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring"
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
 import { AvatarLabIcon, DonateIcon, FeedbackIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
-import { DONATION_QR_ASSET_BY_SRC, DONATION_QR_ASSETS, type DonationFeedId, type DonatePlatformId, type DonationQrAsset } from "@/features/results/donation-qr-assets";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type FeedbackCategory = "bug" | "idea" | "chat";
 type FeedbackSubmitState = "idle" | "submitting" | "sent" | "failed";
-type DonationQrIntegrityStatus = "checking" | "valid" | "invalid";
+type DonatePlatformId = "alipay" | "wechat";
+type DonationFeedId = "mixue" | "porkRice" | "free";
 type DonationFeedOption = {
   id: DonationFeedId;
   label: string;
@@ -46,8 +46,8 @@ const DONATION_FEED_OPTIONS = [
     label: "蜜雪冰城",
     note: "清凉补给",
     qrImages: {
-      alipay: DONATION_QR_ASSETS.mixue.alipay.src,
-      wechat: DONATION_QR_ASSETS.mixue.wechat.src,
+      alipay: "/donate/alipay-mixue.jpg",
+      wechat: "/donate/wechat-mixue.png",
     },
   },
   {
@@ -55,8 +55,8 @@ const DONATION_FEED_OPTIONS = [
     label: "大份猪脚饭",
     note: "回血套餐",
     qrImages: {
-      alipay: DONATION_QR_ASSETS.porkRice.alipay.src,
-      wechat: DONATION_QR_ASSETS.porkRice.wechat.src,
+      alipay: "/donate/alipay-pork-rice.jpg",
+      wechat: "/donate/wechat-pork-rice.png",
     },
   },
   {
@@ -64,8 +64,8 @@ const DONATION_FEED_OPTIONS = [
     label: "随意加餐",
     note: "能吃就行",
     qrImages: {
-      alipay: DONATION_QR_ASSETS.free.alipay.src,
-      wechat: DONATION_QR_ASSETS.free.wechat.src,
+      alipay: "/donate/alipay-free.jpg",
+      wechat: "/donate/wechat-free.png",
     },
   },
 ] as const satisfies ReadonlyArray<DonationFeedOption>;
@@ -90,21 +90,6 @@ function roundFailureCount(trials: TrialEvent[], roundId: RoundId) {
 
   if (reportedFailures !== undefined) return Math.max(0, Math.round(reportedFailures));
   return roundTrials.filter((item) => item.correct === false).length;
-}
-
-function hashBufferAsHex(buffer: ArrayBuffer) {
-  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function verifyDonationQrAsset(qrImage: string, asset: DonationQrAsset, signal: AbortSignal) {
-  const response = await fetch(qrImage, { cache: "no-store", signal });
-  if (!response.ok) return false;
-
-  const fileBuffer = await response.arrayBuffer();
-  if (fileBuffer.byteLength !== asset.bytes) return false;
-
-  const digest = await crypto.subtle.digest("SHA-256", fileBuffer);
-  return hashBufferAsHex(digest) === asset.sha256;
 }
 
 export function ResultScreen({
@@ -147,7 +132,6 @@ export function ResultScreen({
   const [donatePanelOpen, setDonatePanelOpen] = useState(false);
   const [donateConfirmed, setDonateConfirmed] = useState(false);
   const [donateActionReady, setDonateActionReady] = useState(false);
-  const [donationQrIntegrity, setDonationQrIntegrity] = useState<Record<string, DonationQrIntegrityStatus>>({});
   const [selectedDonationFeedId, setSelectedDonationFeedId] = useState<DonationFeedOption["id"] | null>(null);
   const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
@@ -178,8 +162,6 @@ export function ResultScreen({
   const rankTitle = formatResultRankTitle(result.name, advancedStars);
   const luckStatus = getLuckDrawStatusText(advancedUnlocked, advancedProgress);
   const selectedDonationFeed = selectedDonationFeedId ? DONATION_FEED_OPTIONS.find((item) => item.id === selectedDonationFeedId) ?? null : null;
-  const selectedDonationQrAssetsVerified =
-    selectedDonationFeed !== null && DONATION_PLATFORMS.every((platform) => donationQrIntegrity[selectedDonationFeed.qrImages[platform.id]] === "valid");
 
   const clearAvatarEntryTimer = useCallback(() => {
     if (avatarEntryTimerRef.current !== null) {
@@ -196,10 +178,10 @@ export function ResultScreen({
   }, []);
 
   const markDonateActionReady = useCallback(() => {
-    if (!selectedDonationFeedId || !selectedDonationQrAssetsVerified) return;
+    if (!selectedDonationFeedId) return;
     clearDonateSaveIntentTimer();
     setDonateActionReady(true);
-  }, [clearDonateSaveIntentTimer, selectedDonationFeedId, selectedDonationQrAssetsVerified]);
+  }, [clearDonateSaveIntentTimer, selectedDonationFeedId]);
 
   useEffect(() => clearAvatarEntryTimer, [clearAvatarEntryTimer]);
   useEffect(() => clearDonateSaveIntentTimer, [clearDonateSaveIntentTimer]);
@@ -222,30 +204,6 @@ export function ResultScreen({
       window.removeEventListener("blur", markAfterLeaving);
     };
   }, [donatePanelOpen, markDonateActionReady, selectedDonationFeedId]);
-
-  useEffect(() => {
-    if (!donatePanelOpen || !selectedDonationFeed) return;
-
-    const controller = new AbortController();
-    const qrImages = DONATION_PLATFORMS.map((platform) => selectedDonationFeed.qrImages[platform.id]);
-
-    for (const qrImage of qrImages) {
-      const asset = DONATION_QR_ASSET_BY_SRC[qrImage];
-      const verifyAsset = asset ? verifyDonationQrAsset(qrImage, asset, controller.signal) : Promise.resolve(false);
-
-      verifyAsset
-        .then((valid) => {
-          if (controller.signal.aborted) return;
-          setDonationQrIntegrity((current) => ({ ...current, [qrImage]: valid ? "valid" : "invalid" }));
-        })
-        .catch(() => {
-          if (controller.signal.aborted) return;
-          setDonationQrIntegrity((current) => ({ ...current, [qrImage]: "invalid" }));
-        });
-    }
-
-    return () => controller.abort();
-  }, [donatePanelOpen, selectedDonationFeed]);
 
   const runAvatarMenuAction = useCallback(
     (action: () => void) => {
@@ -288,7 +246,6 @@ export function ResultScreen({
     setAvatarMenuOpen(false);
     setDonateConfirmed(false);
     setDonateActionReady(false);
-    setDonationQrIntegrity({});
     setSelectedDonationFeedId(null);
     onDonateAuthor();
     setDonatePanelOpen(true);
@@ -549,9 +506,6 @@ export function ResultScreen({
                   key={option.id}
                   type="button"
                   onClick={() => {
-                    if (selectedDonationFeedId !== option.id) {
-                      setDonationQrIntegrity({});
-                    }
                     setSelectedDonationFeedId(option.id);
                     setDonateConfirmed(false);
                     setDonateActionReady(false);
@@ -568,38 +522,34 @@ export function ResultScreen({
                 <div className="donate-qr-grid">
                   {DONATION_PLATFORMS.map((platform) => {
                     const qrImage = selectedDonationFeed.qrImages[platform.id];
-                    const qrStatus = donationQrIntegrity[qrImage] ?? "checking";
                     return (
                       <section className="donate-qr-panel" key={`${selectedDonationFeed.id}-${platform.id}`}>
                         <strong>{platform.label}</strong>
                         <div
                           className="donate-qr-box"
-                          onContextMenu={qrStatus === "valid" ? markDonateActionReady : undefined}
+                          onContextMenu={markDonateActionReady}
                           onPointerCancel={clearDonateSaveIntentTimer}
                           onPointerDown={() => {
-                            if (qrStatus !== "valid") return;
                             clearDonateSaveIntentTimer();
                             donateSaveIntentTimerRef.current = window.setTimeout(markDonateActionReady, 520);
                           }}
                           onPointerLeave={clearDonateSaveIntentTimer}
                           onPointerUp={clearDonateSaveIntentTimer}
                         >
-                          {qrStatus === "valid" ? (
-                            <Image
-                              alt={`${platform.label}：${selectedDonationFeed.label}`}
-                              className={`donate-qr-image platform-${platform.id}`}
-                              height={180}
-                              src={qrImage}
-                              unoptimized
-                              width={180}
-                              onError={(event) => {
-                                event.currentTarget.hidden = true;
-                                event.currentTarget.nextElementSibling?.removeAttribute("hidden");
-                              }}
-                            />
-                          ) : null}
-                          <span className="donate-qr-fallback" hidden={qrStatus === "valid"}>
-                            {qrStatus === "invalid" ? "收款码校验失败，请不要付款" : "正在校验收款码"}
+                          <Image
+                            alt={`${platform.label}：${selectedDonationFeed.label}`}
+                            className={`donate-qr-image platform-${platform.id}`}
+                            height={180}
+                            src={qrImage}
+                            unoptimized
+                            width={180}
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                              event.currentTarget.nextElementSibling?.removeAttribute("hidden");
+                            }}
+                          />
+                          <span className="donate-qr-fallback" hidden>
+                            收款码图片加载失败
                           </span>
                         </div>
                       </section>
