@@ -1,7 +1,14 @@
 .play-screen {
   width: min(100%, 920px);
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
   height: 100dvh;
   min-height: 100dvh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   margin: 0 auto;
   display: grid;
   grid-template-rows: auto 4px minmax(0, 1fr);

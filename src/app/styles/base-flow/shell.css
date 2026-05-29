@@ -8,10 +8,24 @@
 .app-shell.app-shell-play {
   width: 100%;
   max-width: none;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
   height: 100dvh;
   min-height: 100dvh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   padding: 0;
   overflow: hidden;
+}
+
+html[data-game-viewport-locked],
+html[data-game-viewport-locked] body {
+  height: var(--game-viewport-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .home-screen,

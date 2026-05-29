@@ -15,6 +15,13 @@ import {
   type MiniGameId,
   type MiniGameParams,
 } from "@/lib/mini-games";
+import {
+  GAME_VIEWPORT_WIDTH_CHANGE_PX,
+  MINI_GAME_STAGE_COLLAPSE_RATIO,
+  MIN_MINI_GAME_STAGE_HEIGHT,
+  MIN_MINI_GAME_STAGE_WIDTH,
+  shouldCommitMiniGameStageSize,
+} from "@/features/layout/game-viewport";
 
 export const STAGE_WIDTH = 360;
 export const STAGE_HEIGHT = 640;
@@ -108,6 +115,15 @@ export function useMiniGameStageSize<T extends HTMLElement = HTMLDivElement>() {
     const node = stageRef.current;
     if (!node) return undefined;
     let frameId = 0;
+    let recoveryTimeoutId = 0;
+
+    const scheduleRecoveryMeasure = () => {
+      if (recoveryTimeoutId !== 0) return;
+      recoveryTimeoutId = window.setTimeout(() => {
+        recoveryTimeoutId = 0;
+        scheduleMeasure();
+      }, 90);
+    };
 
     const measure = () => {
       frameId = 0;
@@ -115,8 +131,17 @@ export function useMiniGameStageSize<T extends HTMLElement = HTMLDivElement>() {
       const width = Math.max(1, Math.round(rect.width));
       const height = Math.max(1, Math.round(rect.height));
       const previous = stageSizeRef.current;
-      if (previous.width === width && previous.height === height) return;
       const next = { width, height };
+      const stageTooSmall = width < MIN_MINI_GAME_STAGE_WIDTH || height < MIN_MINI_GAME_STAGE_HEIGHT;
+      const likelyCollapsedHeight =
+        Math.abs(width - previous.width) < GAME_VIEWPORT_WIDTH_CHANGE_PX &&
+        height < previous.height * MINI_GAME_STAGE_COLLAPSE_RATIO;
+
+      if (!shouldCommitMiniGameStageSize(previous, next)) {
+        if (stageTooSmall || likelyCollapsedHeight) scheduleRecoveryMeasure();
+        return;
+      }
+
       stageSizeRef.current = next;
       setStageSize(next);
     };
@@ -132,6 +157,7 @@ export function useMiniGameStageSize<T extends HTMLElement = HTMLDivElement>() {
       window.addEventListener("resize", scheduleMeasure);
       return () => {
         if (frameId !== 0) window.cancelAnimationFrame(frameId);
+        if (recoveryTimeoutId !== 0) window.clearTimeout(recoveryTimeoutId);
         window.removeEventListener("resize", scheduleMeasure);
       };
     }
@@ -140,6 +166,7 @@ export function useMiniGameStageSize<T extends HTMLElement = HTMLDivElement>() {
     observer.observe(node);
     return () => {
       if (frameId !== 0) window.cancelAnimationFrame(frameId);
+      if (recoveryTimeoutId !== 0) window.clearTimeout(recoveryTimeoutId);
       observer.disconnect();
     };
   }, []);

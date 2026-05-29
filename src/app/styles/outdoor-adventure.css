@@ -11,8 +11,15 @@
   --outdoor-meta-width: min(34vw, 150px);
   position: fixed;
   inset: 0;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
   height: 100dvh;
   min-height: 100svh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   z-index: 1250;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -678,8 +685,15 @@
   position: fixed;
   inset: 0;
   z-index: 1300;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
   height: 100dvh;
   min-height: 100svh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
@@ -787,7 +801,10 @@
 }
 
 .outdoor-summary-room {
+  min-height: 100vh;
+  min-height: 100svh;
   min-height: 100dvh;
+  min-height: var(--game-viewport-height, 100dvh);
   display: grid;
   place-items: center;
   padding: max(28px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));

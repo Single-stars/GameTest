@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { GameViewportGuard } from "@/features/layout/game-viewport-guard";
 import { MobileLongPressGuard } from "@/features/input/mobile-long-press-guard";
 import "./globals.css";
 
@@ -36,6 +37,14 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#f7f4ee",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -44,6 +53,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
+        <GameViewportGuard />
         <MobileLongPressGuard />
         {children}
       </body>

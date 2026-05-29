@@ -811,6 +811,34 @@ test("mini-game stages use native measured dimensions instead of visual scaling"
   }
 });
 
+test("gameplay fullscreen surfaces use the guarded mobile viewport", () => {
+  const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const viewportGuardUrl = new URL("../features/layout/game-viewport-guard.tsx", import.meta.url);
+  const viewportHelperUrl = new URL("../features/layout/game-viewport.ts", import.meta.url);
+  const shellCss = readFileSync(new URL("../app/styles/base-flow/shell.css", import.meta.url), "utf8");
+  const playFrameCss = readFileSync(new URL("../app/styles/base-flow/play-frame.css", import.meta.url), "utf8");
+  const homeworldCss = readFileSync(new URL("../app/styles/base-flow/homeworld.css", import.meta.url), "utf8");
+  const outdoorCss = readFileSync(new URL("../app/styles/outdoor-adventure.css", import.meta.url), "utf8");
+  const multiplayerCss = readFileSync(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url), "utf8");
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+
+  assert.equal(existsSync(viewportGuardUrl), true, viewportGuardUrl.pathname);
+  assert.equal(existsSync(viewportHelperUrl), true, viewportHelperUrl.pathname);
+  assert.match(layoutSource, /import type \{ Metadata,\s*Viewport \} from "next";/);
+  assert.match(layoutSource, /export const viewport: Viewport = \{[\s\S]*viewportFit:\s*"cover"/);
+  assert.match(layoutSource, /<GameViewportGuard \/>[\s\S]*<MobileLongPressGuard \/>/);
+  assert.match(pageSource, /const playShellActive =/);
+  assert.match(shellCss, /\.app-shell\.app-shell-play \{[\s\S]*--game-viewport-height/);
+  assert.match(playFrameCss, /\.play-screen \{[\s\S]*--game-viewport-height/);
+  assert.match(homeworldCss, /\.homeworld-screen \{[\s\S]*--game-viewport-height/);
+  assert.match(outdoorCss, /\.outdoor-adventure-room \{[\s\S]*--game-viewport-height/);
+  assert.match(outdoorCss, /\.outdoor-round-play \{[\s\S]*--game-viewport-height/);
+  assert.match(multiplayerCss, /\.multiplayer-game-shell \{[\s\S]*--game-viewport-height/);
+  assert.match(commonSource, /shouldCommitMiniGameStageSize/);
+  assert.match(commonSource, /recoveryTimeoutId/);
+});
+
 test("single-player game sync state types live outside multiplayer transport modules", () => {
   const gameSyncTypesUrl = new URL("../features/game-sync/types.ts", import.meta.url);
   const multiplayerTypesSource = readFileSync(new URL("./multiplayer/types.ts", import.meta.url), "utf8");
