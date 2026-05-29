@@ -61,14 +61,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-body *:not(input):not(textarea):not(.share-image-preview),
+body *:not(input):not(textarea):not(.share-image-preview):not(.donate-qr-image),
 body *::before,
 body *::after {
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
 }
 
-body *:not(input):not(textarea):not(.share-image-preview) {
+body *:not(input):not(textarea):not(.share-image-preview):not(.donate-qr-image) {
   -webkit-user-select: none;
   user-select: none;
 }
@@ -120,7 +120,8 @@ textarea {
   user-select: text;
 }
 
-.share-image-preview {
+.share-image-preview,
+.donate-qr-image {
   -webkit-touch-callout: default;
   -webkit-user-drag: auto;
   -webkit-user-select: auto;

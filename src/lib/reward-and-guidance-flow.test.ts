@@ -182,6 +182,7 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
 test("donation flow uses feed choices with personal collection-code guidance", () => {
   const pageSource = readSource("../app/page.tsx");
   const resultSource = readSource("../features/results/result-screen.tsx");
+  const qrAssetSource = readSource("../features/results/donation-qr-assets.ts");
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
 
   assert.match(pageSource, /DONATE_AUTHOR_URL/);
@@ -200,6 +201,14 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   assert.match(resultSource, /投喂食材选项/);
   assert.match(resultSource, /useState<DonationFeedOption\["id"\] \| null>\(null\)/);
   assert.match(resultSource, /selectedDonationFeed \? \(/);
+  assert.match(resultSource, /DONATION_QR_ASSET_BY_SRC/);
+  assert.match(qrAssetSource, /alipay-mixue\.jpg/);
+  assert.match(resultSource, /className=\{`donate-qr-image platform-\$\{platform\.id\}`\}/);
+  assert.match(resultSource, /crypto\.subtle\.digest\("SHA-256"/);
+  assert.match(resultSource, /selectedDonationQrAssetsVerified/);
+  assert.match(resultSource, /qrStatus === "valid"/);
+  assert.match(resultSource, /收款码校验失败，请不要付款/);
+  assert.match(resultSource, /正在校验收款码/);
   assert.match(resultSource, /支付宝收款码/);
   assert.match(resultSource, /微信收款码/);
   assert.match(resultSource, /长按保存图片，打开支付宝\/微信扫一扫相册识别/);
@@ -287,6 +296,11 @@ test("bubble expansion surfaces use the measured viewport and internal scrolling
   assert.match(resultsCss, /\.feedback-dialog\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
   assert.match(resultsCss, /\.feedback-card\s*{[\s\S]*max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) - 36px - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\)\);[\s\S]*overflow:\s*auto;/);
   assert.match(resultsCss, /\.donate-dialog\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
+  assert.match(resultsCss, /\.donate-card\s*{[\s\S]*width:\s*min\(100%, 430px\);/);
+  assert.match(resultsCss, /\.donate-qr-grid\s*{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(resultsCss, /@media \(max-width: 380px\)\s*{[\s\S]*\.donate-qr-grid\s*{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
+  assert.match(resultsCss, /\.donate-qr-box\s*{[\s\S]*aspect-ratio:\s*4 \/ 5;[\s\S]*overflow:\s*hidden;/);
+  assert.match(resultsCss, /\.donate-qr-image\s*{[\s\S]*object-fit:\s*cover;/);
   assert.match(rewardsCss, /\.reward-overlay\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*var\(--game-viewport-height,\s*100dvh\);[\s\S]*overflow-y:\s*auto;/);
 });
 

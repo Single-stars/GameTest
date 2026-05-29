@@ -24,6 +24,7 @@ const DEFAULT_ALLOWED_SURFACES = [
   "[contenteditable='true']",
   "[role='button']",
   ".share-image-preview",
+  ".donate-qr-image",
 ].join(", ");
 
 function getEventElement(target: EventTarget | null) {

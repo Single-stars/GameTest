@@ -224,7 +224,7 @@
 
 .donate-card {
   position: relative;
-  width: min(100%, 570px);
+  width: min(100%, 430px);
   max-height: calc(var(--game-viewport-height, 100dvh) - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   display: grid;
   justify-items: center;
@@ -329,7 +329,11 @@
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 7px;
+  border: 1px solid rgba(47, 127, 89, 0.18);
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
 }
 
 .donate-qr-panel strong {
@@ -340,19 +344,29 @@
 
 .donate-qr-box {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 5;
   display: grid;
   place-items: center;
-  border: 1px dashed rgba(47, 127, 89, 0.34);
+  border: 1px dashed rgba(47, 127, 89, 0.28);
   border-radius: 8px;
-  padding: 8px;
+  padding: 0;
   background: #f8fff7;
+  overflow: hidden;
 }
 
-.donate-qr-box img {
+.donate-qr-image {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+}
+
+.donate-qr-image.platform-alipay {
+  object-position: 50% 47%;
+}
+
+.donate-qr-image.platform-wechat {
+  object-position: 50% 42%;
 }
 
 .donate-qr-fallback {
@@ -1004,6 +1018,10 @@
 }
 
 @media (max-width: 380px) {
+  .donate-qr-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .rank-title {
     padding-inline-end: 68px;
   }
