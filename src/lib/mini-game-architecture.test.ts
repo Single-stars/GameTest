@@ -219,6 +219,12 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(resultScreenSource, /export function ResultScreen/);
   assert.match(luckDrawScreenSource, /export function LuckDrawScreen/);
   assert.match(restartDialogSource, /export function RestartConfirmDialog/);
+  assert.match(restartDialogSource, /className="restart-dialog-backdrop"[\s\S]*onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.doesNotMatch(restartDialogSource, /className="restart-dialog-backdrop"[\s\S]*onPointerDown=\{onCancel\}/);
+  assert.match(restartDialogSource, /className="secondary-button"[\s\S]*onClick=\{onCancel\}/);
+  assert.match(restartDialogSource, /className="primary-button"[\s\S]*onClick=\{onConfirm\}/);
+  assert.doesNotMatch(restartDialogSource, /className="secondary-button"[\s\S]*onPointerDown=\{onCancel\}/);
+  assert.doesNotMatch(restartDialogSource, /className="primary-button"[\s\S]*onPointerDown=\{onConfirm\}/);
   assert.match(advancedScreenSource, /export type AdvancedChallengeState/);
   assert.match(advancedScreenSource, /export function AdvancedChallengeScreen/);
   assert.equal(existsSync(nativeRoundsFacadeUrl), false);

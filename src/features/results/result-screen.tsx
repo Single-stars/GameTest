@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   useCallback,
   useEffect,
@@ -19,6 +20,13 @@ import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/pl
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 type FeedbackCategory = "bug" | "idea" | "chat";
 type FeedbackSubmitState = "idle" | "submitting" | "sent" | "failed";
+type DonatePlatformId = "alipay" | "wechat";
+type DonationFeedOption = {
+  id: "mixue" | "porkRice" | "free";
+  label: string;
+  note: string;
+  qrImages: Record<DonatePlatformId, string>;
+};
 type AvatarMenuItem = {
   id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate" | "feedback";
   label: string;
@@ -31,6 +39,39 @@ type AvatarMenuItem = {
 
 const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;
 const FEEDBACK_CONTENT_MAX_LENGTH = 250;
+const DONATION_FEED_OPTIONS = [
+  {
+    id: "mixue",
+    label: "蜜雪冰城",
+    note: "清凉补给",
+    qrImages: {
+      alipay: "/donate/alipay-mixue.png",
+      wechat: "/donate/wechat-mixue.png",
+    },
+  },
+  {
+    id: "porkRice",
+    label: "大份猪脚饭",
+    note: "回血套餐",
+    qrImages: {
+      alipay: "/donate/alipay-pork-rice.png",
+      wechat: "/donate/wechat-pork-rice.png",
+    },
+  },
+  {
+    id: "free",
+    label: "随意加餐",
+    note: "能吃就行",
+    qrImages: {
+      alipay: "/donate/alipay-free.png",
+      wechat: "/donate/wechat-free.png",
+    },
+  },
+] as const satisfies ReadonlyArray<DonationFeedOption>;
+const DONATION_PLATFORMS = [
+  { id: "alipay", label: "支付宝收款码", appName: "支付宝" },
+  { id: "wechat", label: "微信收款码", appName: "微信" },
+] as const satisfies ReadonlyArray<{ id: DonatePlatformId; label: string; appName: string }>;
 const FEEDBACK_TYPES = [
   { id: "bug", label: "BUG反馈" },
   { id: "idea", label: "贡献你的想法" },
@@ -89,6 +130,8 @@ export function ResultScreen({
   const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
   const [donatePanelOpen, setDonatePanelOpen] = useState(false);
   const [donateConfirmed, setDonateConfirmed] = useState(false);
+  const [donateActionReady, setDonateActionReady] = useState(false);
+  const [selectedDonationFeedId, setSelectedDonationFeedId] = useState<DonationFeedOption["id"] | null>(null);
   const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
   const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("idea");
@@ -96,6 +139,7 @@ export function ResultScreen({
   const [feedbackSubmitState, setFeedbackSubmitState] = useState<FeedbackSubmitState>("idle");
   const [feedbackError, setFeedbackError] = useState("");
   const avatarEntryTimerRef = useRef<number | null>(null);
+  const donateSaveIntentTimerRef = useRef<number | null>(null);
   const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
   const dinoTrials = brakingTrials.filter((item) => item.value?.mode === "dino" || item.value?.signal === "threat");
@@ -116,6 +160,7 @@ export function ResultScreen({
 
   const rankTitle = formatResultRankTitle(result.name, advancedStars);
   const luckStatus = getLuckDrawStatusText(advancedUnlocked, advancedProgress);
+  const selectedDonationFeed = selectedDonationFeedId ? DONATION_FEED_OPTIONS.find((item) => item.id === selectedDonationFeedId) ?? null : null;
 
   const clearAvatarEntryTimer = useCallback(() => {
     if (avatarEntryTimerRef.current !== null) {
@@ -124,7 +169,40 @@ export function ResultScreen({
     }
   }, []);
 
+  const clearDonateSaveIntentTimer = useCallback(() => {
+    if (donateSaveIntentTimerRef.current !== null) {
+      window.clearTimeout(donateSaveIntentTimerRef.current);
+      donateSaveIntentTimerRef.current = null;
+    }
+  }, []);
+
+  const markDonateActionReady = useCallback(() => {
+    if (!selectedDonationFeedId) return;
+    clearDonateSaveIntentTimer();
+    setDonateActionReady(true);
+  }, [clearDonateSaveIntentTimer, selectedDonationFeedId]);
+
   useEffect(() => clearAvatarEntryTimer, [clearAvatarEntryTimer]);
+  useEffect(() => clearDonateSaveIntentTimer, [clearDonateSaveIntentTimer]);
+
+  useEffect(() => {
+    if (!donatePanelOpen || !selectedDonationFeedId) return;
+
+    const markAfterLeaving = () => markDonateActionReady();
+    const markWhenHidden = () => {
+      if (document.visibilityState === "hidden") markDonateActionReady();
+    };
+
+    document.addEventListener("visibilitychange", markWhenHidden);
+    window.addEventListener("pagehide", markAfterLeaving);
+    window.addEventListener("blur", markAfterLeaving);
+
+    return () => {
+      document.removeEventListener("visibilitychange", markWhenHidden);
+      window.removeEventListener("pagehide", markAfterLeaving);
+      window.removeEventListener("blur", markAfterLeaving);
+    };
+  }, [donatePanelOpen, markDonateActionReady, selectedDonationFeedId]);
 
   const runAvatarMenuAction = useCallback(
     (action: () => void) => {
@@ -163,11 +241,14 @@ export function ResultScreen({
 
   const openDonatePanel = useCallback(() => {
     clearAvatarEntryTimer();
+    clearDonateSaveIntentTimer();
     setAvatarMenuOpen(false);
     setDonateConfirmed(false);
+    setDonateActionReady(false);
+    setSelectedDonationFeedId(null);
     onDonateAuthor();
     setDonatePanelOpen(true);
-  }, [clearAvatarEntryTimer, onDonateAuthor]);
+  }, [clearAvatarEntryTimer, clearDonateSaveIntentTimer, onDonateAuthor]);
 
   const confirmDonate = useCallback(() => {
     onConfirmDonateAuthor();
@@ -258,7 +339,7 @@ export function ResultScreen({
     },
     {
       id: "donate",
-      label: "赞赏作者",
+      label: "投喂",
       icon: <DonateIcon />,
       tone: "donate",
       onSelect: openDonatePanel,
@@ -408,16 +489,80 @@ export function ResultScreen({
       {donatePanelOpen ? (
         <div className="donate-dialog" role="dialog" aria-modal="true" aria-labelledby="donate-dialog-title">
           <div className="donate-card">
-            <button className="donate-close" type="button" aria-label="关闭赞赏面板" onClick={() => setDonatePanelOpen(false)}>
+            <button className="donate-close" type="button" aria-label="关闭投喂面板" onClick={() => setDonatePanelOpen(false)}>
               ×
             </button>
-            <DonateIcon />
-            <h2 id="donate-dialog-title">赞赏作者</h2>
-            <p>如已打开赞赏链接，金额由你自己决定；完成后回到这里确认即可解锁赞赏皮肤。</p>
-            <button className="donate-confirm" type="button" onClick={confirmDonate}>
-              我已赞赏
-            </button>
-            {donateConfirmed ? <small>赞赏皮肤已解锁</small> : null}
+            <div className="donate-piggy" aria-hidden="true">
+              <PlayerAvatar action="celebrate" effect="sparkles" expression="happy" skin="pig" size={62} />
+            </div>
+            <h2 id="donate-dialog-title">投喂</h2>
+            <p className="donate-feed-title">如果你觉得作者做的还不错~</p>
+            <div className="donate-feed-options" aria-label="投喂食材选项" role="group">
+              {DONATION_FEED_OPTIONS.map((option) => (
+                <button
+                  aria-pressed={selectedDonationFeed?.id === option.id}
+                  className={selectedDonationFeed?.id === option.id ? "selected" : ""}
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDonationFeedId(option.id);
+                    setDonateConfirmed(false);
+                    setDonateActionReady(false);
+                    clearDonateSaveIntentTimer();
+                  }}
+                >
+                  <span>{option.label}</span>
+                  <small>{option.note}</small>
+                </button>
+              ))}
+            </div>
+            {selectedDonationFeed ? (
+              <>
+                <div className="donate-qr-grid">
+                  {DONATION_PLATFORMS.map((platform) => {
+                    const qrImage = selectedDonationFeed.qrImages[platform.id];
+                    return (
+                      <section className="donate-qr-panel" key={`${selectedDonationFeed.id}-${platform.id}`}>
+                        <strong>{platform.label}</strong>
+                        <div
+                          className="donate-qr-box"
+                          onContextMenu={markDonateActionReady}
+                          onPointerCancel={clearDonateSaveIntentTimer}
+                          onPointerDown={() => {
+                            clearDonateSaveIntentTimer();
+                            donateSaveIntentTimerRef.current = window.setTimeout(markDonateActionReady, 520);
+                          }}
+                          onPointerLeave={clearDonateSaveIntentTimer}
+                          onPointerUp={clearDonateSaveIntentTimer}
+                        >
+                          <Image
+                            alt={`${platform.label}：${selectedDonationFeed.label}`}
+                            height={180}
+                            src={qrImage}
+                            unoptimized
+                            width={180}
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                              event.currentTarget.nextElementSibling?.removeAttribute("hidden");
+                            }}
+                          />
+                          <span className="donate-qr-fallback" hidden>
+                            收款码图片待放入 public{qrImage}
+                          </span>
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+                <p className="donate-save-hint">长按保存图片，打开支付宝/微信扫一扫相册识别</p>
+              </>
+            ) : null}
+            {donateActionReady || donateConfirmed ? (
+              <button className="donate-confirm" type="button" onClick={confirmDonate}>
+                我已投喂
+              </button>
+            ) : null}
+            {donateConfirmed ? <small className="donate-fed-note">猪猪开心的哼叫~ 投喂皮肤已解锁</small> : null}
           </div>
         </div>
       ) : null}

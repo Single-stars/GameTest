@@ -59,7 +59,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     target: "很难被打中的小方块",
   });
 
-  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.arcade.label, "赞赏作者后解锁");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.arcade.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.basketball.label, "荣耀王者 50 星解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.blade.label, "通关丢飞刀最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.cyan.label, "默认解锁");

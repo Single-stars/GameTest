@@ -118,7 +118,7 @@ type PlayerAvatarSkinUnlock =
     };
 
 export const PLAYER_AVATAR_SKIN_UNLOCKS = {
-  arcade: { kind: "donation", label: "赞赏作者后解锁" },
+  arcade: { kind: "donation", label: "投喂作者一次解锁" },
   basketball: { kind: "legend-50", label: "荣耀王者 50 星解锁" },
   blade: { kind: "advanced-final", label: "通关丢飞刀最终试炼", roundId: "patience" },
   cyan: { kind: "default", label: "默认解锁" },

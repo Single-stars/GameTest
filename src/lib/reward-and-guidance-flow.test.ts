@@ -179,7 +179,7 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
   assert.match(resultSource, /幸运币/);
 });
 
-test("donation flow avoids placeholder navigation and unlocks only after explicit confirmation", () => {
+test("donation flow uses feed choices with personal collection-code guidance", () => {
   const pageSource = readSource("../app/page.tsx");
   const resultSource = readSource("../features/results/result-screen.tsx");
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
@@ -190,7 +190,31 @@ test("donation flow avoids placeholder navigation and unlocks only after explici
   assert.doesNotMatch(pageSource, /example\.com\/alipay-donate-placeholder/);
   assert.match(pageSource, /const confirmDonateAuthor = useCallback/);
   assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void/);
-  assert.match(resultSource, /我已赞赏/);
+  assert.match(resultSource, /DONATION_FEED_OPTIONS/);
+  assert.match(resultSource, /蜜雪冰城/);
+  assert.match(resultSource, /大份猪脚饭/);
+  assert.match(resultSource, /随意加餐/);
+  assert.match(resultSource, /能吃就行/);
+  assert.match(resultSource, /投喂/);
+  assert.match(resultSource, /如果你觉得作者做的还不错~/);
+  assert.match(resultSource, /投喂食材选项/);
+  assert.match(resultSource, /useState<DonationFeedOption\["id"\] \| null>\(null\)/);
+  assert.match(resultSource, /selectedDonationFeed \? \(/);
+  assert.match(resultSource, /支付宝收款码/);
+  assert.match(resultSource, /微信收款码/);
+  assert.match(resultSource, /长按保存图片，打开支付宝\/微信扫一扫相册识别/);
+  assert.match(resultSource, /markDonateActionReady/);
+  assert.match(resultSource, /visibilitychange/);
+  assert.match(resultSource, /pagehide/);
+  assert.match(resultSource, /window\.addEventListener\("blur"/);
+  assert.match(resultSource, /我已投喂/);
+  assert.match(resultSource, /猪猪开心的哼叫~/);
+  assert.match(resultSource, /投喂皮肤已解锁/);
+  assert.doesNotMatch(resultSource, /作者本体/);
+  assert.doesNotMatch(resultSource, /如已打开赞赏链接/);
+  assert.doesNotMatch(resultSource, /金额由你自己决定/);
+  assert.doesNotMatch(resultSource, /赞赏完全自愿，不影响测试结果和功能使用/);
+  assert.doesNotMatch(resultSource, /网站不会自动识别付款状态/);
   assert.match(resultSource, /onConfirmDonateAuthor\(\);/);
   assert.match(resultSource, /item\.id === "donate" \? item\.onSelect\(\) : runAvatarMenuAction\(item\.onSelect\)/);
   assert.match(headersSource, /Content-Security-Policy/);
