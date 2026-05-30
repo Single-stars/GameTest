@@ -109,6 +109,9 @@ test("home screen requires privacy and disclaimer confirmation before starting",
   assert.match(homeScreenSource, /本测试仅供娱乐，不是专业能力、心理、医疗、教育或职业评估/);
   assert.match(homeScreenSource, /测试结果只代表本次浏览器操作表现/);
   assert.match(homeScreenSource, /localStorage/);
+  assert.match(homeScreenSource, /创意皮肤图片会裁剪压缩后保存在本机浏览器 IndexedDB/);
+  assert.match(homeScreenSource, /网页只能在你主动选择图片后读取该图片/);
+  assert.match(homeScreenSource, /联机使用创意皮肤时，头像图片可能通过点对点连接临时发送给对方显示/);
   assert.match(homeScreenSource, /分享图片在本机浏览器生成/);
   assert.match(homeScreenSource, /反馈功能会提交反馈文本、评分、反馈类型、页面信息和浏览器 user-agent/);
   assert.match(homeScreenSource, /请勿在反馈中填写手机号、微信、真实姓名、身份证、地址等敏感信息/);

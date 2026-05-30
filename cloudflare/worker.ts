@@ -18,11 +18,12 @@ type RoomMetadata = {
   expiresAt: number;
   hostToken: string;
   guestToken: string | null;
-  lastEmptyAt: number;
+  lastActivityAt: number;
 };
 
-const ROOM_TTL_MS = 30 * 60 * 1000;
-const EMPTY_ROOM_TTL_MS = 15 * 60 * 1000;
+const ROOM_INACTIVITY_TTL_MS = 15 * 60 * 1000;
+const ROOM_SIGNAL_KEEPALIVE_MS = 30 * 1000;
+const MULTIPLAYER_ROOM_EXPIRED_REASON = "room-expired";
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
@@ -550,6 +551,16 @@ export class RoomDurableObject {
     return jsonResponse({ error: "room-not-found" }, { status: 404 });
   }
 
+  async alarm() {
+    const metadata = this.metadata;
+    if (!metadata) return;
+    if (!this.isRoomExpired(metadata)) {
+      await this.state.storage.setAlarm(metadata.expiresAt);
+      return;
+    }
+    await this.closeExpiredRoom();
+  }
+
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     if (typeof message !== "string") return;
     const attachment = socket.deserializeAttachment() as { role?: SignalingRole } | null;
@@ -563,7 +574,13 @@ export class RoomDurableObject {
     }
     if (typeof payload !== "object" || payload === null) return;
     const record = payload as Record<string, unknown>;
+    if (record.type === "heartbeat") {
+      await this.noteRoomActivity();
+      socket.send(JSON.stringify({ type: "heartbeat", sentAt: Date.now() }));
+      return;
+    }
     if (record.type !== "signal") return;
+    await this.noteRoomActivity();
     this.sendToRole(role === "host" ? "guest" : "host", {
       type: "signal",
       signal: record.signal,
@@ -580,7 +597,10 @@ export class RoomDurableObject {
 
   private async createRoom() {
     const now = Date.now();
-    if (this.metadata && this.metadata.expiresAt > now) {
+    if (this.metadata && this.isRoomExpired(this.metadata)) {
+      await this.closeExpiredRoom();
+    }
+    if (this.metadata && !this.isRoomExpired(this.metadata)) {
       return jsonResponse({ error: "room-active" }, { status: 409 });
     }
 
@@ -588,13 +608,14 @@ export class RoomDurableObject {
     const metadata: RoomMetadata = {
       code,
       createdAt: now,
-      expiresAt: now + ROOM_TTL_MS,
+      expiresAt: now + ROOM_INACTIVITY_TTL_MS,
       hostToken: randomToken(),
       guestToken: null,
-      lastEmptyAt: now,
+      lastActivityAt: now,
     };
     this.metadata = metadata;
     await this.state.storage.put("metadata", metadata);
+    await this.state.storage.setAlarm(metadata.expiresAt);
     return jsonResponse(
       {
         roomCode: metadata.code,
@@ -607,9 +628,10 @@ export class RoomDurableObject {
     );
   }
 
-  private status() {
+  private async status() {
     const metadata = this.metadata;
     if (!metadata || this.isRoomExpired(metadata)) {
+      if (metadata) await this.closeExpiredRoom();
       return jsonResponse({ exists: false }, { status: 404 });
     }
     return jsonResponse({
@@ -646,13 +668,12 @@ export class RoomDurableObject {
 
     if (role === "guest" && metadata.guestToken && token !== metadata.guestToken) {
       metadata.guestToken = token || randomToken();
-      await this.state.storage.put("metadata", metadata);
     }
 
     if (role === "guest" && !metadata.guestToken) {
       metadata.guestToken = token || randomToken();
-      await this.state.storage.put("metadata", metadata);
     }
+    await this.noteRoomActivity(metadata);
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
@@ -672,6 +693,9 @@ export class RoomDurableObject {
     if (role === "guest") {
       this.sendToRole("host", { type: "peer-joined" });
     }
+    if (role === "host" && this.hasRole("guest")) {
+      server.send(JSON.stringify({ type: "peer-joined" }));
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -685,9 +709,7 @@ export class RoomDurableObject {
 
   private isRoomExpired(metadata: RoomMetadata) {
     const now = Date.now();
-    if (metadata.expiresAt <= now) return true;
-    const emptySince = metadata.lastEmptyAt ?? metadata.createdAt;
-    return !this.hasRole("guest") && now - emptySince > EMPTY_ROOM_TTL_MS;
+    return now - (metadata.lastActivityAt ?? metadata.createdAt) > ROOM_INACTIVITY_TTL_MS;
   }
 
   private sendToRole(role: SignalingRole, payload: unknown) {
@@ -709,19 +731,55 @@ export class RoomDurableObject {
     const metadata = this.metadata;
     if (!metadata?.guestToken) return;
     metadata.guestToken = null;
-    metadata.lastEmptyAt = Date.now();
+    await this.noteRoomActivity(metadata);
+  }
+
+  private async noteRoomActivity(metadata: RoomMetadata | null = this.metadata) {
+    if (!metadata) return;
+    const now = Date.now();
+    metadata.lastActivityAt = now;
+    metadata.expiresAt = now + ROOM_INACTIVITY_TTL_MS;
     await this.state.storage.put("metadata", metadata);
+    await this.state.storage.setAlarm(metadata.expiresAt + ROOM_SIGNAL_KEEPALIVE_MS);
+  }
+
+  private async deleteRoom() {
+    this.metadata = null;
+    await this.state.storage.delete("metadata");
+    await this.state.storage.deleteAlarm();
+  }
+
+  private async closeExpiredRoom() {
+    const metadata = this.metadata;
+    if (!metadata) return;
+    const payload = { type: "room-closed", reason: MULTIPLAYER_ROOM_EXPIRED_REASON };
+    for (const socket of this.state.getWebSockets()) {
+      try {
+        socket.send(JSON.stringify(payload));
+      } catch {
+        // The socket is already gone; closing below is still safe.
+      }
+      socket.close(4001, MULTIPLAYER_ROOM_EXPIRED_REASON);
+    }
+    await this.deleteRoom();
   }
 
   private async notifyPeerLeft(socket: WebSocket, reason?: string) {
     if (reason === "replaced") return;
+    if (reason === MULTIPLAYER_ROOM_EXPIRED_REASON) return;
     const attachment = socket.deserializeAttachment() as { role?: SignalingRole } | null;
     if (attachment?.role === "host") {
-      this.sendToRole("guest", { type: "peer-left", reason: "host-disbanded-room" });
+      if (reason === "host-disbanded-room") {
+        this.sendToRole("guest", { type: "peer-left", reason: "host-disbanded-room" });
+        await this.deleteRoom();
+        return;
+      }
+      await this.noteRoomActivity();
+      this.sendToRole("guest", { type: "peer-left", reason: "host-signaling-left" });
     }
     if (attachment?.role === "guest") {
       await this.clearGuestToken();
-      this.sendToRole("host", { type: "peer-left", reason: "guest-signaling-left" });
+      this.sendToRole("host", { type: "peer-left", reason: reason === "peer-left-room" ? "peer-left-room" : "guest-signaling-left" });
     }
   }
 }

@@ -48,7 +48,14 @@ export function PlayerCard({
     >
       <p style={{ margin: 0, color: "#666", fontSize: 13 }}>{title}</p>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-        <PlayerAvatar skin={resolveSkinId(player, fallbackSkin)} size={44} action="idle" expression="neutral" />
+        <PlayerAvatar
+          customImageUrl={player?.skinId === "custom" ? player.customAvatar?.imageDataUrl : null}
+          customOutlineColor={player?.skinId === "custom" ? player.customAvatar?.outlineColor ?? null : null}
+          skin={resolveSkinId(player, fallbackSkin)}
+          size={44}
+          action="idle"
+          expression="neutral"
+        />
         <div>
           <p style={{ margin: 0, fontWeight: 600 }}>{player?.name ?? title}</p>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: ready ? "#087443" : "#934f00" }}>

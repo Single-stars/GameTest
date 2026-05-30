@@ -37,6 +37,7 @@ import {
   writePersistedGameState,
   readPersistedGameState,
   GAME_STATE_STORAGE_KEY,
+  type AdvancedProgress,
   type StorageLike,
 } from "./advanced-progress.ts";
 import type { TrialEvent } from "./scoring.ts";
@@ -69,25 +70,23 @@ function memoryStorage(): StorageLike {
 
 const ROUND_IDS = ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"] as const;
 
-function advancedProgressWithClearedLevels(count: number, patch = {}) {
+function advancedProgressWithClearedLevels(count: number, patch: Partial<AdvancedProgress> = {}) {
+  const base = markAdvancedUnlocked(createDefaultAdvancedProgress());
   let remaining = Math.max(0, Math.min(80, count));
-  const dimensions = Object.fromEntries(
-    ROUND_IDS.map((roundId) => {
-      const clearedCount = Math.min(10, remaining);
-      remaining -= clearedCount;
-      return [
-        roundId,
-        {
-          clearedLevels: Array.from({ length: clearedCount }, () => true),
-          attempts: Array.from({ length: clearedCount }, () => 1),
-          bestScores: Array.from({ length: clearedCount }, () => 90),
-        },
-      ];
-    }),
-  );
+  const dimensions: AdvancedProgress["dimensions"] = { ...base.dimensions };
+  for (const roundId of ROUND_IDS) {
+    const clearedCount = Math.min(10, remaining);
+    remaining -= clearedCount;
+    dimensions[roundId] = {
+      ...dimensions[roundId],
+      clearedLevels: Array.from({ length: clearedCount }, () => true),
+      attempts: Array.from({ length: clearedCount }, () => 1),
+      bestScores: Array.from({ length: clearedCount }, () => 90),
+    };
+  }
 
   return {
-    ...markAdvancedUnlocked(createDefaultAdvancedProgress()),
+    ...base,
     dimensions,
     ...patch,
   };
@@ -340,32 +339,13 @@ test("luck draws consume chances, map 0-100 score to 0-20 stars, and preserve th
 });
 
 test("the eightieth luck draw is guaranteed to fill luck stars", () => {
-  const progress = {
-    ...markAdvancedUnlocked(createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z")),
+  const progress = advancedProgressWithClearedLevels(80, {
     luckStars: 12,
     luckBestScore: 64,
     luckDrawChances: 1,
     luckDrawCount: 79,
-    dimensions: Object.fromEntries(
-      [
-        "reaction",
-        "aim",
-        "search",
-        "stroop",
-        "rhythm",
-        "memory",
-        "braking",
-        "patience",
-      ].map((roundId) => [
-        roundId,
-        {
-          clearedLevels: Array.from({ length: 10 }, () => true),
-          attempts: Array.from({ length: 10 }, () => 1),
-          bestScores: Array.from({ length: 10 }, () => 90),
-        },
-      ]),
-    ),
-  };
+    updatedAt: "2026-05-10T00:00:00.000Z",
+  });
 
   const result = recordLuckDraw(progress, 0, "2026-05-10T00:00:01.000Z");
 

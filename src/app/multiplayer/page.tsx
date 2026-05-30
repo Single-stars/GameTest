@@ -21,6 +21,7 @@ import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
 import { PlayerCard } from "@/features/multiplayer/player-card";
 import { PlayerAvatarSkinProvider, isPlayerAvatarSkinUnlocked, resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
+import { useCustomAvatarImage } from "@/features/player-avatar/use-custom-avatar-image";
 import {
   readPersistedPlayerAvatarSkin,
   readPersistedPlayerName,
@@ -41,6 +42,7 @@ import type { MiniGameId } from "@/lib/mini-games";
 import {
   DEFAULT_MULTIPLAYER_LEVEL_ID,
   DEFAULT_MULTIPLAYER_PLAY_MODE,
+  MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
   MULTIPLAYER_PLAY_MODES,
   areMultiplayerLevelSelectSlotsConfirmed,
   createDefaultMultiplayerLevelSelectState,
@@ -56,6 +58,7 @@ import {
   buildInitialSnapshot,
   MultiplayerSession,
 } from "@/lib/multiplayer/multiplayer-session";
+import { MULTIPLAYER_ROOM_EXPIRED_MESSAGE } from "@/lib/multiplayer/protocol";
 import { getSignalingRoomStatus } from "@/lib/multiplayer/room-api";
 import type {
   GameResult,
@@ -71,7 +74,6 @@ const LEVEL_SELECT_COUNTDOWN_TICK_MS = 100;
 const MATCH_LOGIC_HEIGHT = 640;
 type CopyStatus = "idle" | "copied" | "manual";
 type RoomShareCopyStatus = CopyStatus | "expired";
-const HOST_EMPTY_ROOM_TIMEOUT_MS = 15 * 60 * 1000;
 
 function createSeed() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -107,16 +109,69 @@ function resolveLogicSize(selfPlayer: PlayerInfo | null, opponentPlayer: PlayerI
   return { logicWidth, logicHeight: MATCH_LOGIC_HEIGHT };
 }
 
-function createSelfPlayer(role: SessionRole, selectedSkin: PlayerAvatarSkin, resolvedName: string): PlayerInfo {
+function createSelfPlayer(
+  role: SessionRole,
+  selectedSkin: PlayerAvatarSkin,
+  resolvedName: string,
+  customAvatar: PlayerInfo["customAvatar"] | null = null,
+): PlayerInfo {
   const isHost = role === "host";
   const fallbackName = isHost ? "房主" : "访客";
   return {
+    ...(selectedSkin === "custom" && customAvatar ? { customAvatar } : {}),
     id: createPlayerId(role),
     name: resolvedName.trim() || fallbackName,
     skinId: selectedSkin,
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
   };
+}
+
+type LevelSelectSelectionSetters = {
+  setHostPlayMode: (playMode: MultiplayerPlayMode) => void;
+  setHostSelectedGameId: (gameId: MiniGameId) => void;
+  setHostSelectedLevelId: (levelId: string) => void;
+  setLevelSelectState: (selection: MultiplayerLevelSelectState) => void;
+};
+
+function applyLevelSelectSelection(selection: MultiplayerLevelSelectState, setters: LevelSelectSelectionSetters) {
+  setters.setLevelSelectState(selection);
+  setters.setHostSelectedGameId(selection.gameId);
+  setters.setHostSelectedLevelId(selection.levelId);
+  setters.setHostPlayMode(selection.playMode);
+}
+
+function resetLocalLevelSelectSelection(setters: LevelSelectSelectionSetters) {
+  const nextSelection = createDefaultMultiplayerLevelSelectState();
+  applyLevelSelectSelection(nextSelection, setters);
+  return nextSelection;
+}
+
+function standaloneStatusText(status: MultiplayerSnapshot["status"]) {
+  switch (status) {
+    case "idle":
+      return "未开始";
+    case "creating":
+      return "正在创建房间";
+    case "waiting":
+      return "等待好友加入";
+    case "joining":
+      return "正在加入房间";
+    case "connected":
+      return "已连接";
+    case "countdown":
+      return "倒计时中";
+    case "playing":
+      return "游戏中";
+    case "finished":
+      return "已结束";
+    case "failed":
+      return "连接失败";
+    case "disconnected":
+      return "已断开";
+    default:
+      return "未知状态";
+  }
 }
 
 function copyRoomLinkWithFallback(text: string) {
@@ -148,7 +203,9 @@ function MultiplayerPageContent() {
   const roomParam = (searchParams.get("room") ?? "").trim();
   const homeworldParam = searchParams.get("homeworld");
   const hostHomeworldParam = searchParams.get("host");
+  const selectParam = searchParams.get("select");
   const isHomeworldRoute = homeworldParam === "1";
+  const isStandaloneSelectRoute = selectParam === "1";
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
@@ -164,19 +221,27 @@ function MultiplayerPageContent() {
   const [levelSelectStartCountdownNow, setLevelSelectStartCountdownNow] = useState(0);
   const [levelSelectState, setLevelSelectState] = useState<MultiplayerLevelSelectState>(() => createDefaultMultiplayerLevelSelectState());
   const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
+  const [unavailableModeHint, setUnavailableModeHint] = useState<{ id: number; message: string } | null>(null);
+  const [standaloneJoinDialogOpen, setStandaloneJoinDialogOpen] = useState(false);
+  const [standaloneJoinRoomCode, setStandaloneJoinRoomCode] = useState(roomParam);
+  const [standaloneExitConfirmOpen, setStandaloneExitConfirmOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [skinHydrated, setSkinHydrated] = useState(false);
+  const { customAvatarImageUrl, customAvatarOutlineColor, customAvatarSyncPayload, saveCustomAvatarImage } = useCustomAvatarImage();
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const latestHomeworldPresenceRef = useRef<HomeworldPresence | null>(null);
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
   const autoJoinRoomRef = useRef<string | null>(null);
+  const suppressedAutoJoinRoomRef = useRef<string | null>(null);
   const autoCreateHomeworldHostRef = useRef(false);
   const wasInHomeworldMatchRef = useRef(false);
   const didExitLevelSelectToHomeworldRef = useRef(false);
   const copyStatusTimerRef = useRef<number | null>(null);
   const roomCodeCopyStatusTimerRef = useRef<number | null>(null);
+  const unavailableModeHintTimerRef = useRef<number | null>(null);
+  const unavailableModeHintIdRef = useRef(0);
   const roomRefreshInFlightRef = useRef(false);
   const { runModeTransition, runRouteTransition, transitionState } = useModeTransition();
 
@@ -205,6 +270,16 @@ function MultiplayerPageContent() {
   const activePlayMode = snapshot.match?.playMode ?? hostPlayMode;
   const activeLevelSelectState = snapshot.levelSelectState ?? levelSelectState;
   const levelSelectSlotsConfirmed = areMultiplayerLevelSelectSlotsConfirmed(activeLevelSelectState);
+  const standalonePeerConnected = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);
+  const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;
+  const standaloneRoomBarVisible = !standalonePeerConnected;
+  const standaloneSelectionAvailable = standalonePeerConnected;
+  const standaloneSelectionUnavailableMessage = snapshot.status === "waiting"
+    ? "请先邀请好友加入房间"
+    : "请先创建或加入房间";
+  const standaloneLevelSelectRoomKey = `${snapshot.role ?? "idle"}:${snapshot.roomId ?? "none"}:${standaloneSelectionAvailable ? "active" : "entry"}`;
+  const levelSelectReadyAvailable = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer) && levelSelectSlotsConfirmed;
+  const standaloneSelfSkin = resolvePlayerAvatarSkin(snapshot.selfPlayer?.skinId ?? selectedSkin);
   const levelSelectStartCountdownSeconds =
     levelSelectStartCountdownEndsAt !== null
       ? Math.max(1, Math.ceil((levelSelectStartCountdownEndsAt - levelSelectStartCountdownNow) / 1000))
@@ -227,8 +302,10 @@ function MultiplayerPageContent() {
   const roomLink = useMemo(() => {
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
-    return `${window.location.origin}/multiplayer?room=${query}`;
-  }, [snapshot.roomId]);
+    return isStandaloneSelectRoute
+      ? `${window.location.origin}/multiplayer?select=1&room=${query}`
+      : `${window.location.origin}/multiplayer?room=${query}`;
+  }, [isStandaloneSelectRoute, snapshot.roomId]);
   const homeworldRoomLink = useMemo(() => {
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
@@ -245,18 +322,36 @@ function MultiplayerPageContent() {
     sessionRef.current = null;
   }, []);
 
-  useEffect(() => {
-    if (snapshot.role !== "host") return;
-    if (snapshot.status !== "waiting") return;
-    if (!snapshot.roomId || snapshot.opponentPlayer) return;
-    const timer = window.setTimeout(() => {
-      sessionRef.current?.leave("host-disbanded-room");
+  const resetMultiplayerRoomToEntry = useCallback(
+    (options: { suppressRoomParam?: boolean } = {}) => {
       cleanupSession();
-      setSnapshot(buildInitialSnapshot());
+      setLevelSelectOpen(false);
+      setLevelSelectStartCountdownEndsAt(null);
+      setStandaloneExitConfirmOpen(false);
+      setStandaloneJoinDialogOpen(false);
+      setCopyStatus("idle");
+      setRoomCodeCopyStatus("idle");
+      resetLocalLevelSelectSelection({
+        setHostPlayMode,
+        setHostSelectedGameId,
+        setHostSelectedLevelId,
+        setLevelSelectState,
+      });
+      if (options.suppressRoomParam) {
+        const suppressedRoom = isStandaloneSelectRoute && roomParam ? `select:${roomParam}` : roomParam || null;
+        suppressedAutoJoinRoomRef.current = suppressedRoom;
+        autoJoinRoomRef.current = suppressedRoom;
+      } else {
+        suppressedAutoJoinRoomRef.current = null;
+        autoJoinRoomRef.current = null;
+      }
+      autoCreateHomeworldHostRef.current = false;
       setHomeworldEntryVisible(true);
-    }, HOST_EMPTY_ROOM_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
-  }, [cleanupSession, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.status]);
+      setSnapshot(buildInitialSnapshot());
+      router.replace(isHomeworldRoute ? "/multiplayer" : "/multiplayer?select=1");
+    },
+    [cleanupSession, isHomeworldRoute, isStandaloneSelectRoute, roomParam, router],
+  );
 
   const bootstrapSession = useCallback(
     async (role: SessionRole, roomId?: string | null) => {
@@ -264,7 +359,8 @@ function MultiplayerPageContent() {
       setSnapshot(buildInitialSnapshot());
       const resolvedSkin = skinHydrated ? selectedSkin : readPersistedPlayerAvatarSkin();
       const resolvedName = skinHydrated ? playerName : readPersistedPlayerName();
-      const selfPlayer = createSelfPlayer(role, resolvedSkin, resolvedName);
+      const resolvedCustomAvatar = resolvedSkin === "custom" ? customAvatarSyncPayload : null;
+      const selfPlayer = createSelfPlayer(role, resolvedSkin, resolvedName, resolvedCustomAvatar);
       const session = new MultiplayerSession({
         role,
         roomId,
@@ -274,6 +370,19 @@ function MultiplayerPageContent() {
       sessionRef.current = session;
       if (latestHomeworldPresenceRef.current) {
         session.reportHomeworldPresence(latestHomeworldPresenceRef.current);
+      }
+      if (isStandaloneSelectRoute) {
+        session.reportLevelSelectPresence({
+          action: "idle",
+          direction: "none",
+          inRoom: true,
+          readyToStart: false,
+          skinId: resolvedSkin,
+          x: 50,
+        });
+        if (role === "host") {
+          session.reportLevelSelectState(levelSelectState);
+        }
       }
       try {
         await session.start();
@@ -286,7 +395,7 @@ function MultiplayerPageContent() {
         }));
       }
     },
-    [cleanupSession, playerName, selectedSkin, skinHydrated],
+    [cleanupSession, customAvatarSyncPayload, isStandaloneSelectRoute, levelSelectState, playerName, selectedSkin, skinHydrated],
   );
 
   const handleCreate = useCallback(() => {
@@ -296,10 +405,41 @@ function MultiplayerPageContent() {
   const handleJoin = useCallback(
     (roomCode: string) => {
       if (!roomCode) return;
+      suppressedAutoJoinRoomRef.current = null;
       void bootstrapSession("guest", roomCode);
     },
     [bootstrapSession],
   );
+
+  const openStandaloneJoinDialog = useCallback(() => {
+    setStandaloneJoinRoomCode(roomParam);
+    setStandaloneJoinDialogOpen(true);
+  }, [roomParam]);
+
+  const closeStandaloneJoinDialog = useCallback(() => {
+    setStandaloneJoinDialogOpen(false);
+  }, []);
+
+  const submitStandaloneJoinRoom = useCallback(() => {
+    const roomCode = standaloneJoinRoomCode.trim();
+    if (!roomCode) return;
+    setStandaloneJoinDialogOpen(false);
+    handleJoin(roomCode);
+  }, [handleJoin, standaloneJoinRoomCode]);
+
+  const handleUnavailablePlayMode = useCallback((message: string = MULTIPLAYER_COOP_UNAVAILABLE_TEXT) => {
+    if (unavailableModeHintTimerRef.current !== null) {
+      window.clearTimeout(unavailableModeHintTimerRef.current);
+      unavailableModeHintTimerRef.current = null;
+    }
+    const nextHintId = unavailableModeHintIdRef.current + 1;
+    unavailableModeHintIdRef.current = nextHintId;
+    setUnavailableModeHint({ id: nextHintId, message });
+    unavailableModeHintTimerRef.current = window.setTimeout(() => {
+      setUnavailableModeHint((current) => (current?.id === nextHintId ? null : current));
+      unavailableModeHintTimerRef.current = null;
+    }, 1800);
+  }, []);
 
   const setTransientCopyStatus = useCallback((status: RoomShareCopyStatus) => {
     setCopyStatus(status);
@@ -445,6 +585,7 @@ function MultiplayerPageContent() {
     (roomCode: string) => {
       if (!roomCode.trim()) return;
       autoJoinRoomRef.current = null;
+      suppressedAutoJoinRoomRef.current = null;
       setHomeworldEntryVisible(true);
       void bootstrapSession("guest", roomCode);
     },
@@ -452,45 +593,83 @@ function MultiplayerPageContent() {
   );
 
   const handleOpenLevelSelectRoom = useCallback(() => {
-    didExitLevelSelectToHomeworldRef.current = false;
-    setHomeworldReturnPose({ ...HOMEWORLD_INITIAL_PLAYER, direction: "right", sleeping: false });
-    setLevelSelectOpen(true);
-    sessionRef.current?.reportLevelSelectPresence({ inRoom: true });
-    sessionRef.current?.reportLevelSelectState(activeLevelSelectState);
-  }, [activeLevelSelectState]);
+    void transitionInPage(() => {
+      didExitLevelSelectToHomeworldRef.current = false;
+      setHomeworldReturnPose({ ...HOMEWORLD_INITIAL_PLAYER, direction: "right", sleeping: false });
+      setLevelSelectOpen(true);
+      sessionRef.current?.reportLevelSelectPresence({
+        action: "idle",
+        direction: "none",
+        inRoom: true,
+        readyToStart: false,
+        skinId: selectedSkinRef.current,
+        x: 50,
+      });
+      sessionRef.current?.reportLevelSelectState(activeLevelSelectState);
+    });
+  }, [activeLevelSelectState, transitionInPage]);
 
   const handleCloseLevelSelectRoom = useCallback(() => {
-    didExitLevelSelectToHomeworldRef.current = true;
-    setHomeworldReturnPose({ ...HOMEWORLD_INITIAL_PLAYER, direction: "right", sleeping: false });
-    setLevelSelectOpen(false);
-    sessionRef.current?.setReady(false);
-    sessionRef.current?.reportLevelSelectPresence({
-      action: "idle",
-      direction: "none",
-      inRoom: false,
-      readyToStart: false,
-      skinId: selectedSkin,
-      x: 0,
+    void transitionInPage(() => {
+      didExitLevelSelectToHomeworldRef.current = true;
+      setHomeworldReturnPose({ ...HOMEWORLD_INITIAL_PLAYER, direction: "right", sleeping: false });
+      setLevelSelectOpen(false);
+      sessionRef.current?.setReady(false);
+      sessionRef.current?.reportLevelSelectPresence({
+        action: "idle",
+        direction: "none",
+        inRoom: false,
+        readyToStart: false,
+        skinId: selectedSkinRef.current,
+        x: 0,
+      });
     });
-  }, [selectedSkin]);
+  }, [transitionInPage]);
 
-  const resetLevelSelectState = useCallback(() => {
-    const nextSelection = createDefaultMultiplayerLevelSelectState();
-    setLevelSelectState(nextSelection);
-    setHostSelectedGameId(nextSelection.gameId);
-    setHostSelectedLevelId(nextSelection.levelId);
-    setHostPlayMode(nextSelection.playMode);
-    sessionRef.current?.setReady(false);
-    sessionRef.current?.reportLevelSelectState(nextSelection);
+  const confirmStandaloneLevelSelectExit = useCallback(async () => {
+    setStandaloneExitConfirmOpen(false);
+    if (!snapshot.role) {
+      void transitionToRoute("/");
+      return;
+    }
+    await transitionInPage(async () => {
+      const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
+      sessionRef.current?.leave(leaveReason);
+      cleanupSession();
+      setSnapshot(buildInitialSnapshot());
+      resetLocalLevelSelectSelection({
+        setHostPlayMode,
+        setHostSelectedGameId,
+        setHostSelectedLevelId,
+        setLevelSelectState,
+      });
+      setLevelSelectStartCountdownEndsAt(null);
+      autoJoinRoomRef.current = null;
+      router.replace("/multiplayer?select=1");
+    });
+  }, [cleanupSession, router, snapshot.role, transitionInPage, transitionToRoute]);
+
+  const requestStandaloneLevelSelectExit = useCallback(() => {
+    if (!snapshot.role) {
+      void confirmStandaloneLevelSelectExit();
+      return;
+    }
+    setStandaloneExitConfirmOpen(true);
+  }, [confirmStandaloneLevelSelectExit, snapshot.role]);
+
+  const cancelStandaloneLevelSelectExit = useCallback(() => {
+    setStandaloneExitConfirmOpen(false);
   }, []);
 
   const handleLevelSelectChange = useCallback(
     (nextSelection: MultiplayerLevelSelectState) => {
       if (snapshot.selfReady || snapshot.opponentReady) return;
-      setLevelSelectState(nextSelection);
-      setHostSelectedGameId(nextSelection.gameId);
-      setHostSelectedLevelId(nextSelection.levelId);
-      setHostPlayMode(nextSelection.playMode);
+      applyLevelSelectSelection(nextSelection, {
+        setHostPlayMode,
+        setHostSelectedGameId,
+        setHostSelectedLevelId,
+        setLevelSelectState,
+      });
       if (snapshot.selfReady) {
         sessionRef.current?.setReady(false);
       }
@@ -504,9 +683,10 @@ function MultiplayerPageContent() {
   }, []);
 
   const setLevelSelectReady = useCallback((ready: boolean) => {
-    if (snapshot.selfReady === ready) return;
-    sessionRef.current?.setReady(ready);
-  }, [snapshot.selfReady]);
+    const nextReady = ready && levelSelectReadyAvailable;
+    if (snapshot.selfReady === nextReady) return;
+    sessionRef.current?.setReady(nextReady);
+  }, [levelSelectReadyAvailable, snapshot.selfReady]);
 
   const handleRematch = useCallback(() => {
     sessionRef.current?.requestRematch();
@@ -527,6 +707,9 @@ function MultiplayerPageContent() {
       }
       if (roomCodeCopyStatusTimerRef.current !== null) {
         window.clearTimeout(roomCodeCopyStatusTimerRef.current);
+      }
+      if (unavailableModeHintTimerRef.current !== null) {
+        window.clearTimeout(unavailableModeHintTimerRef.current);
       }
       cleanupSession();
     },
@@ -552,7 +735,10 @@ function MultiplayerPageContent() {
     if (!isPlayerAvatarSkinUnlocked(skin, advancedProgress)) return;
     setSelectedSkin(skin);
     writePersistedPlayerAvatarSkin(skin);
-    sessionRef.current?.updateSelfPlayerProfile({ skinId: skin });
+    sessionRef.current?.updateSelfPlayerProfile({
+      customAvatar: skin === "custom" ? customAvatarSyncPayload ?? undefined : undefined,
+      skinId: skin,
+    });
     const currentPresence = latestHomeworldPresenceRef.current;
     const currentPose = homeworldPlayerPoseRef.current;
     const nextPresence: HomeworldPresence = {
@@ -571,7 +757,15 @@ function MultiplayerPageContent() {
         skinId: skin,
       });
     }
-  }, [advancedProgress, playerName, snapshot.selfLevelSelectPresence]);
+  }, [advancedProgress, customAvatarSyncPayload, playerName, snapshot.selfLevelSelectPresence]);
+
+  useEffect(() => {
+    if (!sessionRef.current) return;
+    sessionRef.current.updateSelfPlayerProfile({
+      customAvatar: selectedSkin === "custom" ? customAvatarSyncPayload ?? undefined : undefined,
+      skinId: selectedSkin,
+    });
+  }, [customAvatarSyncPayload, selectedSkin]);
 
   useEffect(() => {
     if (isPlayerAvatarSkinUnlocked(selectedSkin, advancedProgress)) return;
@@ -581,10 +775,38 @@ function MultiplayerPageContent() {
   useEffect(() => {
     if (!skinHydrated) return;
     if (!isHomeworldRoute) return;
-    if (!roomParam || autoJoinRoomRef.current === roomParam) return;
+    if (!roomParam) {
+      if (suppressedAutoJoinRoomRef.current && !suppressedAutoJoinRoomRef.current.startsWith("select:")) {
+        suppressedAutoJoinRoomRef.current = null;
+      }
+      return;
+    }
+    if (suppressedAutoJoinRoomRef.current === roomParam) return;
+    if (autoJoinRoomRef.current === roomParam) return;
     autoJoinRoomRef.current = roomParam;
     void bootstrapSession("guest", roomParam);
   }, [bootstrapSession, isHomeworldRoute, roomParam, skinHydrated]);
+
+  useEffect(() => {
+    if (!skinHydrated) return;
+    if (!isStandaloneSelectRoute) return;
+    if (!roomParam) {
+      if (suppressedAutoJoinRoomRef.current?.startsWith("select:")) {
+        suppressedAutoJoinRoomRef.current = null;
+      }
+      return;
+    }
+    const standaloneAutoJoinKey = `select:${roomParam}`;
+    if (suppressedAutoJoinRoomRef.current === standaloneAutoJoinKey) return;
+    if (autoJoinRoomRef.current === standaloneAutoJoinKey) return;
+    autoJoinRoomRef.current = standaloneAutoJoinKey;
+    void bootstrapSession("guest", roomParam);
+  }, [bootstrapSession, isStandaloneSelectRoute, roomParam, skinHydrated]);
+
+  useEffect(() => {
+    if (standaloneJoinDialogOpen) return;
+    setStandaloneJoinRoomCode(roomParam);
+  }, [roomParam, standaloneJoinDialogOpen]);
 
   useEffect(() => {
     if (!skinHydrated) return;
@@ -596,14 +818,17 @@ function MultiplayerPageContent() {
 
   useEffect(() => {
     if (!snapshot.levelSelectState) return;
-    setLevelSelectState(snapshot.levelSelectState);
-    setHostSelectedGameId(snapshot.levelSelectState.gameId);
-    setHostSelectedLevelId(snapshot.levelSelectState.levelId);
-    setHostPlayMode(snapshot.levelSelectState.playMode);
+    applyLevelSelectSelection(snapshot.levelSelectState, {
+      setHostPlayMode,
+      setHostSelectedGameId,
+      setHostSelectedLevelId,
+      setLevelSelectState,
+    });
   }, [snapshot.levelSelectState]);
 
   useEffect(() => {
-    if (!levelSelectOpen) return;
+    const levelSelectRoomActive = isHomeworldRoute ? levelSelectOpen : isStandaloneSelectRoute && !showGameShell;
+    if (!levelSelectRoomActive) return;
     sessionRef.current?.reportLevelSelectPresence({
       action: "idle",
       direction: "none",
@@ -622,7 +847,7 @@ function MultiplayerPageContent() {
         x: 0,
       });
     };
-  }, [levelSelectOpen]);
+  }, [isHomeworldRoute, isStandaloneSelectRoute, levelSelectOpen, showGameShell]);
 
   useEffect(() => {
     if (!isHomeworldRoute) return;
@@ -653,13 +878,19 @@ function MultiplayerPageContent() {
     if (selfInRoom || opponentInRoom) return;
     const currentSelection = snapshot.levelSelectState ?? levelSelectState;
     if (isDefaultMultiplayerLevelSelectState(currentSelection)) return;
-    resetLevelSelectState();
+    const nextSelection = resetLocalLevelSelectSelection({
+      setHostPlayMode,
+      setHostSelectedGameId,
+      setHostSelectedLevelId,
+      setLevelSelectState,
+    });
+    sessionRef.current?.setReady(false);
+    sessionRef.current?.reportLevelSelectState(nextSelection);
     didExitLevelSelectToHomeworldRef.current = false;
   }, [
     isHomeworldRoute,
     levelSelectOpen,
     levelSelectState,
-    resetLevelSelectState,
     snapshot.levelSelectState,
     snapshot.match,
     snapshot.opponentLevelSelectPresence?.inRoom,
@@ -668,9 +899,9 @@ function MultiplayerPageContent() {
   ]);
 
   useEffect(() => {
+    const levelSelectRoomActive = isHomeworldRoute ? levelSelectOpen : isStandaloneSelectRoute;
     const canCountDownInLevelSelect =
-      isHomeworldRoute &&
-      levelSelectOpen &&
+      levelSelectRoomActive &&
       snapshot.status === "connected" &&
       !snapshot.match &&
       snapshot.selfReady &&
@@ -685,6 +916,7 @@ function MultiplayerPageContent() {
     setLevelSelectStartCountdownEndsAt((current) => current ?? nowMs + LEVEL_SELECT_START_COUNTDOWN_MS);
   }, [
     isHomeworldRoute,
+    isStandaloneSelectRoute,
     levelSelectOpen,
     levelSelectSlotsConfirmed,
     snapshot.match,
@@ -788,16 +1020,16 @@ function MultiplayerPageContent() {
   }, [homeworldState, isHomeworldRoute, snapshot.role, snapshot.status]);
 
   useEffect(() => {
-    if (!isHomeworldRoute) return;
-    if (snapshot.status !== "disconnected" || snapshot.errorMessage !== "host-disbanded-room") return;
-    cleanupSession();
-    setLevelSelectOpen(false);
-    setHomeworldEntryVisible(true);
-    autoJoinRoomRef.current = null;
-    autoCreateHomeworldHostRef.current = false;
-    setSnapshot(buildInitialSnapshot());
-    router.replace("/multiplayer");
-  }, [cleanupSession, isHomeworldRoute, router, snapshot.errorMessage, snapshot.status]);
+    if (snapshot.status !== "disconnected" && snapshot.status !== "failed") return;
+    if (!snapshot.role) return;
+    const shouldResetHomeworld =
+      isHomeworldRoute &&
+      (snapshot.errorMessage === "host-disbanded-room" || snapshot.errorMessage === MULTIPLAYER_ROOM_EXPIRED_MESSAGE);
+    const shouldResetStandalone = isStandaloneSelectRoute && (snapshot.role === "host" || snapshot.role === "guest");
+    const shouldResetLegacyRoute = !isHomeworldRoute && !isStandaloneSelectRoute && snapshot.errorMessage === MULTIPLAYER_ROOM_EXPIRED_MESSAGE;
+    if (!shouldResetHomeworld && !shouldResetStandalone && !shouldResetLegacyRoute) return;
+    resetMultiplayerRoomToEntry({ suppressRoomParam: true });
+  }, [isHomeworldRoute, isStandaloneSelectRoute, resetMultiplayerRoomToEntry, snapshot.errorMessage, snapshot.role, snapshot.status]);
 
   const guestInHostHome =
     snapshot.role === "guest" &&
@@ -843,11 +1075,195 @@ function MultiplayerPageContent() {
     !snapshot.role &&
     snapshot.status === "idle" &&
     (hostHomeworldParam === "1" || Boolean(roomParam));
+  const standaloneLeftExitLabel =
+    snapshot.role === "host" ? "← 解散房间" : snapshot.role === "guest" ? "← 退出联机" : "← 返回首页";
+  const standaloneExitActionLabel = snapshot.role === "host" ? "解散房间" : "退出联机";
+  const standaloneExitConfirmTitle = snapshot.role === "host" ? "确认解散房间？" : "确认退出联机？";
+  const standaloneExitConfirmBody =
+    snapshot.role === "host"
+      ? "房间会关闭，当前访客也会离开。"
+      : "你会离开当前房间，房主侧会重新显示邀请链接和房间码。";
+
+  const renderStandaloneLevelSelect = () => (
+    <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
+      <main className="app-shell app-shell-play multiplayer-select-shell">
+        {showGameShell ? (
+          <MultiplayerGameShell
+            countdownSeconds={countdownSeconds}
+            coOpAssignmentText={coOpAssignmentText}
+            opponentPlayer={snapshot.opponentPlayer}
+            opponentResult={snapshot.opponentResult}
+            opponentState={snapshot.opponentState}
+            playMode={activePlayMode}
+            onForfeit={handleForfeit}
+            onRematch={handleRematch}
+            onReturnRoom={handleReturnRoom}
+            rematchRequestedByOpponent={snapshot.opponentReady}
+            rematchRequestedBySelf={snapshot.selfReady}
+            selfPlayer={snapshot.selfPlayer}
+            selfResult={snapshot.selfResult}
+            selfState={snapshot.selfState}
+            status={snapshot.status}
+            winnerText={winnerText}
+          >
+            {(snapshot.status === "playing" || snapshot.status === "finished") ? (
+              <MultiplayerMatchRuntime
+                level={battleLevel}
+                matchStageSize={matchStageSize}
+                opponentPlayer={snapshot.opponentPlayer}
+                opponentStateSubscription={subscribeOpponentState}
+                readOpponentStateMetrics={readOpponentStateMetrics}
+                opponentState={snapshot.opponentState}
+                playMode={activePlayMode}
+                reportInput={reportInput}
+                reportResult={reportResult}
+                reportState={reportState}
+                runSeed={runSeed}
+                selfRole={snapshot.role ?? "host"}
+                selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
+                selfSkinId={standaloneSelfSkin}
+              />
+            ) : null}
+          </MultiplayerGameShell>
+        ) : (
+          <>
+            <MultiplayerLevelSelectRoom
+              key={standaloneLevelSelectRoomKey}
+              leftExitLabel={standaloneLeftExitLabel}
+              opponentCustomAvatar={snapshot.opponentPlayer?.customAvatar}
+              opponentName={snapshot.opponentPlayer?.name}
+              opponentPresence={snapshot.opponentLevelSelectPresence}
+              opponentReady={snapshot.opponentReady}
+              opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
+              readyAvailable={standaloneReadyAvailable}
+              rightReadyLabel={standaloneReadyAvailable ? "准备开始 →" : ""}
+              selfReady={snapshot.selfReady}
+              selfSkin={standaloneSelfSkin}
+              selection={activeLevelSelectState}
+              selectionAvailable={standaloneSelectionAvailable}
+              selectionUnavailableMessage={standaloneSelectionUnavailableMessage}
+              showGuides={!standaloneRoomBarVisible}
+              startCountdownSeconds={levelSelectStartCountdownSeconds}
+              unavailableModeHint={unavailableModeHint?.message ?? null}
+              unavailableModeHintKey={unavailableModeHint?.id ?? 0}
+              onBackToRoom={requestStandaloneLevelSelectExit}
+              onPresenceChange={reportLevelSelectPresence}
+              onReadyChange={setLevelSelectReady}
+              onSelectionChange={handleLevelSelectChange}
+              onUnavailablePlayMode={handleUnavailablePlayMode}
+            />
+            {standaloneRoomBarVisible ? (
+              <section className="multiplayer-select-room-bar" aria-label="联机房间">
+                <div className="multiplayer-select-control-row">
+                  {snapshot.role === "host" && snapshot.roomId && snapshot.status !== "idle" ? (
+                    <HostRoom
+                      roomCode={snapshot.roomId}
+                      roomCodeCopyStatus={roomCodeCopyStatus}
+                      roomLink={roomLink}
+                      onCopy={handleCopyLink}
+                      onCopyRoomCode={handleCopyRoomCode}
+                      copyStatus={copyStatus}
+                    />
+                  ) : snapshot.role === "guest" && snapshot.status !== "disconnected" && snapshot.status !== "failed" ? (
+                    <div className="multiplayer-select-guest-card">
+                      <span>房间码</span>
+                      <strong>{snapshot.roomId ?? roomParam}</strong>
+                    </div>
+                  ) : (
+                    <div className="multiplayer-select-entry-row">
+                      <button
+                        className="multiplayer-select-action-button"
+                        disabled={snapshot.status === "creating" || snapshot.status === "joining"}
+                        type="button"
+                        onClick={handleCreate}
+                      >
+                        创建房间
+                      </button>
+                      <button
+                        className="multiplayer-select-action-button"
+                        disabled={snapshot.status === "creating" || snapshot.status === "joining"}
+                        type="button"
+                        onClick={openStandaloneJoinDialog}
+                      >
+                        加入房间
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="multiplayer-select-guide-row" aria-hidden="true">
+                  <span>{standaloneLeftExitLabel}</span>
+                  {standaloneReadyAvailable ? <span className="ready">{`准备开始 →`}</span> : null}
+                </div>
+              </section>
+            ) : null}
+            <div className="multiplayer-select-status-text">
+              联机状态：{standaloneStatusText(snapshot.status)}
+              {snapshot.errorMessage ? ` · ${snapshot.errorMessage}` : ""}
+            </div>
+            {standaloneJoinDialogOpen ? (
+              <div className="multiplayer-join-dialog-backdrop" role="presentation" onPointerDown={closeStandaloneJoinDialog}>
+                <form
+                  aria-labelledby="multiplayer-join-dialog-title"
+                  aria-modal="true"
+                  className="multiplayer-join-dialog"
+                  role="dialog"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitStandaloneJoinRoom();
+                  }}
+                >
+                  <h2 id="multiplayer-join-dialog-title">加入房间</h2>
+                  <input
+                    autoFocus
+                    value={standaloneJoinRoomCode}
+                    onChange={(event) => setStandaloneJoinRoomCode(event.currentTarget.value)}
+                    placeholder="输入房间码"
+                  />
+                  <div className="multiplayer-join-dialog-actions">
+                    <button className="secondary-button" type="button" onClick={closeStandaloneJoinDialog}>
+                      取消
+                    </button>
+                    <button className="primary-button" disabled={standaloneJoinRoomCode.trim().length === 0} type="submit">
+                      加入
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
+            {standaloneExitConfirmOpen ? (
+              <div className="multiplayer-join-dialog-backdrop" role="presentation" onPointerDown={cancelStandaloneLevelSelectExit}>
+                <div
+                  aria-labelledby="multiplayer-exit-confirm-title"
+                  aria-modal="true"
+                  className="multiplayer-confirm-dialog"
+                  role="dialog"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <h2 id="multiplayer-exit-confirm-title">{standaloneExitConfirmTitle}</h2>
+                  <p>{standaloneExitConfirmBody}</p>
+                  <div className="multiplayer-confirm-dialog-actions">
+                    <button className="secondary-button" type="button" onClick={cancelStandaloneLevelSelectExit}>
+                      取消
+                    </button>
+                    <button className="primary-button danger" type="button" onClick={confirmStandaloneLevelSelectExit}>
+                      {standaloneExitActionLabel}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
+        <ModeTransitionOverlay state={transitionState} />
+      </main>
+    </PlayerAvatarSkinProvider>
+  );
 
   if (!skinHydrated) {
     return (
-      <PlayerAvatarSkinProvider skin={selectedSkin}>
-        <main className="app-shell app-shell-play route-blackout-shell">
+      <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
+        <main className="app-shell app-shell-play route-blackout-shell multiplayer-route-loading-shell">
           <ModeTransitionOverlay state={transitionState} />
         </main>
       </PlayerAvatarSkinProvider>
@@ -856,17 +1272,21 @@ function MultiplayerPageContent() {
 
   if (waitingForInitialHomeworldSession) {
     return (
-      <PlayerAvatarSkinProvider skin={selectedSkin}>
-        <main className="app-shell app-shell-play route-blackout-shell">
+      <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
+        <main className="app-shell app-shell-play route-blackout-shell multiplayer-route-loading-shell">
           <ModeTransitionOverlay state={transitionState} />
         </main>
       </PlayerAvatarSkinProvider>
     );
   }
 
+  if (isStandaloneSelectRoute) {
+    return renderStandaloneLevelSelect();
+  }
+
   if (isHomeworldRoute) {
     return (
-      <PlayerAvatarSkinProvider skin={selectedSkin}>
+      <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
         <main className="app-shell app-shell-play">
           {showGameShell ? (
             <MultiplayerGameShell
@@ -901,16 +1321,21 @@ function MultiplayerPageContent() {
                   reportState={reportState}
                   runSeed={runSeed}
                   selfRole={snapshot.role ?? "host"}
+                  selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
                   selfSkinId={selectedSkin}
                 />
               ) : null}
             </MultiplayerGameShell>
           ) : levelSelectOpen ? (
             <MultiplayerLevelSelectRoom
+              opponentCustomAvatar={snapshot.opponentPlayer?.customAvatar}
+              unavailableModeHint={unavailableModeHint?.message ?? null}
+              unavailableModeHintKey={unavailableModeHint?.id ?? 0}
               opponentName={snapshot.opponentPlayer?.name}
               opponentPresence={snapshot.opponentLevelSelectPresence}
               opponentReady={snapshot.opponentReady}
               opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
+              readyAvailable={levelSelectReadyAvailable}
               selfReady={snapshot.selfReady}
               selfSkin={selectedSkin}
               selection={activeLevelSelectState}
@@ -919,11 +1344,14 @@ function MultiplayerPageContent() {
               onPresenceChange={reportLevelSelectPresence}
               onReadyChange={setLevelSelectReady}
               onSelectionChange={handleLevelSelectChange}
+              onUnavailablePlayMode={handleUnavailablePlayMode}
             />
           ) : avatarLabOpen ? (
             <AvatarLabScreen
               advancedProgress={advancedProgress}
+              customAvatarImageUrl={customAvatarImageUrl}
               selectedSkin={selectedSkin}
+              onSaveCustomAvatarImage={saveCustomAvatarImage}
               onSelectSkin={handleSelectAvatarSkin}
               onBack={() => {
                 void transitionInPage(() => setAvatarLabOpen(false));
@@ -963,6 +1391,7 @@ function MultiplayerPageContent() {
               onStateChange={homeworldMode === "owner" ? handleHomeworldStateChange : undefined}
               remoteHomeworldState={snapshot.homeworldState}
               remoteLevelSelectInRoom={Boolean(snapshot.opponentLevelSelectPresence?.inRoom)}
+              remoteCustomAvatar={snapshot.opponentPlayer?.customAvatar}
               remotePresence={snapshot.opponentHomeworldPresence}
               remoteSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
               selfDisplayName={playerName}
@@ -984,7 +1413,7 @@ function MultiplayerPageContent() {
     snapshot.status === "playing" ||
     snapshot.status === "finished";
   return (
-    <PlayerAvatarSkinProvider skin={selectedSkin}>
+    <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "24px 16px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h1 style={{ margin: 0 }}>联机挑战选关</h1>
@@ -1035,12 +1464,20 @@ function MultiplayerPageContent() {
                     key={mode.id}
                     disabled={levelPickerLocked}
                     className={hostPlayMode === mode.id ? "selected" : ""}
-                    onClick={() => setHostPlayMode(mode.id)}
+                    aria-disabled={mode.id === "co-op" ? true : undefined}
+                    onClick={() => {
+                      if (mode.id === "co-op") {
+                        handleUnavailablePlayMode();
+                        return;
+                      }
+                      setHostPlayMode(mode.id);
+                    }}
                   >
                     {mode.title}
                   </button>
                 ))}
               </div>
+              {unavailableModeHint ? <em className="multiplayer-mode-hint" key={unavailableModeHint.id}>{unavailableModeHint.message}</em> : null}
               <small>{MULTIPLAYER_PLAY_MODES.find((mode) => mode.id === activePlayMode)?.ruleText}</small>
             </div>
           </section>
@@ -1132,6 +1569,7 @@ function MultiplayerPageContent() {
                 reportState={reportState}
                 runSeed={runSeed}
                 selfRole={snapshot.role ?? "host"}
+                selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
                 selfSkinId={selectedSkin}
               />
             ) : null}
@@ -1156,7 +1594,7 @@ function MultiplayerPageContent() {
 
 export default function MultiplayerPage() {
   return (
-    <Suspense fallback={<main className="app-shell app-shell-play route-blackout-shell" />}>
+    <Suspense fallback={<main className="app-shell app-shell-play route-blackout-shell multiplayer-route-loading-shell" />}>
       <MultiplayerPageContent />
     </Suspense>
   );

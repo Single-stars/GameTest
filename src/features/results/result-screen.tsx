@@ -14,7 +14,7 @@ import { getAdvancedDimensionLevel, getAdvancedLevelTone, getLuckDrawStatusText,
 import { getGameRankResult, type RoundId, type TrialEvent } from "@/lib/scoring";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { RadarChart } from "@/features/results/radar-chart";
-import { AvatarLabIcon, DonateIcon, FeedbackIcon, HomeworldIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
+import { AvatarLabIcon, DonateIcon, FeedbackIcon, HomeworldIcon, MultiplayerIcon, RestartIcon, ResetDataIcon, ShareIcon } from "@/features/results/result-icons";
 import { PlayerAvatar, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 
 type ImageShareState = "idle" | "sharing" | "saved" | "failed";
@@ -29,11 +29,11 @@ type DonationFeedOption = {
   qrImages: Record<DonatePlatformId, string>;
 };
 type AvatarMenuItem = {
-  id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate" | "feedback";
+  id: "share" | "restart" | "reset" | "homeworld" | "skin" | "donate" | "feedback" | "multiplayer";
   label: string;
   icon: ReactNode;
   onSelect: () => void;
-  tone: "share" | "restart" | "skin" | "donate" | "homeworld" | "reset" | "feedback";
+  tone: "share" | "restart" | "skin" | "donate" | "homeworld" | "reset" | "feedback" | "multiplayer";
   disabled?: boolean;
   danger?: boolean;
 };
@@ -104,6 +104,7 @@ export function ResultScreen({
   onOpenAvatarLab,
   onOpenHomeworld,
   onOpenLuckDraw,
+  onOpenMultiplayer,
   onDonateAuthor,
   onConfirmDonateAuthor,
   onResetTestData,
@@ -121,6 +122,7 @@ export function ResultScreen({
   onOpenAvatarLab: () => void;
   onOpenHomeworld: () => void;
   onOpenLuckDraw: () => void;
+  onOpenMultiplayer: () => void;
   onDonateAuthor: () => void;
   onConfirmDonateAuthor: () => void;
   onResetTestData: () => void;
@@ -330,6 +332,13 @@ export function ResultScreen({
       icon: null,
       tone: "skin",
       onSelect: onOpenAvatarLab,
+    },
+    {
+      id: "multiplayer",
+      label: "联机",
+      icon: <MultiplayerIcon />,
+      tone: "multiplayer",
+      onSelect: onOpenMultiplayer,
     },
     {
       id: "feedback",

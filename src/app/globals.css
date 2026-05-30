@@ -24,6 +24,15 @@
   display: none;
 }
 
+.mode-transition-overlay.closed,
+.mode-transition-overlay.opening-start {
+  background: #050505;
+}
+
+.mode-transition-overlay.opening {
+  animation: mode-transition-opening-cover 40ms step-end both;
+}
+
 .route-blackout-shell {
   background: #050505;
 }
@@ -58,6 +67,17 @@
 
 .mode-transition-overlay.opening .mode-transition-hole {
   transition-duration: 900ms, 900ms, 180ms;
+}
+
+@keyframes mode-transition-opening-cover {
+  0%,
+  99% {
+    background: #050505;
+  }
+
+  100% {
+    background: transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

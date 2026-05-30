@@ -45,6 +45,7 @@ import {
   type HomeworldRole,
   type HomeworldState,
 } from "@/lib/homeworld/homeworld-state";
+import type { PlayerInfo } from "@/lib/multiplayer/types";
 import { OUTDOOR_MATERIALS, type OutdoorMaterialId } from "@/lib/outdoor-adventure/events";
 
 const PLAYER_SIZE = 70;
@@ -106,6 +107,7 @@ export type HomeworldScreenProps = {
   onStateChange?: (state: HomeworldState) => void;
   remoteHomeworldState?: HomeworldState | null;
   remoteLevelSelectInRoom?: boolean;
+  remoteCustomAvatar?: PlayerInfo["customAvatar"];
   remotePresence?: HomeworldPresence | null;
   remoteSkin?: PlayerAvatarSkin;
   selfDisplayName?: string;
@@ -229,6 +231,7 @@ export function HomeworldScreen({
   onStateChange,
   remoteHomeworldState,
   remoteLevelSelectInRoom = false,
+  remoteCustomAvatar,
   remotePresence,
   remoteSkin,
   selfDisplayName,
@@ -830,6 +833,8 @@ export function HomeworldScreen({
                                 action="idle"
                                 direction={presenceDirection(remotePresence.direction)}
                                 expression="neutral"
+                                customImageUrl={resolvedRemoteSkin === "custom" ? remoteCustomAvatar?.imageDataUrl : null}
+                                customOutlineColor={resolvedRemoteSkin === "custom" ? remoteCustomAvatar?.outlineColor ?? null : null}
                                 skin={resolvedRemoteSkin}
                                 size={30}
                                 visualScale={1}
@@ -905,6 +910,8 @@ export function HomeworldScreen({
                     action={remoteAvatar.action}
                     direction={remoteAvatar.direction}
                     expression={remoteAvatar.expression}
+                    customImageUrl={resolvedRemoteSkin === "custom" ? remoteCustomAvatar?.imageDataUrl : null}
+                    customOutlineColor={resolvedRemoteSkin === "custom" ? remoteCustomAvatar?.outlineColor ?? null : null}
                     skin={resolvedRemoteSkin}
                     size={PLAYER_SIZE}
                     visualScale={1.08}

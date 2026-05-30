@@ -8,6 +8,7 @@ import {
   recordAdvancedChallengeResult,
 } from "../../lib/advanced-progress.ts";
 import {
+  PLAYER_AVATAR_FACELESS_SKINS,
   PLAYER_AVATAR_SKIN_DESCRIPTIONS,
   PLAYER_AVATAR_SKIN_LABELS,
   PLAYER_AVATAR_SKIN_UNLOCKS,
@@ -29,6 +30,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     arcade: "手柄",
     basketball: "篮球",
     blade: "飞刀",
+    custom: "创意",
     cyan: "青蓝",
     ivory: "象牙",
     mint: "薄荷",
@@ -46,6 +48,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     arcade: "谢谢你支持我的游戏！",
     basketball: "哇真的是你呀",
     blade: "块狠话不多",
+    custom: "来自世界之外的小方块",
     cyan: "原装方块，干净耐看。",
     ivory: "成功方块，尊贵优雅",
     mint: "清清凉凉，冰冰爽爽",
@@ -62,6 +65,7 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.arcade.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.basketball.label, "荣耀王者 50 星解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.blade.label, "通关丢飞刀最终试炼");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.custom.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.cyan.label, "默认解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.ivory.label, "通关停下来最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mint.label, "通关一路向上最终试炼");
@@ -86,6 +90,7 @@ test("avatar skins unlock from completed final advanced challenges", () => {
   assert.equal(getPlayerAvatarSkinUnlockState("basketball", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("starfall", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("arcade", emptyProgress).unlocked, false);
+  assert.equal(getPlayerAvatarSkinUnlockState("custom", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("pig", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("paw", emptyProgress).unlocked, false);
 
@@ -142,6 +147,7 @@ test("special avatar skins unlock from donation, king rank, legend stars, and lu
   const luckyProgress = { ...emptyProgress, luckBestScore: 100, luckStars: 20 };
 
   assert.equal(getPlayerAvatarSkinUnlockState("arcade", donatedProgress).unlocked, true);
+  assert.equal(getPlayerAvatarSkinUnlockState("custom", donatedProgress).unlocked, true);
   assert.equal(getPlayerAvatarSkinUnlockState("pig", kingProgress).unlocked, true);
   assert.equal(getPlayerAvatarSkinUnlockState("basketball", kingProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("basketball", fiftyStarsProgress).unlocked, true);
@@ -162,7 +168,7 @@ test("avatar skin diff reports every newly unlocked skin and excludes already-ow
 
   const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
   const donatedProgress = markAuthorDonated(emptyProgress, "2026-05-28T00:01:00.000Z");
-  assert.deepEqual(getNewlyUnlockedPlayerAvatarSkins(emptyProgress, donatedProgress), ["arcade"]);
+  assert.deepEqual(getNewlyUnlockedPlayerAvatarSkins(emptyProgress, donatedProgress), ["arcade", "custom"]);
 
   const kingProgress = { ...donatedProgress, unlocked: true };
   assert.deepEqual(getNewlyUnlockedPlayerAvatarSkins(donatedProgress, kingProgress), ["pig"]);
@@ -188,12 +194,20 @@ test("avatar skin display keeps unlocked skins first and preserves the configure
 
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(emptyProgress).map((item) => item.skin),
-    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "arcade"],
+    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "arcade", "custom"],
   );
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(searchClearedProgress).map((item) => item.skin),
-    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "arcade"],
+    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "arcade", "custom"],
   );
+  assert.deepEqual(
+    getPlayerAvatarSkinDisplayItems(markAuthorDonated(emptyProgress)).map((item) => item.skin).slice(0, 3),
+    ["custom", "cyan", "arcade"],
+  );
+});
+
+test("custom avatar skin is faceless so uploaded photos keep only square motion", () => {
+  assert.ok(PLAYER_AVATAR_FACELESS_SKINS.includes("custom"));
 });
 
 function clearFinalChallenge(

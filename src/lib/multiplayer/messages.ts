@@ -15,8 +15,10 @@ import type {
   NetReturnRoomMessage,
   NetStartMessage,
   NetStateMessage,
+  NetTimeSyncMessage,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
+import { resolveCustomAvatarSyncPayload } from "../../features/player-avatar/custom-avatar-storage.ts";
 import { MULTIPLAYER_PROTOCOL_VERSION } from "./protocol.ts";
 import {
   isHomeworldPresence,
@@ -66,6 +68,7 @@ function isPlayerInfo(value: unknown): value is PlayerInfo {
   if (!isString(value.id)) return false;
   if (!isString(value.name)) return false;
   if (!isString(value.skinId)) return false;
+  if (value.customAvatar !== undefined && !resolveCustomAvatarSyncPayload(value.customAvatar)) return false;
   if (value.color !== undefined && typeof value.color !== "string") return false;
   if (value.face !== undefined && typeof value.face !== "string") return false;
   if (value.viewportWidth !== undefined && !isNumber(value.viewportWidth)) return false;
@@ -112,9 +115,13 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (!isProtocolV1(value.v) || value.kind !== "state") return false;
   if (!isString(value.matchId)) return false;
   if (!isNumber(value.progress)) return false;
+  if (value.type !== undefined && value.type !== "state") return false;
   if (value.score !== undefined && !isNumber(value.score)) return false;
+  if (value.t !== undefined && !isNumber(value.t)) return false;
   if (value.x !== undefined && !isNumber(value.x)) return false;
   if (value.y !== undefined && !isNumber(value.y)) return false;
+  if (value.angle !== undefined && !isNumber(value.angle)) return false;
+  if (value.anim !== undefined && typeof value.anim !== "string") return false;
   if (value.cameraX !== undefined && !isNumber(value.cameraX)) return false;
   if (value.cameraY !== undefined && !isNumber(value.cameraY)) return false;
   if (value.cameraScale !== undefined && !isNumber(value.cameraScale)) return false;
@@ -193,6 +200,14 @@ function isHeartbeatMessage(value: unknown): value is NetHeartbeatMessage {
   return isProtocolV1(value.v) && value.kind === "heartbeat" && isNumber(value.sentAt);
 }
 
+function isTimeSyncMessage(value: unknown): value is NetTimeSyncMessage {
+  if (!isRecord(value)) return false;
+  if (!isProtocolV1(value.v) || value.kind !== "time-sync") return false;
+  if (!isNumber(value.id) || !isNumber(value.pingLocalTime)) return false;
+  if (value.mode === "ping") return true;
+  return value.mode === "pong" && isNumber(value.remoteReceiveTime) && isNumber(value.remoteSendTime);
+}
+
 function isHomeworldStateMessage(value: unknown): value is NetHomeworldStateMessage {
   if (!isRecord(value)) return false;
   return isProtocolV1(value.v) && value.kind === "homeworld-state" && isHomeworldState(value.homeworld);
@@ -224,16 +239,25 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
     }
   }
 
-  if (isHelloMessage(payload)) return payload;
+  if (isHelloMessage(payload)) {
+    const player = { ...payload.player };
+    if (payload.player.customAvatar !== undefined) {
+      const customAvatar = resolveCustomAvatarSyncPayload(payload.player.customAvatar);
+      if (!customAvatar) return null;
+      player.customAvatar = customAvatar;
+    }
+    return { ...payload, player };
+  }
   if (isReadyMessage(payload)) return payload;
   if (isStartMessage(payload)) return payload;
   if (isInputMessage(payload)) return payload;
-  if (isStateMessage(payload)) return payload;
+  if (isStateMessage(payload)) return { ...payload, type: "state" };
   if (isResultMessage(payload)) return payload;
   if (isRematchMessage(payload)) return payload;
   if (isForfeitMessage(payload)) return payload;
   if (isReturnRoomMessage(payload)) return payload;
   if (isHeartbeatMessage(payload)) return payload;
+  if (isTimeSyncMessage(payload)) return payload;
   if (isHomeworldStateMessage(payload)) return payload;
   if (isHomeworldPresenceMessage(payload)) return payload;
   if (isLevelSelectPresenceMessage(payload)) return payload;
@@ -260,16 +284,20 @@ export function createReadyMessage(ready: boolean): NetReadyMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "ready", ready };
 }
 
-export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind">): NetStateMessage {
+export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind" | "type">): NetStateMessage {
   return {
     v: MULTIPLAYER_PROTOCOL_VERSION,
     kind: "state",
+    type: "state",
     matchId: data.matchId,
     progress: data.progress,
     score: data.score,
     status: data.status,
+    t: data.t,
     x: data.x,
     y: data.y,
+    angle: data.angle,
+    anim: data.anim,
     cameraX: data.cameraX,
     cameraY: data.cameraY,
     cameraScale: data.cameraScale,
@@ -337,6 +365,28 @@ export function createReturnRoomMessage(matchId: string): NetReturnRoomMessage {
 
 export function createHeartbeatMessage(sentAt: number): NetHeartbeatMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "heartbeat", sentAt };
+}
+
+export function createTimeSyncPingMessage(data: Omit<Extract<NetTimeSyncMessage, { mode: "ping" }>, "v" | "kind" | "mode">): NetTimeSyncMessage {
+  return {
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "time-sync",
+    mode: "ping",
+    id: data.id,
+    pingLocalTime: data.pingLocalTime,
+  };
+}
+
+export function createTimeSyncPongMessage(data: Omit<Extract<NetTimeSyncMessage, { mode: "pong" }>, "v" | "kind" | "mode">): NetTimeSyncMessage {
+  return {
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "time-sync",
+    mode: "pong",
+    id: data.id,
+    pingLocalTime: data.pingLocalTime,
+    remoteReceiveTime: data.remoteReceiveTime,
+    remoteSendTime: data.remoteSendTime,
+  };
 }
 
 export function createHomeworldStateMessage(homeworld: HomeworldState): NetHomeworldStateMessage {

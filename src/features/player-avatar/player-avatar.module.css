@@ -101,7 +101,7 @@
 .body {
   inset: 0;
   overflow: hidden;
-  border: max(2px, calc(var(--player-avatar-size-resolved) * 0.08)) solid var(--player-avatar-outline);
+  border: var(--player-avatar-border-width, max(2px, calc(var(--player-avatar-size-resolved) * 0.08))) solid var(--player-avatar-outline);
   border-radius: 24%;
   background: var(--player-avatar-body);
   box-shadow:
@@ -744,6 +744,20 @@
   --player-avatar-texture-position: 4px -6px, 23px 11px, -17px 28px;
   --player-avatar-texture-inset: -34%;
   --player-avatar-texture-blend-mode: screen;
+}
+
+.root[data-skin="custom"] {
+  --player-avatar-body: #fff;
+  --player-avatar-outline: var(--player-avatar-custom-outline, rgba(24, 24, 24, 0.18));
+  --player-avatar-border-width: 1px;
+  --player-avatar-ink: rgba(24, 24, 24, 0.82);
+  --player-avatar-skin-line: rgba(24, 24, 24, 0.16);
+  --player-avatar-texture: var(--player-avatar-custom-image, none);
+  --player-avatar-texture-opacity: 1;
+  --player-avatar-texture-size: cover;
+  --player-avatar-texture-position: center;
+  --player-avatar-texture-repeat: no-repeat;
+  --player-avatar-texture-blend-mode: normal;
 }
 
 .root[data-skin="arcade"] .body::before {

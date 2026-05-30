@@ -52,6 +52,8 @@ test("mode transitions are implemented as a reusable visual layer", () => {
   assert.match(cssSource, /\.mode-transition-overlay/);
   assert.match(cssSource, /\.mode-transition-hole/);
   assert.match(cssSource, /z-index:\s*3000/);
+  assert.match(cssSource, /\.mode-transition-overlay\.closed,[\s\S]*?\.mode-transition-overlay\.opening-start\s*{[\s\S]*?background:\s*#050505;/);
+  assert.match(cssSource, /@keyframes mode-transition-opening-cover/);
   assert.match(cssSource, /box-shadow:\s*0 0 0 220vmax/);
   assert.match(transitionSource, /MODE_TRANSITION_CLOSE_MS = 900/);
   assert.match(transitionSource, /MODE_TRANSITION_OPEN_MS = 900/);

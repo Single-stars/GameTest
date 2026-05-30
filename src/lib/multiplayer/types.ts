@@ -40,6 +40,11 @@ export type PlayerInfo = {
   id: string;
   name: string;
   skinId: string;
+  customAvatar?: {
+    imageDataUrl: string;
+    outlineColor?: string;
+    updatedAt: string;
+  };
   color?: string;
   face?: string;
   viewportWidth?: number;
@@ -89,12 +94,16 @@ export type NetStartMessage = {
 export type NetStateMessage = {
   v: 1;
   kind: "state";
+  type: "state";
   matchId: string;
   progress: number;
   score?: number;
   status: GameStateStatus;
+  t?: number;
   x?: number;
   y?: number;
+  angle?: number;
+  anim?: string;
   cameraX?: number;
   cameraY?: number;
   cameraScale?: number;
@@ -142,6 +151,24 @@ export type NetHeartbeatMessage = {
   kind: "heartbeat";
   sentAt: number;
 };
+
+export type NetTimeSyncMessage =
+  | {
+      v: 1;
+      kind: "time-sync";
+      mode: "ping";
+      id: number;
+      pingLocalTime: number;
+    }
+  | {
+      v: 1;
+      kind: "time-sync";
+      mode: "pong";
+      id: number;
+      pingLocalTime: number;
+      remoteReceiveTime: number;
+      remoteSendTime: number;
+    };
 
 export type NetHomeworldStateMessage = {
   v: 1;
@@ -193,6 +220,7 @@ export type NetMessage =
   | NetForfeitMessage
   | NetReturnRoomMessage
   | NetHeartbeatMessage
+  | NetTimeSyncMessage
   | NetHomeworldStateMessage
   | NetHomeworldPresenceMessage
   | NetLevelSelectPresenceMessage

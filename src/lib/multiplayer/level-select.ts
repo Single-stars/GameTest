@@ -19,8 +19,9 @@ export type MultiplayerLevelGroup = {
 };
 
 export const DEFAULT_MULTIPLAYER_LEVEL_ID = "square-jump-base";
-export const DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "co-op";
-const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId[] = ["square-jump", "doodle", "fall-down"];
+export const DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "versus";
+export const MULTIPLAYER_COOP_UNAVAILABLE_TEXT = "合作模式开发中";
+const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId[] = ["square-jump", "doodle", "fall-down", "flappy", "knife"];
 
 export const MULTIPLAYER_PLAY_MODES: Array<{
   id: MultiplayerPlayMode;
@@ -35,7 +36,7 @@ export const MULTIPLAYER_PLAY_MODES: Array<{
   {
     id: "co-op",
     title: "合作",
-    ruleText: "两人都通关才算合作成功；一人失败则一起复盘。",
+    ruleText: MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
   },
 ];
 
@@ -130,7 +131,7 @@ function toneForPlayMode(playMode: MultiplayerPlayMode): MultiplayerLevelSelectT
 }
 
 function selectedSlotTone(state: MultiplayerLevelSelectState) {
-  return state.confirmedSlots.mode ? toneForPlayMode(state.playMode) : "green";
+  return toneForPlayMode(state.playMode);
 }
 
 export function getNextMultiplayerLevelSelectState(
@@ -159,7 +160,7 @@ export function getNextMultiplayerLevelSelectState(
     };
   }
 
-  const playMode = !state.confirmedSlots.mode || state.playMode === "versus" ? "co-op" : "versus";
+  const playMode: MultiplayerPlayMode = "versus";
   const tone = toneForPlayMode(playMode);
   const confirmedSlots = { ...state.confirmedSlots, mode: true };
   return {

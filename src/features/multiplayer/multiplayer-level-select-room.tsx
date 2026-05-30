@@ -9,12 +9,14 @@ import {
   getMultiplayerLevelSelectRoomTone,
   getNextMultiplayerLevelSelectState,
   isMultiplayerLevelSelectReadyZone,
+  MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
   resolveMultiplayerLevelGroup,
   resolveMultiplayerLevelSelection,
   type MultiplayerLevelSelectPresence,
   type MultiplayerLevelSelectSlot,
   type MultiplayerLevelSelectState,
 } from "@/lib/multiplayer/level-select";
+import type { PlayerInfo } from "@/lib/multiplayer/types";
 
 const ROOM_PLAYER_SIZE = 58;
 const BUTTON_REACH = 12;
@@ -24,6 +26,7 @@ const LEVEL_SELECT_PRESENCE_SYNC_MS = 90;
 
 type LevelSelectRoomProps = {
   opponentName?: string;
+  opponentCustomAvatar?: PlayerInfo["customAvatar"];
   opponentPresence?: MultiplayerLevelSelectPresence | null;
   opponentReady: boolean;
   opponentSkin?: PlayerAvatarSkin;
@@ -31,7 +34,16 @@ type LevelSelectRoomProps = {
   selfSkin: PlayerAvatarSkin;
   selection: MultiplayerLevelSelectState;
   startCountdownSeconds?: number | null;
+  leftExitLabel?: string;
+  rightReadyLabel?: string;
+  readyAvailable?: boolean;
+  selectionAvailable?: boolean;
+  selectionUnavailableMessage?: string;
+  showGuides?: boolean;
+  unavailableModeHint?: string | null;
+  unavailableModeHintKey?: number;
   onBackToRoom: () => void;
+  onUnavailablePlayMode?: (message: string) => void;
   onPresenceChange: (presence: MultiplayerLevelSelectPresence) => void;
   onReadyChange: (ready: boolean) => void;
   onSelectionChange: (selection: MultiplayerLevelSelectState) => void;
@@ -47,7 +59,7 @@ function slotX(slot: MultiplayerLevelSelectSlot) {
 function slotAriaLabel(slot: MultiplayerLevelSelectSlot) {
   if (slot === "type") return "切换关卡类型";
   if (slot === "level") return "切换难度和变体";
-  return "切换合作或对抗";
+  return "确认对抗模式";
 }
 
 function wallContent(slot: MultiplayerLevelSelectSlot, selection: MultiplayerLevelSelectState) {
@@ -57,7 +69,7 @@ function wallContent(slot: MultiplayerLevelSelectSlot, selection: MultiplayerLev
   if (slot === "level") return [`${level.code} ${level.difficulty}`, level.variant];
   return [
     selection.playMode === "versus" ? "对抗" : "合作",
-    selection.playMode === "versus" ? "各自冲关，比速度和得分" : "两人都通关才算成功",
+    selection.playMode === "versus" ? "各自冲关，比速度和得分" : MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
   ];
 }
 
@@ -75,6 +87,7 @@ function isControlTarget(target: EventTarget | null) {
 
 export function MultiplayerLevelSelectRoom({
   opponentName = "对方",
+  opponentCustomAvatar,
   opponentPresence = null,
   opponentReady,
   opponentSkin,
@@ -82,7 +95,16 @@ export function MultiplayerLevelSelectRoom({
   selfReady,
   selection,
   startCountdownSeconds = null,
+  leftExitLabel = "← 回到家园",
+  rightReadyLabel = "准备开始 →",
+  readyAvailable = true,
+  selectionAvailable = true,
+  selectionUnavailableMessage = "请先创建或加入房间",
+  showGuides = true,
+  unavailableModeHint = null,
+  unavailableModeHintKey = 0,
   onBackToRoom,
+  onUnavailablePlayMode,
   onPresenceChange,
   onReadyChange,
   onSelectionChange,
@@ -99,6 +121,7 @@ export function MultiplayerLevelSelectRoom({
   const reachableSlot = nearestReachableSlot(playerX);
   const roomTone = getMultiplayerLevelSelectRoomTone(selection);
   const complete = areMultiplayerLevelSelectSlotsConfirmed(selection);
+  const readyGuideVisible = readyAvailable && complete;
   const selectionLocked = selfReady || opponentReady;
   const remotePlayerX = opponentPresence?.inRoom
     ? Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), opponentPresence.x ?? 50))
@@ -111,9 +134,17 @@ export function MultiplayerLevelSelectRoom({
   const interactWithSlot = useCallback(
     (slot: MultiplayerLevelSelectSlot | null = reachableSlot) => {
       if (!slot || selectionLocked) return;
+      if (!selectionAvailable) {
+        onUnavailablePlayMode?.(selectionUnavailableMessage);
+        return;
+      }
+      if (slot === "mode" && selection.confirmedSlots.mode) {
+        onUnavailablePlayMode?.(unavailableModeHint ?? MULTIPLAYER_COOP_UNAVAILABLE_TEXT);
+        return;
+      }
       onSelectionChange(getNextMultiplayerLevelSelectState(selection, slot));
     },
-    [onSelectionChange, reachableSlot, selection, selectionLocked],
+    [onSelectionChange, onUnavailablePlayMode, reachableSlot, selection, selectionAvailable, selectionLocked, selectionUnavailableMessage, unavailableModeHint],
   );
 
   const publishPresence = useCallback(
@@ -191,6 +222,11 @@ export function MultiplayerLevelSelectRoom({
   }, [playerX, selection, updateReady]);
 
   useEffect(() => {
+    if (readyAvailable && selectionAvailable) return;
+    updateReady(false);
+  }, [readyAvailable, selectionAvailable, updateReady]);
+
+  useEffect(() => {
     let frameId = 0;
     let lastTime = performance.now();
 
@@ -203,7 +239,11 @@ export function MultiplayerLevelSelectRoom({
         const clamped = Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), next));
         playerXRef.current = clamped;
         setPlayerX(clamped);
-        updateReady(isMultiplayerLevelSelectReadyZone(selection, clamped));
+        const nextReady = readyAvailable && isMultiplayerLevelSelectReadyZone(selection, clamped);
+        updateReady(nextReady);
+        if (returnedRef.current && clamped > EXIT_LEFT + 1) {
+          returnedRef.current = false;
+        }
         if (time - lastPresenceSentRef.current >= LEVEL_SELECT_PRESENCE_SYNC_MS) {
           lastPresenceSentRef.current = time;
           publishPresence(clamped, inputDirection);
@@ -218,7 +258,7 @@ export function MultiplayerLevelSelectRoom({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [onBackToRoom, publishPresence, selection, updateReady]);
+  }, [onBackToRoom, publishPresence, readyAvailable, selection, updateReady]);
 
   const playerAction = moving ? "move" : "idle";
   const wallNodes = useMemo(
@@ -275,10 +315,18 @@ export function MultiplayerLevelSelectRoom({
       onPointerUp={stopMove}
       tabIndex={0}
     >
-      <div className="multiplayer-level-room-guides" aria-hidden="true">
-        <div className="multiplayer-level-guide left">← 回到家园</div>
-        {complete ? <div className="multiplayer-level-guide right">准备开始 →</div> : null}
-      </div>
+      {showGuides ? (
+        <div className="multiplayer-level-room-guides" aria-hidden="true">
+          <div className="multiplayer-level-guide left">{leftExitLabel}</div>
+          {readyGuideVisible ? <div className="multiplayer-level-guide right">{rightReadyLabel}</div> : null}
+        </div>
+      ) : null}
+
+      {unavailableModeHint ? (
+        <div className="multiplayer-level-mode-hint" aria-live="polite" key={unavailableModeHintKey}>
+          {unavailableModeHint}
+        </div>
+      ) : null}
 
       {(selfReady || opponentReady) ? (
         <div className="multiplayer-level-ready-hints" aria-live="polite">
@@ -301,16 +349,17 @@ export function MultiplayerLevelSelectRoom({
         {SLOT_ORDER.map((slot) => (
           <button
             aria-label={slotAriaLabel(slot)}
-            className={`multiplayer-floor-switch slot-${slot} ${reachableSlot === slot ? "reachable" : ""}`}
-            disabled={selectionLocked || reachableSlot !== slot}
+            aria-disabled={!selectionAvailable || selectionLocked || reachableSlot !== slot ? true : undefined}
+            className={`multiplayer-floor-switch slot-${slot} ${reachableSlot === slot ? "reachable" : ""} ${!selectionAvailable ? "locked" : ""}`}
+            disabled={selectionLocked || (selectionAvailable && reachableSlot !== slot)}
             key={slot}
             style={{ left: `${slotX(slot)}%` }}
             type="button"
-            onClick={() => interactWithSlot(reachableSlot === slot ? slot : null)}
+            onClick={() => interactWithSlot(!selectionAvailable ? slot : reachableSlot === slot ? slot : null)}
           />
         ))}
 
-        <div className="multiplayer-level-room-player" style={{ left: `${playerX}%` }}>
+        <div className="multiplayer-level-room-player" data-transition-avatar-anchor style={{ left: `${playerX}%` }}>
           <PlayerAvatar
             action={playerAction}
             direction={direction}
@@ -327,6 +376,8 @@ export function MultiplayerLevelSelectRoom({
               action={remotePlayerAction}
               direction={remotePlayerDirection}
               expression="neutral"
+              customImageUrl={remotePlayerSkin === "custom" ? opponentCustomAvatar?.imageDataUrl : null}
+              customOutlineColor={remotePlayerSkin === "custom" ? opponentCustomAvatar?.outlineColor ?? null : null}
               skin={remotePlayerSkin}
               size={ROOM_PLAYER_SIZE}
               visualScale={1.08}

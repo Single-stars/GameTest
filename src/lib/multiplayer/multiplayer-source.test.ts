@@ -110,14 +110,16 @@ test("WebRTC game traffic uses separate control input and state channels", () =>
   assert.match(protocolSource, /control: "control"/);
   assert.match(protocolSource, /input: "input"/);
   assert.match(protocolSource, /state: "state"/);
-  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = 16/);
+  assert.match(protocolSource, /MULTIPLAYER_STATE_SYNC_MS = REMOTE_STATE_SEND_INTERVAL_MS/);
+  assert.match(protocolSource, /MULTIPLAYER_FAST_STATE_SYNC_MS = REMOTE_FAST_STATE_SEND_INTERVAL_MS/);
+  assert.match(protocolSource, /MULTIPLAYER_IDLE_STATE_SYNC_MS = REMOTE_IDLE_STATE_SEND_INTERVAL_MS/);
   assert.match(protocolSource, /MULTIPLAYER_INPUT_KEEPALIVE_MS = 50/);
-  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = 32/);
-  assert.match(protocolSource, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS = 180/);
+  assert.match(protocolSource, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS = REMOTE_INTERPOLATION_DELAY_MS/);
+  assert.match(protocolSource, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS = REMOTE_MAX_PREDICTION_MS/);
   assert.match(protocolSource, /MULTIPLAYER_LOGIC_TIMESTEP_MS = 1000 \/ 60/);
   assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.control, \{ ordered: true \}\)/);
   assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.input, \{ ordered: false, maxRetransmits: 0 \}\)/);
-  assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state, \{ ordered: false, maxRetransmits: 0 \}\)/);
+  assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state, MULTIPLAYER_STATE_CHANNEL_CONFIG\)/);
   assert.match(transportSource, /message\.kind === "input" \? this\.inputChannel/);
   assert.match(transportSource, /message\.kind === "state" \? this\.stateChannel/);
   assert.doesNotMatch(transportSource, /fallbackChannel/);
@@ -266,7 +268,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /readPersistedPlayerName/);
   assert.doesNotMatch(pageSource, /writePersistedPlayerName/);
   assert.match(pageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
-  assert.match(pageSource, /createSelfPlayer\(role, resolvedSkin, resolvedName\)/);
+  assert.match(pageSource, /createSelfPlayer\(role, resolvedSkin, resolvedName, resolvedCustomAvatar\)/);
   assert.match(pageSource, /autoCreateHomeworldHostRef/);
   assert.match(pageSource, /hostHomeworldParam !== "1"/);
   assert.match(pageSource, /homeworldEntryVisible/);
@@ -371,18 +373,38 @@ test("Doodle multiplayer mode uses a fixed match stage and renders the remote av
 
 test("multiplayer match runtime sends throttled state samples for smooth remote movement", () => {
   const source = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const netProtocolSource = readSource("../../features/multiplayer/net-protocol.ts");
+  const interpolatorSource = readSource("../../features/multiplayer/remote-interpolator.ts");
 
-  assert.match(source, /MULTIPLAYER_STATE_SYNC_MS/);
-  assert.match(source, /const syncIntervalMs = inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;/);
+  assert.match(source, /MULTIPLAYER_FAST_STATE_SYNC_MS/);
+  assert.match(source, /MULTIPLAYER_IDLE_STATE_SYNC_MS/);
+  assert.match(source, /const syncIntervalMs = inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_FAST_STATE_SYNC_MS;/);
   assert.match(source, /new SimpleGameSync\([\s\S]*syncIntervalMs/);
+  assert.match(source, /sendIntervalMs: inputOnlySync \? undefined : resolveDynamicStateSendIntervalMs/);
   assert.match(source, /signature: multiplayerStateSignature\(nextState\)/);
+  assert.match(source, /syncRef\.current\?\.update\(nextState, \{ immediate, signature: multiplayerStateSignature\(nextState\) \}\)/);
   assert.match(source, /function multiplayerStateSignature/);
+  assert.match(netProtocolSource, /REMOTE_STATE_SEND_INTERVAL_MS = 50/);
+  assert.match(netProtocolSource, /REMOTE_FAST_STATE_SEND_INTERVAL_MS = 1000 \/ 30/);
+  assert.match(netProtocolSource, /REMOTE_IDLE_STATE_SEND_INTERVAL_MS = 100/);
+  assert.match(netProtocolSource, /REMOTE_INTERPOLATION_DELAY_MS = 80/);
+  assert.match(netProtocolSource, /REMOTE_MAX_PREDICTION_MS = 100/);
+  assert.match(netProtocolSource, /REMOTE_STALE_MS = 500/);
+  assert.match(netProtocolSource, /REMOTE_SMOOTH_SHARPNESS = 36/);
+  assert.match(netProtocolSource, /REMOTE_TELEPORT_DISTANCE = 260/);
+  assert.match(interpolatorSource, /export class RemoteInterpolator/);
+  assert.match(interpolatorSource, /sample\(now: number\)/);
 });
 
 test("multiplayer transport drops replaceable state frames under data channel backpressure", () => {
   const source = readSource("./webrtc-transport.ts");
+  const p2pClientSource = readSource("../../features/multiplayer/p2p-client.ts");
 
-  assert.match(source, /STATE_CHANNEL_BACKPRESSURE_BYTES/);
+  assert.match(p2pClientSource, /STATE_CHANNEL_BACKPRESSURE_BYTES/);
+  assert.match(p2pClientSource, /MULTIPLAYER_STATE_CHANNEL_CONFIG/);
+  assert.match(p2pClientSource, /ordered: false/);
+  assert.match(p2pClientSource, /maxRetransmits: 0/);
+  assert.match(p2pClientSource, /function canSendRealtimeState/);
   assert.match(source, /function canSendReplaceableState/);
   assert.match(source, /if \(message\.kind === "state" && !canSendReplaceableState\(preferredChannel\)\) return;/);
   assert.match(source, /channel\.bufferedAmount/);
@@ -482,14 +504,15 @@ test("homeworld level-select start flow waits in the room before sending startMa
   assert.match(roomSource, /resolvePlayerAvatarSkin\(opponentPresence\?\.skinId \?\? opponentSkin\)/);
   assert.match(roomSource, /selectionLocked = selfReady \|\| opponentReady/);
   assert.match(roomSource, /if \(!slot \|\| selectionLocked\) return;/);
-  assert.match(roomSource, /disabled=\{selectionLocked \|\| reachableSlot !== slot\}/);
+  assert.match(roomSource, /if \(!selectionAvailable\) \{[\s\S]{0,120}onUnavailablePlayMode\?\.\(selectionUnavailableMessage\);[\s\S]{0,60}return;/);
+  assert.match(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
   assert.match(roomSource, /skinId: selfSkin/);
   assert.match(roomSource, /className="multiplayer-level-room-player remote"/);
   assert.match(pageSource, /opponentPresence=\{snapshot\.opponentLevelSelectPresence\}/);
   assert.match(pageSource, /opponentSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
   assert.match(roomSource, /← 回到家园/);
   assert.match(roomSource, /准备开始 →/);
-  assert.match(roomSource, /\{complete \? <div className="multiplayer-level-guide right">/);
+  assert.match(roomSource, /\{readyGuideVisible \? <div className="multiplayer-level-guide right">/);
   assert.match(roomSource, /你已准备/);
   assert.match(roomSource, /已准备/);
   assert.match(roomSource, /startCountdownSeconds/);
@@ -501,6 +524,109 @@ test("homeworld level-select start flow waits in the room before sending startMa
   assert.match(sessionSource, /current\?\.action === presence\.action/);
   assert.match(sessionSource, /current\?\.readyToStart === presence\.readyToStart/);
   assert.match(sessionSource, /current\?\.skinId === presence\.skinId/);
+});
+
+test("standalone level-select controls stay locked until a room exists", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(roomSource, /selectionAvailable\?: boolean;/);
+  assert.match(roomSource, /selectionUnavailableMessage\?: string;/);
+  assert.match(roomSource, /if \(!selectionAvailable\) \{[\s\S]{0,120}onUnavailablePlayMode\?\.\(selectionUnavailableMessage\);[\s\S]{0,60}return;/);
+  assert.match(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
+  assert.match(roomSource, /aria-disabled=\{!selectionAvailable \|\| selectionLocked \|\| reachableSlot !== slot \? true : undefined\}/);
+  assert.match(roomSource, /!selectionAvailable \? "locked" : ""/);
+  assert.match(roomSource, /onClick=\{\(\) => interactWithSlot\(!selectionAvailable \? slot : reachableSlot === slot \? slot : null\)\}/);
+  assert.match(pageSource, /const standaloneSelectionAvailable = standalonePeerConnected;/);
+  assert.match(pageSource, /const standaloneSelectionUnavailableMessage = snapshot\.status === "waiting"\s*\?\s*"请先邀请好友加入房间"\s*:\s*"请先创建或加入房间";/);
+  assert.match(pageSource, /selectionAvailable=\{standaloneSelectionAvailable\}/);
+  assert.match(pageSource, /selectionUnavailableMessage=\{standaloneSelectionUnavailableMessage\}/);
+});
+
+test("repeated unavailable co-op clicks replay the hint without mutating confirmed mode selection", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(pageSource, /const \[unavailableModeHint, setUnavailableModeHint\] = useState<\{ id: number; message: string \} \| null>\(null\);/);
+  assert.match(pageSource, /unavailableModeHintIdRef/);
+  assert.match(pageSource, /setUnavailableModeHint\(\{ id: nextHintId, message \}\)/);
+  assert.match(roomSource, /unavailableModeHintKey\?: number;/);
+  assert.match(roomSource, /key=\{unavailableModeHintKey\}/);
+  assert.match(roomSource, /if \(slot === "mode" && selection\.confirmedSlots\.mode\) \{[\s\S]{0,140}onUnavailablePlayMode\?\.[\s\S]{0,80}return;/);
+});
+
+test("standalone room disband uses an in-page iris transition and remounts the room player at center", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(pageSource, /const standaloneLevelSelectRoomKey =/);
+  assert.match(pageSource, /key=\{standaloneLevelSelectRoomKey\}/);
+  assert.match(pageSource, /function applyLevelSelectSelection/);
+  assert.match(pageSource, /function resetLocalLevelSelectSelection/);
+  assert.doesNotMatch(pageSource, /const applyLevelSelectState = useCallback/);
+  assert.doesNotMatch(pageSource, /const resetLevelSelectState = useCallback/);
+  assert.match(pageSource, /await transitionInPage\(async \(\) => \{/);
+  assert.match(pageSource, /resetLocalLevelSelectSelection\(\{/);
+  assert.match(pageSource, /router\.replace\("\/multiplayer\?select=1"\)/);
+  assert.match(roomSource, /data-transition-avatar-anchor/);
+});
+
+test("level-select presence is republished when returning from an in-game match", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /const levelSelectRoomActive = isHomeworldRoute \? levelSelectOpen : isStandaloneSelectRoute && !showGameShell;/);
+  assert.match(pageSource, /\}, \[isHomeworldRoute, isStandaloneSelectRoute, levelSelectOpen, showGameShell\]\);/);
+});
+
+test("custom avatar profiles render for remote multiplayer avatars", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const homeworldSource = readSource("../../features/homeworld/homeworld-screen.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const flappySource = readSource("../../features/mini-games/flappy.tsx");
+  const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
+
+  assert.match(pageSource, /opponentCustomAvatar=\{snapshot\.opponentPlayer\?\.customAvatar\}/);
+  assert.match(pageSource, /remoteCustomAvatar=\{snapshot\.opponentPlayer\?\.customAvatar\}/);
+  assert.match(pageSource, /opponentPlayer=\{snapshot\.opponentPlayer\}/);
+  assert.match(pageSource, /selfCustomAvatar=\{snapshot\.selfPlayer\?\.customAvatar\}/);
+  assert.match(shellSource, /customImageUrl=\{player\?\.skinId === "custom" \? player\.customAvatar\?\.imageDataUrl : null\}/);
+  assert.match(roomSource, /opponentCustomAvatar\?: PlayerInfo\["customAvatar"\]/);
+  assert.match(roomSource, /customImageUrl=\{remotePlayerSkin === "custom" \? opponentCustomAvatar\?\.imageDataUrl : null\}/);
+  assert.match(runtimeSource, /selfCustomAvatar\?: PlayerInfo\["customAvatar"\] \| null;/);
+  assert.match(runtimeSource, /function resolveCoOpSharedCustomAvatar/);
+  assert.match(runtimeSource, /coOpCustomAvatar=\{coOpSharedCustomAvatar\}/);
+  assert.match(doodleSource, /customImageUrl=\{remotePlayerSkin === "custom" \? remotePlayer\?\.customAvatar\?\.imageDataUrl : null\}/);
+  assert.match(fallDownSource, /customImageUrl=\{remotePlayerSkin === "custom" \? remotePlayer\?\.customAvatar\?\.imageDataUrl : null\}/);
+  assert.match(flappySource, /customImageUrl=\{remotePlayerSkin === "custom" \? remotePlayer\?\.customAvatar\?\.imageDataUrl : null\}/);
+  assert.match(squareJumpSource, /customImageUrl=\{remotePlayerSkin === "custom" \? remotePlayer\?\.customAvatar\?\.imageDataUrl : null\}/);
+  assert.match(homeworldSource, /remoteCustomAvatar\?: PlayerInfo\["customAvatar"\]/);
+  assert.match(homeworldSource, /customImageUrl=\{resolvedRemoteSkin === "custom" \? remoteCustomAvatar\?\.imageDataUrl : null\}/);
+});
+
+test("multiplayer gameplay does not render a network fluctuation hint overlay", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.doesNotMatch(runtimeSource, /remoteNetworkUnstable/);
+  assert.doesNotMatch(runtimeSource, /multiplayer-network-hint/);
+  assert.doesNotMatch(runtimeSource, /网络波动|缃戠粶娉㈠姩/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-network-hint\b/);
+});
+
+test("knife multiplayer reports animation-frame runtime state like the smoother shared-map modes", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const knifeSource = readSource("../../features/mini-games/knife.tsx");
+
+  assert.match(knifeSource, /export type KnifeRuntimeState/);
+  assert.match(knifeSource, /KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS/);
+  assert.match(knifeSource, /const syncKnifeRuntimeState = useCallback/);
+  assert.match(knifeSource, /syncKnifeRuntimeState\(time\);/);
+  assert.match(runtimeSource, /handleKnifeRuntimeState/);
+  assert.match(runtimeSource, /onRuntimeState=\{handleKnifeRuntimeState\}/);
 });
 
 test("homeworld multiplayer preserves selected skin before movement and returns forfeits to level select", () => {
@@ -684,9 +810,12 @@ test("multiplayer host can choose the battle level before match start", () => {
   assert.match(pageSource, /session\.startMatch\(\{/);
   assert.match(pageSource, /levelId: activeLevelSelectState\.levelId/);
   assert.match(pageSource, /playMode: activeLevelSelectState\.playMode/);
-  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down"\]/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "knife"\]/);
+  assert.match(levelSelectSource, /DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "versus"/);
   assert.match(levelSelectSource, /MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup\[\] = MULTIPLAYER_ENABLED_GAME_IDS\.map/);
-  assert.doesNotMatch(pageSource, /MULTIPLAYER_LEVEL_OPTIONS|fall-down-final|flappy-7/);
+  assert.match(pageSource, /handleUnavailablePlayMode/);
+  assert.match(pageSource, /MULTIPLAYER_COOP_UNAVAILABLE_TEXT/);
+  assert.doesNotMatch(pageSource, /MULTIPLAYER_LEVEL_OPTIONS|fall-down-final/);
 });
 
 test("multiplayer runtime supports fall-down with synced state and unlimited respawn", () => {
@@ -742,24 +871,29 @@ test("co-op multiplayer uses one shared avatar skin selected from both players b
   const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
 
   assert.match(runtimeSource, /function resolveCoOpSharedSkinId\(/);
-  assert.match(runtimeSource, /opponentPlayer: \{ skinId\?: string \} \| null/);
+  assert.match(runtimeSource, /opponentPlayer: PlayerInfo \| null/);
   assert.match(runtimeSource, /const coOpSharedSkinId = coOpMode \? resolveCoOpSharedSkinId/);
+  assert.match(runtimeSource, /const coOpSharedCustomAvatar = coOpMode \? resolveCoOpSharedCustomAvatar/);
   assert.match(runtimeSource, /coOpSkinId=\{coOpSharedSkinId\}/);
+  assert.match(runtimeSource, /coOpCustomAvatar=\{coOpSharedCustomAvatar\}/);
   assert.match(doodleSource, /coOpSkinId\?: string \| null;/);
-  assert.match(doodleSource, /skin=\{resolveDoodleCoOpSkin\(coOpSkinId\)\}/);
+  assert.match(doodleSource, /const coOpPlayerSkin = resolveDoodleCoOpSkin\(coOpSkinId\)/);
+  assert.match(doodleSource, /skin=\{coOpPlayerSkin\}/);
   assert.match(fallDownSource, /coOpSkinId\?: string \| null;/);
-  assert.match(fallDownSource, /skin=\{resolveFallDownCoOpSkin\(coOpSkinId\)\}/);
+  assert.match(fallDownSource, /const coOpPlayerSkin = resolveFallDownCoOpSkin\(coOpSkinId\)/);
+  assert.match(fallDownSource, /skin=\{coOpPlayerSkin\}/);
   assert.match(squareJumpSource, /coOpSkinId\?: string \| null;/);
-  assert.match(squareJumpSource, /skin=\{resolveSquareJumpCoOpSkin\(coOpSkinId\)\}/);
+  assert.match(squareJumpSource, /const coOpPlayerSkin = resolveSquareJumpCoOpSkin\(coOpSkinId\)/);
+  assert.match(squareJumpSource, /skin=\{coOpPlayerSkin\}/);
 });
 
-test("multiplayer runtime keeps flappy sync support while level select gates exposed games", () => {
+test("multiplayer runtime exposes flappy and knife because both reuse existing versus runtime", () => {
   const levelSelectSource = readSource("./level-select.ts");
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const flappySource = readSource("../../features/mini-games/flappy.tsx");
+  const knifeSource = readSource("../../features/mini-games/knife.tsx");
 
-  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down"\]/);
-  assert.doesNotMatch(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \[[^\]]*"flappy"/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "knife"\]/);
   assert.match(runtimeSource, /FlappyPrototype/);
   assert.match(runtimeSource, /level\.gameId === "flappy"/);
   assert.match(runtimeSource, /handleFlappyRuntimeState/);
@@ -769,14 +903,144 @@ test("multiplayer runtime keeps flappy sync support while level select gates exp
   assert.match(flappySource, /onRuntimeState\?: \(state: FlappyRuntimeState\) => void;/);
   assert.match(flappySource, /logicStageSizeOverride\?: MiniGameStageSize;/);
   assert.match(flappySource, /unlimitedRespawn = false/);
+  assert.match(runtimeSource, /level\.gameId === "knife"/);
+  assert.match(runtimeSource, /KnifeHitPrototype/);
+  assert.match(runtimeSource, /onComplete=\{handleCompletion\}/);
+  assert.match(runtimeSource, /<KnifeHitPrototype[\s\S]*unlimitedRespawn/);
+  assert.match(knifeSource, /unlimitedRespawn = false/);
+  assert.match(knifeSource, /current\.status = nextShotIndex >= shotCount \? "passed" : "playing"/);
+  assert.match(knifeSource, /onComplete\?: \(outcome: MiniGameCompletion\) => void;/);
+});
+
+test("result screen exposes a standalone multiplayer entry without coupling to homeworld", () => {
+  const appPageSource = readSource("../../app/page.tsx");
+  const resultSource = readSource("../../features/results/result-screen.tsx");
+  const iconSource = readSource("../../features/results/result-icons.tsx");
+
+  assert.match(resultSource, /onOpenMultiplayer/);
+  assert.match(resultSource, /label: "联机"/);
+  assert.match(resultSource, /<MultiplayerIcon \/>/);
+  assert.match(iconSource, /export function MultiplayerIcon/);
+  assert.match(iconSource, /multiplayer:\s*"M5\.07324 5\.30566/);
+  assert.match(appPageSource, /const openMultiplayerSelect = useCallback/);
+  assert.match(appPageSource, /transitionToRoute\("\/multiplayer\?select=1"/);
+  assert.match(appPageSource, /onOpenMultiplayer=\{openMultiplayerSelect\}/);
+  assert.doesNotMatch(resultSource, /onOpenHomeworld[\s\S]{0,240}\/multiplayer/);
+});
+
+test("standalone multiplayer select route reuses the level-select room with room controls", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const selectShellRule = cssRule(cssSource, ".multiplayer-select-shell");
+  const levelRoomRule = cssRule(cssSource, ".multiplayer-level-room");
+  const roomBarRule = cssRule(cssSource, ".multiplayer-select-room-bar");
+  const modeHintRule = cssRule(cssSource, ".multiplayer-level-mode-hint");
+  const statusRule = cssRule(cssSource, ".multiplayer-select-status-text");
+  const dangerButtonRule = cssRule(cssSource, ".multiplayer-confirm-dialog-actions .primary-button.danger");
+
+  assert.match(pageSource, /searchParams\.get\("select"\)/);
+  assert.match(pageSource, /const isStandaloneSelectRoute = selectParam === "1"/);
+  assert.match(pageSource, /renderStandaloneLevelSelect/);
+  assert.match(pageSource, /className="app-shell app-shell-play multiplayer-select-shell"/);
+  assert.match(pageSource, /route-blackout-shell multiplayer-route-loading-shell/);
+  assert.match(pageSource, /className="multiplayer-select-room-bar"/);
+  assert.match(pageSource, /<MultiplayerLevelSelectRoom[\s\S]*leftExitLabel=\{standaloneLeftExitLabel\}/);
+  assert.match(pageSource, /onBackToRoom=\{requestStandaloneLevelSelectExit\}/);
+  assert.match(pageSource, /<HostRoom[\s\S]*roomLink=\{roomLink\}/);
+  assert.match(pageSource, /openStandaloneJoinDialog/);
+  assert.match(pageSource, /standaloneJoinDialogOpen/);
+  assert.match(pageSource, /className="multiplayer-select-action-button"/);
+  assert.match(pageSource, /className="multiplayer-join-dialog"/);
+  assert.match(roomSource, /leftExitLabel = "← 回到家园"/);
+  assert.match(roomSource, /unavailableModeHint/);
+  assert.match(roomSource, /onUnavailablePlayMode/);
+  assert.match(cssSource, /\.multiplayer-select-shell/);
+  assert.match(cssSource, /\.multiplayer-select-room-bar/);
+  assert.match(selectShellRule, /background:\s*#fff;/);
+  assert.match(levelRoomRule, /background:\s*#fff;/);
+  assert.match(cssSource, /\.multiplayer-route-loading-shell\s*{[\s\S]*?background:\s*#fff;/);
+  assert.match(cssSource, /\.multiplayer-level-room\.tone-dark,[\s\S]*?background:\s*#fff;/);
+  assert.match(cssSource, /\.multiplayer-floor-switch\.locked\s*{[\s\S]*?cursor:\s*not-allowed;/);
+  assert.match(roomBarRule, /box-shadow:\s*none;/);
+  assert.match(modeHintRule, /color:\s*#26362f;/);
+  assert.match(modeHintRule, /text-shadow:\s*none;/);
+  assert.match(statusRule, /bottom:\s*max\(34px, calc\(env\(safe-area-inset-bottom\) \+ 34px\)\);/);
+  assert.match(dangerButtonRule, /border:\s*1px solid rgba\(122, 34, 34, 0\.34\);/);
+});
+
+test("standalone host keeps selected level state when a guest joins", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const bootstrapSource = pageSource.slice(pageSource.indexOf("const bootstrapSession = useCallback"), pageSource.indexOf("const handleCreate = useCallback"));
+  const connectedHandlerSource = sessionSource.slice(
+    sessionSource.indexOf("onConnected: () => {"),
+    sessionSource.indexOf("onPeerDisconnected:", sessionSource.indexOf("onConnected: () => {")),
+  );
+
+  assert.match(bootstrapSource, /if \(role === "host"\) \{[\s\S]{0,120}session\.reportLevelSelectState\(levelSelectState\);[\s\S]{0,40}\}/);
+  assert.doesNotMatch(bootstrapSource, /session\.reportLevelSelectState\(levelSelectState\);[\s\S]{0,120}session\.reportLevelSelectPresence/);
+  assert.match(connectedHandlerSource, /const currentLevelSelectState = this\.snapshot\.levelSelectState;/);
+  assert.match(connectedHandlerSource, /levelSelectState:\s*currentLevelSelectState/);
+});
+
+test("standalone multiplayer room controls hide after peer connection and ready requires two players", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(pageSource, /const standalonePeerConnected = snapshot\.status === "connected" && Boolean\(snapshot\.opponentPlayer\);/);
+  assert.match(pageSource, /const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;/);
+  assert.match(pageSource, /const standaloneRoomBarVisible = !standalonePeerConnected;/);
+  assert.match(pageSource, /\{standaloneRoomBarVisible \? \(/);
+  assert.match(pageSource, /standaloneReadyAvailable \? <span className="ready">/);
+  assert.match(pageSource, /readyAvailable=\{standaloneReadyAvailable\}/);
+  assert.match(roomSource, /readyAvailable = true/);
+  assert.match(roomSource, /const readyGuideVisible = readyAvailable && complete;/);
+  assert.match(roomSource, /const nextReady = readyAvailable && isMultiplayerLevelSelectReadyZone\(selection, clamped\);/);
+});
+
+test("standalone multiplayer left exit asks for confirmation before risky room leave actions", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(pageSource, /const \[standaloneExitConfirmOpen, setStandaloneExitConfirmOpen\] = useState\(false\);/);
+  assert.match(pageSource, /const requestStandaloneLevelSelectExit = useCallback/);
+  assert.match(pageSource, /setStandaloneExitConfirmOpen\(true\);/);
+  assert.match(pageSource, /const confirmStandaloneLevelSelectExit = useCallback/);
+  assert.match(pageSource, /const leaveReason = snapshot\.role === "host" \? "host-disbanded-room" : "peer-left-room";/);
+  assert.match(pageSource, /onBackToRoom=\{requestStandaloneLevelSelectExit\}/);
+  assert.match(pageSource, /standaloneExitConfirmOpen \? \(/);
+  assert.match(pageSource, /className="multiplayer-confirm-dialog"/);
+  assert.match(roomSource, /returnedRef\.current && clamped > EXIT_LEFT \+ 1/);
+  assert.match(cssSource, /\.multiplayer-confirm-dialog/);
+});
+
+test("standalone multiplayer uses the session self skin when rendering room and match avatars", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /const standaloneSelfSkin = resolvePlayerAvatarSkin\(snapshot\.selfPlayer\?\.skinId \?\? selectedSkin\);/);
+  assert.match(pageSource, /selfSkin=\{standaloneSelfSkin\}/);
+  assert.match(pageSource, /selfSkinId=\{standaloneSelfSkin\}/);
+});
+
+test("standalone multiplayer co-op unavailable hint is centered without a card", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const hintRule = cssRule(cssSource, ".multiplayer-level-mode-hint");
+
+  assert.match(hintRule, /top:\s*40%;/);
+  assert.match(hintRule, /background:\s*transparent;/);
+  assert.doesNotMatch(hintRule, /border:/);
+  assert.doesNotMatch(hintRule, /box-shadow:/);
 });
 
 test("fall-down multiplayer renders a remote player avatar from shared state", () => {
   const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
 
-  assert.match(fallDownSource, /remotePlayer\?: \{ skinId\?: string \} \| null;/);
+  assert.match(fallDownSource, /type FallDownRemotePlayer =/);
+  assert.match(fallDownSource, /remotePlayer\?: FallDownRemotePlayer \| null;/);
   assert.match(fallDownSource, /remoteState\?: SelfGameState \| null;/);
-  assert.match(fallDownSource, /RemoteStateSmoother/);
+  assert.match(fallDownSource, /RemoteInterpolator/);
   assert.match(fallDownSource, /fall-down-remote-player-shell/);
 });
 
@@ -787,12 +1051,13 @@ test("square-jump versus renders the opponent on the same map while co-op keeps 
 
   assert.match(runtimeSource, /<SquareJumpPrototype[\s\S]*remotePlayer=\{coOpMode \? null : opponentPlayer\}[\s\S]*remoteStateSubscription=\{coOpMode \? null : opponentStateSubscription\}[\s\S]*remoteState=\{coOpMode \? null : opponentState\}/);
   assert.match(runtimeSource, /<SquareJumpPrototype[\s\S]*logicStageSizeOverride=\{matchStageSize\}/);
-  assert.match(squareJumpSource, /remotePlayer\?: \{ skinId\?: string \} \| null;/);
+  assert.match(squareJumpSource, /type SquareJumpRemotePlayer =/);
+  assert.match(squareJumpSource, /remotePlayer\?: SquareJumpRemotePlayer \| null;/);
   assert.match(squareJumpSource, /logicStageSizeOverride\?: MiniGameStageSize;/);
   assert.match(squareJumpSource, /const logicStageSize = logicStageSizeOverride \?\? measuredStageSize;/);
   assert.match(squareJumpSource, /remoteStateSubscription\?: \(\(listener: \(state: SelfGameState\) => void\) => \(\(\) => void\)\) \| null;/);
   assert.match(squareJumpSource, /remoteState\?: SelfGameState \| null;/);
-  assert.match(squareJumpSource, /RemoteStateSmoother/);
+  assert.match(squareJumpSource, /RemoteInterpolator/);
   assert.match(squareJumpSource, /square-jump-base-remote-player-shell/);
   assert.match(squareJumpCss, /\.square-jump-base-remote-player-shell/);
 });
@@ -834,7 +1099,7 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(workerSource, /clearGuestToken\(\)/);
   assert.match(workerSource, /metadata\.guestToken = null/);
   assert.doesNotMatch(workerSource, /room-full/);
-  assert.match(workerSource, /reason: "guest-signaling-left"/);
+  assert.match(workerSource, /"guest-signaling-left"/);
   assert.match(sessionSource, /onPeerDisconnected: \(message\) => \{/);
   assert.match(sessionSource, /status:\s*"waiting"/);
   assert.match(sessionSource, /opponentPlayer:\s*null/);
@@ -878,7 +1143,7 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   const sessionSource = readSource("./multiplayer-session.ts");
   const transportSource = readSource("./webrtc-transport.ts");
 
-  assert.match(transportSource, /socket\.onclose = \(\) => \{[\s\S]*if \(this\.connected\) return;/);
+  assert.match(transportSource, /socket\.onclose = \(event\) => \{[\s\S]*if \(this\.socket !== socket\) return;[\s\S]*if \(this\.connected\) \{[\s\S]{0,140}this\.scheduleSignalReconnect\(\);[\s\S]{0,40}return;/);
   assert.match(transportSource, /connectionState === "disconnected"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_DISCONNECTED_MESSAGE\);[\s\S]*return;/);
   assert.match(transportSource, /connectionState === "failed"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_FAILED_MESSAGE\);/);
   assert.match(transportSource, /case "peer-left":[\s\S]*if \(message\.reason !== "host-disbanded-room" && message\.reason !== "peer-left-room"\) return;/);
@@ -886,7 +1151,41 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   assert.match(sessionSource, /private preserveRoomAfterConnectionIssue/);
   assert.doesNotMatch(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,500}status:\s*"disconnected"/);
   assert.doesNotMatch(sessionSource, /onFailed: \(message\) => \{[\s\S]{0,500}status:\s*"failed"/);
-  assert.doesNotMatch(pageSource, /snapshot\.status !== "disconnected" && snapshot\.status !== "failed"[\s\S]{0,260}cleanupSession\(\)/);
+  assert.doesNotMatch(pageSource, /if \(snapshot\.role !== "host"\) return;[\s\S]{0,320}cleanupSession\(\)/);
+});
+
+test("standalone rooms persist while the host signal is alive and close only on host intent or inactivity", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const workerSource = readSource("../../../cloudflare/worker.ts");
+
+  assert.doesNotMatch(pageSource, /HOST_EMPTY_ROOM_TIMEOUT_MS/);
+  assert.doesNotMatch(pageSource, /setTimeout\(\(\) => \{[\s\S]{0,260}leave\("host-disbanded-room"\)/);
+  assert.match(transportSource, /closeSignalSocket\(reason\)/);
+  assert.match(workerSource, /ROOM_INACTIVITY_TTL_MS = 15 \* 60 \* 1000/);
+  assert.match(workerSource, /lastActivityAt: number/);
+  assert.match(workerSource, /private async noteRoomActivity/);
+  assert.match(workerSource, /ROOM_SIGNAL_KEEPALIVE_MS/);
+  assert.match(workerSource, /async alarm\(\)/);
+  assert.match(workerSource, /record\.type === "heartbeat"/);
+  assert.match(workerSource, /now - \(metadata\.lastActivityAt \?\? metadata\.createdAt\) > ROOM_INACTIVITY_TTL_MS/);
+  assert.match(workerSource, /reason === "host-disbanded-room"[\s\S]{0,180}deleteRoom\(\)/);
+});
+
+test("standalone terminal disconnects return to the initial create or join room state", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /const suppressedAutoJoinRoomRef = useRef<string \| null>\(null\);/);
+  assert.match(pageSource, /const standaloneAutoJoinKey = `select:\$\{roomParam\}`;/);
+  assert.match(pageSource, /if \(suppressedAutoJoinRoomRef\.current === standaloneAutoJoinKey\) return;/);
+  assert.match(pageSource, /const resetMultiplayerRoomToEntry = useCallback/);
+  assert.match(pageSource, /const shouldResetStandalone = isStandaloneSelectRoute && \(snapshot\.role === "host" \|\| snapshot\.role === "guest"\);/);
+  assert.match(pageSource, /snapshot\.status !== "disconnected" && snapshot\.status !== "failed"/);
+  assert.match(pageSource, /const suppressedRoom = isStandaloneSelectRoute && roomParam \? `select:\$\{roomParam\}` : roomParam \|\| null;/);
+  assert.match(pageSource, /suppressedAutoJoinRoomRef\.current = suppressedRoom;/);
+  assert.match(pageSource, /autoJoinRoomRef\.current = suppressedRoom;/);
+  assert.match(pageSource, /setSnapshot\(buildInitialSnapshot\(\)\);[\s\S]{0,120}router\.replace\(isHomeworldRoute \? "\/multiplayer" : "\/multiplayer\?select=1"\)/);
+  assert.match(pageSource, /snapshot\.role === "guest" && snapshot\.status !== "disconnected" && snapshot\.status !== "failed"/);
 });
 
 test("host peer failures keep signaling alive so the displayed room code remains joinable", () => {
@@ -910,6 +1209,52 @@ test("host peer failures keep signaling alive so the displayed room code remains
   assert.match(sessionSource, /private resetHostWaitingState\(errorMessage: string \| null = null\)/);
   assert.match(sessionSource, /status: this\.role === "host" \? "waiting" : "disconnected"/);
   assert.match(sessionSource, /homeworldState: this\.role === "host" \? this\.snapshot\.homeworldState : null/);
+});
+
+test("connected WebRTC sessions reopen signaling sockets so rooms stay joinable after transient socket drops", () => {
+  const transportSource = readSource("./webrtc-transport.ts");
+  const workerSource = readSource("../../../cloudflare/worker.ts");
+
+  assert.match(transportSource, /private signalReconnectTimer: number \| null = null;/);
+  assert.match(transportSource, /private scheduleSignalReconnect\(\)/);
+  assert.match(transportSource, /if \(this\.socket !== socket\) return;[\s\S]{0,360}if \(this\.connected\) \{[\s\S]{0,140}this\.scheduleSignalReconnect\(\);[\s\S]{0,40}return;/);
+  assert.match(transportSource, /await this\.openSignalSocket\(\{ reconnect: true \}\)/);
+  assert.doesNotMatch(workerSource, /host-offline/);
+  assert.doesNotMatch(workerSource, /role === "guest" && !this\.hasRole\("host"\)/);
+  assert.match(workerSource, /if \(role === "host" && this\.hasRole\("guest"\)\) \{[\s\S]{0,120}type: "peer-joined"/);
+});
+
+test("multiplayer room lifecycle terminates expired rooms and resets every client to entry", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const protocolSource = readSource("./protocol.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const workerSource = readSource("../../../cloudflare/worker.ts");
+
+  assert.match(protocolSource, /MULTIPLAYER_ROOM_EXPIRED_REASON = "room-expired"/);
+  assert.match(protocolSource, /MULTIPLAYER_ROOM_EXPIRED_MESSAGE/);
+  assert.match(workerSource, /ROOM_SIGNAL_KEEPALIVE_MS/);
+  assert.match(workerSource, /async alarm\(\)/);
+  assert.match(workerSource, /type: "room-closed"/);
+  assert.match(workerSource, /socket\.close\(4001, MULTIPLAYER_ROOM_EXPIRED_REASON\)/);
+  assert.match(workerSource, /record\.type === "heartbeat"/);
+  assert.match(transportSource, /getSignalingRoomStatus/);
+  assert.match(transportSource, /SIGNAL_HEARTBEAT_INTERVAL_MS/);
+  assert.match(transportSource, /ROOM_STATUS_WATCHDOG_INTERVAL_MS/);
+  assert.match(transportSource, /private signalHeartbeatTimer: number \| null = null;/);
+  assert.match(transportSource, /private roomStatusWatchdogTimer: number \| null = null;/);
+  assert.match(transportSource, /if \(this\.socket !== socket\) return;/);
+  assert.match(transportSource, /case "room-closed":/);
+  assert.match(transportSource, /handleRoomClosed/);
+  assert.match(transportSource, /verifyRoomStillExists/);
+  assert.match(sessionSource, /isTerminalRoomDisconnect/);
+  assert.match(sessionSource, /terminateRoomSession/);
+  assert.match(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,180}isTerminalRoomDisconnect\(message\)/);
+  assert.match(sessionSource, /onFailed: \(message\) => \{[\s\S]{0,180}isTerminalRoomDisconnect\(message\)/);
+  assert.match(pageSource, /const resetMultiplayerRoomToEntry = useCallback/);
+  assert.match(pageSource, /snapshot\.status !== "disconnected" && snapshot\.status !== "failed"/);
+  assert.match(pageSource, /resetMultiplayerRoomToEntry\(\{ suppressRoomParam: true/);
+  assert.match(pageSource, /router\.replace\(isHomeworldRoute \? "\/multiplayer" : "\/multiplayer\?select=1"\)/);
 });
 
 test("co-op countdown explains the player's split control assignment", () => {
@@ -973,7 +1318,7 @@ test("Doodle multiplayer runtime state is sampled from the animation frame, not 
   const viewSyncSource = source.slice(source.indexOf("const syncDoodleView = useCallback"), source.indexOf("useEffect(() => {", source.indexOf("const syncDoodleView = useCallback")));
   const tickSource = source.slice(source.indexOf("const tick = (time: number) =>"), source.indexOf("frameId = requestAnimationFrame(tick);", source.indexOf("const tick = (time: number) =>")));
 
-  assert.match(source, /const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;/);
+  assert.match(source, /const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;/);
   assert.match(source, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS/);
   assert.match(source, /MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS/);
   assert.match(source, /const lastRuntimeSyncRef = useRef\(0\);/);
@@ -981,6 +1326,26 @@ test("Doodle multiplayer runtime state is sampled from the animation frame, not 
   assert.doesNotMatch(viewSyncSource, /onRuntimeStateRef\.current\?\./);
   assert.match(tickSource, /syncDoodleRuntimeState\(time\);/);
   assert.doesNotMatch(tickSource, /applyDoodleAuthoritativeState[\s\S]*syncDoodleRuntimeState\(time, true\);/);
+});
+
+test("Flappy multiplayer remote playback uses visual camera progress and RAF sampling", () => {
+  const source = readSource("../../features/mini-games/flappy.tsx");
+  const runtimeStateSource = source.slice(source.indexOf("function makeFlappyRuntimeState"), source.indexOf("function smoothFlappyRespawnProgress"));
+  const updateDomSource = source.slice(source.indexOf("const updateDom = ("), source.indexOf("const tick = (time: number) =>", source.indexOf("const updateDom = (")));
+  const viewSyncSource = source.slice(source.indexOf("const syncFlappyView = useCallback"), source.indexOf("useEffect(() => {", source.indexOf("const syncFlappyView = useCallback")));
+
+  assert.match(source, /const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;/);
+  assert.match(runtimeStateSource, /const signedDisplayProgress = getFlappySignedProgress\(frame\.displayProgress, reverseDirection\);/);
+  assert.match(runtimeStateSource, /const isActivelyScrolling = frame\.started && frame\.status === "playing";/);
+  assert.match(runtimeStateSource, /cameraX:\s*signedDisplayProgress/);
+  assert.match(runtimeStateSource, /x:\s*playerX \+ signedDisplayProgress/);
+  assert.match(runtimeStateSource, /vx:\s*isActivelyScrolling \? \(reverseDirection \? -speed : speed\) : 0/);
+  assert.match(updateDomSource, /const sampledRemote = remoteSmootherRef\.current\.sample\(frameTime\);/);
+  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, reverseDirection\);/);
+  assert.match(updateDomSource, /const visualRemote = remoteVisualSmootherRef\.current\.update\(sampledRemote, frameTime\);/);
+  assert.match(updateDomSource, /const remoteScreenX = visualRemote\.x - localCameraX;/);
+  assert.doesNotMatch(updateDomSource, /playerX \+ remoteCameraX - localCameraX/);
+  assert.doesNotMatch(viewSyncSource, /onRuntimeStateRef\.current\?\./);
 });
 
 test("Cloudflare static migration metadata uses the new production domain", () => {
@@ -1066,8 +1431,8 @@ test("Cloudflare Worker Durable Object signaling is present with paid fallbacks 
   assert.match(workerSource, /origin-forbidden/);
   assert.match(workerSource, /ENABLE_TURN = false/);
   assert.match(workerSource, /ENABLE_RELAY = false/);
-  assert.match(workerSource, /EMPTY_ROOM_TTL_MS = 15 \* 60 \* 1000/);
-  assert.match(workerSource, /lastEmptyAt/);
+  assert.match(workerSource, /ROOM_INACTIVITY_TTL_MS = 15 \* 60 \* 1000/);
+  assert.match(workerSource, /lastActivityAt/);
   assert.match(workerSource, /isRoomExpired/);
   assert.match(wranglerSource, /class_name = "RoomDurableObject"/);
   assert.match(wranglerSource, /new_sqlite_classes = \["RoomDurableObject"\]/);
@@ -1083,7 +1448,7 @@ test("Cloudflare signaling stays off the hot gameplay state path", () => {
 
   assert.match(workerSource, /if \(record\.type !== "signal"\) return;/);
   assert.doesNotMatch(workerSource, /parseNetMessage|createStateMessage|kind: "state"|kind: "input"/);
-  assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state, \{ ordered: false, maxRetransmits: 0 \}\)/);
+  assert.match(transportSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state, MULTIPLAYER_STATE_CHANNEL_CONFIG\)/);
   assert.match(transportSource, /message\.kind === "input" \? this\.inputChannel/);
   assert.match(transportSource, /message\.kind === "state" \? this\.stateChannel/);
   assert.match(runtimeSource, /MULTIPLAYER_STATE_SYNC_MS/);

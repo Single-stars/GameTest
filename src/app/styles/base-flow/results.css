@@ -184,6 +184,10 @@
   color: #6f7d38;
 }
 
+.rank-avatar-menu-action.tone-multiplayer {
+  color: #256f85;
+}
+
 .rank-avatar-menu-action.tone-reset {
   color: #b42318;
 }

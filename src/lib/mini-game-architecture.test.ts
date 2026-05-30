@@ -268,10 +268,12 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /PlayerAvatar, type PlayerAvatarSkin/);
   assert.match(resultSource, /DonateIcon/);
   assert.match(resultSource, /HomeworldIcon/);
+  assert.match(resultSource, /MultiplayerIcon/);
   assert.match(resultSource, /AvatarLabIcon/);
   assert.match(resultSource, /const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;/);
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
+  assert.match(resultSource, /onOpenMultiplayer:\s*\(\) => void;/);
   assert.match(resultSource, /onDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /homeworldEntryVisible:\s*boolean;/);
@@ -302,7 +304,8 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /icon: <HomeworldIcon \/>/);
   assert.match(resultSource, /onSelect: onOpenHomeworld/);
   assert.match(resultSource, /homeworldEntryVisible/);
-  assert.doesNotMatch(resultSource, /id: "multiplayer"/);
+  assert.match(resultSource, /id: "multiplayer"[\s\S]*tone: "multiplayer"[\s\S]*onSelect: onOpenMultiplayer/);
+  assert.match(resultSource, /icon: <MultiplayerIcon \/>/);
   assert.doesNotMatch(resultSource, /window\.location\.assign\("\/multiplayer"\)/);
   assert.match(resultSource, /onSelect: onOpenAvatarLab/);
   assert.match(resultSource, /debugToolsVisible/);
@@ -338,7 +341,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultIconsSource, /export function DonateIcon/);
   assert.match(resultIconsSource, /export function AvatarLabIcon/);
   assert.match(resultIconsSource, /export function HomeworldIcon/);
-  assert.doesNotMatch(resultIconsSource, /export function MultiplayerIcon/);
+  assert.match(resultIconsSource, /export function MultiplayerIcon/);
   assert.match(resultIconsSource, /const GAME_ICON_PATHS =/);
   assert.match(resultIconsSource, /viewBox="0 0 10 10"/);
   assert.match(resultIconsSource, /fill="currentColor"/);
@@ -408,7 +411,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(avatarLabSource, /expression=\{activeExpression\}/);
   assert.doesNotMatch(avatarLabSource, /const AVATAR_LAB_SCENES/);
   assert.doesNotMatch(avatarLabSource, /wonder:/);
-  assert.match(avatarLabSource, /<PlayerAvatar action="idle" expression="neutral" skin=\{skin\} size=\{44\} \/>/);
+  assert.match(avatarLabSource, /<PlayerAvatar action="idle" customImageUrl=\{customAvatarImageUrl\} expression="neutral" skin=\{skin\} size=\{44\} \/>/);
   assert.match(avatarLabSource, /disabled=\{!unlock\.unlocked\}/);
   assert.match(avatarLabSource, /className=\{`avatar-lab-skin-row/);
   assert.match(avatarLabSource, /onClick=\{\(\) => \{\s*if \(unlock\.unlocked\) onSelectSkin\(skin\);\s*\}\}/);
@@ -450,10 +453,10 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(appPageSource, /enqueueRewardItems\(createSkinRewardItems\(previousProgress,\s*nextProgress,\s*"donation"\)\)/);
   assert.doesNotMatch(appPageSource, /const handleChangePlayerName = useCallback/);
   assert.doesNotMatch(appPageSource, /writePersistedPlayerName\(name\);/);
-  assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\}>/);
+  assert.match(appPageSource, /<PlayerAvatarSkinProvider skin=\{selectedAvatarSkin\} customImageUrl=\{customAvatarImageUrl\} customOutlineColor=\{customAvatarOutlineColor\}>/);
   assert.match(appPageSource, /transitionToStage\("avatar-lab"\)/);
   assert.match(appPageSource, /stage === "avatar-lab"/);
-  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
+  assert.match(appPageSource, /<AvatarLabScreen[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*customAvatarImageUrl=\{customAvatarImageUrl\}[\s\S]*selectedSkin=\{selectedAvatarSkin\}[\s\S]*onSaveCustomAvatarImage=\{saveCustomAvatarImage\}[\s\S]*onSelectSkin=\{handleSelectAvatarSkin\}/);
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}/);
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}/);
   assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*homeworldEntryVisible=\{homeworldEntryVisible\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
@@ -901,6 +904,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
     "basketball",
     "starfall",
     "arcade",
+    "custom",
   ] as const;
   const removedSkins = ["amber", "rose", "aqua", "cocoa", "jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
 
@@ -912,7 +916,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /export type PlayerAvatarView =/);
   assert.match(skinSource, /export const PLAYER_AVATAR_SKINS = \[/);
   assert.match(skinSource, /export const PLAYER_AVATAR_SKIN_LABELS =/);
-  assert.match(skinSource, /export const PLAYER_AVATAR_FACELESS_SKINS = \["basketball", "pig", "paw"\]/);
+  assert.match(skinSource, /export const PLAYER_AVATAR_FACELESS_SKINS = \["basketball", "pig", "paw", "custom"\]/);
   assert.match(skinSource, /export function resolvePlayerAvatarSkin/);
   assert.match(componentSource, /from "\.\/player-avatar-skin"/);
   assert.match(componentSource, /type PlayerAvatarSkin/);
@@ -1144,7 +1148,11 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.doesNotMatch(cssSource, /linear-gradient\(180deg,\s*rgba\(255,\s*255,\s*255/);
   assert.doesNotMatch(cssSource, /@keyframes[\s\S]*?(left|top|width|height):/);
   assert.doesNotMatch(cssSource, /transition:\s*[^;]*(background|border|color|left|top|width|height)[^;]*;/);
-  assert.doesNotMatch(cssSource, /\[data-[^\]]+\][\s\S]*?(left|top|width|height):/);
+  const stateSelectorBlocks = cssSource.match(/[^{}]*\[data-[^\]]+\][^{}]*\{[\s\S]*?\n\}/g) ?? [];
+  assert.notEqual(stateSelectorBlocks.length, 0);
+  for (const block of stateSelectorBlocks) {
+    assert.doesNotMatch(block, /(?:^|[;\n]\s*)(left|top|width|height)\s*:/);
+  }
 });
 
 test("avatar expression usage removes focused and maps gameplay focus to neutral", () => {

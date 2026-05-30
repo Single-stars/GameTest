@@ -76,3 +76,32 @@ test("simple game sync can use caller-provided signatures instead of serializing
     ["right", "left"],
   );
 });
+
+test("simple game sync can use dynamic send intervals for idle and high motion state", () => {
+  let now = 0;
+  const sent: SelfGameState[] = [];
+  const sync = new SimpleGameSync((nextState) => sent.push(nextState), 33, {
+    now: () => now,
+    sendIntervalMs: (nextState) => (nextState.direction === "none" ? 100 : 33),
+  });
+
+  sync.update(state("none"), { immediate: true });
+  now = 50;
+  sync.update({ ...state("none"), progress: 0.1 });
+  sync.flush();
+  assert.equal(sent.length, 1);
+  now = 100;
+  sync.flush();
+  assert.equal(sent.length, 2);
+  now = 132;
+  sync.update({ ...state("right"), progress: 0.2 });
+  sync.flush();
+  assert.equal(sent.length, 2);
+  now = 133;
+  sync.flush();
+
+  assert.deepEqual(
+    sent.map((nextState) => nextState.direction),
+    ["none", "none", "right"],
+  );
+});

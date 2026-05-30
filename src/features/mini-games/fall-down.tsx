@@ -11,7 +11,8 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
-import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
+import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
+import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -46,7 +47,7 @@ import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
   MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
   MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
-  MULTIPLAYER_STATE_SYNC_MS,
+  MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
@@ -99,7 +100,7 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
-const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
+const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 
 export type FallDownRuntimeState = {
   cameraY: number;
@@ -115,6 +116,10 @@ export type FallDownRuntimeState = {
 };
 
 type FallDownRemotePlayer = {
+  customAvatar?: {
+    imageDataUrl: string;
+    outlineColor?: string;
+  };
   skinId?: string;
 };
 
@@ -484,6 +489,7 @@ export function FallDownPrototype({
   coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
 }: {
   baseRevives?: number;
@@ -494,7 +500,7 @@ export function FallDownPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: FallDownRuntimeState) => void;
   onRestart: () => void;
-  remotePlayer?: { skinId?: string } | null;
+  remotePlayer?: FallDownRemotePlayer | null;
   remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   remoteState?: SelfGameState | null;
   runSeed: string;
@@ -503,6 +509,7 @@ export function FallDownPrototype({
   coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   coOpRole?: "left" | "right" | null;
   coOpSkinId?: string | null;
+  coOpCustomAvatar?: FallDownRemotePlayer["customAvatar"] | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   onBaseReviveUsed?: () => void;
 }) {
@@ -535,18 +542,20 @@ export function FallDownPrototype({
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
+  const remoteVisualSmootherRef = useRef(new RemoteVisualSmoother());
   const authoritativeSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
@@ -563,6 +572,8 @@ export function FallDownPrototype({
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
+  const remotePlayerSkin = resolveFallDownRemoteSkin(remotePlayer);
+  const coOpPlayerSkin = resolveFallDownCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
 
   const syncView = useCallback((time = performance.now()) => {
@@ -591,6 +602,7 @@ export function FallDownPrototype({
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     remoteSmootherRef.current.reset();
+    remoteVisualSmootherRef.current.reset();
     authoritativeSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
       remotePlayerShellRef.current.style.display = "none";
@@ -604,18 +616,19 @@ export function FallDownPrototype({
   useEffect(() => {
     if (!remoteState) {
       remoteSmootherRef.current.reset();
+      remoteVisualSmootherRef.current.reset();
       if (remotePlayerShellRef.current) {
         remotePlayerShellRef.current.style.display = "none";
       }
       return;
     }
-    remoteSmootherRef.current.push(remoteState, performance.now());
+    remoteSmootherRef.current.push(remoteState, remoteState.receivedAt ?? performance.now());
   }, [remoteState]);
 
   useEffect(() => {
     if (!remoteStateSubscription) return;
     return remoteStateSubscription((nextState) => {
-      remoteSmootherRef.current.push(nextState, performance.now());
+      remoteSmootherRef.current.push(nextState, nextState.receivedAt ?? performance.now());
     });
   }, [remoteStateSubscription]);
 
@@ -679,13 +692,16 @@ export function FallDownPrototype({
         playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
       }
       if (remotePlayerShellRef.current) {
-        const sampledRemote = remoteSmootherRef.current.sample(performance.now());
-        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
+        const frameTime = performance.now();
+        const sampledRemote = remoteSmootherRef.current.sample(frameTime);
+        const visualRemote = remoteVisualSmootherRef.current.update(sampledRemote, frameTime);
+        if (visualRemote && typeof visualRemote.x === "number" && typeof visualRemote.y === "number") {
           remotePlayerShellRef.current.style.display = "";
-          remotePlayerShellRef.current.style.transform = transformPoint3d(
-            sampledRemote.x - PLAYER_SIZE / 2,
-            sampledRemote.y - current.cameraY - PLAYER_SIZE / 2,
-          );
+          remotePlayerShellRef.current.style.transform = `${transformPoint3d(
+            visualRemote.x - PLAYER_SIZE / 2,
+            visualRemote.y - current.cameraY - PLAYER_SIZE / 2,
+          )} rotate(${visualRemote.angle}deg)`;
+          applyRemoteAvatarVisual(remotePlayerAvatarRef.current, visualRemote);
         } else {
           remotePlayerShellRef.current.style.display = "none";
         }
@@ -1138,7 +1154,9 @@ export function FallDownPrototype({
           <PlayerAvatar
             {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
-            skin={resolveFallDownCoOpSkin(coOpSkinId)}
+            customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
+            customOutlineColor={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.outlineColor ?? null : null}
+            skin={coOpPlayerSkin}
             visualScale={1.18}
           />
         </div>
@@ -1147,7 +1165,10 @@ export function FallDownPrototype({
             <PlayerAvatar
               {...(remoteState ? resolveFallDownRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
               direction={remoteState?.direction ?? "none"}
-              skin={resolveFallDownRemoteSkin(remotePlayer)}
+              rootRef={remotePlayerAvatarRef}
+              customImageUrl={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.imageDataUrl : null}
+              customOutlineColor={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.outlineColor ?? null : null}
+              skin={remotePlayerSkin}
               visualScale={1.18}
             />
           </div>

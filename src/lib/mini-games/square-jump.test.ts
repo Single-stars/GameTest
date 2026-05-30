@@ -875,13 +875,14 @@ test("square jump multiplayer shows same-map opponent and shared co-op charge co
   const squareJumpSource = readFileSync(new URL("../../features/mini-games/square-jump.tsx", import.meta.url), "utf8");
   const globalCss = readAppCssSource();
 
-  assert.match(componentSource, /remotePlayer\?: \{ skinId\?: string \} \| null;/);
+  assert.match(componentSource, /type SquareJumpRemotePlayer =/);
+  assert.match(componentSource, /remotePlayer\?: SquareJumpRemotePlayer \| null;/);
   assert.match(componentSource, /logicStageSizeOverride\?: MiniGameStageSize;/);
   assert.match(componentSource, /const logicStageSize = logicStageSizeOverride \?\? measuredStageSize;/);
   assert.match(componentSource, /createSquareJumpUnifiedRuntime\(level, runSeed, logicStageSize\)/);
   assert.match(componentSource, /squareBaseWorldTransform\(view\.camera, logicStageSize\)/);
   assert.match(componentSource, /remoteState\?: SelfGameState \| null;/);
-  assert.match(componentSource, /RemoteStateSmoother/);
+  assert.match(componentSource, /RemoteInterpolator/);
   assert.match(componentSource, /remoteSmootherRef/);
   assert.match(componentSource, /square-jump-base-remote-player-shell/);
   assert.match(componentSource, /resolveSquareJumpRemoteAvatarView/);

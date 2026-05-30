@@ -12,13 +12,14 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
-import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
+import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
+import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import type { SelfGameState } from "@/features/game-sync/types";
 import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
   MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
   MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
-  MULTIPLAYER_STATE_SYNC_MS,
+  MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 import {
   BASE_FAILURE_LIMIT,
@@ -88,6 +89,14 @@ export type SquareJumpStateSnapshot = {
   turns: number;
   x: number;
   y: number;
+};
+
+type SquareJumpRemotePlayer = {
+  customAvatar?: {
+    imageDataUrl: string;
+    outlineColor?: string;
+  };
+  skinId?: string;
 };
 
 const SQUARE_BASE_MAX_HOLD_MS = 900;
@@ -178,7 +187,7 @@ type SquareJumpUnifiedRuntime = {
 };
 
 const SQUARE_JUMP_ADVANCE_DELAY = 0.16;
-const SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
+const SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 
 function getSquareJumpPlatformY(stageHeight: number) {
   return stageHeight * 0.72;
@@ -198,7 +207,7 @@ function resolveSquareJumpCoOpSkin(coOpSkinId: string | null | undefined): Playe
   return coOpSkinId ? resolvePlayerAvatarSkin(coOpSkinId) : undefined;
 }
 
-function resolveSquareJumpRemoteSkin(remotePlayer: { skinId?: string } | null | undefined): PlayerAvatarSkin {
+function resolveSquareJumpRemoteSkin(remotePlayer: SquareJumpRemotePlayer | null | undefined): PlayerAvatarSkin {
   return resolvePlayerAvatarSkin(remotePlayer?.skinId);
 }
 
@@ -536,6 +545,7 @@ export function SquareJumpPrototype({
   coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
 }: {
   level: MiniGameLevelConfig;
@@ -546,7 +556,7 @@ export function SquareJumpPrototype({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: SquareJumpStateSnapshot) => void;
   onRestart: () => void;
-  remotePlayer?: { skinId?: string } | null;
+  remotePlayer?: SquareJumpRemotePlayer | null;
   remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   remoteState?: SelfGameState | null;
   unlimitedRespawn?: boolean;
@@ -554,6 +564,7 @@ export function SquareJumpPrototype({
   coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   coOpRole?: SquareJumpCoOpRole | null;
   coOpSkinId?: string | null;
+  coOpCustomAvatar?: SquareJumpRemotePlayer["customAvatar"] | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
@@ -580,17 +591,18 @@ export function SquareJumpPrototype({
   const playerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const remotePlayerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
+  const remoteVisualSmootherRef = useRef(new RemoteVisualSmoother());
   const authoritativeSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
@@ -607,6 +619,8 @@ export function SquareJumpPrototype({
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<SquareJumpUnifiedRuntime>(() => makeSquareJumpUnifiedView(initialRuntime));
+  const remotePlayerSkin = resolveSquareJumpRemoteSkin(remotePlayer);
+  const coOpPlayerSkin = resolveSquareJumpCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
 
   useEffect(() => {
@@ -635,6 +649,7 @@ export function SquareJumpPrototype({
     remoteChargeHeldRef.current = false;
     completedRef.current = false;
     remoteSmootherRef.current.reset();
+    remoteVisualSmootherRef.current.reset();
     authoritativeSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
       remotePlayerShellRef.current.style.display = "none";
@@ -648,18 +663,19 @@ export function SquareJumpPrototype({
   useEffect(() => {
     if (!remoteState) {
       remoteSmootherRef.current.reset();
+      remoteVisualSmootherRef.current.reset();
       if (remotePlayerShellRef.current) {
         remotePlayerShellRef.current.style.display = "none";
       }
       return;
     }
-    remoteSmootherRef.current.push(remoteState, performance.now());
+    remoteSmootherRef.current.push(remoteState, remoteState.receivedAt ?? performance.now());
   }, [remoteState]);
 
   useEffect(() => {
     if (!remoteStateSubscription) return;
     return remoteStateSubscription((nextState) => {
-      remoteSmootherRef.current.push(nextState, performance.now());
+      remoteSmootherRef.current.push(nextState, nextState.receivedAt ?? performance.now());
     });
   }, [remoteStateSubscription]);
 
@@ -720,11 +736,14 @@ export function SquareJumpPrototype({
       setSquareJumpAvatarChargeVars(playerAvatarRef.current, current);
       let remoteChargeHint = 0;
       if (remotePlayerShellRef.current) {
-        const sampledRemote = remoteSmootherRef.current.sample(performance.now());
-        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
-          remoteChargeHint = sampledRemote.direction && sampledRemote.direction !== "none" ? 0.68 : 0;
+        const frameTime = performance.now();
+        const sampledRemote = remoteSmootherRef.current.sample(frameTime);
+        const visualRemote = remoteVisualSmootherRef.current.update(sampledRemote, frameTime);
+        if (visualRemote && typeof visualRemote.x === "number" && typeof visualRemote.y === "number") {
+          remoteChargeHint = visualRemote.direction && visualRemote.direction !== "none" ? 0.68 : 0;
           remotePlayerShellRef.current.style.display = "";
-          remotePlayerShellRef.current.style.transform = transformPoint3d(sampledRemote.x - PLAYER_SIZE / 2, sampledRemote.y - PLAYER_SIZE / 2);
+          remotePlayerShellRef.current.style.transform = `${transformPoint3d(visualRemote.x - PLAYER_SIZE / 2, visualRemote.y - PLAYER_SIZE / 2)} rotate(${visualRemote.angle}deg)`;
+          applyRemoteAvatarVisual(remotePlayerAvatarRef.current, visualRemote);
         } else {
           remotePlayerShellRef.current.style.display = "none";
         }
@@ -1209,7 +1228,9 @@ export function SquareJumpPrototype({
               gravity={view.activeGravity}
               rotationTurns={view.playerTurns}
               rootRef={playerAvatarRef}
-              skin={resolveSquareJumpCoOpSkin(coOpSkinId)}
+              customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
+              customOutlineColor={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.outlineColor ?? null : null}
+              skin={coOpPlayerSkin}
               visualScale={1.18}
             />
           </div>
@@ -1227,7 +1248,9 @@ export function SquareJumpPrototype({
               <PlayerAvatar
                 {...resolveSquareJumpRemoteAvatarView(remoteState)}
                 rootRef={remotePlayerAvatarRef}
-                skin={resolveSquareJumpRemoteSkin(remotePlayer)}
+                customImageUrl={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.imageDataUrl : null}
+                customOutlineColor={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.outlineColor ?? null : null}
+                skin={remotePlayerSkin}
                 visualScale={1.18}
               />
             </div>

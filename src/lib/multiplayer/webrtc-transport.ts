@@ -2,14 +2,24 @@
 
 import { parseNetMessage, serializeNetMessage } from "@/lib/multiplayer/messages";
 import {
+  MULTIPLAYER_STATE_CHANNEL_CONFIG,
+  RemoteClockSync,
+  TIME_SYNC_INTERVAL_MS,
+  canSendRealtimeState,
+  type TimeSyncMessage,
+} from "../../features/multiplayer/p2p-client.ts";
+import {
   MULTIPLAYER_DATA_CHANNELS,
   MULTIPLAYER_DISCONNECTED_MESSAGE,
   MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_REASON,
   type MultiplayerDataChannelLabel,
 } from "@/lib/multiplayer/protocol";
 import {
   buildRoomWebSocketUrl,
   createSignalingRoom,
+  getSignalingRoomStatus,
   isRoomCode,
   normalizeRoomCode,
   readStoredRoomToken,
@@ -18,10 +28,19 @@ import {
 } from "@/lib/multiplayer/room-api";
 import type { NetMessage } from "@/lib/multiplayer/types";
 
-export { MULTIPLAYER_DISCONNECTED_MESSAGE, MULTIPLAYER_FAILED_MESSAGE } from "@/lib/multiplayer/protocol";
+export {
+  MULTIPLAYER_DISCONNECTED_MESSAGE,
+  MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_REASON,
+} from "@/lib/multiplayer/protocol";
 
 const SIGNAL_OPEN_TIMEOUT_MS = 12_000;
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
+const SIGNAL_RECONNECT_DELAY_MS = 800;
+const SIGNAL_RECONNECT_MAX_DELAY_MS = 5_000;
+const SIGNAL_HEARTBEAT_INTERVAL_MS = 30_000;
+const ROOM_STATUS_WATCHDOG_INTERVAL_MS = 15_000;
 const ICE_RESTART_DELAY_MS = 1_200;
 const MAX_ICE_RESTART_ATTEMPTS = 3;
 const ICE_SERVERS: RTCIceServer[] = [
@@ -38,6 +57,7 @@ export type RoomSignalTransportEvents = {
   onConnected?: (remotePeerId: string) => void;
   onPeerDisconnected?: (reason: string) => void;
   onMessage?: (message: NetMessage) => void;
+  onRemoteClockOffset?: (offsetMs: number) => void;
   onFailed?: (message: string) => void;
   onDisconnected?: (message: string) => void;
 };
@@ -56,8 +76,10 @@ type SignalPayload =
 
 type ServerMessage =
   | { type: "ready"; role: SignalingRole; roomCode: string; token: string; expiresAt: number }
+  | { type: "heartbeat"; sentAt?: number }
   | { type: "peer-joined" }
   | { type: "peer-left"; reason?: string }
+  | { type: "room-closed"; reason?: string }
   | { type: "signal"; signal: SignalPayload }
   | { type: "error"; message: string };
 
@@ -96,8 +118,10 @@ function parseServerMessage(raw: string): ServerMessage | null {
       expiresAt: payload.expiresAt,
     };
   }
+  if (payload.type === "heartbeat") return { type: "heartbeat", sentAt: typeof payload.sentAt === "number" ? payload.sentAt : undefined };
   if (payload.type === "peer-joined") return { type: "peer-joined" };
   if (payload.type === "peer-left") return { type: "peer-left", reason: typeof payload.reason === "string" ? payload.reason : undefined };
+  if (payload.type === "room-closed") return { type: "room-closed", reason: typeof payload.reason === "string" ? payload.reason : undefined };
   if (payload.type === "signal" && isSignalPayload(payload.signal)) return { type: "signal", signal: payload.signal };
   if (payload.type === "error") return { type: "error", message: typeof payload.message === "string" ? payload.message : MULTIPLAYER_FAILED_MESSAGE };
   return null;
@@ -107,10 +131,8 @@ function channelIsOpen(channel: RTCDataChannel | null): channel is RTCDataChanne
   return channel?.readyState === "open";
 }
 
-const STATE_CHANNEL_BACKPRESSURE_BYTES = 64 * 1024;
-
 function canSendReplaceableState(channel: RTCDataChannel | null) {
-  return channelIsOpen(channel) && channel.bufferedAmount <= STATE_CHANNEL_BACKPRESSURE_BYTES;
+  return channelIsOpen(channel) && canSendRealtimeState(channel.bufferedAmount);
 }
 
 export class RoomSignalTransport {
@@ -122,12 +144,18 @@ export class RoomSignalTransport {
   private controlChannel: RTCDataChannel | null = null;
   private inputChannel: RTCDataChannel | null = null;
   private stateChannel: RTCDataChannel | null = null;
+  private readonly remoteClockSync = new RemoteClockSync();
   private destroyed = false;
   private connected = false;
   private roomCode: string | null = null;
   private roleToken: string | null = null;
   private signalOpenTimer: number | null = null;
+  private signalReconnectTimer: number | null = null;
+  private signalReconnectAttempts = 0;
+  private signalHeartbeatTimer: number | null = null;
+  private roomStatusWatchdogTimer: number | null = null;
   private dataChannelOpenTimer: number | null = null;
+  private timeSyncTimer: number | null = null;
   private iceRestartTimer: number | null = null;
   private iceRestartAttempts = 0;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
@@ -147,6 +175,8 @@ export class RoomSignalTransport {
     this.destroyed = false;
     this.connected = false;
     this.pendingIceCandidates = [];
+    this.clearSignalReconnectTimer();
+    this.signalReconnectAttempts = 0;
 
     if (this.role === "host") {
       const room = await createSignalingRoom();
@@ -180,25 +210,33 @@ export class RoomSignalTransport {
     if (reason && channelIsOpen(this.controlChannel)) {
       this.controlChannel.send(serializeNetMessage({ v: 1, kind: "bye", reason }));
     }
-    this.dispose();
+    this.disposeWithSignalReason(reason);
   }
 
   dispose() {
+    this.disposeWithSignalReason();
+  }
+
+  private disposeWithSignalReason(reason?: string) {
     this.destroyed = true;
     this.clearSignalOpenTimer();
+    this.clearSignalReconnectTimer();
+    this.clearSignalHeartbeatTimer();
+    this.clearRoomStatusWatchdogTimer();
     this.clearDataChannelOpenTimer();
+    this.clearTimeSyncTimer();
     this.clearIceRestartTimer();
     this.closePeerConnection();
-    this.socket?.close();
-    this.socket = null;
+    this.closeSignalSocket(reason);
   }
 
   disconnectActiveConnection() {
     this.closePeerConnection();
   }
 
-  private async openSignalSocket() {
+  private async openSignalSocket(options: { reconnect?: boolean } = {}) {
     if (!this.roomCode) throw new Error("missing-room-code");
+    const reconnect = options.reconnect === true;
     const socket = new WebSocket(
       buildRoomWebSocketUrl({
         roomCode: this.roomCode,
@@ -213,7 +251,8 @@ export class RoomSignalTransport {
       this.signalOpenTimer = window.setTimeout(() => {
         if (settled) return;
         settled = true;
-        this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+        this.clearSignalOpenTimer();
+        if (!reconnect) this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
         reject(new Error("signal-open-timeout"));
       }, SIGNAL_OPEN_TIMEOUT_MS);
 
@@ -228,10 +267,12 @@ export class RoomSignalTransport {
         if (settled) return;
         settled = true;
         this.clearSignalOpenTimer();
-        this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+        if (!reconnect) this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
         reject(new Error("signal-open-error"));
       };
     });
+
+    if (reconnect) this.signalReconnectAttempts = 0;
 
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return;
@@ -240,9 +281,16 @@ export class RoomSignalTransport {
       void this.handleServerMessage(message);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.destroyed) return;
+      if (this.socket !== socket) return;
+      if (this.socket === socket) this.socket = null;
+      if (event.reason === MULTIPLAYER_ROOM_EXPIRED_REASON) {
+        this.handleRoomClosed(event.reason);
+        return;
+      }
       if (this.connected) {
+        this.scheduleSignalReconnect();
         return;
       }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
@@ -256,7 +304,11 @@ export class RoomSignalTransport {
         this.roomCode = normalizeRoomCode(message.roomCode);
         this.roleToken = message.token;
         writeStoredRoomToken(this.roomCode, message.role, message.token);
+        this.startSignalHeartbeat();
+        this.startRoomStatusWatchdog();
         if (this.role === "host") this.preparePeerConnection();
+        break;
+      case "heartbeat":
         break;
       case "peer-joined":
         if (this.role === "host") {
@@ -272,6 +324,9 @@ export class RoomSignalTransport {
         } else {
           this.handleDisconnected(message.reason);
         }
+        break;
+      case "room-closed":
+        this.handleRoomClosed(message.reason);
         break;
       case "signal":
         await this.handleSignal(message.signal);
@@ -315,7 +370,7 @@ export class RoomSignalTransport {
     if (this.role === "host") {
       this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.control, { ordered: true }), MULTIPLAYER_DATA_CHANNELS.control);
       this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.input, { ordered: false, maxRetransmits: 0 }), MULTIPLAYER_DATA_CHANNELS.input);
-      this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.state, { ordered: false, maxRetransmits: 0 }), MULTIPLAYER_DATA_CHANNELS.state);
+      this.bindDataChannel(peerConnection.createDataChannel(MULTIPLAYER_DATA_CHANNELS.state, MULTIPLAYER_STATE_CHANNEL_CONFIG), MULTIPLAYER_DATA_CHANNELS.state);
     } else {
       peerConnection.ondatachannel = (event) => {
         if (event.channel.label === MULTIPLAYER_DATA_CHANNELS.input || event.channel.label === MULTIPLAYER_DATA_CHANNELS.state) {
@@ -345,6 +400,10 @@ export class RoomSignalTransport {
     channel.onmessage = (event) => {
       const parsed = parseNetMessage(event.data);
       if (!parsed) return;
+      if (parsed.kind === "time-sync") {
+        this.handleTimeSyncMessage(parsed);
+        return;
+      }
       this.events.onMessage?.(parsed);
     };
 
@@ -378,7 +437,31 @@ export class RoomSignalTransport {
     this.connected = true;
     this.iceRestartAttempts = 0;
     this.clearDataChannelOpenTimer();
+    this.startTimeSync();
     this.events.onConnected?.(this.role === "host" ? "guest" : "host");
+  }
+
+  private startTimeSync() {
+    this.clearTimeSyncTimer();
+    this.remoteClockSync.reset();
+    const sendPing = () => {
+      if (!channelIsOpen(this.controlChannel)) return;
+      this.controlChannel.send(serializeNetMessage(this.remoteClockSync.createPing(performance.now())));
+    };
+    sendPing();
+    this.timeSyncTimer = window.setInterval(sendPing, TIME_SYNC_INTERVAL_MS);
+  }
+
+  private handleTimeSyncMessage(message: TimeSyncMessage) {
+    const result = this.remoteClockSync.handleMessage(message, performance.now());
+    if (result === null) return;
+    if (typeof result === "number") {
+      this.events.onRemoteClockOffset?.(result);
+      return;
+    }
+    if (channelIsOpen(this.controlChannel)) {
+      this.controlChannel.send(serializeNetMessage(result));
+    }
   }
 
   private async createOffer({ iceRestart = false, resetPeer = false }: { iceRestart?: boolean; resetPeer?: boolean } = {}) {
@@ -455,7 +538,9 @@ export class RoomSignalTransport {
   private closePeerConnection() {
     this.connected = false;
     this.clearDataChannelOpenTimer();
+    this.clearTimeSyncTimer();
     this.clearIceRestartTimer();
+    this.remoteClockSync.reset();
     this.iceRestartAttempts = 0;
     this.controlChannel?.close();
     this.inputChannel?.close();
@@ -466,6 +551,58 @@ export class RoomSignalTransport {
     this.stateChannel = null;
     this.peerConnection = null;
     this.pendingIceCandidates = [];
+  }
+
+  private closeSignalSocket(reason?: string) {
+    const socket = this.socket;
+    this.socket = null;
+    if (!socket) return;
+    if (reason) {
+      socket.close(1000, reason.slice(0, 123));
+      return;
+    }
+    socket.close();
+  }
+
+  private startSignalHeartbeat() {
+    this.clearSignalHeartbeatTimer();
+    const sendHeartbeat = () => {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      try {
+        socket.send(JSON.stringify({ type: "heartbeat", sentAt: Date.now() }));
+      } catch {
+        socket.close();
+      }
+    };
+    sendHeartbeat();
+    this.signalHeartbeatTimer = window.setInterval(sendHeartbeat, SIGNAL_HEARTBEAT_INTERVAL_MS);
+  }
+
+  private startRoomStatusWatchdog() {
+    this.clearRoomStatusWatchdogTimer();
+    this.roomStatusWatchdogTimer = window.setInterval(() => {
+      void this.verifyRoomStillExists();
+    }, ROOM_STATUS_WATCHDOG_INTERVAL_MS);
+  }
+
+  private async verifyRoomStillExists() {
+    if (!this.roomCode || this.destroyed) return true;
+    try {
+      const status = await getSignalingRoomStatus(this.roomCode);
+      if (status.exists) return true;
+      this.handleRoomClosed(MULTIPLAYER_ROOM_EXPIRED_REASON);
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  private handleRoomClosed(reason?: string) {
+    if (this.destroyed) return;
+    const message = reason === MULTIPLAYER_ROOM_EXPIRED_REASON ? MULTIPLAYER_ROOM_EXPIRED_MESSAGE : MULTIPLAYER_DISCONNECTED_MESSAGE;
+    this.events.onDisconnected?.(message);
+    this.dispose();
   }
 
   private handleFailure(message: string) {
@@ -510,16 +647,59 @@ export class RoomSignalTransport {
     }, ICE_RESTART_DELAY_MS);
   }
 
+  private scheduleSignalReconnect() {
+    if (this.destroyed || this.signalReconnectTimer !== null || !this.roomCode) return;
+    const delay = Math.min(SIGNAL_RECONNECT_DELAY_MS * 2 ** this.signalReconnectAttempts, SIGNAL_RECONNECT_MAX_DELAY_MS);
+    this.signalReconnectAttempts += 1;
+    this.signalReconnectTimer = window.setTimeout(() => {
+      this.signalReconnectTimer = null;
+      void (async () => {
+        if (this.destroyed || !this.connected) return;
+        try {
+          await this.openSignalSocket({ reconnect: true });
+        } catch {
+          if (this.destroyed || !this.connected) return;
+          if (!(await this.verifyRoomStillExists())) return;
+          this.scheduleSignalReconnect();
+        }
+      })();
+    }, delay);
+  }
+
   private clearSignalOpenTimer() {
     if (this.signalOpenTimer === null) return;
     window.clearTimeout(this.signalOpenTimer);
     this.signalOpenTimer = null;
   }
 
+  private clearSignalReconnectTimer() {
+    if (this.signalReconnectTimer === null) return;
+    window.clearTimeout(this.signalReconnectTimer);
+    this.signalReconnectTimer = null;
+  }
+
+  private clearSignalHeartbeatTimer() {
+    if (this.signalHeartbeatTimer === null) return;
+    window.clearInterval(this.signalHeartbeatTimer);
+    this.signalHeartbeatTimer = null;
+  }
+
+  private clearRoomStatusWatchdogTimer() {
+    if (this.roomStatusWatchdogTimer === null) return;
+    window.clearInterval(this.roomStatusWatchdogTimer);
+    this.roomStatusWatchdogTimer = null;
+  }
+
   private clearDataChannelOpenTimer() {
     if (this.dataChannelOpenTimer === null) return;
     window.clearTimeout(this.dataChannelOpenTimer);
     this.dataChannelOpenTimer = null;
+  }
+
+  private clearTimeSyncTimer() {
+    if (this.timeSyncTimer === null) return;
+    window.clearInterval(this.timeSyncTimer);
+    this.timeSyncTimer = null;
   }
 
   private clearIceRestartTimer() {

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  createByeMessage,
   createForfeitMessage,
   createHeartbeatMessage,
   createHelloMessage,
@@ -19,6 +18,8 @@ import {
 import {
   MULTIPLAYER_DISCONNECTED_MESSAGE,
   MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_REASON,
   RoomSignalTransport,
 } from "@/lib/multiplayer/webrtc-transport";
 import type {
@@ -50,6 +51,14 @@ const PEER_STALE_MS = 9_000;
 
 function now() {
   return Date.now();
+}
+
+function performanceNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : now();
+}
+
+function isTerminalRoomDisconnect(message: string) {
+  return message === MULTIPLAYER_ROOM_EXPIRED_MESSAGE || message === MULTIPLAYER_ROOM_EXPIRED_REASON;
 }
 
 function createMatchId(seed: string) {
@@ -112,6 +121,7 @@ export class MultiplayerSession {
   private opponentStateAcceptedPackets = 0;
   private opponentStateDroppedOldPackets = 0;
   private lastOpponentStateAcceptedAt: number | null = null;
+  private remoteTimeOffsetMs: number | null = null;
   private heartbeatTimer: number | null = null;
   private lastPeerMessageAt: number | null = null;
 
@@ -169,6 +179,7 @@ export class MultiplayerSession {
           this.lastSelfStateSnapshotAt = 0;
           this.selfStateSeq = 0;
           this.opponentStateSeq = -1;
+          this.remoteTimeOffsetMs = null;
           this.notePeerMessage();
           this.startPeerPresence();
           this.patchSnapshot({
@@ -198,10 +209,21 @@ export class MultiplayerSession {
           this.resetHostWaitingState(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
         },
         onMessage: (message) => this.handleMessage(message),
+        onRemoteClockOffset: (offsetMs) => {
+          this.remoteTimeOffsetMs = offsetMs;
+        },
         onFailed: (message) => {
+          if (isTerminalRoomDisconnect(message)) {
+            this.terminateRoomSession(message);
+            return;
+          }
           this.preserveRoomAfterConnectionIssue(message || MULTIPLAYER_FAILED_MESSAGE);
         },
         onDisconnected: (message) => {
+          if (isTerminalRoomDisconnect(message)) {
+            this.terminateRoomSession(message);
+            return;
+          }
           this.preserveRoomAfterConnectionIssue(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
         },
       },
@@ -216,7 +238,7 @@ export class MultiplayerSession {
     this.maybeStartMatch();
   }
 
-  updateSelfPlayerProfile(patch: Pick<PlayerInfo, "skinId"> | Pick<PlayerInfo, "name"> | Pick<PlayerInfo, "name" | "skinId">) {
+  updateSelfPlayerProfile(patch: Partial<Pick<PlayerInfo, "customAvatar" | "name" | "skinId">>) {
     this.selfPlayer = { ...this.selfPlayer, ...patch };
     this.patchSnapshot({ selfPlayer: this.selfPlayer });
     this.send(createHelloMessage(this.selfPlayer));
@@ -277,6 +299,7 @@ export class MultiplayerSession {
       matchId,
       seq: this.selfStateSeq,
       sentAt: now(),
+      t: performanceNow(),
     };
     this.selfStateSeq += 1;
     this.syncSelfStateSnapshot(sequencedState);
@@ -305,6 +328,9 @@ export class MultiplayerSession {
         seq: sequencedState.seq,
         sentAt: sequencedState.sentAt,
         status: sequencedState.status,
+        t: sequencedState.t,
+        angle: sequencedState.angle,
+        anim: sequencedState.anim,
         x: sequencedState.x,
         y: sequencedState.y,
         usedPlatformIds: sequencedState.usedPlatformIds,
@@ -424,8 +450,7 @@ export class MultiplayerSession {
   }
 
   leave(reason?: string) {
-    this.transport?.send(createByeMessage(reason));
-    this.transport?.dispose();
+    this.transport?.close(reason);
     this.transport = null;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
@@ -440,6 +465,7 @@ export class MultiplayerSession {
     this.opponentStateAcceptedPackets = 0;
     this.opponentStateDroppedOldPackets = 0;
     this.lastOpponentStateAcceptedAt = null;
+    this.remoteTimeOffsetMs = null;
     this.patchSnapshot({
       status: "idle",
       errorMessage: null,
@@ -475,6 +501,7 @@ export class MultiplayerSession {
     this.opponentStateAcceptedPackets = 0;
     this.opponentStateDroppedOldPackets = 0;
     this.lastOpponentStateAcceptedAt = null;
+    this.remoteTimeOffsetMs = null;
   }
 
   private currentMatchId() {
@@ -540,6 +567,7 @@ export class MultiplayerSession {
         }
         if (typeof message.seq === "number") this.opponentStateSeq = message.seq;
         {
+          const receivedAt = performanceNow();
           const opponentState: SelfGameState = {
             matchId: message.matchId,
             cameraX: message.cameraX,
@@ -563,7 +591,13 @@ export class MultiplayerSession {
             score: message.score,
             seq: message.seq,
             sentAt: message.sentAt,
+            receivedAt,
+            remoteTimeOffsetMs: this.remoteTimeOffsetMs ?? undefined,
             status: message.status,
+            type: message.type,
+            t: message.t,
+            angle: message.angle,
+            anim: message.anim,
             x: message.x,
             y: message.y,
             usedPlatformIds: message.usedPlatformIds,
@@ -886,6 +920,44 @@ export class MultiplayerSession {
       selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,
       opponentReady: false,
+    });
+  }
+
+  private terminateRoomSession(message: string) {
+    this.transport?.dispose();
+    this.transport = null;
+    this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    this.stopSelfStateSnapshotTimer();
+    this.stopPeerPresence();
+    this.pendingOpponentStateSnapshot = null;
+    this.pendingSelfStateSnapshot = null;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.lastSelfStateSnapshotAt = 0;
+    this.selfStateSeq = 0;
+    this.opponentStateSeq = -1;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
+    this.remoteTimeOffsetMs = null;
+    this.patchSnapshot({
+      status: "disconnected",
+      errorMessage: message,
+      selfReady: false,
+      opponentReady: false,
+      match: null,
+      countdown: null,
+      selfState: null,
+      opponentState: null,
+      selfResult: null,
+      opponentResult: null,
+      opponentPlayer: null,
+      homeworldState: null,
+      selfHomeworldPresence: null,
+      opponentHomeworldPresence: null,
+      levelSelectState: null,
+      selfLevelSelectPresence: null,
+      opponentLevelSelectPresence: null,
     });
   }
 

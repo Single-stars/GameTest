@@ -22,21 +22,21 @@ export function HostRoom({
       ) : null}
       <div className="multiplayer-share-grid">
         <div className="multiplayer-share-item">
-          <span>房间码</span>
-          <output className="multiplayer-share-value code" aria-label="房间码">
-            {roomCode}
-          </output>
-          <button type="button" onClick={onCopyRoomCode}>
-            {roomCodeCopyStatus === "copied" ? "已复制" : "复制码"}
-          </button>
-        </div>
-        <div className="multiplayer-share-item">
           <span>邀请链接</span>
           <output className="multiplayer-share-value link" aria-label="邀请链接">
             {roomLink}
           </output>
           <button type="button" onClick={onCopy} aria-label={`复制邀请链接 ${roomLink}`}>
             {copyStatus === "copied" ? "已复制" : "复制链接"}
+          </button>
+        </div>
+        <div className="multiplayer-share-item">
+          <span>房间码</span>
+          <output className="multiplayer-share-value code" aria-label="房间码">
+            {roomCode}
+          </output>
+          <button type="button" onClick={onCopyRoomCode}>
+            {roomCodeCopyStatus === "copied" ? "已复制" : "复制码"}
           </button>
         </div>
       </div>

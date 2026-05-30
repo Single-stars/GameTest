@@ -6,13 +6,18 @@ import { SimpleGameSync } from "@/features/game-sync/simple-game-sync";
 import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-games/doodle";
 import { FallDownPrototype, type FallDownRuntimeState } from "@/features/mini-games/fall-down";
 import { FlappyPrototype, type FlappyRuntimeState } from "@/features/mini-games/flappy";
-import { KnifeHitPrototype } from "@/features/mini-games/knife";
+import { KnifeHitPrototype, type KnifeRuntimeState } from "@/features/mini-games/knife";
 import { SquareJumpPrototype, type SquareJumpStateSnapshot } from "@/features/mini-games/square-jump";
 import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
-import type { GameResult, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
+import type { GameResult, PlayerInfo, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
 import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
-import { MULTIPLAYER_INPUT_KEEPALIVE_MS, MULTIPLAYER_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
+import {
+  MULTIPLAYER_INPUT_KEEPALIVE_MS,
+  MULTIPLAYER_FAST_STATE_SYNC_MS,
+  MULTIPLAYER_IDLE_STATE_SYNC_MS,
+  MULTIPLAYER_STATE_SYNC_MS,
+} from "@/lib/multiplayer/protocol";
 
 function resolveRuntimeStatus(status: "playing" | "passed" | "failed"): SelfGameState["status"] {
   if (status === "passed") return "finished";
@@ -38,6 +43,12 @@ function resolveFlappyScore(runtime: FlappyRuntimeState) {
   return Math.max(0, Math.round(progressScore - failurePenalty));
 }
 
+function resolveKnifeScore(runtime: KnifeRuntimeState) {
+  const progressScore = runtime.progress * 1030;
+  const failurePenalty = runtime.failures * 36;
+  return Math.max(0, Math.round(progressScore - failurePenalty));
+}
+
 function resolveSquareJumpScore(runtime: SquareJumpStateSnapshot) {
   const progressScore = runtime.progress * 1040;
   const failurePenalty = runtime.failures * 32;
@@ -60,9 +71,17 @@ function resolveCompletionScore(outcome: MiniGameCompletion) {
   return Math.max(0, Math.round(baseScore + timeBonus + progressScore + hitScore + jumpScore - failurePenalty));
 }
 
+function resolveRuntimeAnim(runtime: MultiplayerRuntimeState, status: SelfGameState["status"]) {
+  if (status !== "playing") return status;
+  if (runtime.phase) return runtime.phase;
+  if (runtime.direction && runtime.direction !== "none") return "move";
+  return "idle";
+}
+
 function multiplayerStateSignature(state: SelfGameState) {
   return [
     state.status,
+    state.anim ?? "",
     state.direction ?? "none",
     state.phase ?? "",
     state.charge ?? "",
@@ -82,6 +101,43 @@ function multiplayerStateSignature(state: SelfGameState) {
   ].join(":");
 }
 
+function multiplayerImmediateStateSignature(state: SelfGameState) {
+  return [
+    state.status,
+    state.anim ?? "",
+    state.direction ?? "none",
+    state.phase ?? "",
+    state.score ?? 0,
+    state.failures ?? 0,
+    state.gravity ?? "",
+    state.platformIndex ?? "",
+    state.nextPlatformIndex ?? "",
+    state.exitingPlatformIndex ?? "",
+    state.turns ?? "",
+  ].join(":");
+}
+
+function resolveDynamicStateSendIntervalMs(state: SelfGameState) {
+  if (state.status !== "playing") return 0;
+  const vx = typeof state.vx === "number" && Number.isFinite(state.vx) ? state.vx : 0;
+  const vy = typeof state.vy === "number" && Number.isFinite(state.vy) ? state.vy : 0;
+  const speed = Math.hypot(vx, vy);
+  const phase = state.phase ?? "";
+  const highMotionPhase =
+    phase === "jumping" ||
+    phase === "falling" ||
+    phase === "airCharging" ||
+    phase === "advancing" ||
+    phase === "charging";
+  if (speed >= 260 || Math.abs(vy) >= 180 || highMotionPhase) return MULTIPLAYER_FAST_STATE_SYNC_MS;
+  const idle =
+    speed <= 8 &&
+    (state.direction === undefined || state.direction === "none") &&
+    (typeof state.charge !== "number" || state.charge <= 0.001) &&
+    (phase === "" || phase === "idle");
+  return idle ? MULTIPLAYER_IDLE_STATE_SYNC_MS : MULTIPLAYER_STATE_SYNC_MS;
+}
+
 type MultiplayerRuntimeState = {
   cameraX?: number;
   cameraY: number;
@@ -89,6 +145,7 @@ type MultiplayerRuntimeState = {
   charge?: number;
   direction: SelfGameState["direction"];
   elapsedMs: number;
+  angle?: number;
   exitingPlatformIndex?: number;
   exitingPlatformOffsetY?: number;
   failures: number;
@@ -107,10 +164,12 @@ type MultiplayerRuntimeState = {
   y: number;
 };
 
+type PlayerCustomAvatar = NonNullable<PlayerInfo["customAvatar"]>;
+
 type MultiplayerMatchRuntimeProps = {
   level: MiniGameLevelConfig;
   matchStageSize?: { width: number; height: number };
-  opponentPlayer: { skinId?: string } | null;
+  opponentPlayer: PlayerInfo | null;
   opponentStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   readOpponentStateMetrics?: (() => {
     acceptedPackets: number;
@@ -124,6 +183,7 @@ type MultiplayerMatchRuntimeProps = {
   reportState: (state: SelfGameState) => void;
   runSeed: string;
   selfRole: SessionRole;
+  selfCustomAvatar?: PlayerInfo["customAvatar"] | null;
   selfSkinId?: string;
 };
 
@@ -159,13 +219,33 @@ function resolveCoOpSharedSkinId({
   runSeed,
   selfSkinId,
 }: {
-  opponentPlayer?: { skinId?: string } | null;
+  opponentPlayer?: PlayerInfo | null;
   runSeed: string;
   selfSkinId?: string;
 }) {
   const skinIds = [selfSkinId, opponentPlayer?.skinId].filter((skinId): skinId is string => typeof skinId === "string" && skinId.length > 0);
   if (skinIds.length === 0) return null;
   return skinIds[hashMultiplayerSeed(`${runSeed}:co-op-shared-skin`) % skinIds.length];
+}
+
+function resolveCoOpSharedCustomAvatar({
+  opponentPlayer,
+  runSeed,
+  selfCustomAvatar,
+  selfSkinId,
+}: {
+  opponentPlayer?: PlayerInfo | null;
+  runSeed: string;
+  selfCustomAvatar?: PlayerInfo["customAvatar"] | null;
+  selfSkinId?: string;
+}) {
+  const candidates = [
+    { customAvatar: selfCustomAvatar ?? null, skinId: selfSkinId },
+    { customAvatar: opponentPlayer?.customAvatar ?? null, skinId: opponentPlayer?.skinId },
+  ].filter((item): item is { customAvatar: PlayerCustomAvatar | null; skinId: string } => typeof item.skinId === "string" && item.skinId.length > 0);
+  if (candidates.length === 0) return null;
+  const selected = candidates[hashMultiplayerSeed(`${runSeed}:co-op-shared-skin`) % candidates.length];
+  return selected.skinId === "custom" ? selected.customAvatar : null;
 }
 
 export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
@@ -181,10 +261,12 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   reportState,
   runSeed,
   selfRole,
+  selfCustomAvatar,
   selfSkinId,
 }: MultiplayerMatchRuntimeProps) {
   const syncRef = useRef<SimpleGameSync | null>(null);
   const localResultSentRef = useRef(false);
+  const lastImmediateStateSignatureRef = useRef<string | undefined>(undefined);
   const lastReportedInputSignatureRef = useRef<string | undefined>(undefined);
   const packetTelemetryRef = useRef<{
     intervalMs: number | null;
@@ -204,6 +286,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     lastReceivedAgeMs: number | null;
     syncHz: number | null;
   } | null>(null);
+  const coOpMode = playMode === "co-op";
 
   const cleanupSync = useCallback(() => {
     syncRef.current?.stop();
@@ -213,9 +296,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   useEffect(() => {
     cleanupSync();
     localResultSentRef.current = false;
+    lastImmediateStateSignatureRef.current = undefined;
     lastReportedInputSignatureRef.current = undefined;
     const inputOnlySync = playMode === "co-op";
-    const syncIntervalMs = inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_STATE_SYNC_MS;
+    const syncIntervalMs = inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : MULTIPLAYER_FAST_STATE_SYNC_MS;
     const sync = new SimpleGameSync((state: SelfGameState) => {
       if (playMode === "co-op") {
         reportInput({
@@ -230,6 +314,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
       reportState(state);
     }, syncIntervalMs, {
       keepAliveMs: inputOnlySync ? MULTIPLAYER_INPUT_KEEPALIVE_MS : undefined,
+      sendIntervalMs: inputOnlySync ? undefined : resolveDynamicStateSendIntervalMs,
     });
     syncRef.current = sync;
     sync.start();
@@ -277,7 +362,6 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     return () => window.clearInterval(timer);
   }, [readOpponentStateMetrics]);
 
-  const coOpMode = playMode === "co-op";
   const coOpInputOnly = coOpMode;
   const coOpAuthoritativeStateSubscription = null;
   const coOpInputStateSubscription = coOpMode ? opponentStateSubscription : null;
@@ -286,12 +370,16 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     (runtime: MultiplayerRuntimeState, score: number) => {
       const status = resolveRuntimeStatus(runtime.status);
       const nextState: SelfGameState = {
+        type: "state",
         cameraX: runtime.cameraX,
         cameraY: runtime.cameraY,
         cameraScale: runtime.cameraScale,
         charge: runtime.charge,
         direction: runtime.direction,
         elapsedMs: runtime.elapsedMs,
+        t: runtime.elapsedMs,
+        angle: runtime.angle ?? 0,
+        anim: resolveRuntimeAnim(runtime, status),
         exitingPlatformIndex: runtime.exitingPlatformIndex,
         exitingPlatformOffsetY: runtime.exitingPlatformOffsetY,
         failures: runtime.failures,
@@ -321,7 +409,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         syncRef.current?.update(inputOnlyState, { immediate: inputChanged, signature: multiplayerStateSignature(inputOnlyState) });
       }
       if (!coOpInputOnly) {
-        syncRef.current?.update(nextState, { immediate: true, signature: multiplayerStateSignature(nextState) });
+        const immediateSignature = multiplayerImmediateStateSignature(nextState);
+        const immediate = lastImmediateStateSignatureRef.current !== immediateSignature || nextState.status !== "playing";
+        lastImmediateStateSignatureRef.current = immediateSignature;
+        syncRef.current?.update(nextState, { immediate, signature: multiplayerStateSignature(nextState) });
       }
       if (nextState.status === "playing") return;
       syncRef.current?.flush({ force: true });
@@ -361,6 +452,13 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   const handleFlappyRuntimeState = useCallback(
     (runtime: FlappyRuntimeState) => {
       handleRuntimeState(runtime, resolveFlappyScore);
+    },
+    [handleRuntimeState],
+  );
+
+  const handleKnifeRuntimeState = useCallback(
+    (runtime: KnifeRuntimeState) => {
+      handleRuntimeState(runtime, resolveKnifeScore);
     },
     [handleRuntimeState],
   );
@@ -412,6 +510,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   const coOpRole = coOpMode ? resolveCoOpRole(selfRole, resolveCoOpHostLeft(runSeed)) : null;
   const squareJumpCoOpRole = coOpMode ? resolveSquareJumpCoOpRole(selfRole, resolveSquareJumpHostFirst(runSeed)) : null;
   const coOpSharedSkinId = coOpMode ? resolveCoOpSharedSkinId({ opponentPlayer, runSeed, selfSkinId }) : null;
+  const coOpSharedCustomAvatar = coOpMode ? resolveCoOpSharedCustomAvatar({ opponentPlayer, runSeed, selfCustomAvatar, selfSkinId }) : null;
 
   const runtimeNode =
     level.gameId === "doodle" ? (
@@ -432,6 +531,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        coOpCustomAvatar={coOpSharedCustomAvatar}
         authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : level.gameId === "fall-down" ? (
@@ -451,6 +551,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        coOpCustomAvatar={coOpSharedCustomAvatar}
         authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : level.gameId === "flappy" ? (
@@ -473,8 +574,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         mode="advanced"
         onBackToSelect={() => undefined}
         onComplete={handleCompletion}
+        onRuntimeState={handleKnifeRuntimeState}
         onRestart={() => undefined}
         runSeed={runSeed}
+        unlimitedRespawn
       />
     ) : level.gameId === "square-jump" ? (
       <SquareJumpPrototype
@@ -494,6 +597,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={squareJumpCoOpRole}
         coOpSkinId={coOpSharedSkinId}
+        coOpCustomAvatar={coOpSharedCustomAvatar}
         authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     ) : (
@@ -514,6 +618,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         coOpInputStateSubscription={coOpInputStateSubscription}
         coOpRole={coOpRole}
         coOpSkinId={coOpSharedSkinId}
+        coOpCustomAvatar={coOpSharedCustomAvatar}
         authoritativeStateSubscription={coOpAuthoritativeStateSubscription}
       />
     );

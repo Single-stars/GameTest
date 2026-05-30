@@ -8,8 +8,12 @@ export type SelfGameState = {
   progress: number;
   score?: number;
   status: GameStateStatus;
+  type?: "state";
+  t?: number;
   x?: number;
   y?: number;
+  angle?: number;
+  anim?: string;
   cameraX?: number;
   cameraY?: number;
   cameraScale?: number;
@@ -27,8 +31,13 @@ export type SelfGameState = {
   platformIndex?: number;
   turns?: number;
   elapsedMs?: number;
+  eventSeq?: number;
+  forceSnap?: boolean;
   seq?: number;
   sentAt?: number;
+  animSeq?: number;
+  receivedAt?: number;
+  remoteTimeOffsetMs?: number;
   usedPlatformIds?: number[];
 };
 

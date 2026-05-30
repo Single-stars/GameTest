@@ -54,24 +54,46 @@ export const PLAYER_AVATAR_EXPRESSIONS = ["neutral", "happy", "sleepy", "scared"
 export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question"] as const satisfies readonly PlayerAvatarEffect[];
 
 const PlayerAvatarSkinContext = createContext<PlayerAvatarSkin>("cyan");
+const PlayerAvatarCustomImageContext = createContext<string | null>(null);
+const PlayerAvatarCustomOutlineContext = createContext<string | null>(null);
 
 export function PlayerAvatarSkinProvider({
   children,
+  customImageUrl = null,
+  customOutlineColor = null,
   skin,
 }: {
   children: ReactNode;
+  customImageUrl?: string | null;
+  customOutlineColor?: string | null;
   skin: PlayerAvatarSkin;
 }) {
-  return <PlayerAvatarSkinContext.Provider value={skin}>{children}</PlayerAvatarSkinContext.Provider>;
+  return (
+    <PlayerAvatarSkinContext.Provider value={skin}>
+      <PlayerAvatarCustomImageContext.Provider value={customImageUrl}>
+        <PlayerAvatarCustomOutlineContext.Provider value={customOutlineColor}>{children}</PlayerAvatarCustomOutlineContext.Provider>
+      </PlayerAvatarCustomImageContext.Provider>
+    </PlayerAvatarSkinContext.Provider>
+  );
 }
 
 export function usePlayerAvatarSkin() {
   return useContext(PlayerAvatarSkinContext);
 }
 
+export function usePlayerAvatarCustomImage() {
+  return useContext(PlayerAvatarCustomImageContext);
+}
+
+export function usePlayerAvatarCustomOutline() {
+  return useContext(PlayerAvatarCustomOutlineContext);
+}
+
 export type PlayerAvatarProps = Partial<PlayerAvatarView> & {
   gravity?: PlayerAvatarGravity;
   skin?: PlayerAvatarSkin;
+  customImageUrl?: string | null;
+  customOutlineColor?: string | null;
   size?: PlayerAvatarSize;
   direction?: PlayerAvatarDirection;
   rotationTurns?: number;
@@ -260,28 +282,40 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
   return null;
 }
 
-export function PlayerAvatar({
-  action = "idle",
-  active = true,
-  charge = 0,
-  className = "",
-  direction = "none",
-  effect = "none",
-  expression = "neutral",
-  gravity = "normal",
-  rotationDeg,
-  rotationTurns = 0,
-  rootRef,
-  size = "md",
-  skin,
-  visualScale = 1,
-}: PlayerAvatarProps) {
+export function PlayerAvatar(props: PlayerAvatarProps) {
+  const {
+    action = "idle",
+    active = true,
+    charge = 0,
+    className = "",
+    customImageUrl,
+    customOutlineColor,
+    direction = "none",
+    effect = "none",
+    expression = "neutral",
+    gravity = "normal",
+    rotationDeg,
+    rotationTurns = 0,
+    rootRef,
+    size = "md",
+    skin,
+    visualScale = 1,
+  } = props;
   const currentSkin = usePlayerAvatarSkin();
+  const currentCustomImageUrl = usePlayerAvatarCustomImage();
+  const currentCustomOutlineColor = usePlayerAvatarCustomOutline();
+  const hasCustomImageUrlProp = Object.prototype.hasOwnProperty.call(props, "customImageUrl");
+  const hasCustomOutlineColorProp = Object.prototype.hasOwnProperty.call(props, "customOutlineColor");
+  const hasExplicitSkinProp = skin !== undefined;
   const normalizedCharge = clampAvatarUnit(charge);
   const normalizedVisualScale = clampAvatarScale(visualScale);
   const resolvedAction = active ? action : "idle";
   const resolvedExpression = active ? expression : "neutral";
   const resolvedSkin = skin ?? currentSkin;
+  const resolvedCustomImageUrl =
+    resolvedSkin === "custom" ? (hasExplicitSkinProp && hasCustomImageUrlProp ? customImageUrl ?? null : currentCustomImageUrl) : null;
+  const resolvedCustomOutlineColor =
+    resolvedSkin === "custom" ? (hasExplicitSkinProp && hasCustomOutlineColorProp ? customOutlineColor ?? null : currentCustomOutlineColor) : null;
   const shouldRenderExpression = !PLAYER_AVATAR_FACELESS_SKINS.includes(resolvedSkin);
   const shouldRecenterForDisplay = action === "celebrate";
   const rotation = shouldRecenterForDisplay ? 0 : rotationDeg ?? rotationTurns * 90;
@@ -295,6 +329,8 @@ export function PlayerAvatar({
     "--player-avatar-rotation": `${rotation}deg`,
     "--player-avatar-size": customSize,
     "--player-avatar-visual-scale": toFixedVar(normalizedVisualScale),
+    "--player-avatar-custom-image": resolvedCustomImageUrl ? `url("${resolvedCustomImageUrl}")` : undefined,
+    "--player-avatar-custom-outline": resolvedCustomOutlineColor ?? undefined,
   } as CSSProperties & Record<string, string | undefined>;
 
   return (

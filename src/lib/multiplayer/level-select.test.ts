@@ -14,15 +14,15 @@ import {
   resolveMultiplayerPlayMode,
 } from "./level-select.ts";
 
-test("multiplayer level selection temporarily exposes only jump, up, and down levels", () => {
-  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 3);
+test("multiplayer level selection exposes every currently reusable versus runtime", () => {
+  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 5);
   assert.deepEqual(
     MULTIPLAYER_LEVEL_GROUPS.map((group) => group.gameId),
-    ["square-jump", "doodle", "fall-down"],
+    ["square-jump", "doodle", "fall-down", "flappy", "knife"],
   );
   assert.equal(
     MULTIPLAYER_LEVEL_GROUPS.reduce((total, group) => total + group.levels.length, 0),
-    33,
+    55,
   );
   for (const group of MULTIPLAYER_LEVEL_GROUPS) {
     assert.equal(group.levels.filter((level) => level.kind === "advanced").length, 10);
@@ -37,21 +37,24 @@ test("multiplayer level selection resolves invalid ids to the default playable l
   assert.equal(selection.gameId, "square-jump");
 });
 
-test("multiplayer level selection only resolves currently exposed two-player games", () => {
+test("multiplayer level selection resolves every currently exposed two-player runtime", () => {
   const knife = resolveMultiplayerLevelSelection("knife-7");
+  const flappy = resolveMultiplayerLevelSelection("flappy-7");
   const squareJump = resolveMultiplayerLevelSelection("square-jump-final");
 
-  assert.equal(knife.gameId, "square-jump");
-  assert.equal(knife.levelId, DEFAULT_MULTIPLAYER_LEVEL_ID);
+  assert.equal(knife.gameId, "knife");
+  assert.equal(knife.levelId, "knife-7");
+  assert.equal(flappy.gameId, "flappy");
+  assert.equal(flappy.levelId, "flappy-7");
   assert.equal(squareJump.gameId, "square-jump");
   assert.equal(squareJump.levelId, "square-jump-final");
 });
 
-test("multiplayer play mode parsing preserves versus from network messages", () => {
+test("multiplayer play mode defaults and invalid network messages resolve to versus", () => {
   assert.equal(resolveMultiplayerPlayMode("versus"), "versus");
   assert.equal(resolveMultiplayerPlayMode("co-op"), "co-op");
-  assert.equal(resolveMultiplayerPlayMode("missing"), "co-op");
-  assert.equal(resolveMultiplayerPlayMode(null), "co-op");
+  assert.equal(resolveMultiplayerPlayMode("missing"), "versus");
+  assert.equal(resolveMultiplayerPlayMode(null), "versus");
 });
 
 test("multiplayer level select room starts dark and lights full-height slots after interaction", () => {
@@ -66,49 +69,39 @@ test("multiplayer level select room starts dark and lights full-height slots aft
 
   const typeSelected = getNextMultiplayerLevelSelectState(initial, "type");
   const levelSelected = getNextMultiplayerLevelSelectState(typeSelected, "level");
-  const coopSelected = getNextMultiplayerLevelSelectState(levelSelected, "mode");
+  const versusSelected = getNextMultiplayerLevelSelectState(levelSelected, "mode");
 
   assert.equal(typeSelected.confirmedSlots.type, true);
-  assert.equal(typeSelected.slotTones.type, "green");
+  assert.equal(typeSelected.slotTones.type, "red");
   assert.equal(getMultiplayerLevelSelectRoomTone(typeSelected), "partial");
   assert.equal(levelSelected.confirmedSlots.level, true);
-  assert.equal(levelSelected.slotTones.level, "green");
-  assert.equal(coopSelected.playMode, "co-op");
-  assert.equal(coopSelected.slotTones.type, "green");
-  assert.equal(coopSelected.slotTones.level, "green");
-  assert.equal(coopSelected.slotTones.mode, "green");
-  assert.equal(getMultiplayerLevelSelectRoomTone(coopSelected), "partial");
+  assert.equal(levelSelected.slotTones.level, "red");
+  assert.equal(versusSelected.playMode, "versus");
+  assert.equal(versusSelected.slotTones.type, "red");
+  assert.equal(versusSelected.slotTones.level, "red");
+  assert.equal(versusSelected.slotTones.mode, "red");
+  assert.equal(getMultiplayerLevelSelectRoomTone(versusSelected), "partial");
 });
 
-test("multiplayer level select mode recolors every confirmed slot", () => {
+test("multiplayer level select mode keeps co-op closed while marking versus confirmed", () => {
   const initial = createDefaultMultiplayerLevelSelectState();
   const type = getNextMultiplayerLevelSelectState(initial, "type");
   const level = getNextMultiplayerLevelSelectState(type, "level");
-  const coop = getNextMultiplayerLevelSelectState(level, "mode");
-  const versus = getNextMultiplayerLevelSelectState(coop, "mode");
+  const versus = getNextMultiplayerLevelSelectState(level, "mode");
+  const stillVersus = getNextMultiplayerLevelSelectState(versus, "mode");
 
-  assert.equal(coop.playMode, "co-op");
-  assert.equal(coop.slotTones.type, "green");
-  assert.equal(coop.slotTones.level, "green");
-  assert.equal(coop.slotTones.mode, "green");
-  assert.equal(getMultiplayerLevelSelectRoomTone(coop), "partial");
   assert.equal(versus.playMode, "versus");
   assert.equal(versus.slotTones.type, "red");
   assert.equal(versus.slotTones.level, "red");
   assert.equal(versus.slotTones.mode, "red");
   assert.equal(getMultiplayerLevelSelectRoomTone(versus), "partial");
+  assert.deepEqual(stillVersus, versus);
 });
 
 test("multiplayer level select mode does not light unconfirmed slots", () => {
   const initial = createDefaultMultiplayerLevelSelectState();
-  const coop = getNextMultiplayerLevelSelectState(initial, "mode");
-  const versus = getNextMultiplayerLevelSelectState(coop, "mode");
+  const versus = getNextMultiplayerLevelSelectState(initial, "mode");
 
-  assert.deepEqual(coop.slotTones, {
-    level: "off",
-    mode: "green",
-    type: "off",
-  });
   assert.deepEqual(versus.slotTones, {
     level: "off",
     mode: "red",

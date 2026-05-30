@@ -10,7 +10,8 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
-import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
+import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
+import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -47,12 +48,12 @@ import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
   MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
   MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
-  MULTIPLAYER_STATE_SYNC_MS,
+  MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 
 const FLAPPY_GATE_WIDTH = 54;
 const FLAPPY_START_PLATFORM_HEIGHT = 12;
-const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
+const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
 
@@ -99,6 +100,7 @@ type FlappyViewFrame = {
 };
 
 export type FlappyRuntimeState = {
+  cameraX: number;
   cameraY: number;
   direction: PlayerAvatarDirection;
   elapsedMs: number;
@@ -112,6 +114,10 @@ export type FlappyRuntimeState = {
 };
 
 type FlappyRemotePlayer = {
+  customAvatar?: {
+    imageDataUrl: string;
+    outlineColor?: string;
+  };
   skinId?: string;
 };
 
@@ -182,17 +188,19 @@ function makeFlappyRuntimeState(
   reverseDirection: boolean,
   speed: number,
 ): FlappyRuntimeState {
-  const absoluteWorldX = playerX + getFlappySignedProgress(frame.progress, reverseDirection);
+  const signedDisplayProgress = getFlappySignedProgress(frame.displayProgress, reverseDirection);
+  const isActivelyScrolling = frame.started && frame.status === "playing";
   return {
+    cameraX: signedDisplayProgress,
     cameraY: 0,
     direction,
     elapsedMs: Math.round(frame.time * 1000),
     failures: frame.failures,
     progress: Number((frame.passed / Math.max(1, gateCount)).toFixed(4)),
     status: frame.status,
-    vx: reverseDirection ? -speed : speed,
+    vx: isActivelyScrolling ? (reverseDirection ? -speed : speed) : 0,
     vy: frame.playerVy,
-    x: absoluteWorldX,
+    x: playerX + signedDisplayProgress,
     y: frame.playerY,
   };
 }
@@ -313,17 +321,20 @@ export function FlappyPrototype({
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<FlappyRemoteState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
+  const remoteVisualSmootherRef = useRef(new RemoteVisualSmoother());
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
+  const remotePlayerSkin = resolveFlappyRemoteSkin(remotePlayer);
 
   const syncFlappyView = useCallback(
     (time = performance.now()) => {
@@ -359,6 +370,7 @@ export function FlappyPrototype({
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     remoteSmootherRef.current.reset();
+    remoteVisualSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
       remotePlayerShellRef.current.style.display = "none";
     }
@@ -376,18 +388,19 @@ export function FlappyPrototype({
   useEffect(() => {
     if (!remoteState) {
       remoteSmootherRef.current.reset();
+      remoteVisualSmootherRef.current.reset();
       if (remotePlayerShellRef.current) {
         remotePlayerShellRef.current.style.display = "none";
       }
       return;
     }
-    remoteSmootherRef.current.push(remoteState, performance.now());
+    remoteSmootherRef.current.push(remoteState, remoteState.receivedAt ?? performance.now());
   }, [remoteState]);
 
   useEffect(() => {
     if (!remoteStateSubscription) return;
     return remoteStateSubscription((nextState) => {
-      remoteSmootherRef.current.push(nextState, performance.now());
+      remoteSmootherRef.current.push(nextState, nextState.receivedAt ?? performance.now());
     });
   }, [remoteStateSubscription]);
 
@@ -405,7 +418,7 @@ export function FlappyPrototype({
     let frameId = 0;
     let last = performance.now();
 
-    const updateDom = (current: FlappyFrame) => {
+    const updateDom = (current: FlappyFrame, frameTime: number) => {
       const renderProgress = current.displayProgress;
       const gateById = new Map(current.gates.map((gate) => [gate.id, gate]));
       for (const ref of backgroundRefs) {
@@ -455,15 +468,17 @@ export function FlappyPrototype({
         playerShellRef.current.style.transform = transformPoint3d(playerScreenX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
       if (remotePlayerShellRef.current) {
-        const sampledRemote = remoteSmootherRef.current.sample(performance.now());
-        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
-          const localSignedProgress = getFlappySignedProgress(current.displayProgress, reverseDirection);
-          const remoteScreenX = sampledRemote.x - localSignedProgress;
+        const sampledRemote = remoteSmootherRef.current.sample(frameTime);
+        const visualRemote = remoteVisualSmootherRef.current.update(sampledRemote, frameTime);
+        if (visualRemote && typeof visualRemote.x === "number" && typeof visualRemote.y === "number") {
+          const localCameraX = getFlappySignedProgress(current.displayProgress, reverseDirection);
+          const remoteScreenX = visualRemote.x - localCameraX;
           remotePlayerShellRef.current.style.display = "";
-          remotePlayerShellRef.current.style.transform = transformPoint3d(
+          remotePlayerShellRef.current.style.transform = `${transformPoint3d(
             remoteScreenX - PLAYER_SIZE / 2,
-            sampledRemote.y - PLAYER_SIZE / 2,
-          );
+            visualRemote.y - PLAYER_SIZE / 2,
+          )} rotate(${visualRemote.angle}deg)`;
+          applyRemoteAvatarVisual(remotePlayerAvatarRef.current, visualRemote);
         } else {
           remotePlayerShellRef.current.style.display = "none";
         }
@@ -477,7 +492,7 @@ export function FlappyPrototype({
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
-        updateDom(current);
+        updateDom(current, time);
         const keepRemoteRenderingAfterSettled = mode === "advanced" && Boolean(onRuntimeStateRef.current);
         if (keepRemoteRenderingAfterSettled) {
           frameId = requestAnimationFrame(tick);
@@ -490,7 +505,7 @@ export function FlappyPrototype({
           current.time += delta;
           current.displayProgress = resolveFlappyDisplayProgress(current);
         }
-        updateDom(current);
+        updateDom(current, time);
         if (isRespawnCameraMoving || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
           syncFlappyView(time);
         }
@@ -600,7 +615,7 @@ export function FlappyPrototype({
           current.invincibleUntil = nextTime + 1.15;
           current.status = "playing";
           current.reason = reason;
-          updateDom(current);
+          updateDom(current, time);
           syncFlappyView(time);
           syncFlappyRuntimeState(time, true);
           frameId = requestAnimationFrame(tick);
@@ -634,7 +649,7 @@ export function FlappyPrototype({
         current.invincibleUntil = nextTime + 1.15;
         current.status = "playing";
         current.reason = reason;
-        updateDom(current);
+        updateDom(current, time);
         syncFlappyView(time);
         syncFlappyRuntimeState(time, true);
         frameId = requestAnimationFrame(tick);
@@ -644,7 +659,7 @@ export function FlappyPrototype({
       if (status === "failed") triggerScreenShake();
       current.status = status;
       current.reason = reason;
-      updateDom(current);
+      updateDom(current, time);
       if (status !== "playing" || eventChanged) {
         syncFlappyRuntimeState(time, true);
       } else {
@@ -797,7 +812,10 @@ export function FlappyPrototype({
                 {...(remoteState ? resolveFlappyRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
                 direction={remoteState?.direction ?? "none"}
                 gravity={reversedGravity ? "light" : "normal"}
-                skin={resolveFlappyRemoteSkin(remotePlayer)}
+                rootRef={remotePlayerAvatarRef}
+                customImageUrl={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.imageDataUrl : null}
+                customOutlineColor={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.outlineColor ?? null : null}
+                skin={remotePlayerSkin}
                 visualScale={1.18}
               />
             </div>

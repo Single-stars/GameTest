@@ -437,10 +437,10 @@ test("play HUD keeps only pass-condition counters and removes helper status labe
   }
   assert.doesNotMatch(cssSource, /prototype-start-hint|flappy-start-hint/);
   assert.doesNotMatch([doodleSource, fallDownSource, squareJumpSource, flappySource].join("\n"), /Math\.min\(view\.failures, BASE_FAILURE_LIMIT\)/);
-  assert.match(doodleSource, /\{riskTotal > 0 \? <span>.*?view\.riskHit.*?riskTotal.*?<\/span> : null\}/s);
+  assert.match(doodleSource, /\{riskTotal > 0 \? <span>[\s\S]*?view\.riskHit[\s\S]*?riskTotal[\s\S]*?<\/span> : null\}/);
   assert.doesNotMatch(fallDownSource, /Math\.max\(0, pressureScreenY\)\.toFixed\(0\)/);
   assert.match(squareJumpSource, /const showGravityStatus = booleanParam\(level\.params, "gravityChallenge"\);/);
-  assert.match(squareJumpSource, /\{showGravityStatus \? <span>.*?squareGravityLabel\(gravity\).*?<\/span> : null\}/s);
+  assert.match(squareJumpSource, /\{showGravityStatus \? <span>[\s\S]*?squareGravityLabel\(gravity\)[\s\S]*?<\/span> : null\}/);
   assert.doesNotMatch(knifeSource, /sineRotationEnabled \? <span>/);
   assert.doesNotMatch(brakingSource, /statusLabel/);
 }
@@ -478,7 +478,7 @@ test("flappy base respawns onto the middle safe platform and waits for the next 
 
 test("flappy gate painting avoids repeated linear gate lookups in the animation frame", () => {
   const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
-  const updateDomSource = sourceBetween(flappySource, "const updateDom = (current: FlappyFrame) => {", "const tick = (time: number) => {");
+  const updateDomSource = sourceBetween(flappySource, "const updateDom = (current: FlappyFrame, frameTime: number) => {", "const tick = (time: number) => {");
 
   assert.match(updateDomSource, /const gateById = new Map\(current\.gates\.map\(\(gate\) => \[gate\.id, gate\]\)\);/);
   assert.match(updateDomSource, /const gate = gateById\.get\(id\);/);

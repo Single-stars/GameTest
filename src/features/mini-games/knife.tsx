@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { MULTIPLAYER_FAST_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
 import {
   DEBUG_MINI_GAME_FPS,
   MINI_GAME_TIMER_SYNC_MS,
@@ -46,6 +47,7 @@ const KNIFE_BASE_LAUNCHER_BOTTOM = 92;
 const KNIFE_COLLISION_DEGREES = 8;
 const KNIFE_FLIGHT_MS = 95;
 const KNIFE_FEEDBACK_MS = 420;
+const KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 type KnifeFeedbackTone = "idle" | "good" | "bad";
 type KnifeForbiddenZone = {
   id: number;
@@ -71,6 +73,17 @@ type KnifeFrame = {
 
 type KnifeViewFrame = KnifeFrame & {
   launcherVisible: boolean;
+};
+
+export type KnifeRuntimeState = {
+  cameraY: number;
+  direction: "none";
+  elapsedMs: number;
+  failures: number;
+  progress: number;
+  status: PrototypeStatus;
+  x: number;
+  y: number;
 };
 
 function knifeSectorPath(zone: KnifeForbiddenZone) {
@@ -132,6 +145,23 @@ function makeKnifeView(frame: KnifeFrame, launcherVisible: boolean): KnifeViewFr
   };
 }
 
+function makeKnifeRuntimeState(frame: KnifeFrame, shotCount: number, stageSize: MiniGameStageSize, geometry: ReturnType<typeof getKnifeStageGeometry>): KnifeRuntimeState {
+  const totalShots = Math.max(1, shotCount);
+  const progress = frame.status === "passed" ? 1 : Math.min(1, Math.max(0, frame.shotIndex / totalShots));
+  const launcherY = stageSize.height - geometry.launcherBottom;
+  const wheelCenterY = geometry.wheelTop + KNIFE_WHEEL_SIZE / 2;
+  return {
+    cameraY: 0,
+    direction: "none",
+    elapsedMs: Math.round(frame.time * 1000),
+    failures: frame.failures,
+    progress: Number(progress.toFixed(4)),
+    status: frame.status,
+    x: stageSize.width / 2,
+    y: frame.flying ? (launcherY + wheelCenterY) / 2 : wheelCenterY,
+  };
+}
+
 function resolveKnifeWheelAvatarView(view: KnifeViewFrame, feedbackTone: KnifeFeedbackTone): PlayerAvatarView {
   if (feedbackTone === "bad" || view.status === "failed") return { action: "hit", expression: "hurt" };
   if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
@@ -142,15 +172,19 @@ export function KnifeHitPrototype({
   level,
   mode,
   runSeed,
+  unlimitedRespawn = false,
   onBackToSelect,
   onComplete,
+  onRuntimeState,
   onRestart,
 }: {
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode;
   runSeed: string;
+  unlimitedRespawn?: boolean;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
+  onRuntimeState?: (state: KnifeRuntimeState) => void;
   onRestart: () => void;
 }) {
   const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
@@ -176,7 +210,9 @@ export function KnifeHitPrototype({
   const runtimeRef = useRef<KnifeFrame>(initialRuntime);
   const launcherVisibleRef = useRef(true);
   const lastTimerSyncRef = useRef(0);
+  const lastRuntimeSyncRef = useRef(0);
   const completedRef = useRef(false);
+  const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
@@ -185,6 +221,20 @@ export function KnifeHitPrototype({
   const syncKnifeView = useCallback(() => {
     setView(makeKnifeView(runtimeRef.current, launcherVisibleRef.current));
   }, []);
+
+  useEffect(() => {
+    onRuntimeStateRef.current = onRuntimeState;
+  }, [onRuntimeState]);
+
+  const syncKnifeRuntimeState = useCallback(
+    (time = performance.now(), force = false) => {
+      if (!onRuntimeStateRef.current) return;
+      if (!force && time - lastRuntimeSyncRef.current < KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS) return;
+      lastRuntimeSyncRef.current = time;
+      onRuntimeStateRef.current(makeKnifeRuntimeState(runtimeRef.current, shotCount, stageSize, knifeGeometry));
+    },
+    [knifeGeometry, shotCount, stageSize],
+  );
 
   const showKnifeFeedback = useCallback((tone: Exclude<KnifeFeedbackTone, "idle">) => {
     if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
@@ -228,7 +278,7 @@ export function KnifeHitPrototype({
 
     if (outcome.kind === "collision") {
       showKnifeFeedback("bad");
-      if (mode === "base") {
+      if (mode === "base" || unlimitedRespawn) {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
         current.failedAngles.push(outcome.impactAngle);
@@ -238,11 +288,16 @@ export function KnifeHitPrototype({
         current.launcherReadyAt = current.time + 0.06;
         current.reason = "撞到已插入长条";
         current.shotIndex = nextShotIndex;
-        current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        if (unlimitedRespawn) {
+          current.status = nextShotIndex >= shotCount ? "passed" : "playing";
+        } else {
+          current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        }
         current.timer = hasCountdown ? countdown : null;
         if (current.status === "playing") scheduleLauncherReady();
         else launcherVisibleRef.current = false;
         syncKnifeView();
+        syncKnifeRuntimeState(performance.now(), true);
         return;
       }
       current.failedAngles.push(outcome.impactAngle);
@@ -252,11 +307,12 @@ export function KnifeHitPrototype({
       current.reason = "撞到已插入长条";
       launcherVisibleRef.current = false;
       syncKnifeView();
+      syncKnifeRuntimeState(performance.now(), true);
       return;
     }
     if (outcome.kind === "forbidden") {
       showKnifeFeedback("bad");
-      if (mode === "base") {
+      if (mode === "base" || unlimitedRespawn) {
         const nextShotIndex = current.shotIndex + 1;
         const nextFailures = current.failures + 1;
         current.failedAngles.push(outcome.impactAngle);
@@ -266,11 +322,16 @@ export function KnifeHitPrototype({
         current.launcherReadyAt = current.time + 0.06;
         current.reason = "命中危险区域";
         current.shotIndex = nextShotIndex;
-        current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        if (unlimitedRespawn) {
+          current.status = nextShotIndex >= shotCount ? "passed" : "playing";
+        } else {
+          current.status = nextShotIndex >= shotCount ? "failed" : "playing";
+        }
         current.timer = hasCountdown ? countdown : null;
         if (current.status === "playing") scheduleLauncherReady();
         else launcherVisibleRef.current = false;
         syncKnifeView();
+        syncKnifeRuntimeState(performance.now(), true);
         return;
       }
       current.failedAngles.push(outcome.impactAngle);
@@ -280,6 +341,7 @@ export function KnifeHitPrototype({
       current.reason = "命中危险区域";
       launcherVisibleRef.current = false;
       syncKnifeView();
+      syncKnifeRuntimeState(performance.now(), true);
       return;
     }
 
@@ -288,11 +350,12 @@ export function KnifeHitPrototype({
     current.flying = false;
     current.shotIndex = nextShotIndex;
     if (nextShotIndex >= shotCount) {
-      current.status = current.failures > 0 && mode === "base" ? "failed" : "passed";
+      current.status = current.failures > 0 && mode === "base" && !unlimitedRespawn ? "failed" : "passed";
       current.reason = `全部 ${shotCount} 发命中`;
       launcherVisibleRef.current = false;
       showKnifeFeedback(current.status === "passed" ? "good" : "bad");
       syncKnifeView();
+      syncKnifeRuntimeState(performance.now(), true);
       return;
     }
 
@@ -301,7 +364,8 @@ export function KnifeHitPrototype({
     current.timer = hasCountdown ? countdown : null;
     scheduleLauncherReady();
     syncKnifeView();
-  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, scheduleLauncherReady, shotCount, showKnifeFeedback, syncKnifeView]);
+    syncKnifeRuntimeState(performance.now(), true);
+  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, scheduleLauncherReady, shotCount, showKnifeFeedback, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const launch = useCallback(() => {
     const current = runtimeRef.current;
@@ -312,11 +376,12 @@ export function KnifeHitPrototype({
     current.flying = true;
     launcherVisibleRef.current = true;
     syncKnifeView();
+    syncKnifeRuntimeState(performance.now(), true);
     timeoutRef.current = window.setTimeout(() => {
       resolveShot();
       timeoutRef.current = null;
     }, KNIFE_FLIGHT_MS);
-  }, [resolveShot, syncKnifeView]);
+  }, [resolveShot, syncKnifeRuntimeState, syncKnifeView]);
 
   useEffect(() => {
     let frameId = 0;
@@ -329,6 +394,7 @@ export function KnifeHitPrototype({
       const current = runtimeRef.current;
       if (current.status !== "playing") {
         if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
+        syncKnifeRuntimeState(time, true);
         return;
       }
 
@@ -353,6 +419,16 @@ export function KnifeHitPrototype({
             current.timer = hasCountdown ? countdown : null;
             if (current.status === "playing") scheduleLauncherReady();
             else launcherVisibleRef.current = false;
+          } else if (unlimitedRespawn) {
+            const nextShotIndex = current.shotIndex + 1;
+            current.failures += 1;
+            current.launcherReadyAt = nextTime + 0.06;
+            current.reason = "倒计时结束";
+            current.shotIndex = nextShotIndex;
+            current.status = nextShotIndex >= shotCount ? "passed" : "playing";
+            current.timer = hasCountdown ? countdown : null;
+            if (current.status === "playing") scheduleLauncherReady();
+            else launcherVisibleRef.current = false;
           } else {
             current.status = "failed";
             current.reason = "倒计时结束";
@@ -369,7 +445,12 @@ export function KnifeHitPrototype({
       }
 
       if (shouldSync) syncKnifeView();
-      frameId = requestAnimationFrame(tick);
+      syncKnifeRuntimeState(time);
+      if (current.status === "playing") {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+      syncKnifeRuntimeState(time, true);
     };
 
     frameId = requestAnimationFrame(tick);
@@ -378,7 +459,7 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeView]);
+  }, [baseRotationSpeed, countdown, hasCountdown, mode, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const remaining = shotCount - view.shotIndex;
   const wheelRotation = `rotate(${view.rotation}deg)`;

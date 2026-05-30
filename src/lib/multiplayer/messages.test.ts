@@ -13,6 +13,7 @@ import {
   createRematchMessage,
   createReturnRoomMessage,
   createStateMessage,
+  createTimeSyncPingMessage,
   parseNetMessage,
   serializeNetMessage,
 } from "./messages.ts";
@@ -64,14 +65,71 @@ test("serialize and parse round trip for hello", () => {
   assert.equal(parsed.player.face, "happy");
 });
 
+test("hello messages carry sanitized custom avatar sync payloads", () => {
+  const parsed = parseNetMessage(createHelloMessage({
+    id: "guest-custom",
+    name: "Guest",
+    skinId: "custom",
+    customAvatar: {
+      imageDataUrl: "data:image/webp;base64,abcd",
+      outlineColor: "rgb(42 90 130)",
+      updatedAt: "2026-05-30T00:00:00.000Z",
+    },
+  }));
+  const rejected = parseNetMessage({
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "hello",
+    player: {
+      id: "guest-custom",
+      name: "Guest",
+      skinId: "custom",
+      customAvatar: {
+        imageDataUrl: "data:image/svg+xml;base64,abcd",
+        updatedAt: "2026-05-30T00:00:00.000Z",
+      },
+    },
+  });
+  const sanitized = parseNetMessage({
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "hello",
+    player: {
+      id: "guest-custom",
+      name: "Guest",
+      skinId: "custom",
+      customAvatar: {
+        imageDataUrl: "data:image/png;base64,abcd",
+        outlineColor: "url(javascript:alert(1))",
+        updatedAt: "2026-05-30T00:00:00.000Z",
+      },
+    },
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "hello");
+  if (parsed.kind === "hello") {
+    assert.equal(parsed.player.customAvatar?.imageDataUrl, "data:image/webp;base64,abcd");
+    assert.equal(parsed.player.customAvatar?.outlineColor, "rgb(42 90 130)");
+  }
+  assert.ok(sanitized);
+  assert.equal(sanitized.kind, "hello");
+  if (sanitized.kind === "hello") {
+    assert.equal(sanitized.player.customAvatar?.imageDataUrl, "data:image/png;base64,abcd");
+    assert.equal(sanitized.player.customAvatar?.outlineColor, undefined);
+  }
+  assert.equal(rejected, null);
+});
+
 test("state messages carry shared-map runtime coordinates", () => {
   const message = createStateMessage({
     matchId: "match-1",
     progress: 0.42,
     score: 420,
     status: "playing",
+    t: 3140,
     x: 128,
     y: 512,
+    angle: 18,
+    anim: "move",
     cameraX: 64,
     cameraY: 96,
     cameraScale: 0.88,
@@ -96,9 +154,13 @@ test("state messages carry shared-map runtime coordinates", () => {
   assert.ok(parsed);
   assert.equal(parsed.kind, "state");
   if (parsed.kind !== "state") return;
+  assert.equal(parsed.type, "state");
   assert.equal(parsed.matchId, "match-1");
+  assert.equal(parsed.t, 3140);
   assert.equal(parsed.x, 128);
   assert.equal(parsed.y, 512);
+  assert.equal(parsed.angle, 18);
+  assert.equal(parsed.anim, "move");
   assert.equal(parsed.cameraX, 64);
   assert.equal(parsed.cameraY, 96);
   assert.equal(parsed.cameraScale, 0.88);
@@ -298,4 +360,32 @@ test("heartbeat messages keep half-open rooms from holding stale guests", () => 
   assert.equal(parsed.kind, "heartbeat");
   if (parsed.kind !== "heartbeat") return;
   assert.equal(parsed.sentAt, 123456);
+});
+
+test("time sync messages are parsed for P2P clock offset estimation", () => {
+  const parsedPing = parseNetMessage(createTimeSyncPingMessage({ id: 7, pingLocalTime: 123.5 }));
+  const parsedPong = parseNetMessage({
+    v: 1,
+    kind: "time-sync",
+    mode: "pong",
+    id: 7,
+    pingLocalTime: 123.5,
+    remoteReceiveTime: 456.25,
+    remoteSendTime: 457.25,
+  });
+
+  assert.ok(parsedPing);
+  assert.equal(parsedPing.kind, "time-sync");
+  if (parsedPing.kind === "time-sync") {
+    assert.equal(parsedPing.mode, "ping");
+    assert.equal(parsedPing.pingLocalTime, 123.5);
+  }
+
+  assert.ok(parsedPong);
+  assert.equal(parsedPong.kind, "time-sync");
+  if (parsedPong.kind === "time-sync") {
+    assert.equal(parsedPong.mode, "pong");
+    assert.equal(parsedPong.remoteReceiveTime, 456.25);
+    assert.equal(parsedPong.remoteSendTime, 457.25);
+  }
 });

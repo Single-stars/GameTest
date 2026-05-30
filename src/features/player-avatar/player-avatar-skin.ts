@@ -15,7 +15,8 @@ export type PlayerAvatarSkin =
   | "ivory"
   | "arcade"
   | "paw"
-  | "blade";
+  | "blade"
+  | "custom";
 
 export const PLAYER_AVATAR_SKINS = [
   "cyan",
@@ -32,9 +33,11 @@ export const PLAYER_AVATAR_SKINS = [
   "basketball",
   "starfall",
   "arcade",
+  "custom",
 ] as const satisfies readonly PlayerAvatarSkin[];
 
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
+  "custom",
   "cyan",
   "signal",
   "target",
@@ -52,10 +55,16 @@ const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
 ] as const satisfies readonly PlayerAvatarSkin[];
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX = new Map(PLAYER_AVATAR_SKIN_DISPLAY_ORDER.map((skin, index) => [skin, index]));
 
+function getPlayerAvatarSkinDisplayIndex(skin: PlayerAvatarSkin, unlocked: boolean) {
+  if (!unlocked && skin === "custom") return 9999;
+  return PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(skin) ?? 999;
+}
+
 export const PLAYER_AVATAR_SKIN_LABELS = {
   arcade: "手柄",
   basketball: "篮球",
   blade: "飞刀",
+  custom: "创意",
   cyan: "青蓝",
   ivory: "象牙",
   mint: "薄荷",
@@ -73,6 +82,7 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   arcade: "谢谢你支持我的游戏！",
   basketball: "哇真的是你呀",
   blade: "块狠话不多",
+  custom: "来自世界之外的小方块",
   cyan: "原装方块，干净耐看。",
   ivory: "成功方块，尊贵优雅",
   mint: "清清凉凉，冰冰爽爽",
@@ -121,6 +131,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   arcade: { kind: "donation", label: "投喂作者一次解锁" },
   basketball: { kind: "legend-50", label: "荣耀王者 50 星解锁" },
   blade: { kind: "advanced-final", label: "通关丢飞刀最终试炼", roundId: "patience" },
+  custom: { kind: "donation", label: "投喂作者一次解锁" },
   cyan: { kind: "default", label: "默认解锁" },
   ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
   mint: { kind: "advanced-final", label: "通关一路向上最终试炼", roundId: "search" },
@@ -134,7 +145,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   target: { kind: "advanced-final", label: "通关移动靶最终试炼", roundId: "aim" },
 } as const satisfies Record<PlayerAvatarSkin, PlayerAvatarSkinUnlock>;
 
-export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw"] as readonly PlayerAvatarSkin[];
+export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw", "custom"] as readonly PlayerAvatarSkin[];
 
 export function resolvePlayerAvatarSkin(skinId: string | null | undefined): PlayerAvatarSkin {
   return PLAYER_AVATAR_SKINS.includes(skinId as PlayerAvatarSkin) ? (skinId as PlayerAvatarSkin) : "cyan";
@@ -166,7 +177,7 @@ export function getPlayerAvatarSkinDisplayItems(progress: AdvancedProgress) {
     unlock: getPlayerAvatarSkinUnlockState(skin, progress),
   })).sort((a, b) => {
     if (a.unlock.unlocked !== b.unlock.unlocked) return a.unlock.unlocked ? -1 : 1;
-    return (PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(a.skin) ?? 999) - (PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(b.skin) ?? 999);
+    return getPlayerAvatarSkinDisplayIndex(a.skin, a.unlock.unlocked) - getPlayerAvatarSkinDisplayIndex(b.skin, b.unlock.unlocked);
   });
 }
 

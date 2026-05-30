@@ -16,7 +16,8 @@ import {
   type PlayerAvatarView,
 } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
-import { RemoteStateSmoother } from "@/features/game-sync/remote-state-smoother";
+import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
+import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
   BASE_FAILURE_LIMIT,
   DEBUG_MINI_GAME_FPS,
@@ -56,11 +57,11 @@ import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
   MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
   MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
-  MULTIPLAYER_STATE_SYNC_MS,
+  MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 
 const DOODLE_PLAYER_SPEED = 315;
-const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_STATE_SYNC_MS;
+const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -125,6 +126,10 @@ export type DoodleRuntimeState = {
 };
 
 export type DoodleRemotePlayer = {
+  customAvatar?: {
+    imageDataUrl: string;
+    outlineColor?: string;
+  };
   skinId?: string;
 };
 
@@ -342,6 +347,7 @@ export function DoodleJumpPrototype({
   coOpInputStateSubscription = null,
   coOpRole = null,
   coOpSkinId = null,
+  coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
   onBackToSelect,
   onBaseReviveUsed,
@@ -363,6 +369,7 @@ export function DoodleJumpPrototype({
   coOpInputStateSubscription?: ((listener: (state: DoodleRemoteState) => void) => (() => void)) | null;
   coOpRole?: "left" | "right" | null;
   coOpSkinId?: string | null;
+  coOpCustomAvatar?: DoodleRemotePlayer["customAvatar"] | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   onBackToSelect: () => void;
   onBaseReviveUsed?: () => void;
@@ -388,18 +395,20 @@ export function DoodleJumpPrototype({
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
+  const remotePlayerAvatarRef = useRef<HTMLSpanElement | null>(null);
   const remoteSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
+  const remoteVisualSmootherRef = useRef(new RemoteVisualSmoother());
   const authoritativeSmootherRef = useRef(
-    new RemoteStateSmoother({
+    new RemoteInterpolator<SelfGameState>({
       interpolationDelayMs: MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
-      maxExtrapolationMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
-      staleStopExtrapolationMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
+      maxPredictionMs: MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
+      staleMs: MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
     }),
   );
   const coOpInputStateRef = useRef<DoodleRemoteState | null>(coOpInputState);
@@ -415,6 +424,8 @@ export function DoodleJumpPrototype({
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<DoodleViewFrame>(() => makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, logicStageHeight));
+  const remotePlayerSkin = resolveDoodleRemoteSkin(remotePlayer);
+  const coOpPlayerSkin = resolveDoodleCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
 
   useEffect(() => {
@@ -455,6 +466,7 @@ export function DoodleJumpPrototype({
 
   useEffect(() => {
     remoteSmootherRef.current.reset();
+    remoteVisualSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
       remotePlayerShellRef.current.style.display = "none";
     }
@@ -463,18 +475,19 @@ export function DoodleJumpPrototype({
   useEffect(() => {
     if (!remoteState) {
       remoteSmootherRef.current.reset();
+      remoteVisualSmootherRef.current.reset();
       if (remotePlayerShellRef.current) {
         remotePlayerShellRef.current.style.display = "none";
       }
       return;
     }
-    remoteSmootherRef.current.push(remoteState, performance.now());
+    remoteSmootherRef.current.push(remoteState, remoteState.receivedAt ?? performance.now());
   }, [remoteState]);
 
   useEffect(() => {
     if (!remoteStateSubscription) return;
     return remoteStateSubscription((nextState) => {
-      remoteSmootherRef.current.push(nextState, performance.now());
+      remoteSmootherRef.current.push(nextState, nextState.receivedAt ?? performance.now());
     });
   }, [remoteStateSubscription]);
 
@@ -589,12 +602,13 @@ export function DoodleJumpPrototype({
       }
       if (remotePlayerShellRef.current) {
         const sampledRemote = remoteSmootherRef.current.sample(frameTime);
-        if (sampledRemote && typeof sampledRemote.x === "number" && typeof sampledRemote.y === "number") {
+        const visualRemote = remoteVisualSmootherRef.current.update(sampledRemote, frameTime);
+        if (visualRemote && typeof visualRemote.x === "number" && typeof visualRemote.y === "number") {
           remotePlayerShellRef.current.style.display = "";
-          remotePlayerShellRef.current.style.transform = transformPoint3d(
-            clamp(sampledRemote.x, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2) - PLAYER_SIZE / 2,
-            logicStageHeight - (sampledRemote.y - current.cameraY) - PLAYER_SIZE / 2,
-          );
+          const remoteX = clamp(visualRemote.x, PLAYER_SIZE / 2, logicStageWidth - PLAYER_SIZE / 2) - PLAYER_SIZE / 2;
+          const remoteY = logicStageHeight - (visualRemote.y - current.cameraY) - PLAYER_SIZE / 2;
+          remotePlayerShellRef.current.style.transform = `${transformPoint3d(remoteX, remoteY)} rotate(${visualRemote.angle}deg)`;
+          applyRemoteAvatarVisual(remotePlayerAvatarRef.current, visualRemote);
         } else {
           remotePlayerShellRef.current.style.display = "none";
         }
@@ -952,7 +966,9 @@ export function DoodleJumpPrototype({
               direction={view.playerDirection}
               gravity="normal"
               rotationTurns={view.playerTurns}
-              skin={resolveDoodleCoOpSkin(coOpSkinId)}
+              customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
+              customOutlineColor={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.outlineColor ?? null : null}
+              skin={coOpPlayerSkin}
               visualScale={1.22}
             />
           </div>
@@ -962,7 +978,10 @@ export function DoodleJumpPrototype({
                 {...(remoteState ? resolveDoodleRemoteAvatarView(remoteState) : { action: "idle", expression: "neutral" })}
                 direction={remoteState?.direction ?? "none"}
                 gravity="normal"
-                skin={resolveDoodleRemoteSkin(remotePlayer)}
+                rootRef={remotePlayerAvatarRef}
+                customImageUrl={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.imageDataUrl : null}
+                customOutlineColor={remotePlayerSkin === "custom" ? remotePlayer?.customAvatar?.outlineColor ?? null : null}
+                skin={remotePlayerSkin}
                 visualScale={1.22}
               />
             </div>

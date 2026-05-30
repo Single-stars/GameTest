@@ -67,6 +67,8 @@ function ProgressMarker({
       <span className="multiplayer-progress-avatar" aria-hidden="true">
         <PlayerAvatar
           action="idle"
+          customImageUrl={player?.skinId === "custom" ? player.customAvatar?.imageDataUrl : null}
+          customOutlineColor={player?.skinId === "custom" ? player.customAvatar?.outlineColor ?? null : null}
           direction="none"
           expression="neutral"
           size={32}

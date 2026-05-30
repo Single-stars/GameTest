@@ -112,6 +112,7 @@ import {
   readPersistedPlayerName,
   writePersistedPlayerAvatarSkin,
 } from "@/features/player-avatar/player-avatar-storage";
+import { useCustomAvatarImage } from "@/features/player-avatar/use-custom-avatar-image";
 import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
 import { RewardOverlay, type RewardOverlayItem } from "@/features/rewards/reward-overlay";
@@ -233,6 +234,7 @@ export default function Home() {
   const [localStateHydrated, setLocalStateHydrated] = useState(false);
   const [debugToolsVisible, setDebugToolsVisible] = useState(false);
   const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
+  const { customAvatarImageUrl, customAvatarOutlineColor, saveCustomAvatarImage } = useCustomAvatarImage();
   const roundCompletionLockedRef = useRef(false);
   const roundIndexRef = useRef(0);
   const trialsRef = useRef<TrialEvent[]>([]);
@@ -1013,6 +1015,10 @@ export default function Home() {
     void transitionToRoute(`/multiplayer?homeworld=1&room=${encodeURIComponent(roomCode)}`, () => persistHomeworldState(homeworldStateRef.current));
   }, [persistHomeworldState, transitionToRoute]);
 
+  const openMultiplayerSelect = useCallback(() => {
+    void transitionToRoute("/multiplayer?select=1");
+  }, [transitionToRoute]);
+
   const openHomeworldMultiplayerEntry = useCallback(() => {
     persistHomeworldState(homeworldStateRef.current);
   }, [persistHomeworldState]);
@@ -1113,7 +1119,7 @@ export default function Home() {
 
   if (!localStateHydrated) {
     return (
-      <PlayerAvatarSkinProvider skin={selectedAvatarSkin}>
+      <PlayerAvatarSkinProvider skin={selectedAvatarSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
         <main className="app-shell app-shell-play route-blackout-shell">
           <ModeTransitionOverlay state={transitionState} />
         </main>
@@ -1122,7 +1128,7 @@ export default function Home() {
   }
 
   return (
-    <PlayerAvatarSkinProvider skin={selectedAvatarSkin}>
+    <PlayerAvatarSkinProvider skin={selectedAvatarSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
     <main className={playShellActive ? "app-shell app-shell-play" : "app-shell"}>
       {stage === "share" ? (
         <ShareImageScreen
@@ -1137,7 +1143,9 @@ export default function Home() {
       ) : stage === "avatar-lab" ? (
         <AvatarLabScreen
           advancedProgress={advancedProgress}
+          customAvatarImageUrl={customAvatarImageUrl}
           selectedSkin={selectedAvatarSkin}
+          onSaveCustomAvatarImage={saveCustomAvatarImage}
           onSelectSkin={handleSelectAvatarSkin}
           onBack={requestAppBack}
         />
@@ -1239,6 +1247,7 @@ export default function Home() {
           onOpenAvatarLab={openAvatarLab}
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
+          onOpenMultiplayer={openMultiplayerSelect}
           onDonateAuthor={handleDonateAuthor}
           onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
@@ -1270,6 +1279,7 @@ export default function Home() {
           onOpenAvatarLab={openAvatarLab}
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
+          onOpenMultiplayer={openMultiplayerSelect}
           onDonateAuthor={handleDonateAuthor}
           onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
