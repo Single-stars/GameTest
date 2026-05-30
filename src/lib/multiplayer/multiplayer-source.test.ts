@@ -1247,6 +1247,7 @@ test("multiplayer room lifecycle terminates expired rooms and resets every clien
   assert.match(transportSource, /case "room-closed":/);
   assert.match(transportSource, /handleRoomClosed/);
   assert.match(transportSource, /verifyRoomStillExists/);
+  assert.match(transportSource, /isRoomStatusActiveForRole\(status, this\.role\)/);
   assert.match(sessionSource, /isTerminalRoomDisconnect/);
   assert.match(sessionSource, /terminateRoomSession/);
   assert.match(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,180}isTerminalRoomDisconnect\(message\)/);

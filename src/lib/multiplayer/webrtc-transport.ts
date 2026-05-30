@@ -20,6 +20,7 @@ import {
   buildRoomWebSocketUrl,
   createSignalingRoom,
   getSignalingRoomStatus,
+  isRoomStatusActiveForRole,
   isRoomCode,
   normalizeRoomCode,
   readStoredRoomToken,
@@ -590,7 +591,7 @@ export class RoomSignalTransport {
     if (!this.roomCode || this.destroyed) return true;
     try {
       const status = await getSignalingRoomStatus(this.roomCode);
-      if (status.exists) return true;
+      if (isRoomStatusActiveForRole(status, this.role)) return true;
       this.handleRoomClosed(MULTIPLAYER_ROOM_EXPIRED_REASON);
       return false;
     } catch {

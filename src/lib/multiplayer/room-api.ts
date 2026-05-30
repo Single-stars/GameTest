@@ -17,6 +17,12 @@ export type RoomStatusResponse = {
   guestConnected?: boolean;
 };
 
+export function isRoomStatusActiveForRole(status: RoomStatusResponse, role: SignalingRole) {
+  if (!status.exists) return false;
+  if (role === "host") return status.hostConnected !== false;
+  return status.guestConnected !== false;
+}
+
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
