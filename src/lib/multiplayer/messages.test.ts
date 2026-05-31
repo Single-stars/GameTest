@@ -11,6 +11,7 @@ import {
   createLevelSelectPresenceMessage,
   createLevelSelectStateMessage,
   createRematchMessage,
+  createResultMessage,
   createReturnRoomMessage,
   createStateMessage,
   createTimeSyncPingMessage,
@@ -144,6 +145,21 @@ test("state messages carry shared-map runtime coordinates", () => {
     phase: "charging",
     platformIndex: 2,
     usedPlatformIds: [10, 12, 14],
+    knifeInsertedAngles: [24, 168],
+    knifeFailedAngles: [96],
+    knifeShotIndex: 3,
+    knifeTimer: 1.4,
+    knifeTimedOutThisShot: true,
+    knifeOvertime: false,
+    knifeWinnerRole: "host",
+    knifeHostHits: 2,
+    knifeGuestHits: 1,
+    knifeHostTimeouts: 1,
+    knifeGuestTimeouts: 0,
+    knifeHostCollisions: 0,
+    knifeGuestCollisions: 1,
+    knifeHostDangerHits: 0,
+    knifeGuestDangerHits: 0,
     elapsedMs: 3140,
     seq: 12,
     sentAt: 123456,
@@ -175,6 +191,21 @@ test("state messages carry shared-map runtime coordinates", () => {
   assert.equal(parsed.phase, "charging");
   assert.equal(parsed.platformIndex, 2);
   assert.deepEqual(parsed.usedPlatformIds, [10, 12, 14]);
+  assert.deepEqual(parsed.knifeInsertedAngles, [24, 168]);
+  assert.deepEqual(parsed.knifeFailedAngles, [96]);
+  assert.equal(parsed.knifeShotIndex, 3);
+  assert.equal(parsed.knifeTimer, 1.4);
+  assert.equal(parsed.knifeTimedOutThisShot, true);
+  assert.equal(parsed.knifeOvertime, false);
+  assert.equal(parsed.knifeWinnerRole, "host");
+  assert.equal(parsed.knifeHostHits, 2);
+  assert.equal(parsed.knifeGuestHits, 1);
+  assert.equal(parsed.knifeHostTimeouts, 1);
+  assert.equal(parsed.knifeGuestTimeouts, 0);
+  assert.equal(parsed.knifeHostCollisions, 0);
+  assert.equal(parsed.knifeGuestCollisions, 1);
+  assert.equal(parsed.knifeHostDangerHits, 0);
+  assert.equal(parsed.knifeGuestDangerHits, 0);
   assert.equal(parsed.elapsedMs, 3140);
   assert.equal(parsed.seq, 12);
   assert.equal(parsed.sentAt, 123456);
@@ -342,6 +373,86 @@ test("result and forfeit messages carry match identity", () => {
   assert.equal(forfeit.kind, "forfeit");
   if (forfeit.kind !== "forfeit") return;
   assert.equal(forfeit.matchId, "match-2");
+});
+
+test("result messages carry settlement breakdown details", () => {
+  const message = createResultMessage({
+    matchId: "match-breakdown",
+    score: 3,
+    passed: true,
+    timeMs: 40000,
+    breakdown: {
+      version: 1,
+      gameId: "knife",
+      levelId: "knife-7",
+      kind: "score",
+      title: "主局总分",
+      winnerText: "飞刀耗尽后分数更高者获胜",
+      outcome: "overtime-win",
+      base: [
+        {
+          key: "base-score",
+          label: "基础分",
+          unit: "point",
+          value: 0,
+          amount: 0,
+        },
+      ],
+      adjustments: [
+        {
+          key: "knife-hit-score",
+          label: "安全插中",
+          unit: "point",
+          value: 7,
+          amount: 7,
+        },
+      ],
+      formulaRows: [
+        {
+          key: "base-score",
+          label: "基础分",
+          unit: "point",
+          value: 0,
+          amount: 0,
+          operation: "base",
+        },
+        {
+          key: "knife-hit-score",
+          label: "安全插中",
+          unit: "point",
+          value: 7,
+          amount: 7,
+          operation: "add",
+        },
+        {
+          key: "knife-overtime-result",
+          label: "加赛结果",
+          unit: "note",
+          value: "对方先失误",
+          operation: "note",
+          displayOnly: true,
+        },
+      ],
+      final: {
+        label: "主局总分",
+        lowerIsBetter: false,
+        unit: "point",
+        value: 3,
+      },
+      tiebreakerText: "主局平分进入无倒计时加赛。",
+    },
+  });
+
+  const parsed = parseNetMessage(serializeNetMessage(message));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "result");
+  if (parsed.kind !== "result") return;
+  assert.equal(parsed.breakdown?.kind, "score");
+  assert.equal(parsed.breakdown?.outcome, "overtime-win");
+  assert.equal(parsed.breakdown?.final.value, 3);
+  assert.equal(parsed.breakdown?.adjustments[0]?.amount, 7);
+  assert.equal(parsed.breakdown?.formulaRows?.at(-1)?.key, "knife-overtime-result");
 });
 
 test("return-room messages carry match identity without leaving the P2P room", () => {

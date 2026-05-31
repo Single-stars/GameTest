@@ -211,6 +211,19 @@ test("flappy recoverable failures use safe respawn instead of a fixed backtrack"
   assert.doesNotMatch(flappyRuntimeSource, /Math\.max\(0, nextProgress - 92\)/);
 });
 
+test("flappy multiplayer collectible misses settle as missed bonuses instead of death respawns", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+  const finishSource = flappyRuntimeSource.slice(
+    flappyRuntimeSource.indexOf("if (status === \"playing\" && passed >= gateCount)"),
+    flappyRuntimeSource.indexOf("current.time = nextTime"),
+  );
+
+  assert.match(finishSource, /const collectibleMissSettleOnly = mode === "advanced" && Boolean\(onRuntimeStateRef\.current\);/);
+  assert.match(finishSource, /if \(unlimitedRespawn \|\| collectibleMissSettleOnly \|\| collected >= collectibleCount\)/);
+  assert.doesNotMatch(finishSource, /status = "failed";\s*reason = `漏收集道具/);
+});
+
 test("flappy gates keep safe horizontal spacing and visible center variation", () => {
   for (const levelId of ["flappy-3", "flappy-6", "flappy-10"]) {
     const level = getMiniGameLevel("flappy", levelId);

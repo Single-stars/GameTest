@@ -779,8 +779,13 @@ test("multiplayer page previews the persisted self skin before a room is created
 test("multiplayer room link copy falls back when Clipboard API is blocked", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const hostRoomSource = readSource("../../features/multiplayer/host-room.tsx");
+  const linkCopySource = pageSource.slice(pageSource.indexOf("const handleCopyLink"), pageSource.indexOf("const handleCopyRoomCode"));
+  const codeCopySource = pageSource.slice(pageSource.indexOf("const handleCopyRoomCode"), pageSource.indexOf("const toggleReady"));
 
   assert.match(pageSource, /copyRoomLinkWithFallback/);
+  assert.match(pageSource, /window\.getSelection\(\)/);
+  assert.match(linkCopySource, /const fallbackCopied = copyRoomLinkWithFallback\(activeRoomLink\);[\s\S]{0,220}if \(fallbackCopied\)/);
+  assert.match(codeCopySource, /const fallbackCopied = copyRoomLinkWithFallback\(snapshot\.roomId\);[\s\S]{0,220}if \(fallbackCopied\)/);
   assert.match(pageSource, /document\.execCommand\("copy"\)/);
   assert.match(pageSource, /getSignalingRoomStatus/);
   assert.match(pageSource, /refreshExpiredHostRoom/);
@@ -823,7 +828,7 @@ test("multiplayer host can choose the battle level before match start", () => {
   assert.match(pageSource, /session\.startMatch\(\{/);
   assert.match(pageSource, /levelId: activeLevelSelectState\.levelId/);
   assert.match(pageSource, /playMode: activeLevelSelectState\.playMode/);
-  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "knife"\]/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "aim", "knife"\]/);
   assert.match(levelSelectSource, /DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "versus"/);
   assert.match(levelSelectSource, /MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup\[\] = MULTIPLAYER_ENABLED_GAME_IDS\.map/);
   assert.match(pageSource, /handleUnavailablePlayMode/);
@@ -900,13 +905,14 @@ test("co-op multiplayer uses one shared avatar skin selected from both players b
   assert.match(squareJumpSource, /skin=\{coOpPlayerSkin\}/);
 });
 
-test("multiplayer runtime exposes flappy and knife because both reuse existing versus runtime", () => {
+test("multiplayer runtime exposes flappy, aim and knife because they reuse existing versus runtime", () => {
   const levelSelectSource = readSource("./level-select.ts");
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
   const flappySource = readSource("../../features/mini-games/flappy.tsx");
+  const aimSource = readSource("../../features/rounds/native/aim.tsx");
   const knifeSource = readSource("../../features/mini-games/knife.tsx");
 
-  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "knife"\]/);
+  assert.match(levelSelectSource, /const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId\[\] = \["square-jump", "doodle", "fall-down", "flappy", "aim", "knife"\]/);
   assert.match(runtimeSource, /FlappyPrototype/);
   assert.match(runtimeSource, /level\.gameId === "flappy"/);
   assert.match(runtimeSource, /handleFlappyRuntimeState/);
@@ -916,6 +922,12 @@ test("multiplayer runtime exposes flappy and knife because both reuse existing v
   assert.match(flappySource, /onRuntimeState\?: \(state: FlappyRuntimeState\) => void;/);
   assert.match(flappySource, /logicStageSizeOverride\?: MiniGameStageSize;/);
   assert.match(flappySource, /unlimitedRespawn = false/);
+  assert.match(runtimeSource, /AdvancedAimRound/);
+  assert.match(runtimeSource, /level\.gameId === "aim"/);
+  assert.match(runtimeSource, /handleAimRuntimeState/);
+  assert.match(runtimeSource, /onRuntimeState=\{handleAimRuntimeState\}/);
+  assert.match(aimSource, /export type AdvancedAimRuntimeState/);
+  assert.match(aimSource, /multiplayerPenaltyMode\?: boolean;/);
   assert.match(runtimeSource, /level\.gameId === "knife"/);
   assert.match(runtimeSource, /KnifeHitPrototype/);
   assert.match(runtimeSource, /onComplete=\{handleCompletion\}/);
@@ -1157,6 +1169,9 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   const transportSource = readSource("./webrtc-transport.ts");
 
   assert.match(transportSource, /socket\.onclose = \(event\) => \{[\s\S]*if \(this\.socket !== socket\) return;[\s\S]*if \(this\.connected\) \{[\s\S]{0,140}this\.scheduleSignalReconnect\(\);[\s\S]{0,40}return;/);
+  assert.match(transportSource, /private signalReady = false;/);
+  assert.match(transportSource, /case "ready":[\s\S]{0,160}this\.signalReady = true;/);
+  assert.match(transportSource, /if \(this\.connected \|\| this\.signalReady\) \{[\s\S]{0,140}this\.scheduleSignalReconnect\(\);[\s\S]{0,40}return;/);
   assert.match(transportSource, /connectionState === "disconnected"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_DISCONNECTED_MESSAGE\);[\s\S]*return;/);
   assert.match(transportSource, /connectionState === "failed"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_FAILED_MESSAGE\);/);
   assert.match(transportSource, /case "peer-left":[\s\S]*if \(message\.reason !== "host-disbanded-room" && message\.reason !== "peer-left-room"\) return;/);
@@ -1183,6 +1198,15 @@ test("standalone rooms persist while the host signal is alive and close only on 
   assert.match(workerSource, /record\.type === "heartbeat"/);
   assert.match(workerSource, /now - \(metadata\.lastActivityAt \?\? metadata\.createdAt\) > ROOM_INACTIVITY_TTL_MS/);
   assert.match(workerSource, /reason === "host-disbanded-room"[\s\S]{0,180}deleteRoom\(\)/);
+});
+
+test("multiplayer room watchdog treats transient role socket absence as reconnectable while the room exists", () => {
+  const transportSource = readSource("./webrtc-transport.ts");
+  const roomApiSource = readSource("./room-api.ts");
+
+  assert.match(roomApiSource, /isRoomStatusActiveForRole/);
+  assert.match(transportSource, /if \(status\.exists\) return true;/);
+  assert.doesNotMatch(transportSource, /isRoomStatusActiveForRole\(status, this\.role\)/);
 });
 
 test("standalone terminal disconnects return to the initial create or join room state", () => {
@@ -1260,7 +1284,7 @@ test("multiplayer room lifecycle terminates expired rooms and resets every clien
   assert.match(transportSource, /case "room-closed":/);
   assert.match(transportSource, /handleRoomClosed/);
   assert.match(transportSource, /verifyRoomStillExists/);
-  assert.match(transportSource, /isRoomStatusActiveForRole\(status, this\.role\)/);
+  assert.match(transportSource, /if \(status\.exists\) return true;/);
   assert.match(sessionSource, /isTerminalRoomDisconnect/);
   assert.match(sessionSource, /terminateRoomSession/);
   assert.match(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,180}isTerminalRoomDisconnect\(message\)/);
@@ -1270,6 +1294,25 @@ test("multiplayer room lifecycle terminates expired rooms and resets every clien
   assert.match(pageSource, /resetMultiplayerRoomToEntry\(\{ suppressRoomParam: true/);
   assert.match(pageSource, /router\.replace\(isHomeworldRoute \? "\/multiplayer" : "\/multiplayer\?select=1"\)/);
 });
+
+test("multiplayer aim stages fill the shell instead of collapsing inside the nested main area", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const rule = cssRule(cssSource, ".multiplayer-game-shell-main > .game-area");
+
+  assert.match(rule, /width:\s*100%;/);
+  assert.match(rule, /height:\s*100%;/);
+  assert.match(rule, /align-self:\s*stretch;/);
+});
+
+test("multiplayer aim allows rapid follow-up shots while previous arrows are still active", () => {
+  const aimSource = readSource("../../features/rounds/native/aim.tsx");
+  const shootSource = aimSource.slice(aimSource.indexOf("const shoot ="), aimSource.indexOf("const arrowsLeft"));
+
+  assert.match(aimSource, /function canFireAdvancedAimShot/);
+  assert.match(shootSource, /canFireAdvancedAimShot\(\{[\s\S]*arrowCount,[\s\S]*firedCount: firedCountRef\.current,[\s\S]*unlimitedArrows,[\s\S]*\}\)/);
+  assert.doesNotMatch(shootSource, /multiplayerPenaltyMode && arrowsRef\.current\.some/);
+}
+);
 
 test("co-op countdown explains the player's split control assignment", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
@@ -1287,9 +1330,68 @@ test("co-op countdown explains the player's split control assignment", () => {
   assert.match(pageSource, /coOpAssignmentText=\{coOpAssignmentText\}/);
   assert.match(shellSource, /coOpAssignmentText\?: string \| null;/);
   assert.match(shellSource, /<strong>\{countdownSeconds\}<\/strong>/);
-  assert.match(shellSource, /coOpMode && coOpAssignmentText \? <span>\{coOpAssignmentText\}<\/span> : null/);
-  assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel strong/);
+  assert.match(shellSource, /coOpMode && coOpAssignmentText \? \[coOpAssignmentText\] : \[\]/);
+  assert.match(multiplayerCss, /\.multiplayer-game-countdown-number strong/);
   assert.match(multiplayerCss, /\.multiplayer-game-countdown-panel span/);
+});
+
+test("versus countdown uses level-specific multiplayer rule copy", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+
+  assert.match(pageSource, /getMultiplayerLevelRules/);
+  assert.doesNotMatch(pageSource, /getMultiplayerCountdownLine/);
+  assert.match(pageSource, /const countdownRules = useMemo/);
+  assert.match(pageSource, /countdownRules=\{countdownRules\}/);
+  assert.match(shellSource, /countdownRules\?: string\[\];/);
+  assert.match(shellSource, /countdownRules\.length > 0 \? countdownRules/);
+});
+
+test("multiplayer runtime reports rule breakdown instead of legacy score-only settlement", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+
+  assert.match(runtimeSource, /buildMultiplayerResultBreakdown/);
+  assert.match(runtimeSource, /const breakdown = buildMultiplayerResultBreakdown/);
+  assert.match(runtimeSource, /breakdown,/);
+  assert.match(runtimeSource, /score:\s*resolveResultScore\(breakdown\)/);
+  assert.match(runtimeSource, /timeMs:\s*resolveResultTimeMs\(breakdown,\s*runtime\.elapsedMs\)/);
+  assert.match(runtimeSource, /collected:\s*runtime\.collected/);
+  assert.match(runtimeSource, /knifeHits:\s*runtime\.knifeHits/);
+});
+
+test("knife versus uses shared turn state and turn-owner calculation", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const knifeSource = readSource("../../features/mini-games/knife.tsx");
+
+  assert.match(runtimeSource, /multiplayerRole=\{selfRole\}/);
+  assert.match(runtimeSource, /remoteState=\{opponentState\}/);
+  assert.match(knifeSource, /multiplayerRole\?: "host" \| "guest";/);
+  assert.match(knifeSource, /remoteState\?: SelfGameState \| null;/);
+  assert.match(knifeSource, /function resolveKnifeTurnOwner/);
+  assert.match(knifeSource, /function applyKnifeRemoteState/);
+  assert.match(knifeSource, /angle:\s*frame\.rotation/);
+  assert.match(knifeSource, /frame\.rotation = normalizeDegrees\(remoteState\.angle\)/);
+  assert.match(runtimeSource, /state\.angle \?\? ""/);
+  assert.match(knifeSource, /if \(multiplayerRole && !isKnifeLocalTurn/);
+  assert.match(knifeSource, /current\.timer = null/);
+  assert.match(knifeSource, /current\.timedOutThisShot = true/);
+});
+
+test("multiplayer result panel renders both players' settlement breakdown rows", () => {
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const articleRule = cssRule(cssSource, ".multiplayer-game-result-grid article");
+
+  assert.match(shellSource, /renderResultBreakdown/);
+  assert.match(shellSource, /multiplayer-game-result-breakdown/);
+  assert.match(shellSource, /result\.breakdown\.formulaRows/);
+  assert.match(shellSource, /result\.breakdown\.final/);
+  assert.match(cssSource, /\.multiplayer-game-result-breakdown/);
+  assert.match(cssSource, /\.multiplayer-game-result-final/);
+  assert.match(cssSource, /\.multiplayer-game-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(cssSource, /\.multiplayer-game-result-grid\.co-op\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
+  assert.doesNotMatch(articleRule, /grid-template-columns:/);
+  assert.match(articleRule, /align-content:\s*start;/);
 });
 
 test("co-op players keep local simulation active instead of rendering host authoritative playback", () => {

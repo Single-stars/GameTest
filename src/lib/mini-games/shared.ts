@@ -1,4 +1,4 @@
-export type MiniGameId = "doodle" | "flappy" | "knife" | "square-jump" | "fall-down";
+export type MiniGameId = "doodle" | "flappy" | "aim" | "knife" | "square-jump" | "fall-down";
 export type MiniGameLevelKind = "advanced" | "base";
 export type MiniGameDifficulty = "基础" | "简单" | "普通" | "困难" | "最终";
 export type MiniGameParams = Record<string, number | string | boolean | null>;

@@ -271,9 +271,9 @@ test("rank score lowers the reaction axis base weight", () => {
 
 test("solid base reaction timings can still display a full score", () => {
   const scores = calculateScores([
-    trial("reaction", 0, { shownAt: 0, responseAt: 228 }),
-    trial("reaction", 1, { shownAt: 1000, responseAt: 1236 }),
-    trial("reaction", 2, { shownAt: 2000, responseAt: 2232 }),
+    trial("reaction", 0, { shownAt: 0, responseAt: 300 }),
+    trial("reaction", 1, { shownAt: 1000, responseAt: 1300 }),
+    trial("reaction", 2, { shownAt: 2000, responseAt: 2300 }),
   ]);
 
   assert.equal(scores.reaction, 100);

@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   advanceFallDownCamera,
+  constrainFallDownRecoveryRuns,
   expireFallDownFragilePlatform,
   getMiniGame,
   getMiniGameLevel,
   getMiniGameLevels,
+  restoreFallDownFragilePlatformsForRespawn,
   resolveFallDownCameraBounds,
   type MiniGameId,
 } from "./index.ts";
@@ -332,15 +334,44 @@ test("fall down platform layout varies by run seed", () => {
   assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, logicStageSize\)/);
 });
 
-test("fall down adds falling hazards and L platforms without more than three consecutive danger layers", () => {
+test("fall down restores fragile platforms when respawning", () => {
+  const platforms = [
+    { id: 1, kind: "fragile", steppedAt: 1.2, broken: true },
+    { id: 2, kind: "danger", steppedAt: 2.4, broken: false },
+    { id: 3, kind: "normal", steppedAt: null, broken: false },
+  ];
+
+  restoreFallDownFragilePlatformsForRespawn(platforms);
+
+  assert.deepEqual(platforms, [
+    { id: 1, kind: "fragile", steppedAt: null, broken: false },
+    { id: 2, kind: "danger", steppedAt: 2.4, broken: false },
+    { id: 3, kind: "normal", steppedAt: null, broken: false },
+  ]);
+});
+
+test("fall down final layouts avoid three consecutive unsafe recovery layers", () => {
+  const constrained = constrainFallDownRecoveryRuns(
+    ["danger", "danger", "danger", "fragile", "fragile", "normal", "moving"],
+    () => 0,
+  );
+
+  for (let index = 0; index <= constrained.length - 3; index += 1) {
+    const run = constrained.slice(index, index + 3);
+    assert.ok(run.some((kind) => kind !== "danger" && kind !== "fragile"), run.join(","));
+  }
+});
+
+test("fall down adds falling hazards and L platforms without more than two consecutive unsafe recovery layers", () => {
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("function fallDownPlatformKindBag"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(componentSource, /type FallDownPlatformShape = "flat" \| "l-left" \| "l-right"/);
   assert.match(componentSource, /type FallDownFallingHazard = \{/);
   assert.match(componentSource, /fallingHazards: FallDownFallingHazard\[\]/);
-  assert.match(componentSource, /function constrainFallDownDangerRuns\(kinds: FallDownPlatformKind\[\], rand: \(\) => number\)/);
-  assert.match(componentSource, /dangerRun > 3/);
+  assert.match(componentSource, /constrainFallDownRecoveryRuns\(kindBag, rand\)/);
+  assert.doesNotMatch(componentSource, /dangerRun > 3/);
+  assert.doesNotMatch(componentSource, /constrainFallDownDangerRuns/);
   assert.match(fallDownSource, /function makeFallDownFallingHazards\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\): FallDownFallingHazard\[\]/);
   assert.match(fallDownSource, /function fallDownFallingHazardScreenY\(hazard: FallDownFallingHazard, time: number, stageHeight: number\)/);
   assert.match(fallDownSource, /function fallDownFallingHazardX\(hazard: FallDownFallingHazard, time: number, stageWidth: number\)/);

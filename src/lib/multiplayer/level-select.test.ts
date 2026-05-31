@@ -5,6 +5,7 @@ import {
   DEFAULT_MULTIPLAYER_LEVEL_ID,
   MULTIPLAYER_LEVEL_GROUPS,
   createDefaultMultiplayerLevelSelectState,
+  formatMultiplayerLevelDisplay,
   getMultiplayerLevelSelectRightLimit,
   getMultiplayerLevelSelectRoomTone,
   getNextMultiplayerLevelSelectState,
@@ -15,19 +16,54 @@ import {
 } from "./level-select.ts";
 
 test("multiplayer level selection exposes every currently reusable versus runtime", () => {
-  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 5);
+  assert.equal(MULTIPLAYER_LEVEL_GROUPS.length, 6);
   assert.deepEqual(
     MULTIPLAYER_LEVEL_GROUPS.map((group) => group.gameId),
-    ["square-jump", "doodle", "fall-down", "flappy", "knife"],
+    ["square-jump", "doodle", "fall-down", "flappy", "aim", "knife"],
   );
   assert.equal(
     MULTIPLAYER_LEVEL_GROUPS.reduce((total, group) => total + group.levels.length, 0),
-    55,
+    66,
   );
   for (const group of MULTIPLAYER_LEVEL_GROUPS) {
     assert.equal(group.levels.filter((level) => level.kind === "advanced").length, 10);
     assert.equal(group.levels.filter((level) => level.kind === "base").length, 1);
+    assert.equal(group.levels[0].kind, "base");
   }
+});
+
+test("multiplayer level selection uses customer-facing names and base-to-advanced order", () => {
+  const groups = MULTIPLAYER_LEVEL_GROUPS.map((group) => [group.gameId, group.title, group.summary]);
+
+  assert.deepEqual(groups, [
+    ["square-jump", "跳一跳", "手感"],
+    ["doodle", "一路向上", "走位"],
+    ["fall-down", "一路向下", "专注"],
+    ["flappy", "一路向前", "协调"],
+    ["aim", "移动靶", "精准"],
+    ["knife", "丢飞刀", "时机"],
+  ]);
+
+  assert.equal(MULTIPLAYER_LEVEL_GROUPS[0].levels[0].levelId, "square-jump-base");
+  assert.deepEqual(MULTIPLAYER_LEVEL_GROUPS[0].levels.slice(1, 4).map((level) => level.levelId), [
+    "square-jump-moving-easy",
+    "square-jump-moving-normal",
+    "square-jump-moving-hard",
+  ]);
+  assert.deepEqual(formatMultiplayerLevelDisplay(resolveMultiplayerLevelSelection("fall-down-base")), {
+    primary: "基础关",
+    secondary: "基础 · 一路向下基础关",
+  });
+  assert.deepEqual(formatMultiplayerLevelDisplay(resolveMultiplayerLevelSelection("doodle-1")), {
+    primary: "移动平台",
+    secondary: "进阶1 · 移动平台",
+  });
+  const aimTrack2 = resolveMultiplayerLevelSelection("aim-4");
+  assert.equal(formatMultiplayerLevelDisplay(aimTrack2).primary, aimTrack2.title);
+  assert.deepEqual(formatMultiplayerLevelDisplay(resolveMultiplayerLevelSelection("fall-down-final")), {
+    primary: "最终试炼",
+    secondary: "进阶10 · 百层试炼",
+  });
 });
 
 test("multiplayer level selection resolves invalid ids to the default playable level", () => {
@@ -38,10 +74,13 @@ test("multiplayer level selection resolves invalid ids to the default playable l
 });
 
 test("multiplayer level selection resolves every currently exposed two-player runtime", () => {
+  const aim = resolveMultiplayerLevelSelection("aim-2");
   const knife = resolveMultiplayerLevelSelection("knife-7");
   const flappy = resolveMultiplayerLevelSelection("flappy-7");
   const squareJump = resolveMultiplayerLevelSelection("square-jump-final");
 
+  assert.equal(aim.gameId, "aim");
+  assert.equal(aim.levelId, "aim-2");
   assert.equal(knife.gameId, "knife");
   assert.equal(knife.levelId, "knife-7");
   assert.equal(flappy.gameId, "flappy");

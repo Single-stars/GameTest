@@ -582,7 +582,7 @@ export function calculateScores(trials: TrialEvent[]): ScoreSummary {
   const miniKnifeScore = miniGameScore(trials.filter((trial) => trial.roundId === "patience"), "knife");
 
   const reaction = clamp(
-    scoreFromLowerIsBetter(metrics.reactionMedianMs, 240, 620, 38) * 0.8 +
+    scoreFromLowerIsBetter(metrics.reactionMedianMs, 300, 620, 38) * 0.8 +
       scoreFromLowerIsBetter(metrics.reactionConsistencyMs, 24, 150, 45) * 0.2 -
       metrics.earlyReactions * 14,
   );

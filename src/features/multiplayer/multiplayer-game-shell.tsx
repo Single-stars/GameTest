@@ -29,15 +29,66 @@ function formatProgress(progress: number) {
 }
 
 function formatScore(state: SelfGameState | null, result: GameResult | null) {
-  if (result) return Math.round(result.score);
-  return Math.round(state?.score ?? 0);
+  if (result?.breakdown) return result.breakdown.winnerText;
+  if (result) return `${Math.round(result.score)}分`;
+  return `${Math.round(state?.score ?? 0)}分`;
+}
+
+function formatBreakdownNumber(value: number, unit: "ms" | "point" | "count" | "note") {
+  if (unit === "ms") return `${(value / 1000).toFixed(2)}s`;
+  if (unit === "point") return `${Math.round(value)}分`;
+  if (unit === "count") return `${Math.round(value)}次`;
+  return String(value);
+}
+
+function formatBreakdownValue(value: number | string, unit: "ms" | "point" | "count" | "note") {
+  if (typeof value === "number") return formatBreakdownNumber(value, unit);
+  return value;
+}
+
+function formatBreakdownAmount(amount: number | undefined, unit: "ms" | "point" | "count" | "note") {
+  if (typeof amount !== "number") return null;
+  const sign = amount > 0 ? "+" : "";
+  if (unit === "ms") return `${sign}${(amount / 1000).toFixed(2)}s`;
+  if (unit === "point") return `${sign}${Math.round(amount)}分`;
+  if (unit === "count") return `${sign}${Math.round(amount)}次`;
+  return `${sign}${amount}`;
 }
 
 function formatResult(result: GameResult | null) {
   if (!result) return "等待结果";
+  if (result.breakdown?.outcome === "forfeit") return "认输";
+  if (result.breakdown?.outcome === "opponent-forfeit") return "对方认输获胜";
+  if (result.breakdown?.outcome === "overtime-win") return `加赛获胜 / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
+  if (result.breakdown?.outcome === "overtime-loss") return `加赛判负 / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
+  if (result.breakdown) return `${result.passed ? "完成" : "判负"} / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
   const passText = result.passed ? "通关" : "失败";
   const timeText = typeof result.timeMs === "number" ? ` / ${(result.timeMs / 1000).toFixed(2)}s` : "";
   return `${passText} / ${Math.round(result.score)}分${timeText}`;
+}
+
+function renderResultBreakdown(result: GameResult | null) {
+  if (!result?.breakdown) return null;
+  const rows = result.breakdown.formulaRows ?? [...result.breakdown.base, ...result.breakdown.adjustments];
+  return (
+    <div className="multiplayer-game-result-breakdown">
+      {rows.map((item) => {
+        const amountText = formatBreakdownAmount(item.amount, item.unit);
+        const operation = "operation" in item ? item.operation : undefined;
+        return (
+          <div className="multiplayer-game-result-row" key={item.key}>
+            <span>{item.label}</span>
+            <strong>{formatBreakdownValue(item.value, item.unit)}</strong>
+            <small>{item.displayOnly ? "不加减" : amountText ?? (operation === "base" ? "基础" : "计入最终")}</small>
+          </div>
+        );
+      })}
+      <div className="multiplayer-game-result-final">
+        <span>{result.breakdown.final.label}</span>
+        <strong>{formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}</strong>
+      </div>
+    </div>
+  );
 }
 
 function ProgressMarker({
@@ -103,6 +154,7 @@ function RematchHint({
 export function MultiplayerGameShell({
   children,
   countdownSeconds,
+  countdownRules = [],
   coOpAssignmentText,
   opponentPlayer,
   opponentResult,
@@ -121,6 +173,7 @@ export function MultiplayerGameShell({
 }: {
   children?: ReactNode;
   countdownSeconds: number | null;
+  countdownRules?: string[];
   coOpAssignmentText?: string | null;
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
@@ -196,8 +249,18 @@ export function MultiplayerGameShell({
 
       {status === "countdown" && countdownSeconds !== null ? (
         <div className="multiplayer-game-countdown-panel" aria-live="polite">
-          <strong>{countdownSeconds}</strong>
-          {coOpMode && coOpAssignmentText ? <span>{coOpAssignmentText}</span> : null}
+          <div className="multiplayer-game-countdown-number">
+            <span>准备</span>
+            <strong>{countdownSeconds}</strong>
+          </div>
+          <div className="multiplayer-game-countdown-rules">
+            <span>{coOpMode ? "合作规则" : "本关规则"}</span>
+            <ul>
+              {(countdownRules.length > 0 ? countdownRules : coOpMode && coOpAssignmentText ? [coOpAssignmentText] : []).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
 
@@ -211,24 +274,27 @@ export function MultiplayerGameShell({
           />
           {coOpMode ? (
             <div className="multiplayer-game-result-grid co-op">
-              <p>
+              <article>
                 <span>合作</span>
                 <strong>{formatResult(sharedResult)}</strong>
-                <small>{formatScore(sharedState, sharedResult)}分</small>
-              </p>
+                <small>{formatScore(sharedState, sharedResult)}</small>
+                {renderResultBreakdown(sharedResult)}
+              </article>
             </div>
           ) : (
             <div className="multiplayer-game-result-grid">
-              <p>
+              <article>
                 <span>你</span>
                 <strong>{formatResult(selfResult)}</strong>
-                <small>{formatScore(selfState, selfResult)}分</small>
-              </p>
-              <p>
+                <small>{formatScore(selfState, selfResult)}</small>
+                {renderResultBreakdown(selfResult)}
+              </article>
+              <article>
                 <span>对方</span>
                 <strong>{formatResult(opponentResult)}</strong>
-                <small>{formatScore(opponentState, opponentResult)}分</small>
-              </p>
+                <small>{formatScore(opponentState, opponentResult)}</small>
+                {renderResultBreakdown(opponentResult)}
+              </article>
             </div>
           )}
           <div className="multiplayer-game-result-actions">

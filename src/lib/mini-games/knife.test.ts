@@ -15,6 +15,8 @@ import {
 } from "./index.ts";
 import {
   integrateSineSweep,
+  readAppCssSource,
+  readMiniGameRuntimeSource,
 } from "./test-utils.ts";
 
 test("knife levels encode countdown, sine rotation, forbidden zones, and final rules", () => {
@@ -160,4 +162,31 @@ test("knife shot outcome keeps the impact angle for success and failures", () =>
     }),
     { impactAngle: 100, kind: "forbidden" },
   );
+});
+
+test("knife collision threshold is tight enough to match visual overlap", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+
+  assert.match(runtimeSource, /const KNIFE_COLLISION_DEGREES = 6;/);
+  assert.equal(
+    resolveKnifeShotOutcome({
+      collisionDegrees: 6,
+      forbiddenZones: [],
+      impactAngle: 102,
+      initialAngles: [96],
+      insertedAngles: [],
+    }).kind,
+    "hit",
+  );
+});
+
+test("knife countdown renders a large background number below the wheel", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+
+  assert.match(runtimeSource, /className="knife-countdown-ghost"/);
+  assert.match(runtimeSource, /Math\.ceil\(Math\.max\(0, view\.timer \?\? 0\)\)/);
+  assert.match(cssSource, /\.knife-countdown-ghost/);
+  assert.match(cssSource, /font-size: clamp\(96px, 28vw, 172px\);/);
+  assert.match(cssSource, /top: 54%;/);
 });

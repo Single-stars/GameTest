@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { MULTIPLAYER_LEVEL_GROUPS } from "./level-select.ts";
 import { resolveMultiplayerWinnerText } from "./match-result.ts";
+import { buildForfeitResult, buildMultiplayerResultBreakdown } from "./result-breakdown.ts";
 import type { GameResult } from "./types.ts";
 
 function result(overrides: Partial<GameResult>): GameResult {
@@ -11,6 +13,12 @@ function result(overrides: Partial<GameResult>): GameResult {
     timeMs: 0,
     ...overrides,
   };
+}
+
+function levelFor(levelId: string) {
+  const level = MULTIPLAYER_LEVEL_GROUPS.flatMap((group) => group.levels).find((item) => item.levelId === levelId);
+  assert.ok(level, `missing level ${levelId}`);
+  return level;
 }
 
 test("multiplayer winner prioritizes finish before score", () => {
@@ -71,4 +79,53 @@ test("multiplayer winner falls back to score only when neither side finishes", (
     ),
     "平局",
   );
+});
+
+test("multiplayer winner uses settlement breakdown before legacy score and time", () => {
+  const self = result({
+    passed: true,
+    score: 100,
+    timeMs: 35_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("flappy-4"), {
+      elapsedMs: 35_000,
+      failures: 0,
+      passed: true,
+      progress: 1,
+      collected: 4,
+      collectibleCount: 4,
+    }),
+  });
+  const opponent = result({
+    passed: true,
+    score: 900,
+    timeMs: 30_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("flappy-4"), {
+      elapsedMs: 30_000,
+      failures: 0,
+      passed: true,
+      progress: 1,
+      collected: 0,
+      collectibleCount: 4,
+    }),
+  });
+
+  assert.equal(resolveMultiplayerWinnerText(self, opponent), "你赢了");
+  assert.equal(resolveMultiplayerWinnerText(opponent, self), "你输了");
+});
+
+test("multiplayer winner text explicitly names forfeits", () => {
+  const level = levelFor("fall-down-danger-easy");
+  const selfForfeit = buildForfeitResult(level, {
+    didForfeit: true,
+    matchId: "match-forfeit",
+    state: { elapsedMs: 12_000, progress: 0.44, score: 440, status: "playing" },
+  });
+  const opponentWins = buildForfeitResult(level, {
+    didForfeit: false,
+    matchId: "match-forfeit",
+    state: { elapsedMs: 12_000, progress: 0.39, score: 390, status: "playing" },
+  });
+
+  assert.equal(resolveMultiplayerWinnerText(selfForfeit, opponentWins), "你认输了");
+  assert.equal(resolveMultiplayerWinnerText(opponentWins, selfForfeit), "对方认输，你赢了");
 });

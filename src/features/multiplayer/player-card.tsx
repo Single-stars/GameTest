@@ -16,6 +16,12 @@ function formatState(state: SelfGameState | null) {
 
 function formatResult(result: GameResult | null) {
   if (!result) return "未结算";
+  if (result.breakdown) {
+    if (result.breakdown.outcome === "forfeit") return "认输";
+    if (result.breakdown.outcome === "opponent-forfeit") return "对方认输获胜";
+    const unit = result.breakdown.final.unit === "ms" ? `${(result.breakdown.final.value / 1000).toFixed(2)}s` : `${Math.round(result.breakdown.final.value)}分`;
+    return `${result.passed ? "完成" : "判负"} / ${result.breakdown.final.label} ${unit}`;
+  }
   const passText = result.passed ? "通关" : "失败";
   const timeText = result.timeMs ? ` / ${result.timeMs}ms` : "";
   return `${passText} / ${Math.round(result.score)}分${timeText}`;

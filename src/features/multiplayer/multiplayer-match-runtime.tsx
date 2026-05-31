@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { SimpleGameSync } from "@/features/game-sync/simple-game-sync";
 import { DoodleJumpPrototype, type DoodleRuntimeState } from "@/features/mini-games/doodle";
@@ -8,10 +8,13 @@ import { FallDownPrototype, type FallDownRuntimeState } from "@/features/mini-ga
 import { FlappyPrototype, type FlappyRuntimeState } from "@/features/mini-games/flappy";
 import { KnifeHitPrototype, type KnifeRuntimeState } from "@/features/mini-games/knife";
 import { SquareJumpPrototype, type SquareJumpStateSnapshot } from "@/features/mini-games/square-jump";
+import { AdvancedAimRound, type AdvancedAimRuntimeState } from "@/features/rounds/native/aim";
 import type { MiniGameCompletion } from "@/features/mini-games/common";
 import type { MiniGameLevelConfig } from "@/lib/mini-games";
+import type { AdvancedStageConfig } from "@/lib/advanced-challenges";
 import type { GameResult, PlayerInfo, SelfGameState, SessionRole } from "@/lib/multiplayer/types";
 import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
+import { buildMultiplayerResultBreakdown } from "@/lib/multiplayer/result-breakdown";
 import {
   MULTIPLAYER_INPUT_KEEPALIVE_MS,
   MULTIPLAYER_FAST_STATE_SYNC_MS,
@@ -49,6 +52,12 @@ function resolveKnifeScore(runtime: KnifeRuntimeState) {
   return Math.max(0, Math.round(progressScore - failurePenalty));
 }
 
+function resolveAimScore(runtime: AdvancedAimRuntimeState) {
+  const progressScore = runtime.progress * 1000;
+  const penalty = (runtime.aimMisses + runtime.aimFlyOuts + runtime.aimDecoyHits) * 24;
+  return Math.max(0, Math.round(progressScore - penalty));
+}
+
 function resolveSquareJumpScore(runtime: SquareJumpStateSnapshot) {
   const progressScore = runtime.progress * 1040;
   const failurePenalty = runtime.failures * 32;
@@ -71,6 +80,16 @@ function resolveCompletionScore(outcome: MiniGameCompletion) {
   return Math.max(0, Math.round(baseScore + timeBonus + progressScore + hitScore + jumpScore - failurePenalty));
 }
 
+function resolveResultScore(breakdown: NonNullable<GameResult["breakdown"]>) {
+  if (breakdown.final.unit === "point") return Math.round(breakdown.final.value);
+  return Math.max(0, Math.round(1_000_000 - breakdown.final.value));
+}
+
+function resolveResultTimeMs(breakdown: NonNullable<GameResult["breakdown"]>, fallbackElapsedMs: number) {
+  if (breakdown.final.unit === "ms") return Math.round(breakdown.final.value);
+  return Math.max(0, Math.round(fallbackElapsedMs));
+}
+
 function resolveRuntimeAnim(runtime: MultiplayerRuntimeState, status: SelfGameState["status"]) {
   if (status !== "playing") return status;
   if (runtime.phase) return runtime.phase;
@@ -87,6 +106,7 @@ function multiplayerStateSignature(state: SelfGameState) {
     state.charge ?? "",
     state.progress ?? 0,
     state.score ?? 0,
+    state.angle ?? "",
     state.x ?? "",
     state.y ?? "",
     state.cameraX ?? "",
@@ -98,6 +118,24 @@ function multiplayerStateSignature(state: SelfGameState) {
     state.failures ?? 0,
     state.gravity ?? "",
     state.turns ?? "",
+    state.knifeShotIndex ?? "",
+    state.knifeTimer ?? "",
+    state.knifeTimedOutThisShot ?? "",
+    state.knifeOvertime ?? "",
+    state.knifeWinnerRole ?? "",
+    state.knifeHostHits ?? "",
+    state.knifeGuestHits ?? "",
+    state.knifeHostTimeouts ?? "",
+    state.knifeGuestTimeouts ?? "",
+    state.knifeHostCollisions ?? "",
+    state.knifeGuestCollisions ?? "",
+    state.knifeHostDangerHits ?? "",
+    state.knifeGuestDangerHits ?? "",
+    state.aimHits ?? "",
+    state.aimMisses ?? "",
+    state.aimFlyOuts ?? "",
+    state.aimDecoyHits ?? "",
+    state.aimTargetCount ?? "",
   ].join(":");
 }
 
@@ -108,12 +146,30 @@ function multiplayerImmediateStateSignature(state: SelfGameState) {
     state.direction ?? "none",
     state.phase ?? "",
     state.score ?? 0,
+    state.angle ?? "",
     state.failures ?? 0,
     state.gravity ?? "",
     state.platformIndex ?? "",
     state.nextPlatformIndex ?? "",
     state.exitingPlatformIndex ?? "",
     state.turns ?? "",
+    state.knifeShotIndex ?? "",
+    state.knifeTimedOutThisShot ?? "",
+    state.knifeOvertime ?? "",
+    state.knifeWinnerRole ?? "",
+    state.knifeHostHits ?? "",
+    state.knifeGuestHits ?? "",
+    state.knifeHostTimeouts ?? "",
+    state.knifeGuestTimeouts ?? "",
+    state.knifeHostCollisions ?? "",
+    state.knifeGuestCollisions ?? "",
+    state.knifeHostDangerHits ?? "",
+    state.knifeGuestDangerHits ?? "",
+    state.aimHits ?? "",
+    state.aimMisses ?? "",
+    state.aimFlyOuts ?? "",
+    state.aimDecoyHits ?? "",
+    state.aimTargetCount ?? "",
   ].join(":");
 }
 
@@ -143,13 +199,39 @@ type MultiplayerRuntimeState = {
   cameraY: number;
   cameraScale?: number;
   charge?: number;
+  collected?: number;
+  collectibleCount?: number;
   direction: SelfGameState["direction"];
   elapsedMs: number;
   angle?: number;
+  aimDecoyHits?: number;
+  aimFlyOuts?: number;
+  aimHits?: number;
+  aimMisses?: number;
+  aimTargetCount?: number;
   exitingPlatformIndex?: number;
   exitingPlatformOffsetY?: number;
   failures: number;
   gravity?: SelfGameState["gravity"];
+  knifeCollisions?: number;
+  knifeDangerHits?: number;
+  knifeFailedAngles?: number[];
+  knifeGuestCollisions?: number;
+  knifeGuestDangerHits?: number;
+  knifeGuestHits?: number;
+  knifeGuestTimeouts?: number;
+  knifeHostCollisions?: number;
+  knifeHostDangerHits?: number;
+  knifeHostHits?: number;
+  knifeHostTimeouts?: number;
+  knifeHits?: number;
+  knifeInsertedAngles?: number[];
+  knifeOvertime?: boolean;
+  knifeShotIndex?: number;
+  knifeTimedOutThisShot?: boolean;
+  knifeTimer?: number;
+  knifeTimeouts?: number;
+  knifeWinnerRole?: "host" | "guest";
   nextPlatformIndex?: number;
   nextPlatformOffsetY?: number;
   phase?: string;
@@ -248,6 +330,35 @@ function resolveCoOpSharedCustomAvatar({
   return selected.skinId === "custom" ? selected.customAvatar : null;
 }
 
+function aimDifficulty(level: MiniGameLevelConfig): AdvancedStageConfig["difficulty"] {
+  if (level.difficulty === "简单") return "easy";
+  if (level.difficulty === "普通") return "medium";
+  if (level.difficulty === "困难") return "hard";
+  return level.difficulty === "最终" ? "boss" : "easy";
+}
+
+function aimVariantIndex(level: MiniGameLevelConfig): AdvancedStageConfig["variantIndex"] {
+  if (level.order === 10) return 10;
+  return (((level.order - 1) % 3) + 1) as 1 | 2 | 3;
+}
+
+function createAimAdvancedConfig(level: MiniGameLevelConfig): AdvancedStageConfig {
+  return {
+    dimension: "aim",
+    level: Math.max(1, Math.min(10, level.order)),
+    stageTitle: level.title,
+    variant: typeof level.params.aimVariant === "string" ? level.params.aimVariant : "aim-track",
+    variantIndex: aimVariantIndex(level),
+    difficulty: aimDifficulty(level),
+    passText: level.goalText,
+    params: {
+      ...level.params,
+      multiplayerPenaltyMode: true,
+      unlimitedArrows: true,
+    },
+  };
+}
+
 export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   level,
   matchStageSize,
@@ -287,6 +398,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     syncHz: number | null;
   } | null>(null);
   const coOpMode = playMode === "co-op";
+  const aimAdvancedConfig = useMemo(() => level.gameId === "aim" ? createAimAdvancedConfig(level) : null, [level]);
 
   const cleanupSync = useCallback(() => {
     syncRef.current?.stop();
@@ -379,11 +491,31 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         elapsedMs: runtime.elapsedMs,
         t: runtime.elapsedMs,
         angle: runtime.angle ?? 0,
+        aimDecoyHits: runtime.aimDecoyHits,
+        aimFlyOuts: runtime.aimFlyOuts,
+        aimHits: runtime.aimHits,
+        aimMisses: runtime.aimMisses,
+        aimTargetCount: runtime.aimTargetCount,
         anim: resolveRuntimeAnim(runtime, status),
         exitingPlatformIndex: runtime.exitingPlatformIndex,
         exitingPlatformOffsetY: runtime.exitingPlatformOffsetY,
         failures: runtime.failures,
         gravity: runtime.gravity,
+        knifeInsertedAngles: runtime.knifeInsertedAngles,
+        knifeFailedAngles: runtime.knifeFailedAngles,
+        knifeShotIndex: runtime.knifeShotIndex,
+        knifeTimer: runtime.knifeTimer,
+        knifeTimedOutThisShot: runtime.knifeTimedOutThisShot,
+        knifeOvertime: runtime.knifeOvertime,
+        knifeWinnerRole: runtime.knifeWinnerRole,
+        knifeHostHits: runtime.knifeHostHits,
+        knifeGuestHits: runtime.knifeGuestHits,
+        knifeHostTimeouts: runtime.knifeHostTimeouts,
+        knifeGuestTimeouts: runtime.knifeGuestTimeouts,
+        knifeHostCollisions: runtime.knifeHostCollisions,
+        knifeGuestCollisions: runtime.knifeGuestCollisions,
+        knifeHostDangerHits: runtime.knifeHostDangerHits,
+        knifeGuestDangerHits: runtime.knifeGuestDangerHits,
         nextPlatformIndex: runtime.nextPlatformIndex,
         nextPlatformOffsetY: runtime.nextPlatformOffsetY,
         phase: runtime.phase,
@@ -418,13 +550,32 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
       syncRef.current?.flush({ force: true });
       if (localResultSentRef.current) return;
       localResultSentRef.current = true;
-      reportResult({
-        score,
+      const breakdown = buildMultiplayerResultBreakdown(level, {
+        aimDecoyHits: runtime.aimDecoyHits,
+        aimFlyOuts: runtime.aimFlyOuts,
+        aimHits: runtime.aimHits,
+        aimMisses: runtime.aimMisses,
+        aimTargetCount: runtime.aimTargetCount,
+        collected: runtime.collected,
+        collectibleCount: runtime.collectibleCount,
+        elapsedMs: runtime.elapsedMs,
+        failures: runtime.failures,
+        knifeCollisions: runtime.knifeCollisions,
+        knifeDangerHits: runtime.knifeDangerHits,
+        knifeHits: runtime.knifeHits,
+        knifeOvertime: runtime.knifeOvertime,
+        knifeTimeouts: runtime.knifeTimeouts,
         passed: nextState.status === "finished",
-        timeMs: runtime.elapsedMs,
+        progress: runtime.progress,
+      });
+      reportResult({
+        breakdown,
+        passed: nextState.status === "finished",
+        score: resolveResultScore(breakdown),
+        timeMs: resolveResultTimeMs(breakdown, runtime.elapsedMs),
       });
     },
-    [coOpInputOnly, reportResult],
+    [coOpInputOnly, level, reportResult],
   );
 
   const handleRuntimeState = useCallback(
@@ -456,6 +607,13 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     [handleRuntimeState],
   );
 
+  const handleAimRuntimeState = useCallback(
+    (runtime: AdvancedAimRuntimeState) => {
+      handleRuntimeState(runtime, resolveAimScore);
+    },
+    [handleRuntimeState],
+  );
+
   const handleKnifeRuntimeState = useCallback(
     (runtime: KnifeRuntimeState) => {
       handleRuntimeState(runtime, resolveKnifeScore);
@@ -479,6 +637,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
           direction: "none",
           elapsedMs: outcome.elapsedMs,
           failures: numberStat(outcome.stats, "failures"),
+          knifeCollisions: numberStat(outcome.stats, "collisions"),
+          knifeDangerHits: numberStat(outcome.stats, "dangerHits"),
+          knifeHits: numberStat(outcome.stats, "hits"),
+          knifeTimeouts: numberStat(outcome.stats, "timeouts"),
           progress: outcome.status === "passed" ? 1 : Math.max(0, Math.min(1, numberStat(outcome.stats, "progressPercent") / 100)),
           status: outcome.status,
           x: 0,
@@ -491,7 +653,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   );
 
   useEffect(() => {
-    if (level.gameId !== "knife" && level.gameId !== "square-jump") return;
+    if (level.gameId !== "knife" && level.gameId !== "square-jump" && level.gameId !== "aim") return;
     publishRuntimeState(
       {
         cameraY: 0,
@@ -568,6 +730,13 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
       />
+    ) : level.gameId === "aim" && aimAdvancedConfig ? (
+      <AdvancedAimRound
+        advancedConfig={aimAdvancedConfig}
+        multiplayerPenaltyMode
+        onComplete={() => undefined}
+        onRuntimeState={handleAimRuntimeState}
+      />
     ) : level.gameId === "knife" ? (
       <KnifeHitPrototype
         level={level}
@@ -576,6 +745,8 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onComplete={handleCompletion}
         onRuntimeState={handleKnifeRuntimeState}
         onRestart={() => undefined}
+        multiplayerRole={selfRole}
+        remoteState={opponentState}
         runSeed={runSeed}
         unlimitedRespawn
       />

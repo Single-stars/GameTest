@@ -46,6 +46,7 @@ import {
   MULTIPLAYER_PLAY_MODES,
   areMultiplayerLevelSelectSlotsConfirmed,
   createDefaultMultiplayerLevelSelectState,
+  formatMultiplayerLevelDisplay,
   getNextMultiplayerGameId,
   isDefaultMultiplayerLevelSelectState,
   resolveMultiplayerLevelGroup,
@@ -54,6 +55,7 @@ import {
   type MultiplayerPlayMode,
 } from "@/lib/multiplayer/level-select";
 import { resolveMultiplayerWinnerText } from "@/lib/multiplayer/match-result";
+import { getMultiplayerLevelRules } from "@/lib/multiplayer/rules";
 import {
   buildInitialSnapshot,
   MultiplayerSession,
@@ -178,6 +180,10 @@ function copyRoomLinkWithFallback(text: string) {
   if (typeof document === "undefined" || !document.body) return false;
 
   const textArea = document.createElement("textarea");
+  const selection = window.getSelection();
+  const previousRanges = selection
+    ? Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+    : [];
   textArea.value = text;
   textArea.readOnly = true;
   textArea.style.position = "fixed";
@@ -194,6 +200,10 @@ function copyRoomLinkWithFallback(text: string) {
     return false;
   } finally {
     textArea.remove();
+    if (selection) {
+      selection.removeAllRanges();
+      for (const range of previousRanges) selection.addRange(range);
+    }
   }
 }
 
@@ -267,6 +277,7 @@ function MultiplayerPageContent() {
     () => resolveMultiplayerLevelSelection(snapshot.match?.levelId ?? hostSelectedLevelId),
     [hostSelectedLevelId, snapshot.match?.levelId],
   );
+  const battleLevelDisplay = useMemo(() => formatMultiplayerLevelDisplay(battleLevel), [battleLevel]);
   const activePlayMode = snapshot.match?.playMode ?? hostPlayMode;
   const activeLevelSelectState = snapshot.levelSelectState ?? levelSelectState;
   const levelSelectSlotsConfirmed = areMultiplayerLevelSelectSlotsConfirmed(activeLevelSelectState);
@@ -494,42 +505,44 @@ function MultiplayerPageContent() {
 
   const handleCopyLink = useCallback(async () => {
     if (!activeRoomLink) return;
+    const fallbackCopied = copyRoomLinkWithFallback(activeRoomLink);
     if (!(await ensureShareRoomIsLive())) return;
-    let copied = false;
+    if (fallbackCopied) {
+      setTransientCopyStatus("copied");
+      return;
+    }
 
+    let clipboardCopied = false;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(activeRoomLink);
-        copied = true;
+        clipboardCopied = true;
       }
     } catch {
-      copied = false;
+      clipboardCopied = false;
     }
-
-    if (!copied) {
-      copied = copyRoomLinkWithFallback(activeRoomLink);
-    }
-    setTransientCopyStatus(copied ? "copied" : "manual");
+    setTransientCopyStatus(clipboardCopied ? "copied" : "manual");
   }, [activeRoomLink, ensureShareRoomIsLive, setTransientCopyStatus]);
 
   const handleCopyRoomCode = useCallback(async () => {
     if (!snapshot.roomId) return;
+    const fallbackCopied = copyRoomLinkWithFallback(snapshot.roomId);
     if (!(await ensureShareRoomIsLive())) return;
-    let copied = false;
+    if (fallbackCopied) {
+      setTransientRoomCodeCopyStatus("copied");
+      return;
+    }
 
+    let clipboardCopied = false;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(snapshot.roomId);
-        copied = true;
+        clipboardCopied = true;
       }
     } catch {
-      copied = false;
+      clipboardCopied = false;
     }
-
-    if (!copied) {
-      copied = copyRoomLinkWithFallback(snapshot.roomId);
-    }
-    setTransientRoomCodeCopyStatus(copied ? "copied" : "manual");
+    setTransientRoomCodeCopyStatus(clipboardCopied ? "copied" : "manual");
   }, [ensureShareRoomIsLive, setTransientRoomCodeCopyStatus, snapshot.roomId]);
 
   const toggleReady = useCallback(() => {
@@ -541,7 +554,7 @@ function MultiplayerPageContent() {
     setHostSelectedGameId((currentGameId) => {
       const nextGameId = getNextMultiplayerGameId(currentGameId);
       const nextGroup = resolveMultiplayerLevelGroup(nextGameId);
-      setHostSelectedLevelId(nextGroup.levels.find((level) => level.kind === "advanced")?.levelId ?? nextGroup.levels[0].levelId);
+      setHostSelectedLevelId(nextGroup.levels[0].levelId);
       return nextGameId;
     });
   }, []);
@@ -1059,6 +1072,11 @@ function MultiplayerPageContent() {
     snapshot.countdown && snapshot.countdown.remainMs > 0
       ? Math.ceil(snapshot.countdown.remainMs / 1000)
       : null;
+  const multiplayerLevelRules = useMemo(() => getMultiplayerLevelRules(battleLevel), [battleLevel]);
+  const countdownRules = useMemo(
+    () => activePlayMode === "versus" ? multiplayerLevelRules.countdownLines : [],
+    [activePlayMode, multiplayerLevelRules],
+  );
   const coOpAssignmentText = useMemo(() => {
     if (activePlayMode !== "co-op" || !snapshot.match || !snapshot.role) return null;
     if (battleLevel.gameId === "square-jump") {
@@ -1090,6 +1108,7 @@ function MultiplayerPageContent() {
         {showGameShell ? (
           <MultiplayerGameShell
             countdownSeconds={countdownSeconds}
+            countdownRules={countdownRules}
             coOpAssignmentText={coOpAssignmentText}
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}
@@ -1291,6 +1310,7 @@ function MultiplayerPageContent() {
           {showGameShell ? (
             <MultiplayerGameShell
               countdownSeconds={countdownSeconds}
+              countdownRules={countdownRules}
               coOpAssignmentText={coOpAssignmentText}
               opponentPlayer={snapshot.opponentPlayer}
               opponentResult={snapshot.opponentResult}
@@ -1422,7 +1442,7 @@ function MultiplayerPageContent() {
           </button>
         </div>
         <p style={{ marginTop: 0, color: "#666" }}>
-          当前：{battleLevel.title} / {battleLevel.variant} / {activePlayMode === "co-op" ? "合作" : "对抗"}
+          当前：{battleLevelDisplay.primary} / {battleLevelDisplay.secondary} / {activePlayMode === "co-op" ? "合作" : "对抗"}
         </p>
 
         <ConnectionStatus status={snapshot.status} errorMessage={snapshot.errorMessage} />
@@ -1447,11 +1467,14 @@ function MultiplayerPageContent() {
                 disabled={levelPickerLocked}
                 onChange={(event) => handleLevelChange(event.currentTarget.value)}
               >
-                {hostSelectedLevelGroup.levels.map((level) => (
-                  <option key={level.levelId} value={level.levelId}>
-                    {level.code} {level.difficulty} / {level.variant}
-                  </option>
-                ))}
+                {hostSelectedLevelGroup.levels.map((level) => {
+                  const display = formatMultiplayerLevelDisplay(level);
+                  return (
+                    <option key={level.levelId} value={level.levelId}>
+                      {display.primary} / {display.secondary}
+                    </option>
+                  );
+                })}
               </select>
               <small>{battleLevel.goalText}</small>
             </label>
@@ -1539,6 +1562,7 @@ function MultiplayerPageContent() {
         {showGameShell ? (
           <MultiplayerGameShell
             countdownSeconds={countdownSeconds}
+            countdownRules={countdownRules}
             coOpAssignmentText={coOpAssignmentText}
             opponentPlayer={snapshot.opponentPlayer}
             opponentResult={snapshot.opponentResult}

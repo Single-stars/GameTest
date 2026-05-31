@@ -7,8 +7,8 @@ import {
   type MiniGameId,
 } from "./index.ts";
 
-export const GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife"];
-export const ALL_GAME_IDS: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump" as MiniGameId, "fall-down" as MiniGameId];
+export const GAME_IDS: MiniGameId[] = ["doodle", "flappy", "aim", "knife"];
+export const ALL_GAME_IDS: MiniGameId[] = ["doodle", "flappy", "aim", "knife", "square-jump" as MiniGameId, "fall-down" as MiniGameId];
 export const SQUARE_JUMP_LEVEL_IDS = [
   "square-jump-base",
   "square-jump-moving-easy",

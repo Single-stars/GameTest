@@ -21,7 +21,6 @@ import {
   createSignalingRoom,
   getSignalingIceServers,
   getSignalingRoomStatus,
-  isRoomStatusActiveForRole,
   isRoomCode,
   normalizeRoomCode,
   readStoredRoomToken,
@@ -241,6 +240,7 @@ export class RoomSignalTransport {
   private iceDiagnostics: IceDiagnostics = createIceDiagnostics();
   private destroyed = false;
   private connected = false;
+  private signalReady = false;
   private roomCode: string | null = null;
   private roleToken: string | null = null;
   private signalOpenTimer: number | null = null;
@@ -269,6 +269,7 @@ export class RoomSignalTransport {
   async start() {
     this.destroyed = false;
     this.connected = false;
+    this.signalReady = false;
     this.pendingRemoteCandidates = [];
     this.pendingSignalQueue = [];
     this.iceDiagnostics = createIceDiagnostics();
@@ -412,6 +413,10 @@ export class RoomSignalTransport {
         this.scheduleSignalReconnect();
         return;
       }
+      if (this.connected || this.signalReady) {
+        this.scheduleSignalReconnect();
+        return;
+      }
       this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
     };
   }
@@ -420,6 +425,7 @@ export class RoomSignalTransport {
     if (this.destroyed) return;
     switch (message.type) {
       case "ready":
+        this.signalReady = true;
         this.roomCode = normalizeRoomCode(message.roomCode);
         this.roleToken = message.token;
         writeStoredRoomToken(this.roomCode, message.role, message.token);
@@ -960,7 +966,7 @@ export class RoomSignalTransport {
     if (!this.roomCode || this.destroyed) return true;
     try {
       const status = await getSignalingRoomStatus(this.roomCode);
-      if (isRoomStatusActiveForRole(status, this.role)) return true;
+      if (status.exists) return true;
       this.handleRoomClosed(MULTIPLAYER_ROOM_EXPIRED_REASON);
       return false;
     } catch {
@@ -1025,11 +1031,11 @@ export class RoomSignalTransport {
     this.signalReconnectTimer = window.setTimeout(() => {
       this.signalReconnectTimer = null;
       void (async () => {
-        if (this.destroyed || !this.connected) return;
+        if (this.destroyed || (!this.connected && !this.signalReady)) return;
         try {
           await this.openSignalSocket({ reconnect: true });
         } catch {
-          if (this.destroyed || !this.connected) return;
+          if (this.destroyed || (!this.connected && !this.signalReady)) return;
           if (!(await this.verifyRoomStillExists())) return;
           this.scheduleSignalReconnect();
         }

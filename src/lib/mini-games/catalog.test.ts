@@ -25,6 +25,7 @@ test("mini-game catalog exposes all formal games", () => {
 
   assert.equal(getMiniGame("doodle").title, "Doodle Jump 型");
   assert.equal(getMiniGame("flappy").title, "Flappy Bird 型");
+  assert.equal(getMiniGame("aim").title, "移动靶");
   assert.equal(getMiniGame("knife").title, "Knife Hit 型");
   assert.equal(getMiniGame("square-jump" as MiniGameId).title, "方块跃迁");
   assert.equal(getMiniGame("fall-down" as MiniGameId).title, "一路向下");

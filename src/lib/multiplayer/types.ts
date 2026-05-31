@@ -124,6 +124,26 @@ export type NetStateMessage = {
   seq?: number;
   sentAt?: number;
   usedPlatformIds?: number[];
+  knifeInsertedAngles?: number[];
+  knifeFailedAngles?: number[];
+  knifeShotIndex?: number;
+  knifeTimer?: number;
+  knifeTimedOutThisShot?: boolean;
+  knifeOvertime?: boolean;
+  knifeWinnerRole?: "host" | "guest";
+  knifeHostHits?: number;
+  knifeGuestHits?: number;
+  knifeHostTimeouts?: number;
+  knifeGuestTimeouts?: number;
+  knifeHostCollisions?: number;
+  knifeGuestCollisions?: number;
+  knifeHostDangerHits?: number;
+  knifeGuestDangerHits?: number;
+  aimHits?: number;
+  aimMisses?: number;
+  aimFlyOuts?: number;
+  aimDecoyHits?: number;
+  aimTargetCount?: number;
 };
 
 export type { NetInputMessage } from "@/lib/multiplayer/protocol";
@@ -201,6 +221,7 @@ export type NetResultMessage = {
   score: number;
   passed: boolean;
   timeMs?: number;
+  breakdown?: GameResult["breakdown"];
 };
 
 export type NetByeMessage = {

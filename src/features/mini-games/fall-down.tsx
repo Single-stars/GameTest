@@ -37,9 +37,11 @@ import {
 } from "@/features/mini-games/common";
 import {
   advanceFallDownCamera,
+  constrainFallDownRecoveryRuns,
   createSeededRandom,
   expireFallDownFragilePlatform,
   resolveFallDownCameraBounds,
+  restoreFallDownFragilePlatformsForRespawn,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 import type { SelfGameState } from "@/features/game-sync/types";
@@ -183,26 +185,6 @@ function fallDownSmoothNoise(points: number[], position: number) {
   return points[leftIndex] * (1 - smooth) + points[rightIndex] * smooth;
 }
 
-function constrainFallDownDangerRuns(kinds: FallDownPlatformKind[], rand: () => number) {
-  let dangerRun = 0;
-  for (let index = 0; index < kinds.length; index += 1) {
-    dangerRun = kinds[index] === "danger" ? dangerRun + 1 : 0;
-    if (dangerRun > 3) {
-      const swapCandidates = kinds
-        .map((kind, candidateIndex) => ({ kind, candidateIndex }))
-        .filter((item) => item.candidateIndex > index && item.kind !== "danger");
-      const swap = swapCandidates[Math.floor(rand() * swapCandidates.length)];
-      if (swap) {
-        [kinds[index], kinds[swap.candidateIndex]] = [kinds[swap.candidateIndex], kinds[index]];
-      } else {
-        kinds[index] = "normal";
-      }
-      dangerRun = 0;
-    }
-  }
-  return kinds;
-}
-
 function fallDownPlatformKindBag(level: MiniGameLevelConfig, layersRequired: number, rand: () => number): FallDownPlatformKind[] {
   const slots = Math.max(0, layersRequired - 1);
   const kindBag: FallDownPlatformKind[] = [];
@@ -237,7 +219,7 @@ function fallDownPlatformKindBag(level: MiniGameLevelConfig, layersRequired: num
     [kindBag[index], kindBag[swapIndex]] = [kindBag[swapIndex], kindBag[index]];
   }
 
-  return constrainFallDownDangerRuns(kindBag, rand);
+  return constrainFallDownRecoveryRuns(kindBag, rand);
 }
 
 function makeFallDownLedgeBag(layersRequired: number, ledgeCount: number, rand: () => number) {
@@ -391,6 +373,7 @@ function recoverFallDownBaseFailure(
   }
   if (!unlimitedRespawn) onBaseReviveUsed?.();
 
+  restoreFallDownFragilePlatformsForRespawn(current.platforms);
   const respawnPlatform = resolveFallDownLastSafePlatform(current);
   current.currentPlatformId = respawnPlatform.id;
   current.lastSafePlatformId = respawnPlatform.id;

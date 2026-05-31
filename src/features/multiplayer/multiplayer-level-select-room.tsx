@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 import { PlayerAvatar, resolvePlayerAvatarSkin, type PlayerAvatarDirection, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import {
   areMultiplayerLevelSelectSlotsConfirmed,
+  formatMultiplayerLevelDisplay,
   getMultiplayerLevelSelectRightLimit,
   getMultiplayerLevelSelectRoomTone,
   getNextMultiplayerLevelSelectState,
@@ -65,8 +66,9 @@ function slotAriaLabel(slot: MultiplayerLevelSelectSlot) {
 function wallContent(slot: MultiplayerLevelSelectSlot, selection: MultiplayerLevelSelectState) {
   const level = resolveMultiplayerLevelSelection(selection.levelId);
   const group = resolveMultiplayerLevelGroup(selection.gameId);
+  const levelDisplay = formatMultiplayerLevelDisplay(level);
   if (slot === "type") return [group.title, group.summary];
-  if (slot === "level") return [`${level.code} ${level.difficulty}`, level.variant];
+  if (slot === "level") return [levelDisplay.primary, levelDisplay.secondary];
   return [
     selection.playMode === "versus" ? "对抗" : "合作",
     selection.playMode === "versus" ? "各自冲关，比速度和得分" : MULTIPLAYER_COOP_UNAVAILABLE_TEXT,

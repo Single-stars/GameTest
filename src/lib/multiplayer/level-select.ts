@@ -4,6 +4,7 @@ import {
   type MiniGameId,
   type MiniGameLevelConfig,
 } from "../mini-games/index.ts";
+import { MULTIPLAYER_VERSUS_RULE_TEXT } from "./rules.ts";
 
 export type MultiplayerPlayMode = "versus" | "co-op";
 export type MultiplayerLevelSelectSlot = "type" | "level" | "mode";
@@ -18,11 +19,23 @@ export type MultiplayerLevelGroup = {
   levels: MiniGameLevelConfig[];
 };
 
+export type MultiplayerLevelDisplay = {
+  primary: string;
+  secondary: string;
+};
+
 export const DEFAULT_MULTIPLAYER_LEVEL_ID = "square-jump-base";
 export const DEFAULT_MULTIPLAYER_PLAY_MODE: MultiplayerPlayMode = "versus";
 export const MULTIPLAYER_COOP_UNAVAILABLE_TEXT = "合作模式开发中";
-const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId[] = ["square-jump", "doodle", "fall-down", "flappy", "knife"];
-
+const MULTIPLAYER_ENABLED_GAME_IDS: MiniGameId[] = ["square-jump", "doodle", "fall-down", "flappy", "aim", "knife"];
+const MULTIPLAYER_LEVEL_GROUP_COPY: Record<MiniGameId, { title: string; summary: string }> = {
+  "square-jump": { title: "跳一跳", summary: "手感" },
+  doodle: { title: "一路向上", summary: "走位" },
+  "fall-down": { title: "一路向下", summary: "专注" },
+  flappy: { title: "一路向前", summary: "协调" },
+  aim: { title: "移动靶", summary: "精准" },
+  knife: { title: "丢飞刀", summary: "时机" },
+};
 export const MULTIPLAYER_PLAY_MODES: Array<{
   id: MultiplayerPlayMode;
   title: string;
@@ -31,7 +44,7 @@ export const MULTIPLAYER_PLAY_MODES: Array<{
   {
     id: "versus",
     title: "对抗",
-    ruleText: "同一关卡同一种子，先通关优先；都未通关时比得分。",
+    ruleText: MULTIPLAYER_VERSUS_RULE_TEXT,
   },
   {
     id: "co-op",
@@ -43,12 +56,16 @@ export const MULTIPLAYER_PLAY_MODES: Array<{
 export const MULTIPLAYER_LEVEL_GROUPS: MultiplayerLevelGroup[] = MULTIPLAYER_ENABLED_GAME_IDS.map((gameId) => {
   const game = MINI_GAME_DEFINITIONS.find((item) => item.id === gameId);
   if (!game) throw new Error(`Missing multiplayer mini-game ${gameId}`);
+  const copy = MULTIPLAYER_LEVEL_GROUP_COPY[game.id];
   return {
     gameId: game.id,
-    levels: game.levels,
-    shortTitle: game.shortTitle,
-    summary: game.summary,
-    title: game.title,
+    levels: [...game.levels].sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === "base" ? -1 : 1;
+      return left.order - right.order;
+    }),
+    shortTitle: copy.title,
+    summary: copy.summary,
+    title: copy.title,
   };
 });
 
@@ -116,7 +133,7 @@ export function isDefaultMultiplayerLevelSelectState(state: MultiplayerLevelSele
 
 function firstLevelIdForGame(gameId: MiniGameId) {
   const group = resolveMultiplayerLevelGroup(gameId);
-  return group.levels.find((level) => level.kind === "advanced")?.levelId ?? group.levels[0].levelId;
+  return group.levels[0].levelId;
 }
 
 function nextLevelId(current: MultiplayerLevelSelectState) {
@@ -229,6 +246,25 @@ export function resolveMultiplayerLevelSelection(levelId: string | null | undefi
 
   if (selected) return selected;
   return getMiniGameLevel("square-jump", DEFAULT_MULTIPLAYER_LEVEL_ID);
+}
+
+export function formatMultiplayerLevelDisplay(level: MiniGameLevelConfig): MultiplayerLevelDisplay {
+  if (level.kind === "base") {
+    return {
+      primary: "基础关",
+      secondary: `基础 · ${level.title}`,
+    };
+  }
+  if (level.order === 10) {
+    return {
+      primary: "最终试炼",
+      secondary: `进阶10 · ${level.title}`,
+    };
+  }
+  return {
+    primary: level.title,
+    secondary: `进阶${level.order} · ${level.variant}`,
+  };
 }
 
 export function resolveMultiplayerLevelGroup(gameId: MiniGameId | null | undefined) {

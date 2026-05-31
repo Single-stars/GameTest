@@ -38,9 +38,11 @@ import type {
 } from "@/lib/homeworld/homeworld-state";
 import {
   resolveMultiplayerPlayMode,
+  resolveMultiplayerLevelSelection,
   type MultiplayerLevelSelectPresence,
   type MultiplayerLevelSelectState,
 } from "@/lib/multiplayer/level-select";
+import { buildForfeitResult } from "@/lib/multiplayer/result-breakdown";
 
 const COUNTDOWN_TICK_MS = 100;
 const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;
@@ -334,6 +336,26 @@ export class MultiplayerSession {
         x: sequencedState.x,
         y: sequencedState.y,
         usedPlatformIds: sequencedState.usedPlatformIds,
+        knifeInsertedAngles: sequencedState.knifeInsertedAngles,
+        knifeFailedAngles: sequencedState.knifeFailedAngles,
+        knifeShotIndex: sequencedState.knifeShotIndex,
+        knifeTimer: sequencedState.knifeTimer,
+        knifeTimedOutThisShot: sequencedState.knifeTimedOutThisShot,
+        knifeOvertime: sequencedState.knifeOvertime,
+        knifeWinnerRole: sequencedState.knifeWinnerRole,
+        knifeHostHits: sequencedState.knifeHostHits,
+        knifeGuestHits: sequencedState.knifeGuestHits,
+        knifeHostTimeouts: sequencedState.knifeHostTimeouts,
+        knifeGuestTimeouts: sequencedState.knifeGuestTimeouts,
+        knifeHostCollisions: sequencedState.knifeHostCollisions,
+        knifeGuestCollisions: sequencedState.knifeGuestCollisions,
+        knifeHostDangerHits: sequencedState.knifeHostDangerHits,
+        knifeGuestDangerHits: sequencedState.knifeGuestDangerHits,
+        aimHits: sequencedState.aimHits,
+        aimMisses: sequencedState.aimMisses,
+        aimFlyOuts: sequencedState.aimFlyOuts,
+        aimDecoyHits: sequencedState.aimDecoyHits,
+        aimTargetCount: sequencedState.aimTargetCount,
       }),
     );
   }
@@ -601,6 +623,26 @@ export class MultiplayerSession {
             x: message.x,
             y: message.y,
             usedPlatformIds: message.usedPlatformIds,
+            knifeInsertedAngles: message.knifeInsertedAngles,
+            knifeFailedAngles: message.knifeFailedAngles,
+            knifeShotIndex: message.knifeShotIndex,
+            knifeTimer: message.knifeTimer,
+            knifeTimedOutThisShot: message.knifeTimedOutThisShot,
+            knifeOvertime: message.knifeOvertime,
+            knifeWinnerRole: message.knifeWinnerRole,
+            knifeHostHits: message.knifeHostHits,
+            knifeGuestHits: message.knifeGuestHits,
+            knifeHostTimeouts: message.knifeHostTimeouts,
+            knifeGuestTimeouts: message.knifeGuestTimeouts,
+            knifeHostCollisions: message.knifeHostCollisions,
+            knifeGuestCollisions: message.knifeGuestCollisions,
+            knifeHostDangerHits: message.knifeHostDangerHits,
+            knifeGuestDangerHits: message.knifeGuestDangerHits,
+            aimHits: message.aimHits,
+            aimMisses: message.aimMisses,
+            aimFlyOuts: message.aimFlyOuts,
+            aimDecoyHits: message.aimDecoyHits,
+            aimTargetCount: message.aimTargetCount,
           };
           this.opponentStateAcceptedPackets += 1;
           this.lastOpponentStateAcceptedAt = now();
@@ -616,6 +658,7 @@ export class MultiplayerSession {
             score: message.score,
             passed: message.passed,
             timeMs: message.timeMs,
+            breakdown: message.breakdown,
           };
           if (this.snapshot.match?.playMode === "co-op") {
             this.patchSnapshot({
@@ -736,22 +779,22 @@ export class MultiplayerSession {
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopSelfStateSnapshotTimer();
-    const selfPassed = source === "opponent";
+    const level = resolveMultiplayerLevelSelection(this.snapshot.match?.levelId);
     this.patchSnapshot({
       status: "finished",
       countdown: null,
       selfReady: false,
       opponentReady: false,
-      selfResult: {
+      selfResult: buildForfeitResult(level, {
+        didForfeit: source === "self",
         matchId,
-        passed: selfPassed,
-        score: selfPassed ? Math.round(this.snapshot.selfState?.score ?? 0) : 0,
-      },
-      opponentResult: {
+        state: this.snapshot.selfState,
+      }),
+      opponentResult: buildForfeitResult(level, {
+        didForfeit: source === "opponent",
         matchId,
-        passed: !selfPassed,
-        score: !selfPassed ? Math.round(this.snapshot.opponentState?.score ?? 0) : 0,
-      },
+        state: this.snapshot.opponentState,
+      }),
     });
   }
 

@@ -102,6 +102,8 @@ type FlappyViewFrame = {
 export type FlappyRuntimeState = {
   cameraX: number;
   cameraY: number;
+  collected: number;
+  collectibleCount: number;
   direction: PlayerAvatarDirection;
   elapsedMs: number;
   failures: number;
@@ -183,6 +185,7 @@ function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): Flapp
 function makeFlappyRuntimeState(
   frame: FlappyFrame,
   gateCount: number,
+  collectibleCount: number,
   playerX: number,
   direction: PlayerAvatarDirection,
   reverseDirection: boolean,
@@ -193,6 +196,8 @@ function makeFlappyRuntimeState(
   return {
     cameraX: signedDisplayProgress,
     cameraY: 0,
+    collected: frame.collected,
+    collectibleCount,
     direction,
     elapsedMs: Math.round(frame.time * 1000),
     failures: frame.failures,
@@ -240,6 +245,10 @@ function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: n
       stageWidth,
     }),
   };
+}
+
+function formatFlappyCollectibleMissReason(collected: number, collectibleCount: number) {
+  return `漏收集道具 ${collected}/${collectibleCount}`;
 }
 
 export function FlappyPrototype({
@@ -356,13 +365,14 @@ export function FlappyPrototype({
       makeFlappyRuntimeState(
         runtimeRef.current,
         gateCount,
+        collectibleCount,
         playerX,
         resolveFlappyDirection(reverseDirection),
         reverseDirection,
         speed,
       ),
     );
-  }, [gateCount, playerX, reverseDirection, speed]);
+  }, [collectibleCount, gateCount, playerX, reverseDirection, speed]);
 
   useEffect(() => {
     runtimeRef.current = initialRuntime;
@@ -569,12 +579,13 @@ export function FlappyPrototype({
       }
 
       if (status === "playing" && passed >= gateCount) {
-        if (collected >= collectibleCount) {
+        const collectibleMissSettleOnly = mode === "advanced" && Boolean(onRuntimeStateRef.current);
+        if (unlimitedRespawn || collectibleMissSettleOnly || collected >= collectibleCount) {
           status = "passed";
           reason = collectibleCount > 0 ? `通过终点，收集 ${collected}/${collectibleCount}` : `通过 ${passed}/${gateCount} 个门`;
         } else {
           status = "failed";
-          reason = `漏收集道具 ${collected}/${collectibleCount}`;
+          reason = formatFlappyCollectibleMissReason(collected, collectibleCount);
         }
         for (const gate of current.gates) gate.passed = true;
         eventChanged = true;

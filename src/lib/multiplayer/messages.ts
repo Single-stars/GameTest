@@ -55,12 +55,80 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(isNumber);
 }
 
+function isBreakdownUnit(value: unknown) {
+  return value === "ms" || value === "point" || value === "count" || value === "note";
+}
+
+function isBreakdownKind(value: unknown) {
+  return value === "finish-time" || value === "effective-time" || value === "score";
+}
+
+function isBreakdownOutcome(value: unknown) {
+  return (
+    value === "completed" ||
+    value === "failed" ||
+    value === "forfeit" ||
+    value === "opponent-forfeit" ||
+    value === "overtime-win" ||
+    value === "overtime-loss"
+  );
+}
+
+function isBreakdownOperation(value: unknown) {
+  return value === "base" || value === "add" || value === "subtract" || value === "note";
+}
+
+function isResultBreakdownEntry(value: unknown) {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.key) &&
+    isString(value.label) &&
+    isBreakdownUnit(value.unit) &&
+    (isNumber(value.value) || typeof value.value === "string") &&
+    (value.amount === undefined || isNumber(value.amount)) &&
+    (value.displayOnly === undefined || isBoolean(value.displayOnly))
+  );
+}
+
+function isResultBreakdownFormulaRow(value: unknown) {
+  return isResultBreakdownEntry(value) && isRecord(value) && isBreakdownOperation(value.operation);
+}
+
+function isResultBreakdown(value: unknown) {
+  if (!isRecord(value)) return false;
+  if (value.version !== 1) return false;
+  if (!isString(value.gameId) || !isString(value.levelId)) return false;
+  if (!isBreakdownKind(value.kind)) return false;
+  if (!isString(value.title) || !isString(value.winnerText)) return false;
+  if (value.outcome !== undefined && !isBreakdownOutcome(value.outcome)) return false;
+  if (value.forfeitBy !== undefined && value.forfeitBy !== "self" && value.forfeitBy !== "opponent") return false;
+  if (value.overtime !== undefined) {
+    if (!isRecord(value.overtime)) return false;
+    if (!isBoolean(value.overtime.entered)) return false;
+    if (value.overtime.rounds !== undefined && !isNumber(value.overtime.rounds)) return false;
+    if (value.overtime.resultText !== undefined && typeof value.overtime.resultText !== "string") return false;
+  }
+  if (!Array.isArray(value.base) || !value.base.every(isResultBreakdownEntry)) return false;
+  if (!Array.isArray(value.adjustments) || !value.adjustments.every(isResultBreakdownEntry)) return false;
+  if (value.formulaRows !== undefined && (!Array.isArray(value.formulaRows) || !value.formulaRows.every(isResultBreakdownFormulaRow))) return false;
+  if (!isRecord(value.final)) return false;
+  if (!isString(value.final.label)) return false;
+  if (value.final.unit !== "ms" && value.final.unit !== "point") return false;
+  if (!isBoolean(value.final.lowerIsBetter) || !isNumber(value.final.value)) return false;
+  if (value.tiebreakerText !== undefined && typeof value.tiebreakerText !== "string") return false;
+  return true;
+}
+
 function isDirection(value: unknown) {
   return value === "left" || value === "right" || value === "none";
 }
 
 function isGravity(value: unknown) {
   return value === "normal" || value === "light" || value === "heavy";
+}
+
+function isSessionRole(value: unknown) {
+  return value === "host" || value === "guest";
 }
 
 function isPlayerInfo(value: unknown): value is PlayerInfo {
@@ -142,6 +210,26 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (value.seq !== undefined && !isNumber(value.seq)) return false;
   if (value.sentAt !== undefined && !isNumber(value.sentAt)) return false;
   if (value.usedPlatformIds !== undefined && !isNumberArray(value.usedPlatformIds)) return false;
+  if (value.knifeInsertedAngles !== undefined && !isNumberArray(value.knifeInsertedAngles)) return false;
+  if (value.knifeFailedAngles !== undefined && !isNumberArray(value.knifeFailedAngles)) return false;
+  if (value.knifeShotIndex !== undefined && !isNumber(value.knifeShotIndex)) return false;
+  if (value.knifeTimer !== undefined && !isNumber(value.knifeTimer)) return false;
+  if (value.knifeTimedOutThisShot !== undefined && !isBoolean(value.knifeTimedOutThisShot)) return false;
+  if (value.knifeOvertime !== undefined && !isBoolean(value.knifeOvertime)) return false;
+  if (value.knifeWinnerRole !== undefined && !isSessionRole(value.knifeWinnerRole)) return false;
+  if (value.knifeHostHits !== undefined && !isNumber(value.knifeHostHits)) return false;
+  if (value.knifeGuestHits !== undefined && !isNumber(value.knifeGuestHits)) return false;
+  if (value.knifeHostTimeouts !== undefined && !isNumber(value.knifeHostTimeouts)) return false;
+  if (value.knifeGuestTimeouts !== undefined && !isNumber(value.knifeGuestTimeouts)) return false;
+  if (value.knifeHostCollisions !== undefined && !isNumber(value.knifeHostCollisions)) return false;
+  if (value.knifeGuestCollisions !== undefined && !isNumber(value.knifeGuestCollisions)) return false;
+  if (value.knifeHostDangerHits !== undefined && !isNumber(value.knifeHostDangerHits)) return false;
+  if (value.knifeGuestDangerHits !== undefined && !isNumber(value.knifeGuestDangerHits)) return false;
+  if (value.aimHits !== undefined && !isNumber(value.aimHits)) return false;
+  if (value.aimMisses !== undefined && !isNumber(value.aimMisses)) return false;
+  if (value.aimFlyOuts !== undefined && !isNumber(value.aimFlyOuts)) return false;
+  if (value.aimDecoyHits !== undefined && !isNumber(value.aimDecoyHits)) return false;
+  if (value.aimTargetCount !== undefined && !isNumber(value.aimTargetCount)) return false;
   return value.status === "playing" || value.status === "failed" || value.status === "finished";
 }
 
@@ -167,7 +255,8 @@ function isResultMessage(value: unknown): value is NetResultMessage {
     isString(value.matchId) &&
     isNumber(value.score) &&
     isBoolean(value.passed) &&
-    (value.timeMs === undefined || isNumber(value.timeMs))
+    (value.timeMs === undefined || isNumber(value.timeMs)) &&
+    (value.breakdown === undefined || isResultBreakdown(value.breakdown))
   );
 }
 
@@ -318,6 +407,26 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind" | "t
     seq: data.seq,
     sentAt: data.sentAt,
     usedPlatformIds: data.usedPlatformIds,
+    knifeInsertedAngles: data.knifeInsertedAngles,
+    knifeFailedAngles: data.knifeFailedAngles,
+    knifeShotIndex: data.knifeShotIndex,
+    knifeTimer: data.knifeTimer,
+    knifeTimedOutThisShot: data.knifeTimedOutThisShot,
+    knifeOvertime: data.knifeOvertime,
+    knifeWinnerRole: data.knifeWinnerRole,
+    knifeHostHits: data.knifeHostHits,
+    knifeGuestHits: data.knifeGuestHits,
+    knifeHostTimeouts: data.knifeHostTimeouts,
+    knifeGuestTimeouts: data.knifeGuestTimeouts,
+    knifeHostCollisions: data.knifeHostCollisions,
+    knifeGuestCollisions: data.knifeGuestCollisions,
+    knifeHostDangerHits: data.knifeHostDangerHits,
+    knifeGuestDangerHits: data.knifeGuestDangerHits,
+    aimHits: data.aimHits,
+    aimMisses: data.aimMisses,
+    aimFlyOuts: data.aimFlyOuts,
+    aimDecoyHits: data.aimDecoyHits,
+    aimTargetCount: data.aimTargetCount,
   };
 }
 
@@ -344,6 +453,7 @@ export function createResultMessage(data: Omit<NetResultMessage, "v" | "kind">):
     score: data.score,
     passed: data.passed,
     timeMs: data.timeMs,
+    breakdown: data.breakdown,
   };
 }
 
