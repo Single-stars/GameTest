@@ -135,52 +135,13 @@ function buildKnifeBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResul
   const rules = getMultiplayerLevelRules(level);
   const knifeHits = wholeCount(stats.knifeHits);
   const knifeTimeouts = wholeCount(stats.knifeTimeouts);
-  const knifeCollisions = wholeCount(stats.knifeCollisions);
-  const knifeDangerHits = wholeCount(stats.knifeDangerHits);
-  const baseScore: GameResultBreakdownEntry = {
-    key: "base-score",
-    label: "基础分",
-    unit: "point",
-    value: 0,
-    amount: 0,
-  };
   const adjustments = compactEntries([
     countedAdjustmentEntry(level, "knife-hit-score", knifeHits),
     countedAdjustmentEntry(level, "knife-timeout-penalty", knifeTimeouts),
-    countedAdjustmentEntry(level, "knife-collision-penalty", knifeCollisions),
-    countedAdjustmentEntry(level, "knife-danger-penalty", knifeDangerHits),
   ]);
   const finalScore = adjustments.reduce((total, item) => total + finiteNumber(item.amount), 0);
-  const overtimeEntered = stats.knifeOvertime === true;
-  const outcome: GameResultOutcome = overtimeEntered ? (stats.passed ? "overtime-win" : "overtime-loss") : stats.passed ? "completed" : "failed";
-  const formulaRows = [
-    formulaRow(baseScore, "base"),
-    ...adjustmentRows(adjustments),
-    ...(overtimeEntered
-      ? [
-          formulaRow(
-            {
-              key: "knife-overtime-entered",
-              label: "加赛",
-              unit: "note",
-              value: "主局平分进入加赛",
-              displayOnly: true,
-            },
-            "note",
-          ),
-          formulaRow(
-            {
-              key: "knife-overtime-result",
-              label: "加赛结果",
-              unit: "note",
-              value: stats.passed ? "对方先失误" : "加赛先失误",
-              displayOnly: true,
-            },
-            "note",
-          ),
-        ]
-      : []),
-  ];
+  const outcome: GameResultOutcome = stats.passed ? "completed" : "failed";
+  const formulaRows = adjustmentRows(adjustments);
 
   return {
     version: 1,
@@ -188,15 +149,9 @@ function buildKnifeBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResul
     levelId: level.levelId,
     kind: "score",
     title: rules.settlement.resultTitle,
-    winnerText: overtimeEntered ? "主局平分后，加赛先失误者输" : rules.settlement.winnerText,
+    winnerText: rules.settlement.winnerText,
     outcome,
-    overtime: overtimeEntered
-      ? {
-          entered: true,
-          resultText: stats.passed ? "对方先失误" : "加赛先失误",
-        }
-      : undefined,
-    base: [baseScore],
+    base: [],
     adjustments,
     formulaRows,
     final: {
@@ -343,6 +298,12 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
   if (selfResult.passed && !opponentResult.passed) return -1;
   if (!selfResult.passed && opponentResult.passed) return 1;
 
+  const scoreSettlement = selfResult.breakdown?.kind === "score" || opponentResult.breakdown?.kind === "score";
+  if (scoreSettlement) {
+    if (selfResult.score > opponentResult.score) return -1;
+    if (selfResult.score < opponentResult.score) return 1;
+  }
+
   if (selfResult.passed && opponentResult.passed) {
     const selfTime = selfResult.timeMs ?? Number.POSITIVE_INFINITY;
     const opponentTime = opponentResult.timeMs ?? Number.POSITIVE_INFINITY;
@@ -350,7 +311,9 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
     if (selfTime > opponentTime) return 1;
   }
 
-  if (selfResult.score > opponentResult.score) return -1;
-  if (selfResult.score < opponentResult.score) return 1;
+  if (!scoreSettlement) {
+    if (selfResult.score > opponentResult.score) return -1;
+    if (selfResult.score < opponentResult.score) return 1;
+  }
   return 0;
 }

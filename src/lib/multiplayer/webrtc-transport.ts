@@ -42,6 +42,7 @@ const SIGNAL_RECONNECT_DELAY_MS = 800;
 const SIGNAL_RECONNECT_MAX_DELAY_MS = 5_000;
 const SIGNAL_HEARTBEAT_INTERVAL_MS = 30_000;
 const ROOM_STATUS_WATCHDOG_INTERVAL_MS = 15_000;
+const ROOM_RECONNECT_GRACE_MS = 60_000;
 const ICE_RESTART_DELAY_MS = 1_200;
 const MAX_ICE_RESTART_ATTEMPTS = 3;
 const MAX_PENDING_SIGNAL_COUNT = 64;
@@ -59,6 +60,7 @@ export type RoomSignalTransportEvents = {
   onPeerOpen?: (roomCode: string) => void;
   onConnected?: (remotePeerId: string) => void;
   onPeerDisconnected?: (reason: string) => void;
+  onPeerJoining?: () => void;
   onMessage?: (message: NetMessage) => void;
   onRemoteClockOffset?: (offsetMs: number) => void;
   onFailed?: (message: string) => void;
@@ -218,6 +220,14 @@ function canApplyRemoteAnswer(peerConnection: RTCPeerConnection) {
   return peerConnection.signalingState === "have-local-offer";
 }
 
+function now() {
+  return Date.now();
+}
+
+function isPeerLeftReason(reason: string | undefined) {
+  return reason === "host-disbanded-room" || reason === "peer-left-room" || reason === "guest-signaling-left";
+}
+
 function readStatsString(record: Record<string, unknown>, key: string) {
   return typeof record[key] === "string" ? record[key] : null;
 }
@@ -259,6 +269,7 @@ export class RoomSignalTransport {
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private pendingSignalQueue: SignalPayload[] = [];
   private ignoreNextControlClose = false;
+  private roomMissingSince: number | null = null;
 
   constructor(options: RoomSignalTransportOptions) {
     this.role = options.role;
@@ -277,6 +288,7 @@ export class RoomSignalTransport {
     this.pendingRemoteCandidates = [];
     this.pendingSignalQueue = [];
     this.iceDiagnostics = createIceDiagnostics();
+    this.roomMissingSince = null;
     this.clearSignalReconnectTimer();
     this.signalReconnectAttempts = 0;
     await this.loadIceServers();
@@ -430,6 +442,7 @@ export class RoomSignalTransport {
     switch (message.type) {
       case "ready":
         this.signalReady = true;
+        this.roomMissingSince = null;
         this.roomCode = normalizeRoomCode(message.roomCode);
         this.roleToken = message.token;
         writeStoredRoomToken(this.roomCode, message.role, message.token);
@@ -441,11 +454,12 @@ export class RoomSignalTransport {
         break;
       case "peer-joined":
         if (this.role === "host") {
+          this.events.onPeerJoining?.();
           await this.createOffer({ resetPeer: true });
         }
         break;
       case "peer-left":
-        if (message.reason !== "host-disbanded-room" && message.reason !== "peer-left-room") return;
+        if (!isPeerLeftReason(message.reason)) return;
         this.ignoreNextControlClose = true;
         this.closePeerConnection();
         if (this.role === "host") {
@@ -976,7 +990,15 @@ export class RoomSignalTransport {
     if (!this.roomCode || this.destroyed) return true;
     try {
       const status = await getSignalingRoomStatus(this.roomCode);
-      if (status.exists) return true;
+      if (status.exists) {
+        this.roomMissingSince = null;
+        return true;
+      }
+      if (this.roomMissingSince === null) {
+        this.roomMissingSince = now();
+        return true;
+      }
+      if (now() - this.roomMissingSince < ROOM_RECONNECT_GRACE_MS) return true;
       this.handleRoomClosed(MULTIPLAYER_ROOM_EXPIRED_REASON);
       return false;
     } catch {

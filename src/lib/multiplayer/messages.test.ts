@@ -378,7 +378,7 @@ test("result and forfeit messages carry match identity", () => {
 test("result messages carry settlement breakdown details", () => {
   const message = createResultMessage({
     matchId: "match-breakdown",
-    score: 3,
+    score: 6,
     passed: true,
     timeMs: 40000,
     breakdown: {
@@ -388,16 +388,8 @@ test("result messages carry settlement breakdown details", () => {
       kind: "score",
       title: "主局总分",
       winnerText: "飞刀耗尽后分数更高者获胜",
-      outcome: "overtime-win",
-      base: [
-        {
-          key: "base-score",
-          label: "基础分",
-          unit: "point",
-          value: 0,
-          amount: 0,
-        },
-      ],
+      outcome: "completed",
+      base: [],
       adjustments: [
         {
           key: "knife-hit-score",
@@ -406,16 +398,15 @@ test("result messages carry settlement breakdown details", () => {
           value: 7,
           amount: 7,
         },
+        {
+          key: "knife-timeout-penalty",
+          label: "倒计时超时",
+          unit: "point",
+          value: 1,
+          amount: -1,
+        },
       ],
       formulaRows: [
-        {
-          key: "base-score",
-          label: "基础分",
-          unit: "point",
-          value: 0,
-          amount: 0,
-          operation: "base",
-        },
         {
           key: "knife-hit-score",
           label: "安全插中",
@@ -425,21 +416,20 @@ test("result messages carry settlement breakdown details", () => {
           operation: "add",
         },
         {
-          key: "knife-overtime-result",
-          label: "加赛结果",
-          unit: "note",
-          value: "对方先失误",
-          operation: "note",
-          displayOnly: true,
+          key: "knife-timeout-penalty",
+          label: "倒计时超时",
+          unit: "point",
+          value: 1,
+          amount: -1,
+          operation: "subtract",
         },
       ],
       final: {
         label: "主局总分",
         lowerIsBetter: false,
         unit: "point",
-        value: 3,
+        value: 6,
       },
-      tiebreakerText: "主局平分进入无倒计时加赛。",
     },
   });
 
@@ -449,10 +439,11 @@ test("result messages carry settlement breakdown details", () => {
   assert.equal(parsed.kind, "result");
   if (parsed.kind !== "result") return;
   assert.equal(parsed.breakdown?.kind, "score");
-  assert.equal(parsed.breakdown?.outcome, "overtime-win");
-  assert.equal(parsed.breakdown?.final.value, 3);
+  assert.equal(parsed.breakdown?.outcome, "completed");
+  assert.equal(parsed.breakdown?.final.value, 6);
+  assert.equal(parsed.breakdown?.base.length, 0);
   assert.equal(parsed.breakdown?.adjustments[0]?.amount, 7);
-  assert.equal(parsed.breakdown?.formulaRows?.at(-1)?.key, "knife-overtime-result");
+  assert.equal(parsed.breakdown?.formulaRows?.at(-1)?.key, "knife-timeout-penalty");
 });
 
 test("return-room messages carry match identity without leaving the P2P room", () => {

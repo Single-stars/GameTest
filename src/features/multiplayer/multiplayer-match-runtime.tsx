@@ -47,9 +47,7 @@ function resolveFlappyScore(runtime: FlappyRuntimeState) {
 }
 
 function resolveKnifeScore(runtime: KnifeRuntimeState) {
-  const progressScore = runtime.progress * 1030;
-  const failurePenalty = runtime.failures * 36;
-  return Math.max(0, Math.round(progressScore - failurePenalty));
+  return Math.round((runtime.knifeHits ?? 0) - (runtime.knifeTimeouts ?? 0));
 }
 
 function resolveAimScore(runtime: AdvancedAimRuntimeState) {
@@ -70,6 +68,9 @@ function numberStat(stats: MiniGameCompletion["stats"], key: string) {
 }
 
 function resolveCompletionScore(outcome: MiniGameCompletion) {
+  if (outcome.gameId === "knife") {
+    return Math.round(numberStat(outcome.stats, "hits") - numberStat(outcome.stats, "timeouts"));
+  }
   const elapsedMs = Math.max(0, outcome.elapsedMs);
   const failurePenalty = numberStat(outcome.stats, "failures") * 40;
   const progressScore = numberStat(outcome.stats, "progressPercent") * 8;
@@ -736,7 +737,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onRuntimeState={handleKnifeRuntimeState}
         onRestart={() => undefined}
         multiplayerRole={selfRole}
-        remoteState={opponentState}
+        remoteStateSubscription={opponentStateSubscription}
         runSeed={runSeed}
         unlimitedRespawn
       />

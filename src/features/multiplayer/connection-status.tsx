@@ -32,10 +32,13 @@ function statusLabel(status: MultiplayerStatus) {
 export function ConnectionStatus({
   status,
   errorMessage,
+  opponentJoining = false,
 }: {
   status: MultiplayerStatus;
   errorMessage: string | null;
+  opponentJoining?: boolean;
 }) {
+  const label = opponentJoining && (status === "waiting" || status === "connected") ? "好友加入中" : statusLabel(status);
   return (
     <div
       style={{
@@ -46,7 +49,7 @@ export function ConnectionStatus({
       }}
     >
       <strong>联机状态：</strong>
-      <span>{statusLabel(status)}</span>
+      <span>{label}</span>
       {errorMessage ? (
         <p style={{ margin: "8px 0 0", color: "#b42318" }}>{errorMessage}</p>
       ) : null}

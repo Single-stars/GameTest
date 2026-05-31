@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MULTIPLAYER_LEVEL_GROUPS } from "./level-select.ts";
@@ -70,7 +70,7 @@ test("doodle boost platform is a display-only route note, not score math", () =>
   assert.equal(boostNote.amount, undefined);
 });
 
-test("knife settlement calculates score from hit and mistake counters", () => {
+test("knife settlement calculates score from safe hits and countdown timeouts only", () => {
   const breakdown = buildMultiplayerResultBreakdown(levelFor("knife-7"), {
     elapsedMs: 40_000,
     failures: 4,
@@ -83,33 +83,27 @@ test("knife settlement calculates score from hit and mistake counters", () => {
   });
 
   assert.equal(breakdown.kind, "score");
-  assert.equal(breakdown.final.value, 3);
+  assert.equal(breakdown.final.value, 6);
   assert.equal(breakdown.final.unit, "point");
   assert.equal(breakdown.final.lowerIsBetter, false);
-  assert.equal(breakdown.base[0]?.key, "base-score");
-  assert.equal(breakdown.base[0]?.value, 0);
+  assert.equal(breakdown.base.length, 0);
   assert.deepEqual(
     breakdown.adjustments.map((item) => [item.key, item.value, item.amount]),
     [
       ["knife-hit-score", 7, 7],
       ["knife-timeout-penalty", 1, -1],
-      ["knife-collision-penalty", 1, -1],
-      ["knife-danger-penalty", 2, -2],
     ],
   );
   assert.deepEqual(
     breakdown.formulaRows?.map((item) => [item.key, item.value, item.amount, item.operation]),
     [
-      ["base-score", 0, 0, "base"],
       ["knife-hit-score", 7, 7, "add"],
       ["knife-timeout-penalty", 1, -1, "subtract"],
-      ["knife-collision-penalty", 1, -1, "subtract"],
-      ["knife-danger-penalty", 2, -2, "subtract"],
     ],
   );
 });
 
-test("knife overtime is shown as a separate settlement note without changing main score", () => {
+test("knife settlement ignores stale overtime and non-scoring mistake counters", () => {
   const breakdown = buildMultiplayerResultBreakdown(levelFor("knife-7"), {
     elapsedMs: 44_000,
     failures: 5,
@@ -122,11 +116,12 @@ test("knife overtime is shown as a separate settlement note without changing mai
     progress: 1,
   });
 
-  assert.equal(breakdown.final.value, 3);
-  assert.equal(breakdown.outcome, "overtime-loss");
-  assert.equal(breakdown.overtime?.entered, true);
-  assert.ok(breakdown.formulaRows?.some((item) => item.key === "knife-overtime-entered" && item.displayOnly === true));
-  assert.ok(breakdown.formulaRows?.some((item) => item.key === "knife-overtime-result" && item.value === "加赛先失误"));
+  assert.equal(breakdown.final.value, 4);
+  assert.equal(breakdown.outcome, "failed");
+  assert.equal(breakdown.overtime, undefined);
+  assert.equal(breakdown.formulaRows?.some((item) => item.key === "knife-overtime-entered"), false);
+  assert.equal(breakdown.formulaRows?.some((item) => item.key === "knife-collision-penalty"), false);
+  assert.equal(breakdown.formulaRows?.some((item) => item.key === "knife-danger-penalty"), false);
 });
 
 test("forfeit results keep both players' current data and mark who conceded", () => {
@@ -189,4 +184,34 @@ test("multiplayer result comparison keeps latest score and time authoritative", 
 
   assert.equal(compareMultiplayerResults(self, opponent), 1);
   assert.equal(compareMultiplayerResults(opponent, self), -1);
+});
+
+test("score settlement levels compare score before finish time", () => {
+  const self = {
+    passed: true,
+    score: 7,
+    timeMs: 35_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 35_000,
+      knifeHits: 7,
+      knifeTimeouts: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const opponent = {
+    passed: true,
+    score: 2,
+    timeMs: 20_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 20_000,
+      knifeHits: 4,
+      knifeTimeouts: 2,
+      passed: true,
+      progress: 1,
+    }),
+  };
+
+  assert.equal(compareMultiplayerResults(self, opponent), -1);
+  assert.equal(compareMultiplayerResults(opponent, self), 1);
 });

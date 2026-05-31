@@ -254,6 +254,7 @@ export type MultiplayerSnapshot = {
   roomId: string | null;
   selfPlayer: PlayerInfo | null;
   opponentPlayer: PlayerInfo | null;
+  opponentJoining: boolean;
   selfReady: boolean;
   opponentReady: boolean;
   match: MatchConfig | null;

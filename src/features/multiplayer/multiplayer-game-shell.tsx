@@ -29,16 +29,20 @@ function formatProgress(progress: number) {
 }
 
 function formatScore(state: SelfGameState | null, result: GameResult | null) {
-  if (result?.breakdown) return result.breakdown.winnerText;
   if (result) return `${Math.round(result.score)}分`;
   return `${Math.round(state?.score ?? 0)}分`;
 }
 
 function formatBreakdownNumber(value: number, unit: "ms" | "point" | "count" | "note") {
   if (unit === "ms") return `${(value / 1000).toFixed(2)}s`;
-  if (unit === "point") return `${Math.round(value)}分`;
+  if (unit === "point") return String(Math.round(value));
   if (unit === "count") return `${Math.round(value)}次`;
   return String(value);
+}
+
+function formatBreakdownFinalNumber(value: number, unit: "ms" | "point" | "count" | "note") {
+  if (unit === "point") return `${Math.round(value)}分`;
+  return formatBreakdownNumber(value, unit);
 }
 
 function formatBreakdownValue(value: number | string, unit: "ms" | "point" | "count" | "note") {
@@ -59,21 +63,30 @@ function formatResult(result: GameResult | null) {
   if (!result) return "等待结果";
   if (result.breakdown?.outcome === "forfeit") return "认输";
   if (result.breakdown?.outcome === "opponent-forfeit") return "对方认输获胜";
-  if (result.breakdown?.outcome === "overtime-win") return `加赛获胜 / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
-  if (result.breakdown?.outcome === "overtime-loss") return `加赛判负 / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
-  if (result.breakdown) return `${result.passed ? "完成" : "判负"} / ${result.breakdown.final.label} ${formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}`;
+  if (result.breakdown) return result.passed ? "完成" : "判负";
   const passText = result.passed ? "通关" : "失败";
   const timeText = typeof result.timeMs === "number" ? ` / ${(result.timeMs / 1000).toFixed(2)}s` : "";
   return `${passText} / ${Math.round(result.score)}分${timeText}`;
+}
+
+function shouldHideResultSummary(result: GameResult | null) {
+  if (!result?.breakdown) return false;
+  return result.breakdown.outcome !== "forfeit" && result.breakdown.outcome !== "opponent-forfeit";
+}
+
+function shouldHideResultScore(result: GameResult | null) {
+  return Boolean(result?.breakdown);
 }
 
 function renderResultBreakdown(result: GameResult | null) {
   if (!result?.breakdown) return null;
   if (result.breakdown.outcome === "forfeit" || result.breakdown.outcome === "opponent-forfeit") return null;
   const rows = result.breakdown.formulaRows ?? [...result.breakdown.base, ...result.breakdown.adjustments];
+  const scoringRows = rows.filter((item) => !item.displayOnly);
+  const noteRows = rows.filter((item) => item.displayOnly);
   return (
     <div className="multiplayer-game-result-breakdown">
-      {rows.map((item) => {
+      {[...scoringRows, ...noteRows].map((item) => {
         const amountText = formatBreakdownAmount(item.amount, item.unit);
         const operation = "operation" in item ? item.operation : undefined;
         return (
@@ -86,7 +99,7 @@ function renderResultBreakdown(result: GameResult | null) {
       })}
       <div className="multiplayer-game-result-final">
         <span>{result.breakdown.final.label}</span>
-        <strong>{formatBreakdownNumber(result.breakdown.final.value, result.breakdown.final.unit)}</strong>
+        <strong>{formatBreakdownFinalNumber(result.breakdown.final.value, result.breakdown.final.unit)}</strong>
       </div>
     </div>
   );
@@ -277,8 +290,8 @@ export function MultiplayerGameShell({
             <div className="multiplayer-game-result-grid co-op">
               <article>
                 <span>合作</span>
-                <strong>{formatResult(sharedResult)}</strong>
-                <small>{formatScore(sharedState, sharedResult)}</small>
+                {shouldHideResultSummary(sharedResult) ? null : <strong>{formatResult(sharedResult)}</strong>}
+                {!shouldHideResultScore(sharedResult) ? <small>{formatScore(sharedState, sharedResult)}</small> : null}
                 {renderResultBreakdown(sharedResult)}
               </article>
             </div>
@@ -286,14 +299,14 @@ export function MultiplayerGameShell({
             <div className="multiplayer-game-result-grid">
               <article>
                 <span>你</span>
-                <strong>{formatResult(selfResult)}</strong>
-                <small>{formatScore(selfState, selfResult)}</small>
+                {shouldHideResultSummary(selfResult) ? null : <strong>{formatResult(selfResult)}</strong>}
+                {!shouldHideResultScore(selfResult) ? <small>{formatScore(selfState, selfResult)}</small> : null}
                 {renderResultBreakdown(selfResult)}
               </article>
               <article>
                 <span>对方</span>
-                <strong>{formatResult(opponentResult)}</strong>
-                <small>{formatScore(opponentState, opponentResult)}</small>
+                {shouldHideResultSummary(opponentResult) ? null : <strong>{formatResult(opponentResult)}</strong>}
+                {!shouldHideResultScore(opponentResult) ? <small>{formatScore(opponentState, opponentResult)}</small> : null}
                 {renderResultBreakdown(opponentResult)}
               </article>
             </div>

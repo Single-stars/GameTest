@@ -78,6 +78,7 @@ export function buildInitialSnapshot(): MultiplayerSnapshot {
     roomId: null,
     selfPlayer: null,
     opponentPlayer: null,
+    opponentJoining: false,
     selfReady: false,
     opponentReady: false,
     match: null,
@@ -192,6 +193,7 @@ export class MultiplayerSession {
             match: null,
             countdown: null,
             selfState: null,
+            opponentJoining: false,
             opponentPlayer: null,
             opponentState: null,
             selfResult: null,
@@ -209,6 +211,9 @@ export class MultiplayerSession {
         onPeerDisconnected: (message) => {
           if (this.role !== "host") return;
           this.resetHostWaitingState(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
+        },
+        onPeerJoining: () => {
+          this.patchSnapshot({ opponentJoining: this.role === "host" });
         },
         onMessage: (message) => this.handleMessage(message),
         onRemoteClockOffset: (offsetMs) => {
@@ -500,6 +505,7 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      opponentJoining: false,
       homeworldState: null,
       selfHomeworldPresence: null,
       opponentHomeworldPresence: null,
@@ -530,6 +536,10 @@ export class MultiplayerSession {
     return this.snapshot.match?.matchId ?? null;
   }
 
+  private currentMatchIsKnife() {
+    return this.snapshot.match?.levelId.startsWith("knife") === true;
+  }
+
   private isCurrentMatchMessage(message: { matchId: string }) {
     return this.currentMatchId() === message.matchId;
   }
@@ -557,7 +567,7 @@ export class MultiplayerSession {
     this.notePeerMessage();
     switch (message.kind) {
       case "hello":
-        this.patchSnapshot({ opponentPlayer: message.player });
+        this.patchSnapshot({ opponentJoining: false, opponentPlayer: message.player });
         this.sendCurrentRoomSnapshots();
         break;
       case "heartbeat":
@@ -728,6 +738,7 @@ export class MultiplayerSession {
             countdown: null,
             selfState: null,
             opponentPlayer: null,
+            opponentJoining: false,
             opponentState: null,
             selfResult: null,
             opponentResult: null,
@@ -770,6 +781,7 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      opponentJoining: false,
     });
   }
 
@@ -828,6 +840,7 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      opponentJoining: false,
       homeworldState: currentHomeworldState,
       selfHomeworldPresence: currentHomeworldPresence,
       opponentHomeworldPresence: null,
@@ -958,6 +971,7 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      opponentJoining: false,
       homeworldState: this.role === "host" ? this.snapshot.homeworldState : null,
       opponentHomeworldPresence: null,
       selfLevelSelectPresence: null,
@@ -995,6 +1009,7 @@ export class MultiplayerSession {
       selfResult: null,
       opponentResult: null,
       opponentPlayer: null,
+      opponentJoining: false,
       homeworldState: null,
       selfHomeworldPresence: null,
       opponentHomeworldPresence: null,
@@ -1038,6 +1053,7 @@ export class MultiplayerSession {
   }
 
   private syncOpponentStateSnapshot(state: SelfGameState) {
+    if (this.currentMatchIsKnife() && state.status === "playing") return;
     const currentTime = now();
     const shouldForcePublish = state.status !== "playing";
     if (shouldForcePublish || currentTime - this.lastOpponentStateSnapshotAt >= OPPONENT_STATE_SNAPSHOT_SYNC_MS) {
@@ -1061,6 +1077,7 @@ export class MultiplayerSession {
   }
 
   private syncSelfStateSnapshot(state: SelfGameState) {
+    if (this.currentMatchIsKnife() && state.status === "playing") return;
     const currentTime = now();
     const shouldForcePublish = state.status !== "playing";
     if (shouldForcePublish || currentTime - this.lastSelfStateSnapshotAt >= SELF_STATE_SNAPSHOT_SYNC_MS) {

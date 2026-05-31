@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MULTIPLAYER_LEVEL_GROUPS, MULTIPLAYER_PLAY_MODES } from "./level-select.ts";
@@ -79,27 +79,17 @@ test("settlement adjustments describe final-score-only bonuses and penalties", (
   assert.deepEqual(adjustmentKeys("square-jump-double-easy"), ["revive-count"]);
 });
 
-test("knife rules use score settlement and contextual penalties", () => {
+test("knife rules use score settlement with only safe-hit and countdown scoring", () => {
   assert.equal(rulesFor("knife-1").settlement.kind, "score");
-  assert.deepEqual(rulesFor("knife-1").countdownLines, [
-    "安全插中 +1 分",
-    "超时扣分后再发射",
-    "撞刀扣 1 分",
-  ]);
-  assert.deepEqual(adjustmentKeys("knife-1"), ["knife-hit-score", "knife-timeout-penalty", "knife-collision-penalty"]);
-
-  assert.deepEqual(rulesFor("knife-7").countdownLines, [
-    "安全插中 +1 分",
-    "超时扣分后再发射",
-    "危险区扣 1 分",
-  ]);
-  assert.deepEqual(adjustmentKeys("knife-7"), ["knife-hit-score", "knife-timeout-penalty", "knife-collision-penalty", "knife-danger-penalty"]);
-
-  assert.deepEqual(rulesFor("knife-10").countdownLines, [
-    "安全插中 +1 分",
-    "超时 / 撞刀扣分",
-    "平分进入加赛",
-  ]);
+  assert.deepEqual(rulesFor("knife-1").settlement.baseMetrics, []);
+  assert.deepEqual(adjustmentKeys("knife-1"), ["knife-hit-score", "knife-timeout-penalty"]);
+  assert.deepEqual(adjustmentKeys("knife-7"), ["knife-hit-score", "knife-timeout-penalty"]);
+  assert.deepEqual(adjustmentKeys("knife-10"), ["knife-hit-score", "knife-timeout-penalty"]);
+  for (const levelId of ["knife-1", "knife-7", "knife-10"]) {
+    const rules = rulesFor(levelId);
+    assert.equal(rules.countdownLines.some((line) => line.includes("撞") || line.includes("危险") || line.includes("加赛")), false);
+    assert.equal(rules.settlement.tiebreakerText, undefined);
+  }
 });
 
 test("countdown exposes all visible rules at once instead of rotating one line per second", () => {

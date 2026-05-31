@@ -113,6 +113,36 @@ test("multiplayer winner uses latest result score and time instead of overriding
   assert.equal(resolveMultiplayerWinnerText(opponent, self), "你赢了");
 });
 
+test("multiplayer winner uses score first for knife score settlements", () => {
+  const self = result({
+    passed: true,
+    score: 7,
+    timeMs: 35_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 35_000,
+      knifeHits: 7,
+      knifeTimeouts: 0,
+      passed: true,
+      progress: 1,
+    }),
+  });
+  const opponent = result({
+    passed: true,
+    score: 2,
+    timeMs: 20_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 20_000,
+      knifeHits: 4,
+      knifeTimeouts: 2,
+      passed: true,
+      progress: 1,
+    }),
+  });
+
+  assert.equal(resolveMultiplayerWinnerText(self, opponent), "你赢了");
+  assert.equal(resolveMultiplayerWinnerText(opponent, self), "你输了");
+});
+
 test("multiplayer winner text explicitly names forfeits", () => {
   const level = levelFor("fall-down-danger-easy");
   const selfForfeit = buildForfeitResult(level, {

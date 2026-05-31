@@ -1123,9 +1123,11 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   const sessionSource = readSource("./multiplayer-session.ts");
 
   assert.match(transportSource, /onPeerDisconnected\?: \(reason: string\) => void;/);
+  assert.match(transportSource, /onPeerJoining\?: \(\) => void;/);
   assert.match(transportSource, /case "peer-left":/);
   assert.match(transportSource, /events\.onPeerDisconnected/);
-  assert.match(transportSource, /message\.reason !== "host-disbanded-room" && message\.reason !== "peer-left-room"/);
+  assert.match(transportSource, /isPeerLeftReason\(message\.reason\)/);
+  assert.match(transportSource, /function isPeerLeftReason\(reason: string \| undefined\)[\s\S]{0,180}reason === "guest-signaling-left"/);
   assert.match(transportSource, /ignoreNextControlClose/);
   assert.match(transportSource, /this\.ignoreNextControlClose = true;/);
   assert.match(transportSource, /if \(label === MULTIPLAYER_DATA_CHANNELS\.control && this\.ignoreNextControlClose\)/);
@@ -1136,12 +1138,31 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(workerSource, /metadata\.guestToken = null/);
   assert.doesNotMatch(workerSource, /room-full/);
   assert.match(workerSource, /"guest-signaling-left"/);
+  assert.match(sessionSource, /opponentJoining:\s*false/);
   assert.match(sessionSource, /onPeerDisconnected: \(message\) => \{/);
   assert.match(sessionSource, /status:\s*"waiting"/);
   assert.match(sessionSource, /opponentPlayer:\s*null/);
   assert.match(sessionSource, /opponentReady:\s*false/);
   assert.match(sessionSource, /opponentState:\s*null/);
   assert.match(sessionSource, /opponentResult:\s*null/);
+});
+
+test("host shows when a guest socket is joining before the direct connection opens", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const typesSource = readSource("./types.ts");
+  const connectionStatusSource = readSource("../../features/multiplayer/connection-status.tsx");
+
+  assert.match(typesSource, /opponentJoining:\s*boolean/);
+  assert.match(transportSource, /events\.onPeerJoining\?\.\(\)/);
+  assert.match(sessionSource, /onPeerJoining: \(\) => \{/);
+  assert.match(sessionSource, /opponentJoining:\s*this\.role === "host"/);
+  assert.match(sessionSource, /onConnected: \(\) => \{[\s\S]*opponentJoining:\s*false/);
+  assert.match(connectionStatusSource, /opponentJoining\?: boolean/);
+  assert.match(connectionStatusSource, /好友加入中/);
+  assert.match(pageSource, /opponentJoining=\{snapshot\.opponentJoining\}/);
+  assert.match(pageSource, /snapshot\.opponentJoining[\s\S]{0,120}好友加入中/);
 });
 
 test("host clears half-open guest slots with heartbeat stale detection so rooms can be rejoined", () => {
@@ -1185,7 +1206,7 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   assert.match(transportSource, /if \(this\.connected \|\| this\.signalReady\) \{[\s\S]{0,140}this\.scheduleSignalReconnect\(\);[\s\S]{0,40}return;/);
   assert.match(transportSource, /connectionState === "disconnected"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_DISCONNECTED_MESSAGE\);[\s\S]*return;/);
   assert.match(transportSource, /connectionState === "failed"[\s\S]*this\.scheduleIceRestart\(MULTIPLAYER_FAILED_MESSAGE\);/);
-  assert.match(transportSource, /case "peer-left":[\s\S]*if \(message\.reason !== "host-disbanded-room" && message\.reason !== "peer-left-room"\) return;/);
+  assert.match(transportSource, /case "peer-left":[\s\S]*if \(!isPeerLeftReason\(message\.reason\)\) return;/);
   assert.doesNotMatch(transportSource, /label !== MULTIPLAYER_DATA_CHANNELS\.control \|\| !this\.connected\) return;[\s\S]{0,220}this\.handleDisconnected/);
   assert.match(sessionSource, /private preserveRoomAfterConnectionIssue/);
   assert.doesNotMatch(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,500}status:\s*"disconnected"/);
@@ -1216,24 +1237,50 @@ test("multiplayer room watchdog treats transient role socket absence as reconnec
   const roomApiSource = readSource("./room-api.ts");
 
   assert.match(roomApiSource, /isRoomStatusActiveForRole/);
-  assert.match(transportSource, /if \(status\.exists\) return true;/);
+  assert.match(transportSource, /if \(status\.exists\) \{[\s\S]{0,80}this\.roomMissingSince = null;[\s\S]{0,80}return true;[\s\S]{0,20}\}/);
   assert.doesNotMatch(transportSource, /isRoomStatusActiveForRole\(status, this\.role\)/);
+});
+
+test("host room status checks keep a backgrounded room for a one minute grace window", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const transportSource = readSource("./webrtc-transport.ts");
+
+  assert.match(pageSource, /HOST_ROOM_STATUS_GRACE_MS = 60_000/);
+  assert.match(pageSource, /lastHostRoomInactiveAtRef/);
+  assert.match(pageSource, /status\.exists && status\.hostConnected === false/);
+  assert.match(pageSource, /Date\.now\(\) - lastHostRoomInactiveAtRef\.current < HOST_ROOM_STATUS_GRACE_MS/);
+  assert.match(transportSource, /ROOM_RECONNECT_GRACE_MS = 60_000/);
+  assert.match(transportSource, /roomMissingSince/);
+  assert.match(transportSource, /now\(\) - this\.roomMissingSince < ROOM_RECONNECT_GRACE_MS/);
 });
 
 test("standalone terminal disconnects return to the initial create or join room state", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
 
   assert.match(pageSource, /const suppressedAutoJoinRoomRef = useRef<string \| null>\(null\);/);
-  assert.match(pageSource, /const standaloneAutoJoinKey = `select:\$\{roomParam\}`;/);
+  assert.match(pageSource, /const standaloneAutoJoinKey = standaloneRoomAutoJoinKey\(roomParam\);/);
   assert.match(pageSource, /if \(suppressedAutoJoinRoomRef\.current === standaloneAutoJoinKey\) return;/);
   assert.match(pageSource, /const resetMultiplayerRoomToEntry = useCallback/);
   assert.match(pageSource, /const shouldResetStandalone = isStandaloneSelectRoute && \(snapshot\.role === "host" \|\| snapshot\.role === "guest"\);/);
   assert.match(pageSource, /snapshot\.status !== "disconnected" && snapshot\.status !== "failed"/);
-  assert.match(pageSource, /const suppressedRoom = isStandaloneSelectRoute && roomParam \? `select:\$\{roomParam\}` : roomParam \|\| null;/);
+  assert.match(pageSource, /const suppressedRoom = isStandaloneSelectRoute \? standaloneRoomAutoJoinKey\(roomParam\) : roomParam \|\| null;/);
   assert.match(pageSource, /suppressedAutoJoinRoomRef\.current = suppressedRoom;/);
   assert.match(pageSource, /autoJoinRoomRef\.current = suppressedRoom;/);
   assert.match(pageSource, /setSnapshot\(buildInitialSnapshot\(\)\);[\s\S]{0,120}router\.replace\(isHomeworldRoute \? "\/multiplayer" : "\/multiplayer\?select=1"\)/);
   assert.match(pageSource, /snapshot\.role === "guest" && snapshot\.status !== "disconnected" && snapshot\.status !== "failed"/);
+});
+
+test("guest standalone exits suppress the current room auto-join key", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(pageSource, /function standaloneRoomAutoJoinKey\(roomCode: string \| null \| undefined\)/);
+  assert.match(pageSource, /const suppressCurrentStandaloneRoomAutoJoin = useCallback/);
+  assert.match(pageSource, /const suppressedRoom = standaloneRoomAutoJoinKey\(roomParam\);/);
+  assert.match(pageSource, /suppressedAutoJoinRoomRef\.current = suppressedRoom;/);
+  assert.match(pageSource, /autoJoinRoomRef\.current = suppressedRoom;/);
+  assert.match(pageSource, /confirmStandaloneLevelSelectExit[\s\S]*suppressCurrentStandaloneRoomAutoJoin\(\);/);
+  assert.match(pageSource, /handleLeave[\s\S]*snapshot\.role === "guest"[\s\S]*suppressCurrentStandaloneRoomAutoJoin\(\);/);
+  assert.doesNotMatch(pageSource, /confirmStandaloneLevelSelectExit[\s\S]{0,520}autoJoinRoomRef\.current = null;/);
 });
 
 test("host peer failures keep signaling alive so the displayed room code remains joinable", () => {
@@ -1295,7 +1342,9 @@ test("multiplayer room lifecycle terminates expired rooms and resets every clien
   assert.match(transportSource, /case "room-closed":/);
   assert.match(transportSource, /handleRoomClosed/);
   assert.match(transportSource, /verifyRoomStillExists/);
-  assert.match(transportSource, /if \(status\.exists\) return true;/);
+  assert.match(transportSource, /if \(status\.exists\) \{[\s\S]{0,80}this\.roomMissingSince = null;[\s\S]{0,80}return true;[\s\S]{0,20}\}/);
+  assert.match(transportSource, /now\(\) - this\.roomMissingSince < ROOM_RECONNECT_GRACE_MS/);
+  assert.match(transportSource, /this\.handleRoomClosed\(MULTIPLAYER_ROOM_EXPIRED_REASON\)/);
   assert.match(sessionSource, /isTerminalRoomDisconnect/);
   assert.match(sessionSource, /terminateRoomSession/);
   assert.match(sessionSource, /onDisconnected: \(message\) => \{[\s\S]{0,180}isTerminalRoomDisconnect\(message\)/);
@@ -1324,6 +1373,17 @@ test("multiplayer aim allows rapid follow-up shots while previous arrows are sti
   assert.doesNotMatch(shootSource, /multiplayerPenaltyMode && arrowsRef\.current\.some/);
 }
 );
+
+test("multiplayer level select wall titles stay on one fitted line", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const wallRule = cssRule(cssSource, ".multiplayer-level-wall");
+  const titleRule = cssRule(cssSource, ".multiplayer-level-wall strong");
+
+  assert.match(wallRule, /container-type:\s*inline-size;/);
+  assert.match(titleRule, /white-space:\s*nowrap;/);
+  assert.match(titleRule, /font-size:\s*clamp\([^;]*cqw[^;]*\);/);
+  assert.doesNotMatch(titleRule, /overflow-wrap:\s*anywhere;/);
+});
 
 test("co-op countdown explains the player's split control assignment", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
@@ -1370,6 +1430,9 @@ test("multiplayer runtime keeps latest score and time while attaching rule break
   assert.doesNotMatch(runtimeSource, /resolveResultTimeMs/);
   assert.match(runtimeSource, /collected:\s*runtime\.collected/);
   assert.match(runtimeSource, /knifeHits:\s*runtime\.knifeHits/);
+  assert.match(runtimeSource, /function resolveKnifeScore/);
+  assert.match(runtimeSource, /runtime\.knifeHits/);
+  assert.match(runtimeSource, /runtime\.knifeTimeouts/);
 });
 
 test("knife versus uses shared turn state and turn-owner calculation", () => {
@@ -1377,20 +1440,24 @@ test("knife versus uses shared turn state and turn-owner calculation", () => {
   const knifeSource = readSource("../../features/mini-games/knife.tsx");
 
   assert.match(runtimeSource, /multiplayerRole=\{selfRole\}/);
-  assert.match(runtimeSource, /remoteState=\{opponentState\}/);
+  assert.match(runtimeSource, /remoteStateSubscription=\{opponentStateSubscription\}/);
+  assert.doesNotMatch(runtimeSource, /<KnifeHitPrototype[\s\S]{0,520}remoteState=\{opponentState\}/);
   assert.match(knifeSource, /multiplayerRole\?: "host" \| "guest";/);
   assert.match(knifeSource, /remoteState\?: SelfGameState \| null;/);
+  assert.match(knifeSource, /remoteStateSubscription\?: \(\(listener: \(state: SelfGameState\) => void\) => \(\(\) => void\)\) \| null;/);
   assert.match(knifeSource, /function resolveKnifeTurnOwner/);
   assert.match(knifeSource, /function applyKnifeRemoteState/);
   assert.match(knifeSource, /angle:\s*frame\.rotation/);
   assert.match(knifeSource, /frame\.rotation = normalizeDegrees\(remoteState\.angle\)/);
+  assert.match(knifeSource, /return remoteStateSubscription\(\(nextRemoteState\) => \{/);
   assert.match(runtimeSource, /state\.angle \?\? ""/);
   assert.match(knifeSource, /if \(multiplayerRole && !isKnifeLocalTurn/);
   assert.match(knifeSource, /current\.timer = null/);
   assert.match(knifeSource, /current\.timedOutThisShot = true/);
+  assert.doesNotMatch(knifeSource, /settleKnifeOvertimeMiss/);
 });
 
-test("multiplayer result panel renders both players' settlement breakdown rows", () => {
+test("multiplayer result panel renders compact ordered settlement breakdown rows", () => {
   const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
   const articleRule = cssRule(cssSource, ".multiplayer-game-result-grid article");
@@ -1399,7 +1466,16 @@ test("multiplayer result panel renders both players' settlement breakdown rows",
   assert.match(shellSource, /multiplayer-game-result-breakdown/);
   assert.match(shellSource, /result\.breakdown\.outcome === "forfeit" \|\| result\.breakdown\.outcome === "opponent-forfeit"/);
   assert.match(shellSource, /result\.breakdown\.formulaRows/);
+  assert.match(shellSource, /rows\.filter\(\(item\) => !item\.displayOnly\)/);
+  assert.match(shellSource, /rows\.filter\(\(item\) => item\.displayOnly\)/);
   assert.match(shellSource, /result\.breakdown\.final/);
+  assert.match(shellSource, /shouldHideResultSummary/);
+  assert.match(shellSource, /function shouldHideResultScore\(result: GameResult \| null\)/);
+  assert.match(shellSource, /return Boolean\(result\?\.breakdown\);/);
+  assert.match(shellSource, /!shouldHideResultScore\(selfResult\)[\s\S]{0,80}<small>\{formatScore\(selfState, selfResult\)\}<\/small>/);
+  assert.match(shellSource, /!shouldHideResultScore\(opponentResult\)[\s\S]{0,80}<small>\{formatScore\(opponentState, opponentResult\)\}<\/small>/);
+  assert.doesNotMatch(shellSource, /result\.breakdown\.winnerText/);
+  assert.doesNotMatch(shellSource, /\$\{result\.passed \? "瀹屾垚" : "鍒よ礋"\} \/ \$\{result\.breakdown\.final\.label\}/);
   assert.match(cssSource, /\.multiplayer-game-result-breakdown/);
   assert.match(cssSource, /\.multiplayer-game-result-final/);
   assert.match(cssSource, /\.multiplayer-game-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);

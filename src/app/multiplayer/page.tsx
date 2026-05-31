@@ -73,6 +73,7 @@ import type {
 const COUNTDOWN_MS = 3_000;
 const LEVEL_SELECT_START_COUNTDOWN_MS = 3_000;
 const LEVEL_SELECT_COUNTDOWN_TICK_MS = 100;
+const HOST_ROOM_STATUS_GRACE_MS = 60_000;
 const MATCH_LOGIC_HEIGHT = 640;
 type CopyStatus = "idle" | "copied" | "manual";
 type RoomShareCopyStatus = CopyStatus | "expired";
@@ -86,6 +87,10 @@ function createSeed() {
 
 function createPlayerId(role: SessionRole) {
   return `${role}-${createSeed().slice(0, 8)}`;
+}
+
+function standaloneRoomAutoJoinKey(roomCode: string | null | undefined) {
+  return roomCode ? `select:${roomCode}` : null;
 }
 
 function getBrowserStorage() {
@@ -245,6 +250,7 @@ function MultiplayerPageContent() {
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
   const autoJoinRoomRef = useRef<string | null>(null);
   const suppressedAutoJoinRoomRef = useRef<string | null>(null);
+  const lastHostRoomInactiveAtRef = useRef<number | null>(null);
   const autoCreateHomeworldHostRef = useRef(false);
   const wasInHomeworldMatchRef = useRef(false);
   const didExitLevelSelectToHomeworldRef = useRef(false);
@@ -333,6 +339,12 @@ function MultiplayerPageContent() {
     sessionRef.current = null;
   }, []);
 
+  const suppressCurrentStandaloneRoomAutoJoin = useCallback(() => {
+    const suppressedRoom = standaloneRoomAutoJoinKey(roomParam);
+    suppressedAutoJoinRoomRef.current = suppressedRoom;
+    autoJoinRoomRef.current = suppressedRoom;
+  }, [roomParam]);
+
   const resetMultiplayerRoomToEntry = useCallback(
     (options: { suppressRoomParam?: boolean } = {}) => {
       cleanupSession();
@@ -349,7 +361,7 @@ function MultiplayerPageContent() {
         setLevelSelectState,
       });
       if (options.suppressRoomParam) {
-        const suppressedRoom = isStandaloneSelectRoute && roomParam ? `select:${roomParam}` : roomParam || null;
+        const suppressedRoom = isStandaloneSelectRoute ? standaloneRoomAutoJoinKey(roomParam) : roomParam || null;
         suppressedAutoJoinRoomRef.current = suppressedRoom;
         autoJoinRoomRef.current = suppressedRoom;
       } else {
@@ -495,7 +507,14 @@ function MultiplayerPageContent() {
     if (snapshot.role !== "host" || !snapshot.roomId) return true;
     try {
       const status = await getSignalingRoomStatus(snapshot.roomId);
-      if (status.exists && status.hostConnected !== false) return true;
+      if (status.exists && status.hostConnected !== false) {
+        lastHostRoomInactiveAtRef.current = null;
+        return true;
+      }
+      if (status.exists && status.hostConnected === false) {
+        lastHostRoomInactiveAtRef.current ??= Date.now();
+        if (Date.now() - lastHostRoomInactiveAtRef.current < HOST_ROOM_STATUS_GRACE_MS) return true;
+      }
       await refreshExpiredHostRoom();
       return false;
     } catch {
@@ -569,8 +588,9 @@ function MultiplayerPageContent() {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
     sessionRef.current?.leave(leaveReason);
     cleanupSession();
+    if (snapshot.role === "guest") suppressCurrentStandaloneRoomAutoJoin();
     setSnapshot(buildInitialSnapshot());
-  }, [cleanupSession, snapshot.role]);
+  }, [cleanupSession, snapshot.role, suppressCurrentStandaloneRoomAutoJoin]);
 
   const handleReturnHome = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
@@ -649,6 +669,7 @@ function MultiplayerPageContent() {
       const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
       sessionRef.current?.leave(leaveReason);
       cleanupSession();
+      suppressCurrentStandaloneRoomAutoJoin();
       setSnapshot(buildInitialSnapshot());
       resetLocalLevelSelectSelection({
         setHostPlayMode,
@@ -657,10 +678,9 @@ function MultiplayerPageContent() {
         setLevelSelectState,
       });
       setLevelSelectStartCountdownEndsAt(null);
-      autoJoinRoomRef.current = null;
       router.replace("/multiplayer?select=1");
     });
-  }, [cleanupSession, router, snapshot.role, transitionInPage, transitionToRoute]);
+  }, [cleanupSession, router, snapshot.role, suppressCurrentStandaloneRoomAutoJoin, transitionInPage, transitionToRoute]);
 
   const requestStandaloneLevelSelectExit = useCallback(() => {
     if (!snapshot.role) {
@@ -809,7 +829,7 @@ function MultiplayerPageContent() {
       }
       return;
     }
-    const standaloneAutoJoinKey = `select:${roomParam}`;
+    const standaloneAutoJoinKey = standaloneRoomAutoJoinKey(roomParam);
     if (suppressedAutoJoinRoomRef.current === standaloneAutoJoinKey) return;
     if (autoJoinRoomRef.current === standaloneAutoJoinKey) return;
     autoJoinRoomRef.current = standaloneAutoJoinKey;
@@ -1445,7 +1465,8 @@ function MultiplayerPageContent() {
           当前：{battleLevelDisplay.primary} / {battleLevelDisplay.secondary} / {activePlayMode === "co-op" ? "合作" : "对抗"}
         </p>
 
-        <ConnectionStatus status={snapshot.status} errorMessage={snapshot.errorMessage} />
+        <ConnectionStatus status={snapshot.status} errorMessage={snapshot.errorMessage} opponentJoining={snapshot.opponentJoining} />
+        {snapshot.opponentJoining ? <p className="multiplayer-mode-hint">好友加入中</p> : null}
 
         {showHostLevelPicker ? (
           <section className="multiplayer-level-scene" aria-label="联机选关场景">

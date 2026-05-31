@@ -3,7 +3,6 @@ import type { MiniGameId, MiniGameLevelConfig } from "../mini-games/index.ts";
 export type MultiplayerSettlementKind = "finish-time" | "effective-time" | "score";
 
 export type MultiplayerSettlementBaseKey =
-  | "base-score"
   | "finish-time"
   | "effective-time"
   | "final-score"
@@ -116,22 +115,6 @@ const knifeTimeoutPenalty: MultiplayerSettlementMetric = {
   description: "倒计时超时扣 1 分，但仍需不限时发射当前飞刀。",
 };
 
-const knifeCollisionPenalty: MultiplayerSettlementMetric = {
-  key: "knife-collision-penalty",
-  label: "撞到旧刀",
-  unit: "point",
-  valuePerEvent: -1,
-  description: "撞到已有飞刀扣 1 分。",
-};
-
-const knifeDangerPenalty: MultiplayerSettlementMetric = {
-  key: "knife-danger-penalty",
-  label: "插中危险区",
-  unit: "point",
-  valuePerEvent: -1,
-  description: "插中危险区扣 1 分。",
-};
-
 function numberParam(level: MiniGameLevelConfig, key: string) {
   const value = level.params[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -163,10 +146,6 @@ function hasDangerPlatforms(level: MiniGameLevelConfig) {
 
 function hasFragilePlatforms(level: MiniGameLevelConfig) {
   return numberParam(level, "fragilePlatformCount") > 0;
-}
-
-function hasForbiddenZones(level: MiniGameLevelConfig) {
-  return numberParam(level, "forbiddenZoneCount") > 0;
 }
 
 function hasSineRotation(level: MiniGameLevelConfig) {
@@ -229,24 +208,14 @@ function flappySettlement(level: MiniGameLevelConfig): MultiplayerSettlementRule
 function knifeSettlement(level: MiniGameLevelConfig): MultiplayerSettlementRules {
   const adjustments = [knifeHitScore];
   if (hasCountdown(level)) adjustments.push(knifeTimeoutPenalty);
-  adjustments.push(knifeCollisionPenalty);
-  if (hasForbiddenZones(level)) adjustments.push(knifeDangerPenalty);
 
   return {
     kind: "score",
     primaryMetric: "final-score",
     resultTitle: "主局总分",
     winnerText: "飞刀耗尽后分数更高者获胜",
-    baseMetrics: [
-      {
-        key: "base-score",
-        label: "基础分",
-        unit: "point",
-        description: "飞刀主局从 0 分开始，安全插中加分，失误扣分。",
-      },
-    ],
+    baseMetrics: [],
     adjustments,
-    tiebreakerText: "主局平分进入无倒计时加赛，加赛先撞刀或插中危险区者输。",
   };
 }
 
@@ -311,25 +280,16 @@ function flappyCountdownLines(level: MiniGameLevelConfig) {
 }
 
 function knifeCountdownLines(level: MiniGameLevelConfig) {
-  if (hasCountdown(level) && hasForbiddenZones(level) && hasSineRotation(level)) {
-    return ["安全插中 +1 分", "超时 / 撞刀扣分", "平分进入加赛"];
-  }
-  if (hasCountdown(level) && hasForbiddenZones(level)) {
-    return ["安全插中 +1 分", "超时扣分后再发射", "危险区扣 1 分"];
-  }
   if (hasCountdown(level) && hasSineRotation(level)) {
-    return ["安全插中 +1 分", "转盘变速看时机", "超时 / 撞刀扣分"];
+    return ["安全插中 +1 分", "倒计时超时 -1 分", "转盘变速看时机"];
   }
   if (hasCountdown(level)) {
-    return ["安全插中 +1 分", "超时扣分后再发射", "撞刀扣 1 分"];
-  }
-  if (hasForbiddenZones(level)) {
-    return ["安全插中 +1 分", "撞刀扣 1 分", "危险区扣 1 分"];
+    return ["安全插中 +1 分", "倒计时超时 -1 分"];
   }
   if (hasSineRotation(level)) {
-    return ["安全插中 +1 分", "转盘变速看时机", "撞刀扣 1 分"];
+    return ["安全插中 +1 分", "转盘变速看时机"];
   }
-  return ["安全插中 +1 分", "撞刀扣 1 分"];
+  return ["安全插中 +1 分"];
 }
 
 function aimCountdownLines(level: MiniGameLevelConfig) {
