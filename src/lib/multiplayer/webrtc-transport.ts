@@ -19,6 +19,7 @@ import {
 import {
   buildRoomWebSocketUrl,
   createSignalingRoom,
+  getSignalingIceServers,
   getSignalingRoomStatus,
   isRoomStatusActiveForRole,
   isRoomCode,
@@ -37,13 +38,15 @@ export {
 } from "@/lib/multiplayer/protocol";
 
 const SIGNAL_OPEN_TIMEOUT_MS = 12_000;
-const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
+const DATA_CHANNEL_OPEN_TIMEOUT_MS = 25_000;
 const SIGNAL_RECONNECT_DELAY_MS = 800;
 const SIGNAL_RECONNECT_MAX_DELAY_MS = 5_000;
 const SIGNAL_HEARTBEAT_INTERVAL_MS = 30_000;
 const ROOM_STATUS_WATCHDOG_INTERVAL_MS = 15_000;
 const ICE_RESTART_DELAY_MS = 1_200;
 const MAX_ICE_RESTART_ATTEMPTS = 3;
+const MAX_PENDING_SIGNAL_COUNT = 64;
+const MAX_PENDING_REMOTE_CANDIDATE_COUNT = 96;
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.cloudflare.com:3478" },
   { urls: "stun:stun.l.google.com:19302" },
@@ -74,6 +77,37 @@ type SignalPayload =
   | { type: "answer"; description: RTCSessionDescriptionInit }
   | { type: "ice"; candidate: RTCIceCandidateInit }
   | { type: "restart-request" };
+
+type IceCandidateType = "host" | "srflx" | "relay" | "prflx" | "unknown";
+
+type IceCandidateTypeCounts = Record<IceCandidateType, number>;
+
+type SelectedCandidatePairDiagnostic = {
+  localType: IceCandidateType;
+  remoteType: IceCandidateType;
+  state: string | null;
+  protocol: string | null;
+};
+
+type IceDiagnostics = {
+  localCandidates: IceCandidateTypeCounts;
+  remoteCandidates: IceCandidateTypeCounts;
+  iceGatheringStates: RTCIceGatheringState[];
+  iceConnectionStates: RTCIceConnectionState[];
+  connectionStates: RTCPeerConnectionState[];
+  localSdpHasSrflx: Partial<Record<RTCSdpType, boolean>>;
+  remoteSdpHasSrflx: Partial<Record<RTCSdpType, boolean>>;
+  onIceCandidateCount: number;
+  lastOnIceCandidateAt: number | null;
+  addIceCandidateSuccess: number;
+  addIceCandidateFailure: number;
+  addIceCandidateErrors: string[];
+  pendingRemoteCandidateQueued: number;
+  pendingRemoteCandidateDropped: number;
+  pendingSignalQueued: number;
+  pendingSignalDropped: number;
+  selectedCandidatePair: SelectedCandidatePairDiagnostic | null;
+};
 
 type ServerMessage =
   | { type: "ready"; role: SignalingRole; roomCode: string; token: string; expiresAt: number }
@@ -136,6 +170,63 @@ function canSendReplaceableState(channel: RTCDataChannel | null) {
   return channelIsOpen(channel) && canSendRealtimeState(channel.bufferedAmount);
 }
 
+function createCandidateCounts(): IceCandidateTypeCounts {
+  return {
+    host: 0,
+    prflx: 0,
+    relay: 0,
+    srflx: 0,
+    unknown: 0,
+  };
+}
+
+function createIceDiagnostics(): IceDiagnostics {
+  return {
+    addIceCandidateErrors: [],
+    addIceCandidateFailure: 0,
+    addIceCandidateSuccess: 0,
+    connectionStates: [],
+    iceConnectionStates: [],
+    iceGatheringStates: [],
+    lastOnIceCandidateAt: null,
+    localCandidates: createCandidateCounts(),
+    localSdpHasSrflx: {},
+    onIceCandidateCount: 0,
+    pendingRemoteCandidateDropped: 0,
+    pendingRemoteCandidateQueued: 0,
+    pendingSignalDropped: 0,
+    pendingSignalQueued: 0,
+    remoteCandidates: createCandidateCounts(),
+    remoteSdpHasSrflx: {},
+    selectedCandidatePair: null,
+  };
+}
+
+function readCandidateString(candidate: RTCIceCandidateInit | RTCIceCandidate | null | undefined) {
+  return typeof candidate?.candidate === "string" ? candidate.candidate : "";
+}
+
+function readCandidateType(candidate: RTCIceCandidateInit | RTCIceCandidate | null | undefined): IceCandidateType {
+  const match = /\btyp\s+(host|srflx|relay|prflx)\b/i.exec(readCandidateString(candidate));
+  return (match?.[1]?.toLowerCase() as IceCandidateType | undefined) ?? "unknown";
+}
+
+function sdpHasServerReflexiveCandidate(description: RTCSessionDescriptionInit | RTCSessionDescription | null | undefined) {
+  return /\btyp srflx\b/i.test(typeof description?.sdp === "string" ? description.sdp : "");
+}
+
+function readStatsString(record: Record<string, unknown>, key: string) {
+  return typeof record[key] === "string" ? record[key] : null;
+}
+
+function readStatsCandidateType(report: RTCStats | undefined): IceCandidateType {
+  if (!report) return "unknown";
+  const record = report as unknown as Record<string, unknown>;
+  const candidateType = readStatsString(record, "candidateType");
+  if (candidateType === "host" || candidateType === "srflx" || candidateType === "relay" || candidateType === "prflx") return candidateType;
+  return "unknown";
+}
+
 export class RoomSignalTransport {
   private readonly role: SignalingRole;
   private readonly targetRoomId: string | null;
@@ -146,6 +237,8 @@ export class RoomSignalTransport {
   private inputChannel: RTCDataChannel | null = null;
   private stateChannel: RTCDataChannel | null = null;
   private readonly remoteClockSync = new RemoteClockSync();
+  private iceServers: RTCIceServer[] = ICE_SERVERS;
+  private iceDiagnostics: IceDiagnostics = createIceDiagnostics();
   private destroyed = false;
   private connected = false;
   private roomCode: string | null = null;
@@ -159,7 +252,8 @@ export class RoomSignalTransport {
   private timeSyncTimer: number | null = null;
   private iceRestartTimer: number | null = null;
   private iceRestartAttempts = 0;
-  private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
+  private pendingSignalQueue: SignalPayload[] = [];
   private ignoreNextControlClose = false;
 
   constructor(options: RoomSignalTransportOptions) {
@@ -175,9 +269,12 @@ export class RoomSignalTransport {
   async start() {
     this.destroyed = false;
     this.connected = false;
-    this.pendingIceCandidates = [];
+    this.pendingRemoteCandidates = [];
+    this.pendingSignalQueue = [];
+    this.iceDiagnostics = createIceDiagnostics();
     this.clearSignalReconnectTimer();
     this.signalReconnectAttempts = 0;
+    await this.loadIceServers();
 
     if (this.role === "host") {
       const room = await createSignalingRoom();
@@ -235,6 +332,26 @@ export class RoomSignalTransport {
     this.closePeerConnection();
   }
 
+  private async loadIceServers() {
+    try {
+      const response = await getSignalingIceServers();
+      this.iceServers = response.iceServers.length > 0 ? response.iceServers : ICE_SERVERS;
+      this.logIceDiagnostic("ice-servers-loaded", {
+        iceServerCount: this.iceServers.length,
+        iceTransportPolicy: response.iceTransportPolicy ?? "all",
+        relayEnabled: response.relayEnabled === true,
+        turnEnabled: response.turnEnabled === true,
+      });
+    } catch (error) {
+      this.iceServers = ICE_SERVERS;
+      this.logIceDiagnostic("ice-servers-fallback", {
+        error: error instanceof Error ? error.message : String(error),
+        iceServerCount: this.iceServers.length,
+        iceTransportPolicy: "all",
+      });
+    }
+  }
+
   private async openSignalSocket(options: { reconnect?: boolean } = {}) {
     if (!this.roomCode) throw new Error("missing-room-code");
     const reconnect = options.reconnect === true;
@@ -274,6 +391,7 @@ export class RoomSignalTransport {
     });
 
     if (reconnect) this.signalReconnectAttempts = 0;
+    this.flushPendingSignalQueue();
 
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return;
@@ -343,15 +461,31 @@ export class RoomSignalTransport {
   private preparePeerConnection() {
     if (this.peerConnection) return this.peerConnection;
 
-    const peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    this.iceDiagnostics = createIceDiagnostics();
+    const iceServers = this.iceServers;
+    const peerConnection = new RTCPeerConnection({ iceServers, iceTransportPolicy: "all" });
     this.peerConnection = peerConnection;
+    this.logIceDiagnostic("peer-connection-created", {
+      iceServerCount: iceServers.length,
+      iceTransportPolicy: "all",
+    });
 
     peerConnection.onicecandidate = (event) => {
+      this.recordLocalIceCandidate(event.candidate);
       if (!event.candidate) return;
       this.sendSignal({ type: "ice", candidate: event.candidate.toJSON() });
     };
 
+    peerConnection.onicegatheringstatechange = () => {
+      this.recordIceGatheringState(peerConnection.iceGatheringState);
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      this.recordIceConnectionState(peerConnection.iceConnectionState);
+    };
+
     peerConnection.onconnectionstatechange = () => {
+      this.recordConnectionState(peerConnection.connectionState);
       if (peerConnection.connectionState === "disconnected") {
         this.scheduleIceRestart(MULTIPLAYER_DISCONNECTED_MESSAGE);
         return;
@@ -362,6 +496,7 @@ export class RoomSignalTransport {
       if (peerConnection.connectionState === "connected") {
         this.clearIceRestartTimer();
         this.iceRestartAttempts = 0;
+        void this.recordSelectedCandidatePair();
       }
       if (peerConnection.connectionState === "closed") {
         this.connected = false;
@@ -424,6 +559,182 @@ export class RoomSignalTransport {
     };
   }
 
+  private logIceDiagnostic(event: string, details: Record<string, unknown> = {}) {
+    console.info("[multiplayer ice]", event, {
+      role: this.role,
+      roomCode: this.roomCode,
+      ...details,
+    });
+  }
+
+  private recordLocalIceCandidate(candidate: RTCIceCandidate | null) {
+    this.iceDiagnostics.onIceCandidateCount += 1;
+    this.iceDiagnostics.lastOnIceCandidateAt = performance.now();
+    if (!candidate) {
+      this.logIceDiagnostic("onicecandidate-complete", {
+        iceGatheringState: this.peerConnection?.iceGatheringState ?? null,
+        onIceCandidateCount: this.iceDiagnostics.onIceCandidateCount,
+      });
+      return;
+    }
+    const type = readCandidateType(candidate);
+    this.iceDiagnostics.localCandidates[type] += 1;
+    this.logIceDiagnostic("local-candidate", {
+      localCandidates: this.iceDiagnostics.localCandidates,
+      type,
+    });
+  }
+
+  private recordRemoteIceCandidate(candidate: RTCIceCandidateInit) {
+    const type = readCandidateType(candidate);
+    this.iceDiagnostics.remoteCandidates[type] += 1;
+    this.logIceDiagnostic("remote-candidate", {
+      remoteCandidates: this.iceDiagnostics.remoteCandidates,
+      type,
+    });
+  }
+
+  private recordIceGatheringState(state: RTCIceGatheringState) {
+    if (this.iceDiagnostics.iceGatheringStates.at(-1) === state) return;
+    this.iceDiagnostics.iceGatheringStates.push(state);
+    this.logIceDiagnostic("iceGatheringState", { iceGatheringState: state });
+  }
+
+  private recordIceConnectionState(state: RTCIceConnectionState) {
+    if (this.iceDiagnostics.iceConnectionStates.at(-1) === state) return;
+    this.iceDiagnostics.iceConnectionStates.push(state);
+    this.logIceDiagnostic("iceConnectionState", { iceConnectionState: state });
+  }
+
+  private recordConnectionState(state: RTCPeerConnectionState) {
+    if (this.iceDiagnostics.connectionStates.at(-1) === state) return;
+    this.iceDiagnostics.connectionStates.push(state);
+    this.logIceDiagnostic("connectionState", { connectionState: state });
+  }
+
+  private recordLocalDescription(description: RTCSessionDescriptionInit | RTCSessionDescription) {
+    this.iceDiagnostics.localSdpHasSrflx[description.type] = sdpHasServerReflexiveCandidate(description);
+    this.logIceDiagnostic("local-sdp", {
+      hasTypSrflx: this.iceDiagnostics.localSdpHasSrflx[description.type] === true,
+      type: description.type,
+    });
+  }
+
+  private recordRemoteDescription(description: RTCSessionDescriptionInit | RTCSessionDescription) {
+    this.iceDiagnostics.remoteSdpHasSrflx[description.type] = sdpHasServerReflexiveCandidate(description);
+    this.logIceDiagnostic("remote-sdp", {
+      hasTypSrflx: this.iceDiagnostics.remoteSdpHasSrflx[description.type] === true,
+      type: description.type,
+    });
+  }
+
+  private recordAddIceCandidateSuccess(candidate: RTCIceCandidateInit) {
+    this.iceDiagnostics.addIceCandidateSuccess += 1;
+    this.logIceDiagnostic("addIceCandidate-success", {
+      addIceCandidateSuccess: this.iceDiagnostics.addIceCandidateSuccess,
+      type: readCandidateType(candidate),
+    });
+  }
+
+  private recordAddIceCandidateFailure(candidate: RTCIceCandidateInit, error: unknown) {
+    this.iceDiagnostics.addIceCandidateFailure += 1;
+    this.iceDiagnostics.addIceCandidateErrors.push(error instanceof Error ? error.message : String(error));
+    this.logIceDiagnostic("addIceCandidate-failure", {
+      addIceCandidateFailure: this.iceDiagnostics.addIceCandidateFailure,
+      error: error instanceof Error ? error.message : String(error),
+      type: readCandidateType(candidate),
+    });
+  }
+
+  private async recordSelectedCandidatePair() {
+    const peerConnection = this.peerConnection;
+    if (!peerConnection) return;
+    try {
+      const stats = await peerConnection.getStats();
+      const reports = new Map<string, RTCStats>();
+      let selectedPair: RTCStats | null = null;
+      stats.forEach((report) => {
+        reports.set(report.id, report);
+        const record = report as unknown as Record<string, unknown>;
+        if (report.type === "transport") {
+          const selectedCandidatePairId = readStatsString(record, "selectedCandidatePairId");
+          const pair = selectedCandidatePairId ? stats.get(selectedCandidatePairId) : undefined;
+          if (pair) selectedPair = pair;
+        }
+        if (
+          !selectedPair &&
+          report.type === "candidate-pair" &&
+          (record.selected === true || record.nominated === true) &&
+          readStatsString(record, "state") === "succeeded"
+        ) {
+          selectedPair = report;
+        }
+      });
+      if (!selectedPair) {
+        this.logIceDiagnostic("selectedCandidatePair-unavailable");
+        return;
+      }
+      const selected = selectedPair as unknown as Record<string, unknown>;
+      const localCandidateId = readStatsString(selected, "localCandidateId");
+      const remoteCandidateId = readStatsString(selected, "remoteCandidateId");
+      const localCandidate = localCandidateId ? reports.get(localCandidateId) : undefined;
+      const remoteCandidate = remoteCandidateId ? reports.get(remoteCandidateId) : undefined;
+      const localCandidateRecord = localCandidate as unknown as Record<string, unknown> | undefined;
+      const remoteCandidateRecord = remoteCandidate as unknown as Record<string, unknown> | undefined;
+      const selectedCandidatePair: SelectedCandidatePairDiagnostic = {
+        localType: readStatsCandidateType(localCandidate),
+        protocol: (localCandidateRecord && readStatsString(localCandidateRecord, "protocol")) ?? (remoteCandidateRecord && readStatsString(remoteCandidateRecord, "protocol")) ?? null,
+        remoteType: readStatsCandidateType(remoteCandidate),
+        state: readStatsString(selected, "state"),
+      };
+      this.iceDiagnostics.selectedCandidatePair = selectedCandidatePair;
+      this.logIceDiagnostic("selectedCandidatePair", selectedCandidatePair);
+    } catch (error) {
+      this.logIceDiagnostic("selectedCandidatePair-error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private buildIceDiagnosticSummary(message: string) {
+    const diagnostics = this.iceDiagnostics;
+    const latestGatheringState = diagnostics.iceGatheringStates.at(-1) ?? this.peerConnection?.iceGatheringState ?? null;
+    const latestIceConnectionState = diagnostics.iceConnectionStates.at(-1) ?? this.peerConnection?.iceConnectionState ?? null;
+    const latestConnectionState = diagnostics.connectionStates.at(-1) ?? this.peerConnection?.connectionState ?? null;
+    const localSdpHasSrflx = Object.values(diagnostics.localSdpHasSrflx).some(Boolean);
+    const remoteSdpHasSrflx = Object.values(diagnostics.remoteSdpHasSrflx).some(Boolean);
+    const conclusions: string[] = [];
+    if (latestGatheringState !== "complete") conclusions.push("gathering 未 complete 就失败：移动网络 STUN candidate 可能尚未出来");
+    if (latestGatheringState === "complete" && diagnostics.localCandidates.srflx === 0 && !localSdpHasSrflx) conclusions.push("gathering complete 后仍无 local srflx：candidate 收集或 STUN 可达性异常");
+    if (diagnostics.remoteCandidates.srflx === 0 && !remoteSdpHasSrflx) conclusions.push("没有 remote srflx：candidate 交换、Worker 转发或 WebSocket 信令可靠性异常");
+    if (diagnostics.localCandidates.srflx > 0 && diagnostics.remoteCandidates.srflx > 0 && latestIceConnectionState === "failed") conclusions.push("双方都有 srflx 但 ICE failed：STUN 直连失败，属于 NAT / 运营商路径问题");
+    if (diagnostics.pendingSignalDropped > 0 || diagnostics.pendingRemoteCandidateDropped > 0) conclusions.push("candidate 被丢：本地有界队列达到上限，需要检查信令断开或 candidate 暴增");
+    return {
+      addIceCandidateFailure: diagnostics.addIceCandidateFailure,
+      addIceCandidateSuccess: diagnostics.addIceCandidateSuccess,
+      connectionState: latestConnectionState,
+      conclusion: conclusions.length > 0 ? conclusions : ["ICE 未给出单一明确结论，需对照 candidate 和状态变化继续看日志"],
+      iceConnectionState: latestIceConnectionState,
+      iceGatheringState: latestGatheringState,
+      lastOnIceCandidateAt: diagnostics.lastOnIceCandidateAt,
+      localCandidates: diagnostics.localCandidates,
+      localSdpHasSrflx,
+      message,
+      onIceCandidateCount: diagnostics.onIceCandidateCount,
+      pendingRemoteCandidateDropped: diagnostics.pendingRemoteCandidateDropped,
+      pendingRemoteCandidateQueued: diagnostics.pendingRemoteCandidateQueued,
+      pendingSignalDropped: diagnostics.pendingSignalDropped,
+      pendingSignalQueued: diagnostics.pendingSignalQueued,
+      remoteCandidates: diagnostics.remoteCandidates,
+      remoteSdpHasSrflx,
+      selectedCandidatePair: diagnostics.selectedCandidatePair,
+    };
+  }
+
+  private reportIceFailure(message: string) {
+    console.warn("[multiplayer ice] failure-summary", this.buildIceDiagnosticSummary(message));
+  }
+
   private startDataChannelOpenTimer() {
     this.clearDataChannelOpenTimer();
     this.dataChannelOpenTimer = window.setTimeout(() => {
@@ -472,6 +783,7 @@ export class RoomSignalTransport {
     const offer = await peerConnection.createOffer({ iceRestart });
     await peerConnection.setLocalDescription(offer);
     if (!peerConnection.localDescription) return;
+    this.recordLocalDescription(peerConnection.localDescription);
     this.sendSignal({
       type: "offer",
       description: {
@@ -487,10 +799,12 @@ export class RoomSignalTransport {
     if (signal.type === "offer") {
       this.startDataChannelOpenTimer();
       await peerConnection.setRemoteDescription(signal.description);
-      await this.flushPendingIceCandidates();
+      this.recordRemoteDescription(signal.description);
+      await this.flushPendingRemoteCandidates();
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
       if (!peerConnection.localDescription) return;
+      this.recordLocalDescription(peerConnection.localDescription);
       this.sendSignal({
         type: "answer",
         description: {
@@ -503,16 +817,14 @@ export class RoomSignalTransport {
 
     if (signal.type === "answer") {
       await peerConnection.setRemoteDescription(signal.description);
-      await this.flushPendingIceCandidates();
+      this.recordRemoteDescription(signal.description);
+      await this.flushPendingRemoteCandidates();
       return;
     }
 
     if (signal.type === "ice") {
-      if (!peerConnection.remoteDescription) {
-        this.pendingIceCandidates.push(signal.candidate);
-        return;
-      }
-      await peerConnection.addIceCandidate(signal.candidate);
+      this.recordRemoteIceCandidate(signal.candidate);
+      await this.addRemoteIceCandidate(signal.candidate);
       return;
     }
 
@@ -521,19 +833,75 @@ export class RoomSignalTransport {
     }
   }
 
-  private async flushPendingIceCandidates() {
+  private queueRemoteIceCandidate(candidate: RTCIceCandidateInit) {
+    if (this.pendingRemoteCandidates.length >= MAX_PENDING_REMOTE_CANDIDATE_COUNT) {
+      this.pendingRemoteCandidates.shift();
+      this.iceDiagnostics.pendingRemoteCandidateDropped += 1;
+    }
+    this.pendingRemoteCandidates.push(candidate);
+    this.iceDiagnostics.pendingRemoteCandidateQueued += 1;
+    this.logIceDiagnostic("remote-candidate-queued", {
+      pendingRemoteCandidates: this.pendingRemoteCandidates.length,
+      type: readCandidateType(candidate),
+    });
+  }
+
+  private async addRemoteIceCandidate(candidate: RTCIceCandidateInit) {
+    const peerConnection = this.peerConnection;
+    if (!peerConnection?.remoteDescription) {
+      this.queueRemoteIceCandidate(candidate);
+      return;
+    }
+    try {
+      await peerConnection.addIceCandidate(candidate);
+      this.recordAddIceCandidateSuccess(candidate);
+    } catch (error) {
+      this.recordAddIceCandidateFailure(candidate, error);
+    }
+  }
+
+  private async flushPendingRemoteCandidates() {
     const peerConnection = this.peerConnection;
     if (!peerConnection?.remoteDescription) return;
-    const pending = this.pendingIceCandidates.splice(0);
+    const pending = this.pendingRemoteCandidates.splice(0);
     for (const candidate of pending) {
-      await peerConnection.addIceCandidate(candidate);
+      await this.addRemoteIceCandidate(candidate);
     }
   }
 
   private sendSignal(signal: SignalPayload) {
     const socket = this.socket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ type: "signal", signal }));
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      this.queueSignal(signal);
+      return;
+    }
+    try {
+      socket.send(JSON.stringify({ type: "signal", signal }));
+    } catch {
+      this.queueSignal(signal);
+    }
+  }
+
+  private queueSignal(signal: SignalPayload) {
+    if (this.pendingSignalQueue.length >= MAX_PENDING_SIGNAL_COUNT) {
+      this.pendingSignalQueue.shift();
+      this.iceDiagnostics.pendingSignalDropped += 1;
+    }
+    this.pendingSignalQueue.push(signal);
+    this.iceDiagnostics.pendingSignalQueued += 1;
+    this.logIceDiagnostic("signal-queued", {
+      pendingSignalCount: this.pendingSignalQueue.length,
+      signalType: signal.type,
+    });
+  }
+
+  private flushPendingSignalQueue() {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || this.pendingSignalQueue.length === 0) return;
+    const pending = this.pendingSignalQueue.splice(0);
+    for (const signal of pending) {
+      this.sendSignal(signal);
+    }
   }
 
   private closePeerConnection() {
@@ -551,7 +919,8 @@ export class RoomSignalTransport {
     this.inputChannel = null;
     this.stateChannel = null;
     this.peerConnection = null;
-    this.pendingIceCandidates = [];
+    this.pendingRemoteCandidates = [];
+    this.pendingSignalQueue = [];
   }
 
   private closeSignalSocket(reason?: string) {
@@ -620,6 +989,7 @@ export class RoomSignalTransport {
 
   private handlePeerConnectionFailure(message: string) {
     if (this.destroyed) return;
+    this.reportIceFailure(message);
     this.closePeerConnection();
     if (this.role === "host") {
       this.events.onPeerDisconnected?.(message);

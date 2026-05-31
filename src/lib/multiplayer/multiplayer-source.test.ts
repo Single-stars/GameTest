@@ -23,7 +23,7 @@ test("Cloudflare WebRTC transport expected failures do not trigger the Next dev 
   assert.doesNotMatch(source, /console\.error/);
 });
 
-test("Cloudflare WebRTC transport retries direct connection with bounded ICE restart and no TURN fallback", () => {
+test("Cloudflare WebRTC transport keeps STUN trickle ICE observable and queued without TURN", () => {
   const source = readSource("./webrtc-transport.ts");
 
   assert.match(source, /ICE_RESTART_DELAY_MS = 1_200/);
@@ -33,7 +33,20 @@ test("Cloudflare WebRTC transport retries direct connection with bounded ICE res
   assert.match(source, /createOffer\(\{ iceRestart: true \}\)/);
   assert.doesNotMatch(source, /restartIce\(\)/);
   assert.doesNotMatch(source, /createOffer\(true\)/);
-  assert.doesNotMatch(source, /turn:/i);
+  assert.match(source, /getSignalingIceServers/);
+  assert.match(source, /iceTransportPolicy:\s*"all"/);
+  assert.match(source, /pendingSignalQueue/);
+  assert.match(source, /MAX_PENDING_SIGNAL_COUNT/);
+  assert.match(source, /pendingRemoteCandidates/);
+  assert.match(source, /flushPendingRemoteCandidates/);
+  assert.match(source, /recordAddIceCandidateSuccess/);
+  assert.match(source, /recordAddIceCandidateFailure/);
+  assert.match(source, /iceGatheringState/);
+  assert.match(source, /iceConnectionState/);
+  assert.match(source, /connectionState/);
+  assert.match(source, /typ srflx/);
+  assert.match(source, /selectedCandidatePair/);
+  assert.doesNotMatch(source, /iceTransportPolicy:\s*"relay"/);
   assert.match(source, /MULTIPLAYER_FAILED_MESSAGE/);
 });
 
@@ -1373,6 +1386,7 @@ test("Cloudflare Pages and Worker configs are split for native Pages Git integra
   assert.match(workerWranglerSource, /^main = "cloudflare\/worker\.ts"/m);
   assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
   assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
+  assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/ice-servers"/);
 });
 
 test("Cloudflare multiplayer uses short room codes and native WebRTC transport", () => {
@@ -1394,12 +1408,16 @@ test("Cloudflare multiplayer uses short room codes and native WebRTC transport",
   assert.match(webRtcSource, /stun:stun\.cloudflare\.com:3478/);
   assert.match(webRtcSource, /stun:stun\.l\.google\.com:19302/);
   assert.match(webRtcSource, /stun:stun1\.l\.google\.com:19302/);
+  assert.match(webRtcSource, /await this\.loadIceServers\(\)/);
+  assert.match(webRtcSource, /new RTCPeerConnection\(\{ iceServers, iceTransportPolicy: "all" \}\)/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.control/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.input/);
   assert.match(webRtcSource, /createDataChannel\(MULTIPLAYER_DATA_CHANNELS\.state/);
   assert.match(webRtcSource, /createOffer\(\{ iceRestart: true \}\)/);
   assert.doesNotMatch(webRtcSource, /createOffer\(true\)/);
   assert.match(roomApiSource, /NEXT_PUBLIC_MULTIPLAYER_SIGNALING_URL/);
+  assert.match(roomApiSource, /getSignalingIceServers/);
+  assert.match(roomApiSource, /\/api\/ice-servers/);
   assert.match(roomApiSource, /getSignalingRoomStatus/);
   assert.match(roomApiSource, /room-status-failed/);
   assert.match(roomApiSource, /LOCAL_DEV_SIGNALING_FALLBACK = "https:\/\/208848\.xyz"/);
@@ -1411,7 +1429,7 @@ test("Cloudflare multiplayer uses short room codes and native WebRTC transport",
   assert.doesNotMatch(sessionSource, /PeerTransport/);
 });
 
-test("Cloudflare Worker Durable Object signaling is present with paid fallbacks disabled by default", () => {
+test("Cloudflare Worker Durable Object signaling queues ICE and exposes STUN-only ICE servers by default", () => {
   const workerUrl = new URL("../../../cloudflare/worker.ts", import.meta.url);
   const wranglerUrl = new URL("../../../wrangler.worker.toml", import.meta.url);
 
@@ -1430,8 +1448,17 @@ test("Cloudflare Worker Durable Object signaling is present with paid fallbacks 
   assert.match(workerSource, /ALLOWED_ORIGIN/);
   assert.match(workerSource, /isRequestOriginAllowed/);
   assert.match(workerSource, /origin-forbidden/);
+  assert.match(workerSource, /GET_ICE_SERVERS_ROUTE = "GET \/api\/ice-servers"/);
+  assert.match(workerSource, /DEFAULT_ICE_SERVERS/);
+  assert.match(workerSource, /stun:stun\.cloudflare\.com:3478/);
+  assert.match(workerSource, /iceTransportPolicy:\s*"all"/);
   assert.match(workerSource, /ENABLE_TURN = false/);
   assert.match(workerSource, /ENABLE_RELAY = false/);
+  assert.doesNotMatch(workerSource, /turn:/i);
+  assert.match(workerSource, /ROOM_PENDING_SIGNAL_LIMIT/);
+  assert.match(workerSource, /queueSignalForRole/);
+  assert.match(workerSource, /flushPendingSignals/);
+  assert.match(workerSource, /sendSignalToRole/);
   assert.match(workerSource, /ROOM_INACTIVITY_TTL_MS = 15 \* 60 \* 1000/);
   assert.match(workerSource, /lastActivityAt/);
   assert.match(workerSource, /isRoomExpired/);
@@ -1439,6 +1466,7 @@ test("Cloudflare Worker Durable Object signaling is present with paid fallbacks 
   assert.match(wranglerSource, /new_sqlite_classes = \["RoomDurableObject"\]/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
+  assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/ice-servers"/);
 });
 
 test("Cloudflare signaling stays off the hot gameplay state path", () => {

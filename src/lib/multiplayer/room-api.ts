@@ -17,6 +17,13 @@ export type RoomStatusResponse = {
   guestConnected?: boolean;
 };
 
+export type IceServersResponse = {
+  iceServers: RTCIceServer[];
+  turnEnabled?: boolean;
+  relayEnabled?: boolean;
+  iceTransportPolicy?: RTCIceTransportPolicy;
+};
+
 export function isRoomStatusActiveForRole(status: RoomStatusResponse, role: SignalingRole) {
   if (!status.exists) return false;
   if (role === "host") return status.hostConnected !== false;
@@ -98,6 +105,29 @@ function isCreateRoomResponse(value: unknown): value is CreateRoomResponse {
   );
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim().length > 0);
+}
+
+function isIceServer(value: unknown): value is RTCIceServer {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (typeof record.urls === "string" && record.urls.trim().length > 0) || isStringArray(record.urls);
+}
+
+function isIceServersResponse(value: unknown): value is IceServersResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.iceServers) && record.iceServers.length > 0 && record.iceServers.every(isIceServer);
+}
+
+function normalizeIceServer(server: RTCIceServer): RTCIceServer {
+  return {
+    ...server,
+    urls: Array.isArray(server.urls) ? server.urls.map((url) => url.trim()).filter(Boolean) : server.urls.trim(),
+  };
+}
+
 export async function createSignalingRoom(fetchImpl: typeof fetch = fetch) {
   const response = await fetchImpl(buildRoomApiUrl("/api/rooms"), {
     method: "POST",
@@ -119,6 +149,25 @@ export async function createSignalingRoom(fetchImpl: typeof fetch = fetch) {
   return {
     ...payload,
     roomCode: normalizeRoomCode(payload.roomCode),
+  };
+}
+
+export async function getSignalingIceServers(fetchImpl: typeof fetch = fetch): Promise<IceServersResponse> {
+  const response = await fetchImpl(buildRoomApiUrl("/api/ice-servers"), {
+    method: "GET",
+    headers: {
+      "cache-control": "no-store",
+    },
+  });
+
+  if (!response.ok) throw new Error(`ice-servers-failed:${response.status}`);
+  const payload: unknown = await response.json();
+  if (!isIceServersResponse(payload)) throw new Error("ice-servers-invalid-response");
+  return {
+    iceServers: payload.iceServers.map(normalizeIceServer),
+    turnEnabled: payload.turnEnabled === true,
+    relayEnabled: payload.relayEnabled === true,
+    iceTransportPolicy: payload.iceTransportPolicy === "relay" ? "relay" : "all",
   };
 }
 

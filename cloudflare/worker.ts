@@ -19,21 +19,35 @@ type RoomMetadata = {
   hostToken: string;
   guestToken: string | null;
   lastActivityAt: number;
+  pendingSignals?: Partial<Record<SignalingRole, QueuedRoomSignal[]>>;
+};
+
+type QueuedRoomSignal = {
+  queuedAt: number;
+  payload: { type: "signal"; signal: unknown };
 };
 
 const ROOM_INACTIVITY_TTL_MS = 15 * 60 * 1000;
 const ROOM_SIGNAL_KEEPALIVE_MS = 30 * 1000;
+const ROOM_PENDING_SIGNAL_LIMIT = 48;
+const ROOM_PENDING_SIGNAL_TTL_MS = 45 * 1000;
 const MULTIPLAYER_ROOM_EXPIRED_REASON = "room-expired";
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
 const CREATE_ROOM_ROUTE = "POST /api/rooms";
+const GET_ICE_SERVERS_ROUTE = "GET /api/ice-servers";
 const POST_FEEDBACK_ROUTE = "POST /api/feedback";
 const GET_FEEDBACK_ADMIN_ROUTE = "GET /api/feedback/admin";
 const GET_FEEDBACK_ANALYTICS_ROUTE = "GET /api/feedback/admin/analytics";
 const ROOM_WS_ROUTE = "/api/rooms/:code/ws";
 const ENABLE_TURN = false;
 const ENABLE_RELAY = false;
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
 const FEEDBACK_CONTENT_MAX_LENGTH = 250;
 const FEEDBACK_ADMIN_LIMIT = 100;
 const FEEDBACK_CATEGORIES = new Set<FeedbackCategory>(["bug", "idea", "chat"]);
@@ -146,6 +160,15 @@ function isRequestOriginAllowed(request: Request, env: Env) {
 
 function originForbiddenResponse() {
   return jsonResponse({ error: "origin-forbidden" }, { status: 403 });
+}
+
+function iceServersResponse() {
+  return jsonResponse({
+    iceServers: DEFAULT_ICE_SERVERS,
+    iceTransportPolicy: "all",
+    turnEnabled: ENABLE_TURN,
+    relayEnabled: ENABLE_RELAY,
+  });
 }
 
 function getAdminToken(request: Request) {
@@ -466,6 +489,17 @@ const workerEntrypoint = {
       });
     }
 
+    if (request.method === "GET" && url.pathname === "/api/ice-servers") {
+      const response = iceServersResponse();
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          ...Object.fromEntries(response.headers),
+          ...corsHeaders(request, env),
+        },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/api/feedback") {
       const response = await saveFeedback(request, env);
       return new Response(response.body, {
@@ -522,6 +556,7 @@ const workerEntrypoint = {
         adminFeedbackRoute: GET_FEEDBACK_ADMIN_ROUTE,
         error: "not-found",
         feedbackRoute: POST_FEEDBACK_ROUTE,
+        iceServersRoute: GET_ICE_SERVERS_ROUTE,
         route: CREATE_ROOM_ROUTE,
         wsRoute: ROOM_WS_ROUTE,
       },
@@ -581,7 +616,7 @@ export class RoomDurableObject {
     }
     if (record.type !== "signal") return;
     await this.noteRoomActivity();
-    this.sendToRole(role === "host" ? "guest" : "host", {
+    await this.sendSignalToRole(role === "host" ? "guest" : "host", {
       type: "signal",
       signal: record.signal,
     });
@@ -612,6 +647,7 @@ export class RoomDurableObject {
       hostToken: randomToken(),
       guestToken: null,
       lastActivityAt: now,
+      pendingSignals: {},
     };
     this.metadata = metadata;
     await this.state.storage.put("metadata", metadata);
@@ -689,6 +725,7 @@ export class RoomDurableObject {
         expiresAt: metadata.expiresAt,
       }),
     );
+    await this.flushPendingSignals(role, server);
 
     if (role === "guest") {
       this.sendToRole("host", { type: "peer-joined" });
@@ -718,6 +755,58 @@ export class RoomDurableObject {
       const attachment = socket.deserializeAttachment() as { role?: SignalingRole } | null;
       if (attachment?.role === role) socket.send(serialized);
     }
+  }
+
+  private async sendSignalToRole(role: SignalingRole, payload: { type: "signal"; signal: unknown }) {
+    const serialized = JSON.stringify(payload);
+    let delivered = false;
+    for (const socket of this.state.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as { role?: SignalingRole } | null;
+      if (attachment?.role !== role) continue;
+      try {
+        socket.send(serialized);
+        delivered = true;
+      } catch {
+        // The signal is queued below if no current recipient can accept it.
+      }
+    }
+    if (!delivered) await this.queueSignalForRole(role, payload);
+  }
+
+  private async queueSignalForRole(role: SignalingRole, payload: { type: "signal"; signal: unknown }) {
+    const metadata = this.metadata;
+    if (!metadata) return;
+    const now = Date.now();
+    const pendingSignals = metadata.pendingSignals ?? {};
+    const queue = (pendingSignals[role] ?? []).filter((item) => now - item.queuedAt <= ROOM_PENDING_SIGNAL_TTL_MS);
+    queue.push({ queuedAt: now, payload });
+    pendingSignals[role] = queue.slice(-ROOM_PENDING_SIGNAL_LIMIT);
+    metadata.pendingSignals = pendingSignals;
+    await this.state.storage.put("metadata", metadata);
+  }
+
+  private async flushPendingSignals(role: SignalingRole, socket: WebSocket) {
+    const metadata = this.metadata;
+    const queue = metadata?.pendingSignals?.[role];
+    if (!metadata || !queue?.length) return;
+    const now = Date.now();
+    const remaining: QueuedRoomSignal[] = [];
+    for (const item of queue) {
+      if (now - item.queuedAt > ROOM_PENDING_SIGNAL_TTL_MS) continue;
+      try {
+        socket.send(JSON.stringify(item.payload));
+      } catch {
+        remaining.push(item);
+      }
+    }
+    const pendingSignals = metadata.pendingSignals ?? {};
+    if (remaining.length > 0) {
+      pendingSignals[role] = remaining.slice(-ROOM_PENDING_SIGNAL_LIMIT);
+    } else {
+      delete pendingSignals[role];
+    }
+    metadata.pendingSignals = pendingSignals;
+    await this.state.storage.put("metadata", metadata);
   }
 
   private closeExistingRoleSocket(role: SignalingRole) {
