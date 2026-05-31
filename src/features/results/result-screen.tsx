@@ -105,7 +105,6 @@ export function ResultScreen({
   onOpenHomeworld,
   onOpenLuckDraw,
   onOpenMultiplayer,
-  onDonateAuthor,
   onConfirmDonateAuthor,
   onResetTestData,
   onShareImage,
@@ -123,7 +122,6 @@ export function ResultScreen({
   onOpenHomeworld: () => void;
   onOpenLuckDraw: () => void;
   onOpenMultiplayer: () => void;
-  onDonateAuthor: () => void;
   onConfirmDonateAuthor: () => void;
   onResetTestData: () => void;
   onShareImage: () => void;
@@ -249,9 +247,8 @@ export function ResultScreen({
     setDonateConfirmed(false);
     setDonateActionReady(false);
     setSelectedDonationFeedId(null);
-    onDonateAuthor();
     setDonatePanelOpen(true);
-  }, [clearAvatarEntryTimer, clearDonateSaveIntentTimer, onDonateAuthor]);
+  }, [clearAvatarEntryTimer, clearDonateSaveIntentTimer]);
 
   const confirmDonate = useCallback(() => {
     onConfirmDonateAuthor();

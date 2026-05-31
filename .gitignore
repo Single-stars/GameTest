@@ -19,6 +19,8 @@
 
 # production
 /build
+/exports/
+/video_review/
 
 # misc
 .DS_Store

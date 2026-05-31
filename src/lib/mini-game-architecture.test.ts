@@ -274,7 +274,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(resultSource, /onOpenAvatarLab:\s*\(\) => void;/);
   assert.match(resultSource, /onOpenMultiplayer:\s*\(\) => void;/);
-  assert.match(resultSource, /onDonateAuthor:\s*\(\) => void;/);
+  assert.doesNotMatch(resultSource, /onDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void;/);
   assert.match(resultSource, /homeworldEntryVisible:\s*boolean;/);
   assert.match(resultSource, /onOpenHomeworld:\s*\(\) => void;/);
@@ -298,7 +298,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.match(resultSource, /id: "homeworld"[\s\S]*tone: "homeworld"/);
   assert.match(resultSource, /icon: <DonateIcon \/>/);
   assert.match(resultSource, /const openDonatePanel = useCallback/);
-  assert.match(resultSource, /onDonateAuthor\(\);/);
+  assert.doesNotMatch(resultSource, /onDonateAuthor\(\);/);
   assert.match(resultSource, /onSelect: openDonatePanel/);
   assert.match(resultSource, /id: "homeworld"/);
   assert.match(resultSource, /icon: <HomeworldIcon \/>/);
@@ -448,7 +448,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /useEffect\(\(\) => \{[\s\S]*writePersistedPlayerAvatarSkin\(selectedAvatarSkin\);[\s\S]*\}, \[selectedAvatarSkin\]\);/);
   assert.doesNotMatch(appPageSource, /avatarSkinLoadedRef/);
   assert.match(appPageSource, /const handleSelectAvatarSkin = useCallback/);
-  assert.match(appPageSource, /const handleDonateAuthor = useCallback/);
+  assert.doesNotMatch(appPageSource, /const handleDonateAuthor = useCallback/);
   assert.match(appPageSource, /const previousProgress = advancedProgressRef\.current;[\s\S]*markAuthorDonated\(previousProgress\)/);
   assert.match(appPageSource, /enqueueRewardItems\(createSkinRewardItems\(previousProgress,\s*nextProgress,\s*"donation"\)\)/);
   assert.doesNotMatch(appPageSource, /const handleChangePlayerName = useCallback/);
@@ -460,7 +460,7 @@ test("result screen opens the avatar lab through a compact rank-side avatar entr
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*playerName=\{playerName\}/);
   assert.doesNotMatch(appPageSource, /<AvatarLabScreen[\s\S]*onPlayerNameChange=\{handleChangePlayerName\}/);
   assert.match(appPageSource, /<ResultScreen[\s\S]*avatarSkin=\{selectedAvatarSkin\}[\s\S]*homeworldEntryVisible=\{homeworldEntryVisible\}[\s\S]*onOpenAvatarLab=\{openAvatarLab\}[\s\S]*onOpenHomeworld=\{openHomeworld\}/);
-  assert.match(appPageSource, /<ResultScreen[\s\S]*onDonateAuthor=\{handleDonateAuthor\}/);
+  assert.doesNotMatch(appPageSource, /<ResultScreen[\s\S]*onDonateAuthor=\{handleDonateAuthor\}/);
   assert.match(appPageSource, /const \[avatarLabReturnStage, setAvatarLabReturnStage\] = useState<"result" \| "homeworld">\("result"\);/);
   assert.match(appPageSource, /setAvatarLabReturnStage\("result"\);[\s\S]*transitionToStage\("avatar-lab"\)/);
   assert.match(appPageSource, /const closeAvatarLab = useCallback\(\(\) => \{[\s\S]*transitionToStage\(avatarLabReturnStage\);[\s\S]*\}, \[avatarLabReturnStage, releaseHistoryGuard, scrollResultToTop, transitionToStage\]\);/);

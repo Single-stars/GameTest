@@ -124,7 +124,6 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
-const DONATE_AUTHOR_URL: string = "";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
@@ -482,13 +481,6 @@ export default function Home() {
     if (!isPlayerAvatarSkinUnlocked(skin, advancedProgressRef.current)) return;
     setSelectedAvatarSkin(skin);
     writePersistedPlayerAvatarSkin(skin);
-  }, []);
-
-  const handleDonateAuthor = useCallback(() => {
-    if (typeof window === "undefined") return;
-    if (DONATE_AUTHOR_URL) {
-      window.open(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer");
-    }
   }, []);
 
   const confirmDonateAuthor = useCallback(() => {
@@ -1248,7 +1240,6 @@ export default function Home() {
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onOpenMultiplayer={openMultiplayerSelect}
-          onDonateAuthor={handleDonateAuthor}
           onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}
@@ -1280,7 +1271,6 @@ export default function Home() {
           onOpenHomeworld={openHomeworld}
           onOpenLuckDraw={openLuckDraw}
           onOpenMultiplayer={openMultiplayerSelect}
-          onDonateAuthor={handleDonateAuthor}
           onConfirmDonateAuthor={confirmDonateAuthor}
           onResetTestData={resetAllTestData}
           onRestart={requestRestartToHome}

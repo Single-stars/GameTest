@@ -185,9 +185,9 @@ test("donation flow uses feed choices with personal collection-code guidance", (
   const headersSource = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
   const donateAssetNames = readdirSync(new URL("../../public/donate", import.meta.url)).sort();
 
-  assert.match(pageSource, /DONATE_AUTHOR_URL/);
-  assert.match(pageSource, /const DONATE_AUTHOR_URL: string = "";/);
-  assert.match(pageSource, /if \(DONATE_AUTHOR_URL\) \{[\s\S]*window\.open\(DONATE_AUTHOR_URL, "_blank", "noopener,noreferrer"\)/);
+  assert.doesNotMatch(pageSource, /DONATE_AUTHOR_URL/);
+  assert.doesNotMatch(pageSource, /window\.open\([^)]*DONATE_AUTHOR_URL/);
+  assert.doesNotMatch(resultSource, /onDonateAuthor/);
   assert.doesNotMatch(pageSource, /example\.com\/alipay-donate-placeholder/);
   assert.match(pageSource, /const confirmDonateAuthor = useCallback/);
   assert.match(resultSource, /onConfirmDonateAuthor:\s*\(\) => void/);
