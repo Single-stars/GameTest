@@ -56,7 +56,7 @@ const reviveAdjustment: MultiplayerSettlementMetric = {
   key: "revive-count",
   label: "复活次数",
   unit: "count",
-  description: "失误后复用基础关复活逻辑，复活本身不扣分，但会损失时间。",
+  description: "失误后按当前关卡规则复活，复活本身不扣分，但会损失时间。",
   displayOnly: true,
 };
 

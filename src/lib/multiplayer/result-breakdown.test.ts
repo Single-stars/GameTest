@@ -159,7 +159,7 @@ test("forfeit results keep both players' current data and mark who conceded", ()
   assert.equal(compareMultiplayerResults(winner, forfeiter), -1);
 });
 
-test("multiplayer result comparison uses breakdown final values before legacy fields", () => {
+test("multiplayer result comparison keeps latest score and time authoritative", () => {
   const self = {
     passed: true,
     score: 100,
@@ -187,6 +187,6 @@ test("multiplayer result comparison uses breakdown final values before legacy fi
     }),
   };
 
-  assert.equal(compareMultiplayerResults(self, opponent), -1);
-  assert.equal(compareMultiplayerResults(opponent, self), 1);
+  assert.equal(compareMultiplayerResults(self, opponent), 1);
+  assert.equal(compareMultiplayerResults(opponent, self), -1);
 });

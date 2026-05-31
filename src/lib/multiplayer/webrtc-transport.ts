@@ -214,6 +214,10 @@ function sdpHasServerReflexiveCandidate(description: RTCSessionDescriptionInit |
   return /\btyp srflx\b/i.test(typeof description?.sdp === "string" ? description.sdp : "");
 }
 
+function canApplyRemoteAnswer(peerConnection: RTCPeerConnection) {
+  return peerConnection.signalingState === "have-local-offer";
+}
+
 function readStatsString(record: Record<string, unknown>, key: string) {
   return typeof record[key] === "string" ? record[key] : null;
 }
@@ -822,6 +826,12 @@ export class RoomSignalTransport {
     }
 
     if (signal.type === "answer") {
+      if (!canApplyRemoteAnswer(peerConnection)) {
+        this.logIceDiagnostic("remote-answer-ignored", {
+          signalingState: peerConnection.signalingState,
+        });
+        return;
+      }
       await peerConnection.setRemoteDescription(signal.description);
       this.recordRemoteDescription(signal.description);
       await this.flushPendingRemoteCandidates();

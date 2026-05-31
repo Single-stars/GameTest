@@ -69,6 +69,7 @@ function formatResult(result: GameResult | null) {
 
 function renderResultBreakdown(result: GameResult | null) {
   if (!result?.breakdown) return null;
+  if (result.breakdown.outcome === "forfeit" || result.breakdown.outcome === "opponent-forfeit") return null;
   const rows = result.breakdown.formulaRows ?? [...result.breakdown.base, ...result.breakdown.adjustments];
   return (
     <div className="multiplayer-game-result-breakdown">

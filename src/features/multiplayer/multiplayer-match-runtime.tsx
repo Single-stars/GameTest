@@ -80,16 +80,6 @@ function resolveCompletionScore(outcome: MiniGameCompletion) {
   return Math.max(0, Math.round(baseScore + timeBonus + progressScore + hitScore + jumpScore - failurePenalty));
 }
 
-function resolveResultScore(breakdown: NonNullable<GameResult["breakdown"]>) {
-  if (breakdown.final.unit === "point") return Math.round(breakdown.final.value);
-  return Math.max(0, Math.round(1_000_000 - breakdown.final.value));
-}
-
-function resolveResultTimeMs(breakdown: NonNullable<GameResult["breakdown"]>, fallbackElapsedMs: number) {
-  if (breakdown.final.unit === "ms") return Math.round(breakdown.final.value);
-  return Math.max(0, Math.round(fallbackElapsedMs));
-}
-
 function resolveRuntimeAnim(runtime: MultiplayerRuntimeState, status: SelfGameState["status"]) {
   if (status !== "playing") return status;
   if (runtime.phase) return runtime.phase;
@@ -571,8 +561,8 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
       reportResult({
         breakdown,
         passed: nextState.status === "finished",
-        score: resolveResultScore(breakdown),
-        timeMs: resolveResultTimeMs(breakdown, runtime.elapsedMs),
+        score,
+        timeMs: Math.max(0, Math.round(runtime.elapsedMs)),
       });
     },
     [coOpInputOnly, level, reportResult],

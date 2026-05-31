@@ -47,10 +47,19 @@ function resolveOrigin(explicitOrigin?: string) {
 function isLocalDevelopmentOrigin(origin: string) {
   try {
     const hostname = new URL(origin).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || isPrivateLanHostname(hostname);
   } catch {
     return origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
   }
+}
+
+function isPrivateLanHostname(hostname: string) {
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return hostname.endsWith(".local");
+  }
+  const [first, second] = parts;
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
 }
 
 export function normalizeRoomCode(value: string) {

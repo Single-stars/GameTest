@@ -20,7 +20,7 @@ function adjustmentKeys(levelId: string): MultiplayerSettlementAdjustmentKey[] {
 test("multiplayer rules cover every currently exposed multiplayer level", () => {
   const levels = MULTIPLAYER_LEVEL_GROUPS.flatMap((group) => group.levels);
 
-  assert.equal(levels.length, 66);
+  assert.equal(levels.length, 60);
   for (const level of levels) {
     const rules = getMultiplayerLevelRules(level);
     assert.equal(rules.levelId, level.levelId);

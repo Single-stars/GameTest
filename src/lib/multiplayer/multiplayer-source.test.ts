@@ -73,6 +73,17 @@ test("Cloudflare WebRTC host waits for a guest before starting direct-connect ti
   assert.match(offerHandler, /this\.startDataChannelOpenTimer\(\)/);
 });
 
+test("Cloudflare WebRTC ignores stale duplicate answers instead of throwing the dev overlay", () => {
+  const source = readSource("./webrtc-transport.ts");
+  const answerHandler = source.slice(source.indexOf('if (signal.type === "answer")'), source.indexOf('if (signal.type === "ice")'));
+
+  assert.match(source, /function canApplyRemoteAnswer/);
+  assert.match(answerHandler, /if \(!canApplyRemoteAnswer\(peerConnection\)\) \{/);
+  assert.match(answerHandler, /remote-answer-ignored/);
+  assert.match(answerHandler, /return;/);
+  assert.match(answerHandler, /await peerConnection\.setRemoteDescription\(signal\.description\)/);
+});
+
 test("Cloudflare migration removes the old PeerJS transport and dependency", () => {
   const packageSource = readSource("../../../package.json");
   const pageSource = readSource("../../app/multiplayer/page.tsx");
@@ -1347,14 +1358,16 @@ test("versus countdown uses level-specific multiplayer rule copy", () => {
   assert.match(shellSource, /countdownRules\.length > 0 \? countdownRules/);
 });
 
-test("multiplayer runtime reports rule breakdown instead of legacy score-only settlement", () => {
+test("multiplayer runtime keeps latest score and time while attaching rule breakdown", () => {
   const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
 
   assert.match(runtimeSource, /buildMultiplayerResultBreakdown/);
   assert.match(runtimeSource, /const breakdown = buildMultiplayerResultBreakdown/);
   assert.match(runtimeSource, /breakdown,/);
-  assert.match(runtimeSource, /score:\s*resolveResultScore\(breakdown\)/);
-  assert.match(runtimeSource, /timeMs:\s*resolveResultTimeMs\(breakdown,\s*runtime\.elapsedMs\)/);
+  assert.match(runtimeSource, /\bscore,/);
+  assert.match(runtimeSource, /timeMs:\s*Math\.max\(0,\s*Math\.round\(runtime\.elapsedMs\)\)/);
+  assert.doesNotMatch(runtimeSource, /resolveResultScore/);
+  assert.doesNotMatch(runtimeSource, /resolveResultTimeMs/);
   assert.match(runtimeSource, /collected:\s*runtime\.collected/);
   assert.match(runtimeSource, /knifeHits:\s*runtime\.knifeHits/);
 });
@@ -1384,6 +1397,7 @@ test("multiplayer result panel renders both players' settlement breakdown rows",
 
   assert.match(shellSource, /renderResultBreakdown/);
   assert.match(shellSource, /multiplayer-game-result-breakdown/);
+  assert.match(shellSource, /result\.breakdown\.outcome === "forfeit" \|\| result\.breakdown\.outcome === "opponent-forfeit"/);
   assert.match(shellSource, /result\.breakdown\.formulaRows/);
   assert.match(shellSource, /result\.breakdown\.final/);
   assert.match(cssSource, /\.multiplayer-game-result-breakdown/);

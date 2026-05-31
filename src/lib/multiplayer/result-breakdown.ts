@@ -340,19 +340,6 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
   const opponentSignal = outcomeSignal(opponentResult);
   if (selfSignal !== opponentSignal) return selfSignal > opponentSignal ? -1 : 1;
 
-  const selfFinal = selfResult.breakdown?.final;
-  const opponentFinal = opponentResult.breakdown?.final;
-  if (selfFinal && opponentFinal && selfFinal.unit === opponentFinal.unit) {
-    if (selfFinal.value !== opponentFinal.value) {
-      const selfWins = selfFinal.lowerIsBetter
-        ? selfFinal.value < opponentFinal.value
-        : selfFinal.value > opponentFinal.value;
-      return selfWins ? -1 : 1;
-    }
-    if (selfResult.passed !== opponentResult.passed) return selfResult.passed ? -1 : 1;
-    return 0;
-  }
-
   if (selfResult.passed && !opponentResult.passed) return -1;
   if (!selfResult.passed && opponentResult.passed) return 1;
 
