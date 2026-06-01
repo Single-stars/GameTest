@@ -727,6 +727,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         multiplayerPenaltyMode
         onComplete={() => undefined}
         onRuntimeState={handleAimRuntimeState}
+        runSeed={runSeed}
       />
     ) : level.gameId === "knife" ? (
       <KnifeHitPrototype

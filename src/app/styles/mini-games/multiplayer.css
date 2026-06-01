@@ -1141,34 +1141,38 @@
 .multiplayer-game-result-final {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(64px, 0.9fr) minmax(48px, auto) minmax(54px, auto);
   align-items: center;
   gap: 8px;
   border-top: 1px solid rgba(24, 24, 24, 0.08);
   padding-top: 6px;
   color: rgba(24, 24, 24, 0.62);
-  font-size: 11px;
+  font-size: clamp(10px, 2.5vw, 11px);
   font-weight: 850;
 }
 
 .multiplayer-game-result-row strong,
 .multiplayer-game-result-final strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: clamp(11px, 2.7vw, 12px);
   white-space: nowrap;
 }
 
-.multiplayer-game-result-row small {
-  min-width: 58px;
+.multiplayer-game-result-row small,
+.multiplayer-game-result-final small {
+  min-width: 0;
   text-align: right;
   white-space: nowrap;
 }
 
 .multiplayer-game-result-final {
-  grid-template-columns: minmax(0, 1fr) auto;
   color: var(--green);
   font-size: 12px;
   font-weight: 950;
+}
+
+.multiplayer-game-result-final small {
+  color: var(--ink);
 }
 
 .multiplayer-game-result-actions {
@@ -1203,6 +1207,10 @@
 
   .multiplayer-game-shell {
     gap: 6px;
+  }
+
+  .multiplayer-game-result-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .multiplayer-progress-hud {

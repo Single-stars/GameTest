@@ -195,8 +195,8 @@ function getSquareJumpPlatformY(stageHeight: number) {
 
 function resolveSquareJumpPlayerAvatarView(view: SquareJumpUnifiedRuntime): PlayerAvatarView {
   if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
-  if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
   if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };
+  if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
   if (view.feedback === "Good") return { action: "land", expression: "neutral" };
   if (view.state === "jumping") return { action: "idle", expression: "neutral" };
   if (view.state === "falling") return { action: "idle", expression: "scared" };

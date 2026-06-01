@@ -5,6 +5,7 @@ export type MultiplayerSettlementKind = "finish-time" | "effective-time" | "scor
 export type MultiplayerSettlementBaseKey =
   | "finish-time"
   | "effective-time"
+  | "aim-hit-count"
   | "final-score"
   | "progress"
   | "revives";
@@ -12,7 +13,6 @@ export type MultiplayerSettlementBaseKey =
 export type MultiplayerSettlementAdjustmentKey =
   | "revive-count"
   | "collectible-time-bonus"
-  | "boost-platform-note"
   | "aim-miss-penalty"
   | "aim-flyout-penalty"
   | "aim-decoy-penalty"
@@ -59,14 +59,6 @@ const reviveAdjustment: MultiplayerSettlementMetric = {
   displayOnly: true,
 };
 
-const boostPlatformNote: MultiplayerSettlementMetric = {
-  key: "boost-platform-note",
-  label: "高能平台",
-  unit: "note",
-  description: "高能平台只是抢时间的路线机会，没踩不判失败，也不额外加减分。",
-  displayOnly: true,
-};
-
 const collectibleTimeBonus: MultiplayerSettlementMetric = {
   key: "collectible-time-bonus",
   label: "道具奖励",
@@ -78,25 +70,25 @@ const collectibleTimeBonus: MultiplayerSettlementMetric = {
 const aimMissPenalty: MultiplayerSettlementMetric = {
   key: "aim-miss-penalty",
   label: "射空",
-  unit: "ms",
-  valuePerEvent: 1000,
-  description: "每次射空让最终用时增加 1 秒。",
+  unit: "count",
+  description: "射空只记录次数，不换算成时间。",
+  displayOnly: true,
 };
 
 const aimFlyOutPenalty: MultiplayerSettlementMetric = {
   key: "aim-flyout-penalty",
   label: "漏靶",
-  unit: "ms",
-  valuePerEvent: 2000,
-  description: "逃逸靶飞出屏幕算漏靶，每个让最终用时增加 2 秒。",
+  unit: "count",
+  description: "逃逸靶飞出屏幕只记录次数，不换算成时间。",
+  displayOnly: true,
 };
 
 const aimDecoyPenalty: MultiplayerSettlementMetric = {
   key: "aim-decoy-penalty",
   label: "打中干扰靶",
-  unit: "ms",
-  valuePerEvent: 3000,
-  description: "打中干扰靶让最终用时增加 3 秒。",
+  unit: "count",
+  description: "打中干扰靶只记录次数，不换算成时间。",
+  displayOnly: true,
 };
 
 const knifeHitScore: MultiplayerSettlementMetric = {
@@ -216,6 +208,7 @@ function knifeSettlement(level: MiniGameLevelConfig): MultiplayerSettlementRules
     winnerText: "飞刀耗尽后分数更高者获胜",
     baseMetrics: [],
     adjustments,
+    tiebreakerText: "同分进入丢飞刀加赛，完全一致继续下一轮。",
   };
 }
 
@@ -224,11 +217,29 @@ function aimSettlement(level: MiniGameLevelConfig): MultiplayerSettlementRules {
   const adjustments = [aimMissPenalty];
   if (mode === "incoming" || mode === "boss") adjustments.push(aimFlyOutPenalty);
   if (mode === "decoy" || mode === "boss") adjustments.push(aimDecoyPenalty);
+  if (mode === "incoming") {
+    return {
+      kind: "score",
+      primaryMetric: "aim-hit-count",
+      resultTitle: "命中数",
+      winnerText: "流程结束后命中更多者获胜，同命中比失误次数，完全一致进入加赛",
+      baseMetrics: [
+        {
+          key: "aim-hit-count",
+          label: "命中",
+          unit: "count",
+          description: "逃逸靶流程结束后的命中数量。",
+        },
+      ],
+      adjustments,
+      tiebreakerText: "命中和失误次数相同进入高速逃逸靶加赛，完全一致继续下一轮。",
+    };
+  }
   return {
     kind: "effective-time",
     primaryMetric: "effective-time",
     resultTitle: "最终用时",
-    winnerText: "完成流程后最终用时更短者获胜",
+    winnerText: "完成流程后最终用时更短者获胜，射空和干扰只记次数",
     baseMetrics: [
       {
         key: "finish-time",
@@ -240,11 +251,10 @@ function aimSettlement(level: MiniGameLevelConfig): MultiplayerSettlementRules {
         key: "effective-time",
         label: "最终用时",
         unit: "ms",
-        description: "完成时间加上射空、漏靶和干扰靶罚时后的成绩。",
+        description: "完成流程的真实用时，射空、漏靶和干扰靶只展示次数。",
       },
     ],
     adjustments,
-    tiebreakerText: mode === "incoming" ? "有效用时相同进入高速逃逸靶加赛，同命中或同漏靶继续下一轮。" : undefined,
   };
 }
 
@@ -295,15 +305,15 @@ function knifeCountdownLines(level: MiniGameLevelConfig) {
 function aimCountdownLines(level: MiniGameLevelConfig) {
   const mode = aimMode(level);
   if (mode === "incoming") {
-    return ["流程结束比最终用时", "射空 +1 秒", "漏靶 +2 秒"];
+    return ["流程结束比命中数", "射空只记次数", "漏靶只记次数"];
   }
   if (mode === "decoy") {
-    return ["清空目标比最终用时", "射空 +1 秒", "打错 +3 秒"];
+    return ["清空目标比最终用时", "射空只记次数", "打错只记次数"];
   }
   if (mode === "boss") {
-    return ["综合靶比最终用时", "射空 +1 秒", "漏靶 / 打错会罚时"];
+    return ["综合靶比最终用时", "射空只记次数", "漏靶打错记次数"];
   }
-  return ["清空目标比最终用时", "射空 +1 秒"];
+  return ["清空目标比最终用时", "射空只记次数"];
 }
 
 export function getMultiplayerLevelRules(level: MiniGameLevelConfig): MultiplayerLevelRules {
@@ -312,7 +322,7 @@ export function getMultiplayerLevelRules(level: MiniGameLevelConfig): Multiplaye
       gameId: level.gameId,
       levelId: level.levelId,
       countdownLines: doodleCountdownLines(level),
-      settlement: finishTimeSettlement(hasBoostPlatforms(level) ? [reviveAdjustment, boostPlatformNote] : [reviveAdjustment]),
+      settlement: finishTimeSettlement([reviveAdjustment]),
     };
   }
 

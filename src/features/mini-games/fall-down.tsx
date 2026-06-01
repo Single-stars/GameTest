@@ -102,6 +102,7 @@ type FallDownRuntime = {
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
 const FALL_DOWN_LEDGE_HEIGHT = 52;
+const FALL_DOWN_FALLING_HAZARD_HITBOX_SCALE = 0.72;
 const FALL_DOWN_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 
 export type FallDownRuntimeState = {
@@ -256,6 +257,10 @@ function fallDownFallingHazardScreenY(hazard: FallDownFallingHazard, time: numbe
 
 function fallDownFallingHazardX(hazard: FallDownFallingHazard, time: number, stageWidth: number) {
   return clamp(hazard.x + Math.sin(time * 1.35 + hazard.phase) * hazard.drift, hazard.size / 2 + 8, stageWidth - hazard.size / 2 - 8);
+}
+
+function fallDownFallingHazardHitboxRadius(hazard: FallDownFallingHazard) {
+  return PLAYER_SIZE * 0.38 + hazard.size * FALL_DOWN_FALLING_HAZARD_HITBOX_SCALE * 0.5;
 }
 
 function fallDownPlatformLandingBounds(platform: FallDownPlatform, platformX: number) {
@@ -931,9 +936,8 @@ export function FallDownPrototype({
             const hazardX = fallDownFallingHazardX(hazard, current.time, stageWidth);
             const hazardY = fallDownFallingHazardScreenY(hazard, current.time, stageHeight);
             const playerScreenY = current.playerY - current.cameraY;
-            const overlapsX = Math.abs(current.playerX - hazardX) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
-            const overlapsY = Math.abs(playerScreenY - hazardY) <= PLAYER_SIZE / 2 + hazard.size / 2 - 2;
-            if (overlapsX && overlapsY && current.time >= current.respawnUntil) {
+            const hazardDistance = Math.hypot(current.playerX - hazardX, playerScreenY - hazardY);
+            if (hazardDistance <= fallDownFallingHazardHitboxRadius(hazard) && current.time >= current.respawnUntil) {
               continueAfterRecoverableFailure("躲开下落危险");
               return;
             }

@@ -211,6 +211,19 @@ test("flappy recoverable failures use safe respawn instead of a fixed backtrack"
   assert.doesNotMatch(flappyRuntimeSource, /Math\.max\(0, nextProgress - 92\)/);
 });
 
+test("flappy multiplayer clock keeps running while waiting after a respawn", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+  const waitingSource = flappyRuntimeSource.slice(
+    flappyRuntimeSource.indexOf("if (!current.started)"),
+    flappyRuntimeSource.indexOf("const nextTime = current.time + delta"),
+  );
+
+  assert.match(waitingSource, /current\.time \+= delta;/);
+  assert.doesNotMatch(waitingSource, /if \(isRespawnCameraMoving\) \{\s*current\.time \+= delta;/);
+  assert.match(waitingSource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
+});
+
 test("flappy multiplayer collectible misses settle as missed bonuses instead of death respawns", () => {
   const componentSource = readMiniGameRuntimeSource();
   const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));

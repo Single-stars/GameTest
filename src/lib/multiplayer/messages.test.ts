@@ -446,6 +446,56 @@ test("result messages carry settlement breakdown details", () => {
   assert.equal(parsed.breakdown?.formulaRows?.at(-1)?.key, "knife-timeout-penalty");
 });
 
+test("result messages accept count final units for hit-count settlements", () => {
+  const parsed = parseNetMessage(createResultMessage({
+    matchId: "match-count-breakdown",
+    score: 8,
+    passed: true,
+    timeMs: 25000,
+    breakdown: {
+      version: 1,
+      gameId: "aim",
+      levelId: "aim-2",
+      kind: "score",
+      title: "命中数",
+      winnerText: "命中更多者获胜",
+      outcome: "completed",
+      base: [
+        {
+          key: "aim-hit-count",
+          label: "命中",
+          unit: "count",
+          value: 8,
+          amount: 8,
+        },
+      ],
+      adjustments: [],
+      formulaRows: [
+        {
+          key: "aim-hit-count",
+          label: "命中",
+          unit: "count",
+          value: 8,
+          amount: 8,
+          operation: "base",
+        },
+      ],
+      final: {
+        label: "命中数",
+        lowerIsBetter: false,
+        unit: "count",
+        value: 8,
+      },
+    },
+  }));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "result");
+  if (parsed.kind !== "result") return;
+  assert.equal(parsed.breakdown?.final.unit, "count");
+  assert.equal(parsed.breakdown?.final.value, 8);
+});
+
 test("return-room messages carry match identity without leaving the P2P room", () => {
   const parsed = parseNetMessage(createReturnRoomMessage("match-3"));
 

@@ -34,6 +34,15 @@ export type MultiplayerStatus =
   | "failed"
   | "disconnected";
 
+export type MultiplayerConnectionState =
+  | "idle"
+  | "signaling"
+  | "connected"
+  | "reconnecting"
+  | "stale"
+  | "replaced"
+  | "closed";
+
 export type SessionRole = "host" | "guest";
 
 export type PlayerInfo = {
@@ -250,6 +259,7 @@ export type NetMessage =
 
 export type MultiplayerSnapshot = {
   status: MultiplayerStatus;
+  connectionState: MultiplayerConnectionState;
   role: SessionRole | null;
   roomId: string | null;
   selfPlayer: PlayerInfo | null;

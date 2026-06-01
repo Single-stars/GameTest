@@ -106,7 +106,7 @@ export type GameResultBreakdown = {
   final: {
     label: string;
     lowerIsBetter: boolean;
-    unit: "ms" | "point";
+    unit: "ms" | "point" | "count";
     value: number;
   };
   tiebreakerText?: string;

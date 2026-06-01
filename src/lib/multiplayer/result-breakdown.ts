@@ -96,12 +96,6 @@ function reviveEntry(level: MiniGameLevelConfig, failures: number) {
   return metricEntry(metric, failures, { displayOnly: true });
 }
 
-function boostNoteEntry(level: MiniGameLevelConfig) {
-  const metric = findMetric(level, "boost-platform-note");
-  if (!metric) return null;
-  return metricEntry(metric, "路线机会", { displayOnly: true });
-}
-
 function collectibleEntry(level: MiniGameLevelConfig, collected: number) {
   const metric = findMetric(level, "collectible-time-bonus");
   if (!metric) return null;
@@ -112,8 +106,17 @@ function collectibleEntry(level: MiniGameLevelConfig, collected: number) {
 function countedAdjustmentEntry(level: MiniGameLevelConfig, key: string, value: number) {
   const metric = findMetric(level, key);
   if (!metric) return null;
+  if (metric.displayOnly || typeof metric.valuePerEvent !== "number") {
+    return metricEntry(metric, value, { displayOnly: metric.displayOnly });
+  }
   const valuePerEvent = finiteNumber(metric.valuePerEvent, 0);
   return metricEntry(metric, value, { amount: value * valuePerEvent });
+}
+
+function aimHitEntry(level: MiniGameLevelConfig, hits: number) {
+  const metric = findMetric(level, "aim-hit-count");
+  if (!metric) return null;
+  return metricEntry(metric, hits, { amount: hits });
 }
 
 function compactEntries(entries: Array<GameResultBreakdownEntry | null>) {
@@ -164,6 +167,41 @@ function buildKnifeBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResul
   };
 }
 
+function buildAimScoreBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResultBreakdownStats): GameResultBreakdown {
+  const rules = getMultiplayerLevelRules(level);
+  const aimHits = wholeCount(stats.aimHits);
+  const aimMisses = wholeCount(stats.aimMisses);
+  const aimFlyOuts = wholeCount(stats.aimFlyOuts);
+  const aimDecoyHits = wholeCount(stats.aimDecoyHits);
+  const hitEntry = aimHitEntry(level, aimHits);
+  const adjustments = compactEntries([
+    countedAdjustmentEntry(level, "aim-miss-penalty", aimMisses),
+    countedAdjustmentEntry(level, "aim-flyout-penalty", aimFlyOuts),
+    countedAdjustmentEntry(level, "aim-decoy-penalty", aimDecoyHits),
+  ]);
+  const formulaRows = compactEntries([hitEntry]).map((entry) => formulaRow(entry, "base"));
+
+  return {
+    version: 1,
+    gameId: level.gameId,
+    levelId: level.levelId,
+    kind: "score",
+    title: rules.settlement.resultTitle,
+    winnerText: rules.settlement.winnerText,
+    outcome: stats.passed ? "completed" : "failed",
+    base: compactEntries([hitEntry]),
+    adjustments,
+    formulaRows: [...formulaRows, ...adjustmentRows(adjustments)],
+    final: {
+      label: "命中数",
+      lowerIsBetter: false,
+      unit: "count",
+      value: aimHits,
+    },
+    tiebreakerText: rules.settlement.tiebreakerText,
+  };
+}
+
 function buildTimeBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResultBreakdownStats): GameResultBreakdown {
   const rules = getMultiplayerLevelRules(level);
   const elapsedMs = Math.max(0, Math.round(finiteNumber(stats.elapsedMs)));
@@ -176,7 +214,6 @@ function buildTimeBreakdown(level: MiniGameLevelConfig, stats: MultiplayerResult
   const finishEntry = finishTimeEntry(level, elapsedMs);
   const adjustments = compactEntries([
     reviveEntry(level, failures),
-    boostNoteEntry(level),
     collectibleCount > 0 ? collectibleEntry(level, collected) : null,
     countedAdjustmentEntry(level, "aim-miss-penalty", aimMisses),
     countedAdjustmentEntry(level, "aim-flyout-penalty", aimFlyOuts),
@@ -212,6 +249,7 @@ export function buildMultiplayerResultBreakdown(
   stats: MultiplayerResultBreakdownStats,
 ): GameResultBreakdown {
   const rules = getMultiplayerLevelRules(level);
+  if (rules.settlement.kind === "score" && level.gameId === "aim") return buildAimScoreBreakdown(level, stats);
   if (rules.settlement.kind === "score") return buildKnifeBreakdown(level, stats);
   return buildTimeBreakdown(level, stats);
 }
@@ -290,6 +328,50 @@ function outcomeSignal(result: GameResult) {
   return 0;
 }
 
+function compareNumberValues(selfValue: number, opponentValue: number, lowerIsBetter: boolean) {
+  if (selfValue === opponentValue) return 0;
+  if (lowerIsBetter) return selfValue < opponentValue ? -1 : 1;
+  return selfValue > opponentValue ? -1 : 1;
+}
+
+function breakdownRows(result: GameResult) {
+  const breakdown = result.breakdown;
+  if (!breakdown) return [];
+  return breakdown.formulaRows ?? [...breakdown.base, ...breakdown.adjustments];
+}
+
+function numericBreakdownValue(result: GameResult, key: string) {
+  const value = breakdownRows(result).find((item) => item.key === key)?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function aimMistakeCount(result: GameResult) {
+  return ["aim-miss-penalty", "aim-flyout-penalty", "aim-decoy-penalty"].reduce((total, key) => {
+    return total + (numericBreakdownValue(result, key) ?? 0);
+  }, 0);
+}
+
+function compareAimScoreBreakdown(selfResult: GameResult, opponentResult: GameResult) {
+  if (selfResult.breakdown?.gameId !== "aim" || opponentResult.breakdown?.gameId !== "aim") return null;
+  if (selfResult.breakdown.kind !== "score" || opponentResult.breakdown.kind !== "score") return null;
+  const selfHits = numericBreakdownValue(selfResult, "aim-hit-count") ?? selfResult.breakdown.final.value;
+  const opponentHits = numericBreakdownValue(opponentResult, "aim-hit-count") ?? opponentResult.breakdown.final.value;
+  const hitComparison = compareNumberValues(selfHits, opponentHits, false);
+  if (hitComparison !== 0) return hitComparison;
+  return compareNumberValues(aimMistakeCount(selfResult), aimMistakeCount(opponentResult), true);
+}
+
+function compareBreakdownFinal(selfResult: GameResult, opponentResult: GameResult) {
+  if (!selfResult.breakdown || !opponentResult.breakdown) return null;
+  const aimComparison = compareAimScoreBreakdown(selfResult, opponentResult);
+  if (aimComparison !== null) return aimComparison;
+  return compareNumberValues(
+    selfResult.breakdown.final.value,
+    opponentResult.breakdown.final.value,
+    selfResult.breakdown.final.lowerIsBetter,
+  );
+}
+
 export function compareMultiplayerResults(selfResult: GameResult, opponentResult: GameResult) {
   const selfSignal = outcomeSignal(selfResult);
   const opponentSignal = outcomeSignal(opponentResult);
@@ -297,6 +379,9 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
 
   if (selfResult.passed && !opponentResult.passed) return -1;
   if (!selfResult.passed && opponentResult.passed) return 1;
+
+  const breakdownComparison = compareBreakdownFinal(selfResult, opponentResult);
+  if (breakdownComparison !== null) return breakdownComparison;
 
   const scoreSettlement = selfResult.breakdown?.kind === "score" || opponentResult.breakdown?.kind === "score";
   if (scoreSettlement) {
@@ -316,4 +401,17 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
     if (selfResult.score < opponentResult.score) return 1;
   }
   return 0;
+}
+
+export function shouldStartMultiplayerTiebreaker(
+  level: MiniGameLevelConfig,
+  selfResult: GameResult | null,
+  opponentResult: GameResult | null,
+  playMode: "versus" | "co-op" = "versus",
+) {
+  if (playMode !== "versus") return false;
+  if (!selfResult || !opponentResult) return false;
+  if (level.gameId === "knife") return false;
+  if (!getMultiplayerLevelRules(level).settlement.tiebreakerText) return false;
+  return compareMultiplayerResults(selfResult, opponentResult) === 0;
 }

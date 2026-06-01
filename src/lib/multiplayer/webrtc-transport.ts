@@ -24,6 +24,7 @@ import {
   isRoomCode,
   normalizeRoomCode,
   readStoredRoomToken,
+  writeActiveMultiplayerRoom,
   writeStoredRoomToken,
   type SignalingRole,
 } from "@/lib/multiplayer/room-api";
@@ -65,6 +66,7 @@ export type RoomSignalTransportEvents = {
   onRemoteClockOffset?: (offsetMs: number) => void;
   onFailed?: (message: string) => void;
   onDisconnected?: (message: string) => void;
+  onReplaced?: () => void;
 };
 
 export type RoomSignalTransportOptions = {
@@ -225,7 +227,7 @@ function now() {
 }
 
 function isPeerLeftReason(reason: string | undefined) {
-  return reason === "host-disbanded-room" || reason === "peer-left-room" || reason === "guest-signaling-left";
+  return reason === "host-disbanded-room" || reason === "peer-left-room" || reason === "guest-signaling-left" || reason === "host-signaling-left";
 }
 
 function readStatsString(record: Record<string, unknown>, key: string) {
@@ -294,10 +296,21 @@ export class RoomSignalTransport {
     await this.loadIceServers();
 
     if (this.role === "host") {
+      if (this.targetRoomId) {
+        this.roomCode = this.targetRoomId;
+        this.roleToken = readStoredRoomToken(this.roomCode, this.role);
+        if (this.role === "host" && this.targetRoomId && this.roleToken) {
+          this.events.onPeerOpen?.(this.roomCode);
+        } else {
+          this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
+          throw new Error("missing-host-room-token");
+        }
+      } else {
       const room = await createSignalingRoom();
       this.roomCode = room.roomCode;
       this.roleToken = room.token;
       this.events.onPeerOpen?.(room.roomCode);
+      }
     } else {
       if (!this.targetRoomId || !isRoomCode(this.targetRoomId)) {
         this.handleFailure(MULTIPLAYER_FAILED_MESSAGE);
@@ -421,6 +434,10 @@ export class RoomSignalTransport {
       if (this.destroyed) return;
       if (this.socket !== socket) return;
       if (this.socket === socket) this.socket = null;
+      if (event.reason === "replaced") {
+        this.handleReplaced();
+        return;
+      }
       if (event.reason === MULTIPLAYER_ROOM_EXPIRED_REASON) {
         this.handleRoomClosed(event.reason);
         return;
@@ -446,6 +463,12 @@ export class RoomSignalTransport {
         this.roomCode = normalizeRoomCode(message.roomCode);
         this.roleToken = message.token;
         writeStoredRoomToken(this.roomCode, message.role, message.token);
+        writeActiveMultiplayerRoom({
+          roomCode: this.roomCode,
+          role: message.role,
+          token: message.token,
+          updatedAt: Date.now(),
+        });
         this.startSignalHeartbeat();
         this.startRoomStatusWatchdog();
         if (this.role === "host") this.preparePeerConnection();
@@ -460,6 +483,10 @@ export class RoomSignalTransport {
         break;
       case "peer-left":
         if (!isPeerLeftReason(message.reason)) return;
+        if (this.role === "guest" && message.reason === "host-signaling-left" && this.connected) {
+          this.events.onDisconnected?.(message.reason);
+          return;
+        }
         this.ignoreNextControlClose = true;
         this.closePeerConnection();
         if (this.role === "host") {
@@ -1022,6 +1049,12 @@ export class RoomSignalTransport {
   private handleDisconnected(message: string) {
     if (this.destroyed) return;
     this.events.onDisconnected?.(message);
+    this.dispose();
+  }
+
+  private handleReplaced() {
+    if (this.destroyed) return;
+    this.events.onReplaced?.();
     this.dispose();
   }
 

@@ -99,7 +99,8 @@ function renderResultBreakdown(result: GameResult | null) {
       })}
       <div className="multiplayer-game-result-final">
         <span>{result.breakdown.final.label}</span>
-        <strong>{formatBreakdownFinalNumber(result.breakdown.final.value, result.breakdown.final.unit)}</strong>
+        <strong aria-hidden="true" />
+        <small>{formatBreakdownFinalNumber(result.breakdown.final.value, result.breakdown.final.unit)}</small>
       </div>
     </div>
   );

@@ -511,10 +511,8 @@ export function FlappyPrototype({
       }
       if (!current.started) {
         const isRespawnCameraMoving = current.respawnProgressUntil > current.time;
-        if (isRespawnCameraMoving) {
-          current.time += delta;
-          current.displayProgress = resolveFlappyDisplayProgress(current);
-        }
+        current.time += delta;
+        current.displayProgress = resolveFlappyDisplayProgress(current);
         updateDom(current, time);
         if (isRespawnCameraMoving || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
           syncFlappyView(time);

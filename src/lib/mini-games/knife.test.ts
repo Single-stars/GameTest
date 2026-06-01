@@ -11,7 +11,10 @@ import {
   getSineAngularVelocity,
   isAngleWithinArc,
   normalizeDegrees,
+  resolveKnifeFirstOwner,
   resolveKnifeShotOutcome,
+  resolveKnifeTurnSettlement,
+  resolveKnifeTurnOwner,
 } from "./index.ts";
 import {
   integrateSineSweep,
@@ -22,12 +25,15 @@ import {
 test("knife levels encode countdown, sine rotation, forbidden zones, and final rules", () => {
   assert.equal(getMiniGameLevel("knife", "knife-base").params.shotCount, 6);
   assert.equal(getMiniGameLevel("knife", "knife-base").params.initialObstacleCount, 4);
+  for (const level of ["knife-base", "knife-1", "knife-2", "knife-3", "knife-4", "knife-5", "knife-6", "knife-7", "knife-8", "knife-9", "knife-10"]) {
+    assert.equal(Number(getMiniGameLevel("knife", level).params.shotCount) % 2, 0, level);
+  }
   assert.equal(getMiniGameLevel("knife", "knife-1").params.shotCountdown, 2.5);
   assert.equal(getMiniGameLevel("knife", "knife-2").params.shotCountdown, 2.5);
   assert.equal(getMiniGameLevel("knife", "knife-3").params.initialObstacleCount, 4);
 
   assert.equal(getMiniGameLevel("knife", "knife-4").params.sineRotationEnabled, true);
-  assert.equal(getMiniGameLevel("knife", "knife-4").params.shotCountdown, 2);
+  assert.equal(getMiniGameLevel("knife", "knife-4").params.shotCountdown, undefined);
   assert.equal(getMiniGameLevel("knife", "knife-4").params.sweepPerPhase, 390);
   assert.equal(getMiniGameLevel("knife", "knife-4").params.phaseDuration, 3);
   assert.equal(getMiniGameLevel("knife", "knife-5").params.sweepPerPhase, 405);
@@ -36,17 +42,117 @@ test("knife levels encode countdown, sine rotation, forbidden zones, and final r
   assert.equal(getMiniGameLevel("knife", "knife-6").params.phaseDuration, 2.55);
 
   assert.equal(getMiniGameLevel("knife", "knife-7").params.forbiddenZoneCount, 1);
-  assert.equal(getMiniGameLevel("knife", "knife-7").params.shotCountdown, 1.5);
+  assert.equal(getMiniGameLevel("knife", "knife-7").params.shotCountdown, undefined);
   assert.equal(getMiniGameLevel("knife", "knife-8").params.forbiddenZoneCount, 2);
   assert.equal(getMiniGameLevel("knife", "knife-9").params.forbiddenZoneRatio, 0.24);
 
   const final = getMiniGameLevel("knife", "knife-10");
-  assert.equal(final.params.shotCount, 13);
-  assert.equal(final.params.shotCountdown, 2.5);
+  assert.equal(final.params.shotCount, 14);
+  assert.equal(final.params.shotCountdown, 3);
   assert.equal(final.params.sineRotationEnabled, true);
   assert.equal(final.params.sweepPerPhase, 405);
   assert.equal(final.params.phaseDuration, 2.7);
   assert.equal(final.params.forbiddenZoneCount, 2);
+});
+
+test("knife countdown is only configured on countdown levels and the final trial", () => {
+  const countdownLevels = new Map([
+    ["knife-1", 2.5],
+    ["knife-2", 2.5],
+    ["knife-3", 2],
+    ["knife-10", 3],
+  ]);
+
+  for (const levelId of ["knife-1", "knife-2", "knife-3", "knife-4", "knife-5", "knife-6", "knife-7", "knife-8", "knife-9", "knife-10"]) {
+    assert.equal(getMiniGameLevel("knife", levelId).params.shotCountdown, countdownLevels.get(levelId), levelId);
+  }
+});
+
+test("knife turn owner is seeded so the host is not always first", () => {
+  const hostFirstSeed = "knife-1:host-first";
+  const guestFirstSeed = "knife-1:guest-first";
+  const hostFirst = resolveKnifeFirstOwner(hostFirstSeed);
+  const guestFirst = resolveKnifeFirstOwner(guestFirstSeed);
+
+  assert.notEqual(hostFirst, guestFirst);
+  assert.equal(resolveKnifeTurnOwner(0, hostFirst), hostFirst);
+  assert.equal(resolveKnifeTurnOwner(1, hostFirst), hostFirst === "host" ? "guest" : "host");
+  assert.equal(resolveKnifeTurnOwner(0, guestFirst), guestFirst);
+  assert.equal(resolveKnifeTurnOwner(1, guestFirst), guestFirst === "host" ? "guest" : "host");
+});
+
+test("knife turn settlement keeps tied games on the same wheel for one-shot overtime rounds", () => {
+  assert.deepEqual(
+    resolveKnifeTurnSettlement({
+      countdown: 0,
+      guestScore: 4,
+      hasCountdown: false,
+      hostScore: 4,
+      shotCount: 8,
+      shotIndex: 8,
+    }),
+    {
+      overtime: true,
+      showOvertimeBanner: true,
+      status: "playing",
+      timer: null,
+      winnerRole: null,
+    },
+  );
+
+  assert.deepEqual(
+    resolveKnifeTurnSettlement({
+      countdown: 0,
+      guestScore: 4,
+      hasCountdown: false,
+      hostScore: 5,
+      shotCount: 8,
+      shotIndex: 9,
+    }),
+    {
+      overtime: true,
+      showOvertimeBanner: false,
+      status: "playing",
+      timer: null,
+      winnerRole: null,
+    },
+  );
+
+  assert.deepEqual(
+    resolveKnifeTurnSettlement({
+      countdown: 0,
+      guestScore: 5,
+      hasCountdown: false,
+      hostScore: 5,
+      shotCount: 8,
+      shotIndex: 10,
+    }),
+    {
+      overtime: true,
+      showOvertimeBanner: true,
+      status: "playing",
+      timer: null,
+      winnerRole: null,
+    },
+  );
+
+  assert.deepEqual(
+    resolveKnifeTurnSettlement({
+      countdown: 3,
+      guestScore: 5,
+      hasCountdown: true,
+      hostScore: 6,
+      shotCount: 8,
+      shotIndex: 12,
+    }),
+    {
+      overtime: true,
+      showOvertimeBanner: false,
+      status: "passed",
+      timer: null,
+      winnerRole: "host",
+    },
+  );
 });
 
 test("knife base and advanced levels one through eight start with four quadrant knives", () => {
@@ -189,4 +295,23 @@ test("knife countdown renders a large background number below the wheel", () => 
   assert.match(cssSource, /\.knife-countdown-ghost/);
   assert.match(cssSource, /font-size: clamp\(96px, 28vw, 172px\);/);
   assert.match(cssSource, /top: 54%;/);
+});
+
+test("knife multiplayer renders turn and overtime prompts without smoothing remote wheel angle", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+
+  assert.match(runtimeSource, /className="knife-turn-ghost"/);
+  assert.match(runtimeSource, /localTurn \? "你的回合" : "对方回合"/);
+  assert.match(runtimeSource, /className="knife-overtime-banner"/);
+  assert.match(runtimeSource, /function formatKnifeOvertimeRoundLabel/);
+  assert.match(runtimeSource, /Math\.floor\(\(Math\.max\(1, overtimeShotNumber\) - 1\) \/ 2\) \+ 1/);
+  assert.match(runtimeSource, /const overtimeRoundLabel = formatKnifeOvertimeRoundLabel\(view\.shotIndex, shotCount\);/);
+  assert.match(runtimeSource, /view\.overtime \? overtimeRoundLabel :/);
+  assert.match(runtimeSource, /\{overtimeRoundLabel\}/);
+  assert.doesNotMatch(runtimeSource, /加赛发射/);
+  assert.doesNotMatch(runtimeSource, />加赛</);
+  assert.doesNotMatch(runtimeSource, /frame\.rotation = normalizeDegrees\(remoteState\.angle\)/);
+  assert.match(cssSource, /\.knife-turn-ghost/);
+  assert.match(cssSource, /\.knife-overtime-banner/);
 });

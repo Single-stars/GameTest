@@ -336,8 +336,13 @@ test("square jump maps its player visuals through the shared avatar without fail
   assert.match(componentSource, /type PlayerAvatarView/);
   assert.match(componentSource, /type PlayerAvatarGravity/);
   assert.match(avatarStateSource, /if \(view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
-  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
   assert.match(avatarStateSource, /if \(view\.state === "charging" \|\| view\.state === "airCharging"\) return \{ action: "charge", expression: "neutral" \};/);
+  assert.match(avatarStateSource, /if \(view\.time < view\.respawnUntil\) return \{ action: "idle", expression: "neutral", effect: "shield" \};/);
+  assert.ok(
+    avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };') <
+      avatarStateSource.indexOf('if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };'),
+    "charging must override respawn shield so revive does not replace the charge animation",
+  );
   assert.match(avatarStateSource, /if \(view\.feedback === "Good"\) return \{ action: "land", expression: "neutral" \};/);
   assert.ok(
     avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };') <

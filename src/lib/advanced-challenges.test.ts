@@ -206,9 +206,9 @@ test("advanced config maps the replaced dimensions to the new mini-game advanced
 test("advanced knife entrance params mirror the prototype countdowns and initial knives", () => {
   const expectedCountdownsByMiniLevel = new Map<string, number>([
     ["knife-1", 2.5],
-    ["knife-4", 2],
-    ["knife-7", 1.5],
-    ["knife-10", 2.5],
+    ["knife-2", 2.5],
+    ["knife-3", 2],
+    ["knife-10", 3],
   ]);
 
   for (let level = 1; level <= 10; level += 1) {
@@ -220,9 +220,8 @@ test("advanced knife entrance params mirror the prototype countdowns and initial
     }
 
     const countdown = expectedCountdownsByMiniLevel.get(miniLevelId);
-    if (countdown !== undefined) {
-      assert.equal(config.params.shotCountdown, countdown, miniLevelId);
-    }
+    assert.equal(config.params.shotCountdown, countdown, miniLevelId);
+    assert.equal(Number(config.params.shotCount) % 2, 0, miniLevelId);
   }
 });
 

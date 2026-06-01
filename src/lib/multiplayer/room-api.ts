@@ -1,7 +1,18 @@
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
 const LOCAL_DEV_SIGNALING_FALLBACK = "https://208848.xyz";
+const ACTIVE_MULTIPLAYER_ROOM_TTL_MS = 30 * 60 * 1000;
+
+export const ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY = "game-rank-test/multiplayer/active-room";
 
 export type SignalingRole = "host" | "guest";
+
+export type ActiveMultiplayerRoomRecord = {
+  role: SignalingRole;
+  roomCode: string;
+  token?: string;
+  updatedAt?: number;
+  intentionallyLeft?: boolean;
+};
 
 export type CreateRoomResponse = {
   roomCode: string;
@@ -218,4 +229,103 @@ export function writeStoredRoomToken(roomCode: string, role: SignalingRole, toke
   } catch {
     // Session storage can be blocked in private browsing modes; reconnect simply becomes best-effort.
   }
+}
+
+function readActiveMultiplayerRoomStorage() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isActiveRoomRole(value: unknown): value is SignalingRole {
+  return value === "host" || value === "guest";
+}
+
+export function writeActiveMultiplayerRoom(record: ActiveMultiplayerRoomRecord, storage: Storage | null = readActiveMultiplayerRoomStorage()) {
+  if (!storage) return;
+  const roomCode = normalizeRoomCode(record.roomCode);
+  if (!isRoomCode(roomCode) || !isActiveRoomRole(record.role)) return;
+  const updatedAt = typeof record.updatedAt === "number" && Number.isFinite(record.updatedAt) ? record.updatedAt : Date.now();
+  const payload: Required<Pick<ActiveMultiplayerRoomRecord, "role" | "roomCode" | "updatedAt" | "intentionallyLeft">> & { token?: string } = {
+    intentionallyLeft: record.intentionallyLeft === true,
+    role: record.role,
+    roomCode,
+    updatedAt,
+  };
+  if (typeof record.token === "string" && record.token.length > 0) payload.token = record.token;
+  try {
+    storage.setItem(ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Local storage can be blocked; bare-route recovery remains best-effort.
+  }
+}
+
+export function readActiveMultiplayerRoom(storage: Storage | null = readActiveMultiplayerRoomStorage(), nowMs = Date.now()) {
+  if (!storage) return null;
+  let payload: unknown;
+  try {
+    const raw = storage.getItem(ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY);
+    if (!raw) return null;
+    payload = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof payload !== "object" || payload === null) return null;
+  const record = payload as Record<string, unknown>;
+  const roomCode = typeof record.roomCode === "string" ? normalizeRoomCode(record.roomCode) : "";
+  const role = record.role;
+  const updatedAt = record.updatedAt;
+  if (!isActiveRoomRole(role) || !isRoomCode(roomCode) || typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+  if (record.intentionallyLeft === true) return null;
+  if (nowMs - updatedAt > ACTIVE_MULTIPLAYER_ROOM_TTL_MS) return null;
+  return {
+    intentionallyLeft: false,
+    role,
+    roomCode,
+    token: typeof record.token === "string" && record.token.length > 0 ? record.token : undefined,
+    updatedAt,
+  };
+}
+
+export function clearActiveMultiplayerRoom(storage: Storage | null = readActiveMultiplayerRoomStorage()) {
+  if (!storage) return;
+  try {
+    storage.removeItem(ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY);
+  } catch {
+    // Local storage can be blocked.
+  }
+}
+
+export function markActiveMultiplayerRoomIntentionallyLeft(storage: Storage | null = readActiveMultiplayerRoomStorage()) {
+  if (!storage) return;
+  let payload: unknown;
+  try {
+    const raw = storage.getItem(ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY);
+    if (!raw) return;
+    payload = JSON.parse(raw) as unknown;
+  } catch {
+    clearActiveMultiplayerRoom(storage);
+    return;
+  }
+  if (typeof payload !== "object" || payload === null) {
+    clearActiveMultiplayerRoom(storage);
+    return;
+  }
+  const record = payload as Record<string, unknown>;
+  if (!isActiveRoomRole(record.role) || typeof record.roomCode !== "string") {
+    clearActiveMultiplayerRoom(storage);
+    return;
+  }
+  writeActiveMultiplayerRoom({
+    intentionallyLeft: true,
+    role: record.role,
+    roomCode: record.roomCode,
+    token: typeof record.token === "string" ? record.token : undefined,
+    updatedAt: Date.now(),
+  }, storage);
 }

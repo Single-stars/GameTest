@@ -1,7 +1,38 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isRoomStatusActiveForRole, resolveSignalingHttpBase, type RoomStatusResponse } from "./room-api.ts";
+import {
+  clearActiveMultiplayerRoom,
+  readActiveMultiplayerRoom,
+  writeActiveMultiplayerRoom,
+  isRoomStatusActiveForRole,
+  resolveSignalingHttpBase,
+  type RoomStatusResponse,
+} from "./room-api.ts";
+
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+  };
+}
 
 test("room status is inactive when the current role is no longer present", () => {
   assert.equal(isRoomStatusActiveForRole({ exists: false }, "host"), false);
@@ -30,4 +61,44 @@ test("local and LAN development origins use the shared signaling service", () =>
   assert.equal(resolveSignalingHttpBase("http://172.16.4.9:3000"), "https://208848.xyz");
   assert.equal(resolveSignalingHttpBase("http://172.31.4.9:3000"), "https://208848.xyz");
   assert.equal(resolveSignalingHttpBase("http://208848.xyz"), "http://208848.xyz");
+});
+
+test("active multiplayer room storage recovers only fresh non-left rooms", () => {
+  const storage = createMemoryStorage();
+  const now = 10_000;
+
+  writeActiveMultiplayerRoom({
+    role: "host",
+    roomCode: " ab-cd23 ",
+    token: "host-token",
+    updatedAt: now,
+  }, storage);
+
+  assert.deepEqual(readActiveMultiplayerRoom(storage, now + 1_000), {
+    intentionallyLeft: false,
+    role: "host",
+    roomCode: "ABCD23",
+    token: "host-token",
+    updatedAt: now,
+  });
+
+  writeActiveMultiplayerRoom({
+    intentionallyLeft: true,
+    role: "guest",
+    roomCode: "EFGH24",
+    token: "guest-token",
+    updatedAt: now + 2_000,
+  }, storage);
+  assert.equal(readActiveMultiplayerRoom(storage, now + 3_000), null);
+
+  writeActiveMultiplayerRoom({
+    role: "guest",
+    roomCode: "JKLM25",
+    token: "guest-token",
+    updatedAt: now,
+  }, storage);
+  assert.equal(readActiveMultiplayerRoom(storage, now + 31 * 60 * 1000), null);
+
+  clearActiveMultiplayerRoom(storage);
+  assert.equal(readActiveMultiplayerRoom(storage, now + 4_000), null);
 });

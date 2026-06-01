@@ -14,6 +14,8 @@ export type KnifePoint = {
   y: number;
 };
 
+export type KnifeOwner = "host" | "guest";
+
 export type KnifeShotOutcomeKind = "hit" | "collision" | "forbidden";
 
 export type KnifeShotOutcome = {
@@ -100,6 +102,82 @@ export function generateKnifeInitialAngles(level: MiniGameLevelConfig, runSeed: 
   }
 
   return angles;
+}
+
+export function resolveKnifeFirstOwner(runSeed: string): KnifeOwner {
+  return createSeededRandom(`${runSeed}:knife-first-owner`)() < 0.5 ? "host" : "guest";
+}
+
+export function resolveKnifeTurnOwner(shotIndex: number, firstOwner: KnifeOwner): KnifeOwner {
+  const evenTurn = Math.max(0, Math.round(shotIndex)) % 2 === 0;
+  if (evenTurn) return firstOwner;
+  return firstOwner === "host" ? "guest" : "host";
+}
+
+export type KnifeTurnSettlement = {
+  overtime: boolean;
+  showOvertimeBanner: boolean;
+  status: "playing" | "passed";
+  timer: number | null;
+  winnerRole: KnifeOwner | null;
+};
+
+export function resolveKnifeTurnSettlement({
+  countdown,
+  guestScore,
+  hasCountdown,
+  hostScore,
+  shotCount,
+  shotIndex,
+}: {
+  countdown: number;
+  guestScore: number;
+  hasCountdown: boolean;
+  hostScore: number;
+  shotCount: number;
+  shotIndex: number;
+}): KnifeTurnSettlement {
+  const safeShotCount = Math.max(0, Math.round(shotCount));
+  const safeShotIndex = Math.max(0, Math.round(shotIndex));
+  const nextTimer = hasCountdown ? Math.max(0, countdown) : null;
+  if (safeShotIndex < safeShotCount) {
+    return {
+      overtime: false,
+      showOvertimeBanner: false,
+      status: "playing",
+      timer: nextTimer,
+      winnerRole: null,
+    };
+  }
+
+  const overtimeShotIndex = safeShotIndex - safeShotCount;
+  if (overtimeShotIndex % 2 !== 0) {
+    return {
+      overtime: true,
+      showOvertimeBanner: false,
+      status: "playing",
+      timer: nextTimer,
+      winnerRole: null,
+    };
+  }
+
+  if (hostScore === guestScore) {
+    return {
+      overtime: true,
+      showOvertimeBanner: true,
+      status: "playing",
+      timer: nextTimer,
+      winnerRole: null,
+    };
+  }
+
+  return {
+    overtime: overtimeShotIndex > 0,
+    showOvertimeBanner: false,
+    status: "passed",
+    timer: null,
+    winnerRole: hostScore > guestScore ? "host" : "guest",
+  };
 }
 
 export function resolveKnifeShotOutcome({

@@ -42,7 +42,7 @@ import {
   type MultiplayerLevelSelectPresence,
   type MultiplayerLevelSelectState,
 } from "@/lib/multiplayer/level-select";
-import { buildForfeitResult } from "@/lib/multiplayer/result-breakdown";
+import { buildForfeitResult, shouldStartMultiplayerTiebreaker } from "@/lib/multiplayer/result-breakdown";
 
 const COUNTDOWN_TICK_MS = 100;
 const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;
@@ -71,9 +71,14 @@ function createRematchSeed(seed: string) {
   return `${seed}:again:${now()}:${Math.random().toString(36).slice(2)}`;
 }
 
+function createTiebreakerSeed(seed: string) {
+  return `${seed}:tiebreak:${now()}:${Math.random().toString(36).slice(2)}`;
+}
+
 export function buildInitialSnapshot(): MultiplayerSnapshot {
   return {
     status: "idle",
+    connectionState: "idle",
     role: null,
     roomId: null,
     selfPlayer: null,
@@ -136,6 +141,7 @@ export class MultiplayerSession {
     this.patchSnapshot({
       role: this.role,
       selfPlayer: this.selfPlayer,
+      connectionState: "signaling",
       status: this.role === "host" ? "creating" : "joining",
     });
   }
@@ -158,6 +164,7 @@ export class MultiplayerSession {
   });
 
   async start() {
+    this.patchSnapshot({ connectionState: "signaling" });
     this.transport = new RoomSignalTransport({
       role: this.role,
       roomId: this.targetRoomId,
@@ -165,6 +172,7 @@ export class MultiplayerSession {
         onPeerOpen: (roomCode) => {
           this.patchSnapshot({
             roomId: roomCode,
+            connectionState: "signaling",
             status: this.role === "host" ? "waiting" : "joining",
           });
         },
@@ -173,6 +181,9 @@ export class MultiplayerSession {
           const currentHomeworldState = this.snapshot.homeworldState;
           const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
           const currentLevelSelectState = this.snapshot.levelSelectState;
+          const currentOpponentPlayer = this.snapshot.opponentPlayer;
+          const currentOpponentHomeworldPresence = this.snapshot.opponentHomeworldPresence;
+          const currentOpponentLevelSelectPresence = this.snapshot.opponentLevelSelectPresence;
           this.stopCountdown();
           this.stopOpponentStateSnapshotTimer();
           this.stopSelfStateSnapshotTimer();
@@ -187,6 +198,7 @@ export class MultiplayerSession {
           this.startPeerPresence();
           this.patchSnapshot({
             status: "connected",
+            connectionState: "connected",
             errorMessage: null,
             selfReady: false,
             opponentReady: false,
@@ -194,26 +206,29 @@ export class MultiplayerSession {
             countdown: null,
             selfState: null,
             opponentJoining: false,
-            opponentPlayer: null,
+            opponentPlayer: currentOpponentPlayer,
             opponentState: null,
             selfResult: null,
             opponentResult: null,
             homeworldState: currentHomeworldState,
             selfHomeworldPresence: currentHomeworldPresence,
-            opponentHomeworldPresence: null,
+            opponentHomeworldPresence: currentOpponentHomeworldPresence,
             levelSelectState: currentLevelSelectState,
             selfLevelSelectPresence: currentLevelSelectPresence,
-            opponentLevelSelectPresence: null,
+            opponentLevelSelectPresence: currentOpponentLevelSelectPresence,
           });
           this.send(createHelloMessage(this.selfPlayer));
           this.sendCurrentRoomSnapshots();
         },
         onPeerDisconnected: (message) => {
           if (this.role !== "host") return;
-          this.resetHostWaitingState(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
+          this.preserveRoomAfterConnectionIssue(message || MULTIPLAYER_DISCONNECTED_MESSAGE);
         },
         onPeerJoining: () => {
           this.patchSnapshot({ opponentJoining: this.role === "host" });
+        },
+        onReplaced: () => {
+          this.markSessionReplaced();
         },
         onMessage: (message) => this.handleMessage(message),
         onRemoteClockOffset: (offsetMs) => {
@@ -240,6 +255,7 @@ export class MultiplayerSession {
   }
 
   setReady(ready: boolean) {
+    if (ready && !this.canUsePeerConnection()) return;
     this.patchSnapshot({ selfReady: ready });
     this.send(createReadyMessage(ready));
     this.maybeStartMatch();
@@ -253,6 +269,7 @@ export class MultiplayerSession {
 
   startMatch(config: Omit<MatchConfig, "matchId" | "startAt"> & { countdownMs: number; matchId?: string }) {
     if (this.role !== "host") return;
+    if (!this.canUsePeerConnection()) return;
     const sentAt = now();
     const startAt = sentAt + config.countdownMs;
     this.stopOpponentStateSnapshotTimer();
@@ -495,6 +512,7 @@ export class MultiplayerSession {
     this.remoteTimeOffsetMs = null;
     this.patchSnapshot({
       status: "idle",
+      connectionState: "idle",
       errorMessage: null,
       selfReady: false,
       opponentReady: false,
@@ -534,6 +552,10 @@ export class MultiplayerSession {
 
   private currentMatchId() {
     return this.snapshot.match?.matchId ?? null;
+  }
+
+  private canUsePeerConnection() {
+    return this.snapshot.connectionState === "connected" && this.transport?.isConnected === true;
   }
 
   private currentMatchIsKnife() {
@@ -733,6 +755,7 @@ export class MultiplayerSession {
           this.stopPeerPresence();
           this.patchSnapshot({
             status: "disconnected",
+            connectionState: "closed",
             errorMessage: message.reason || MULTIPLAYER_DISCONNECTED_MESSAGE,
             match: null,
             countdown: null,
@@ -772,6 +795,7 @@ export class MultiplayerSession {
     this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "connected",
+      connectionState: "connected",
       errorMessage: null,
       selfReady: false,
       opponentReady: false,
@@ -830,6 +854,7 @@ export class MultiplayerSession {
     this.lastOpponentStateAcceptedAt = null;
     this.patchSnapshot({
       status: "waiting",
+      connectionState: "signaling",
       errorMessage,
       selfReady: false,
       opponentReady: false,
@@ -910,6 +935,20 @@ export class MultiplayerSession {
 
   private tryFinishSession() {
     if (!this.snapshot.selfResult || !this.snapshot.opponentResult) return;
+    if (this.snapshot.match && this.role === "host") {
+      const level = resolveMultiplayerLevelSelection(this.snapshot.match.levelId);
+      if (shouldStartMultiplayerTiebreaker(level, this.snapshot.selfResult, this.snapshot.opponentResult, this.snapshot.match.playMode)) {
+        this.startMatch({
+          levelId: this.snapshot.match.levelId,
+          playMode: this.snapshot.match.playMode,
+          seed: createTiebreakerSeed(this.snapshot.match.seed),
+          logicWidth: this.snapshot.match.logicWidth,
+          logicHeight: this.snapshot.match.logicHeight,
+          countdownMs: REMATCH_COUNTDOWN_MS,
+        });
+        return;
+      }
+    }
     this.patchSnapshot({
       status: "finished",
       countdown: null,
@@ -937,8 +976,12 @@ export class MultiplayerSession {
 
   private notePeerMessage() {
     this.lastPeerMessageAt = now();
-    if (this.snapshot.errorMessage) {
-      this.patchSnapshot({ errorMessage: null });
+    if (
+      this.snapshot.errorMessage ||
+      this.snapshot.connectionState === "stale" ||
+      (this.snapshot.connectionState === "reconnecting" && this.transport?.isConnected === true)
+    ) {
+      this.patchSnapshot({ connectionState: "connected", errorMessage: null });
     }
   }
 
@@ -949,12 +992,18 @@ export class MultiplayerSession {
   }
 
   private markPeerTemporarilyStale() {
+    this.stopCountdown();
     this.patchSnapshot({
+      connectionState: "stale",
       errorMessage: MULTIPLAYER_DISCONNECTED_MESSAGE,
+      selfReady: false,
+      opponentReady: false,
+      countdown: null,
     });
   }
 
   private preserveRoomAfterConnectionIssue(message: string) {
+    this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopSelfStateSnapshotTimer();
     this.pendingOpponentStateSnapshot = null;
@@ -962,8 +1011,44 @@ export class MultiplayerSession {
     this.lastOpponentStateSnapshotAt = 0;
     this.lastSelfStateSnapshotAt = 0;
     this.patchSnapshot({
-      status: this.role === "host" ? "waiting" : "disconnected",
+      status: this.snapshot.opponentPlayer ? "connected" : this.role === "host" ? "waiting" : "disconnected",
+      connectionState: "reconnecting",
       errorMessage: message,
+      selfReady: false,
+      match: null,
+      countdown: null,
+      selfState: null,
+      opponentState: null,
+      selfResult: null,
+      opponentResult: null,
+      opponentJoining: false,
+      homeworldState: this.snapshot.homeworldState,
+      opponentReady: false,
+    });
+  }
+
+  private markSessionReplaced() {
+    this.transport = null;
+    this.stopCountdown();
+    this.stopOpponentStateSnapshotTimer();
+    this.stopSelfStateSnapshotTimer();
+    this.stopPeerPresence();
+    this.pendingOpponentStateSnapshot = null;
+    this.pendingSelfStateSnapshot = null;
+    this.lastOpponentStateSnapshotAt = 0;
+    this.lastSelfStateSnapshotAt = 0;
+    this.selfStateSeq = 0;
+    this.opponentStateSeq = -1;
+    this.opponentStateAcceptedPackets = 0;
+    this.opponentStateDroppedOldPackets = 0;
+    this.lastOpponentStateAcceptedAt = null;
+    this.remoteTimeOffsetMs = null;
+    this.patchSnapshot({
+      status: "disconnected",
+      connectionState: "replaced",
+      errorMessage: "same-role-replaced",
+      selfReady: false,
+      opponentReady: false,
       match: null,
       countdown: null,
       selfState: null,
@@ -972,11 +1057,8 @@ export class MultiplayerSession {
       opponentResult: null,
       opponentPlayer: null,
       opponentJoining: false,
-      homeworldState: this.role === "host" ? this.snapshot.homeworldState : null,
       opponentHomeworldPresence: null,
-      selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,
-      opponentReady: false,
     });
   }
 
@@ -999,6 +1081,7 @@ export class MultiplayerSession {
     this.remoteTimeOffsetMs = null;
     this.patchSnapshot({
       status: "disconnected",
+      connectionState: "closed",
       errorMessage: message,
       selfReady: false,
       opponentReady: false,

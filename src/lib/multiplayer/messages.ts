@@ -113,7 +113,7 @@ function isResultBreakdown(value: unknown) {
   if (value.formulaRows !== undefined && (!Array.isArray(value.formulaRows) || !value.formulaRows.every(isResultBreakdownFormulaRow))) return false;
   if (!isRecord(value.final)) return false;
   if (!isString(value.final.label)) return false;
-  if (value.final.unit !== "ms" && value.final.unit !== "point") return false;
+  if (value.final.unit !== "ms" && value.final.unit !== "point" && value.final.unit !== "count") return false;
   if (!isBoolean(value.final.lowerIsBetter) || !isNumber(value.final.value)) return false;
   if (value.tiebreakerText !== undefined && typeof value.tiebreakerText !== "string") return false;
   return true;

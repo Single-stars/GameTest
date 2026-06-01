@@ -74,21 +74,22 @@ test("flappy rules only mention collectible advantage on collectible levels", ()
 
 test("settlement adjustments describe final-score-only bonuses and penalties", () => {
   assert.deepEqual(adjustmentKeys("flappy-4"), ["revive-count", "collectible-time-bonus"]);
-  assert.deepEqual(adjustmentKeys("doodle-4"), ["revive-count", "boost-platform-note"]);
+  assert.deepEqual(adjustmentKeys("doodle-4"), ["revive-count"]);
   assert.deepEqual(adjustmentKeys("fall-down-danger-easy"), ["revive-count"]);
   assert.deepEqual(adjustmentKeys("square-jump-double-easy"), ["revive-count"]);
 });
 
-test("knife rules use score settlement with only safe-hit and countdown scoring", () => {
+test("knife rules use score settlement with countdown only on countdown levels", () => {
   assert.equal(rulesFor("knife-1").settlement.kind, "score");
   assert.deepEqual(rulesFor("knife-1").settlement.baseMetrics, []);
   assert.deepEqual(adjustmentKeys("knife-1"), ["knife-hit-score", "knife-timeout-penalty"]);
-  assert.deepEqual(adjustmentKeys("knife-7"), ["knife-hit-score", "knife-timeout-penalty"]);
+  assert.deepEqual(adjustmentKeys("knife-4"), ["knife-hit-score"]);
+  assert.deepEqual(adjustmentKeys("knife-7"), ["knife-hit-score"]);
   assert.deepEqual(adjustmentKeys("knife-10"), ["knife-hit-score", "knife-timeout-penalty"]);
   for (const levelId of ["knife-1", "knife-7", "knife-10"]) {
     const rules = rulesFor(levelId);
     assert.equal(rules.countdownLines.some((line) => line.includes("撞") || line.includes("危险") || line.includes("加赛")), false);
-    assert.equal(rules.settlement.tiebreakerText, undefined);
+    assert.match(rules.settlement.tiebreakerText ?? "", /加赛/);
   }
 });
 
@@ -102,19 +103,25 @@ test("countdown exposes all visible rules at once instead of rotating one line p
   ]);
 });
 
-test("aim rules settle moving targets with time penalties and escape-target overtime", () => {
+test("aim rules record shot and escape counts without adding time penalties", () => {
   assert.deepEqual(rulesFor("aim-1").countdownLines, [
     "清空目标比最终用时",
-    "射空 +1 秒",
+    "射空只记次数",
   ]);
   assert.deepEqual(rulesFor("aim-2").countdownLines, [
-    "流程结束比最终用时",
-    "射空 +1 秒",
-    "漏靶 +2 秒",
+    "流程结束比命中数",
+    "射空只记次数",
+    "漏靶只记次数",
   ]);
-  assert.equal(rulesFor("aim-2").settlement.kind, "effective-time");
+  assert.equal(rulesFor("aim-2").settlement.kind, "score");
   assert.match(rulesFor("aim-2").settlement.tiebreakerText ?? "", /高速逃逸靶加赛/);
   assert.deepEqual(adjustmentKeys("aim-3"), ["aim-miss-penalty", "aim-decoy-penalty"]);
+  for (const key of ["aim-miss-penalty", "aim-flyout-penalty"] as const) {
+    const metric = rulesFor("aim-2").settlement.adjustments.find((item) => item.key === key);
+    assert.equal(metric?.unit, "count");
+    assert.equal(metric?.valuePerEvent, undefined);
+    assert.equal(metric?.displayOnly, true);
+  }
 });
 
 test("versus mode no longer presents stale score-first rules", () => {

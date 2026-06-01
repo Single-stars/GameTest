@@ -33,10 +33,14 @@ import {
   generateKnifeInitialAngles,
   getKnifeShotGeometry,
   getLocalHitAngle,
+  resolveKnifeFirstOwner,
+  resolveKnifeTurnSettlement,
+  resolveKnifeTurnOwner,
   getSineAngularVelocity,
   normalizeDegrees,
   resolveKnifeShotOutcome,
   type AngleArc,
+  type KnifeOwner,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 
@@ -50,7 +54,6 @@ const KNIFE_FLIGHT_MS = 95;
 const KNIFE_FEEDBACK_MS = 420;
 const KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 type KnifeFeedbackTone = "idle" | "good" | "bad";
-type KnifeOwner = "host" | "guest";
 type KnifeForbiddenZone = {
   id: number;
   localStart: number;
@@ -118,6 +121,18 @@ export type KnifeRuntimeState = {
   x: number;
   y: number;
 };
+
+function formatKnifeRoundNumber(value: number) {
+  const rounded = Math.max(1, Math.round(value));
+  const labels = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  return labels[rounded - 1] ?? String(rounded);
+}
+
+function formatKnifeOvertimeRoundLabel(shotIndex: number, shotCount: number) {
+  const overtimeShotNumber = Math.max(1, Math.round(shotIndex - shotCount));
+  const overtimeRound = Math.floor((Math.max(1, overtimeShotNumber) - 1) / 2) + 1;
+  return `加赛第${formatKnifeRoundNumber(overtimeRound)}轮`;
+}
 
 function knifeSectorPath(zone: KnifeForbiddenZone) {
   const radius = KNIFE_WHEEL_SIZE / 2;
@@ -189,12 +204,8 @@ function makeKnifeView(frame: KnifeFrame, launcherVisible: boolean): KnifeViewFr
   };
 }
 
-function resolveKnifeTurnOwner(shotIndex: number): KnifeOwner {
-  return shotIndex % 2 === 0 ? "host" : "guest";
-}
-
-function isKnifeLocalTurn(frame: KnifeFrame, multiplayerRole: KnifeOwner) {
-  return resolveKnifeTurnOwner(frame.shotIndex) === multiplayerRole;
+function isKnifeLocalTurn(frame: KnifeFrame, multiplayerRole: KnifeOwner, firstOwner: KnifeOwner) {
+  return resolveKnifeTurnOwner(frame.shotIndex, firstOwner) === multiplayerRole;
 }
 
 function addKnifeOwnerStat(frame: KnifeFrame, owner: KnifeOwner, stat: "hit" | "timeout" | "collision" | "danger") {
@@ -237,16 +248,26 @@ function knifeOwnerStats(frame: KnifeFrame, owner: KnifeOwner) {
 
 function settleKnifeTurnBasedShot(frame: KnifeFrame, shotCount: number, hasCountdown: boolean, countdown: number) {
   frame.timedOutThisShot = false;
-  if (frame.shotIndex < shotCount) {
-    frame.timer = hasCountdown ? countdown : null;
-    frame.status = "playing";
-    return;
-  }
   const hostScore = knifeOwnerScore(frame, "host");
   const guestScore = knifeOwnerScore(frame, "guest");
-  frame.timer = null;
-  frame.status = "passed";
-  frame.reason = `主局结束，比分 ${hostScore}:${guestScore}`;
+  const settlement = resolveKnifeTurnSettlement({
+    countdown,
+    guestScore,
+    hasCountdown,
+    hostScore,
+    shotCount,
+    shotIndex: frame.shotIndex,
+  });
+  frame.timer = settlement.timer;
+  frame.overtime = settlement.overtime;
+  frame.status = settlement.status;
+  frame.winnerRole = settlement.winnerRole;
+  if (settlement.showOvertimeBanner) {
+    frame.reason = `加赛，比分 ${hostScore}:${guestScore}`;
+  } else if (settlement.status === "passed") {
+    frame.reason = `主局结束，比分 ${hostScore}:${guestScore}`;
+  }
+  return settlement;
 }
 
 function resolveKnifeCompletionStatus(frame: KnifeFrame, multiplayerRole?: KnifeOwner): PrototypeStatus {
@@ -260,16 +281,13 @@ function finiteStateNumber(value: number | undefined, fallback: number) {
 
 function applyKnifeRemoteState(frame: KnifeFrame, remoteState: SelfGameState) {
   if (typeof remoteState.knifeShotIndex !== "number") return false;
-  if (typeof remoteState.angle === "number" && Number.isFinite(remoteState.angle)) {
-    frame.rotation = normalizeDegrees(remoteState.angle);
-  }
   frame.insertedAngles = [...(remoteState.knifeInsertedAngles ?? frame.insertedAngles)];
   frame.failedAngles = [...(remoteState.knifeFailedAngles ?? frame.failedAngles)];
   frame.shotIndex = remoteState.knifeShotIndex;
   frame.failures = finiteStateNumber(remoteState.failures, frame.failures);
   frame.timer = typeof remoteState.knifeTimer === "number" ? remoteState.knifeTimer : null;
   frame.timedOutThisShot = remoteState.knifeTimedOutThisShot ?? false;
-  frame.overtime = false;
+  frame.overtime = remoteState.knifeOvertime ?? frame.overtime;
   frame.winnerRole = remoteState.knifeWinnerRole ?? null;
   frame.hostHits = finiteStateNumber(remoteState.knifeHostHits, frame.hostHits);
   frame.guestHits = finiteStateNumber(remoteState.knifeGuestHits, frame.guestHits);
@@ -317,7 +335,7 @@ function makeKnifeRuntimeState(
     knifeHostHits: frame.hostHits,
     knifeHostTimeouts: frame.hostTimeouts,
     knifeInsertedAngles: [...frame.insertedAngles],
-    knifeOvertime: false,
+    knifeOvertime: frame.overtime,
     knifeShotIndex: frame.shotIndex,
     knifeTimedOutThisShot: frame.timedOutThisShot,
     knifeTimer: frame.timer ?? undefined,
@@ -376,9 +394,11 @@ export function KnifeHitPrototype({
     [forbiddenArcs],
   );
   const initialAngles = useMemo(() => generateKnifeInitialAngles(level, runSeed, forbiddenArcs), [forbiddenArcs, level, runSeed]);
+  const knifeFirstOwner = useMemo(() => resolveKnifeFirstOwner(runSeed), [runSeed]);
   const timeoutRef = useRef<number | null>(null);
   const launcherReadyTimeoutRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  const overtimeBannerTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
   const initialRuntime = useMemo(() => createKnifeRuntime(initialAngles, hasCountdown, countdown), [countdown, hasCountdown, initialAngles]);
   const runtimeRef = useRef<KnifeFrame>(initialRuntime);
@@ -391,6 +411,7 @@ export function KnifeHitPrototype({
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
+  const [overtimeBannerVisible, setOvertimeBannerVisible] = useState(false);
   const [view, setView] = useState<KnifeViewFrame>(() => makeKnifeView(initialRuntime, true));
 
   const syncKnifeView = useCallback(() => {
@@ -405,12 +426,12 @@ export function KnifeHitPrototype({
     (time = performance.now(), force = false) => {
       if (!onRuntimeStateRef.current) return;
       const frame = runtimeRef.current;
-      if (multiplayerRole && frame.status === "playing" && !isKnifeLocalTurn(frame, multiplayerRole) && !force) return;
+      if (multiplayerRole && frame.status === "playing" && !isKnifeLocalTurn(frame, multiplayerRole, knifeFirstOwner) && !force) return;
       if (!force && time - lastRuntimeSyncRef.current < KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS) return;
       lastRuntimeSyncRef.current = time;
       onRuntimeStateRef.current(makeKnifeRuntimeState(frame, shotCount, stageSize, knifeGeometry, multiplayerRole));
     },
-    [knifeGeometry, multiplayerRole, shotCount, stageSize],
+    [knifeFirstOwner, knifeGeometry, multiplayerRole, shotCount, stageSize],
   );
 
   const showKnifeFeedback = useCallback((tone: Exclude<KnifeFeedbackTone, "idle">) => {
@@ -422,9 +443,19 @@ export function KnifeHitPrototype({
     }, KNIFE_FEEDBACK_MS);
   }, []);
 
+  const showOvertimeBanner = useCallback(() => {
+    if (overtimeBannerTimeoutRef.current !== null) window.clearTimeout(overtimeBannerTimeoutRef.current);
+    setOvertimeBannerVisible(true);
+    overtimeBannerTimeoutRef.current = window.setTimeout(() => {
+      overtimeBannerTimeoutRef.current = null;
+      setOvertimeBannerVisible(false);
+    }, 900);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
+      if (overtimeBannerTimeoutRef.current !== null) window.clearTimeout(overtimeBannerTimeoutRef.current);
     };
   }, []);
 
@@ -433,27 +464,37 @@ export function KnifeHitPrototype({
     launcherVisibleRef.current = false;
     launcherReadyTimeoutRef.current = window.setTimeout(() => {
       const current = runtimeRef.current;
-      if (current.status === "playing" && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole))) {
+      if (current.status === "playing" && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner))) {
         launcherVisibleRef.current = true;
         syncKnifeView();
       }
       launcherReadyTimeoutRef.current = null;
     }, 60);
-  }, [multiplayerRole, syncKnifeView]);
+  }, [knifeFirstOwner, multiplayerRole, syncKnifeView]);
 
   const applyRemoteKnifeState = useCallback((nextRemoteState: SelfGameState) => {
     if (!multiplayerRole) return;
     const remoteSeq = nextRemoteState.seq ?? null;
     if (remoteSeq !== null && lastAppliedRemoteSeqRef.current !== null && remoteSeq <= lastAppliedRemoteSeqRef.current) return;
+    const previousShotIndex = runtimeRef.current.shotIndex;
     if (!applyKnifeRemoteState(runtimeRef.current, nextRemoteState)) return;
     lastAppliedRemoteSeqRef.current = remoteSeq;
     const current = runtimeRef.current;
-    launcherVisibleRef.current = current.status === "playing" && isKnifeLocalTurn(current, multiplayerRole);
+    if (
+      current.overtime &&
+      current.winnerRole === null &&
+      current.shotIndex !== previousShotIndex &&
+      current.shotIndex >= shotCount &&
+      (current.shotIndex - shotCount) % 2 === 0
+    ) {
+      showOvertimeBanner();
+    }
+    launcherVisibleRef.current = current.status === "playing" && isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner);
     syncKnifeView();
-    if (current.status !== "playing" || isKnifeLocalTurn(current, multiplayerRole)) {
+    if (current.status !== "playing" || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner)) {
       syncKnifeRuntimeState(performance.now(), true);
     }
-  }, [multiplayerRole, syncKnifeRuntimeState, syncKnifeView]);
+  }, [knifeFirstOwner, multiplayerRole, shotCount, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView]);
 
   useEffect(() => {
     if (!multiplayerRole || !remoteStateSubscription) return;
@@ -488,7 +529,8 @@ export function KnifeHitPrototype({
         current.launcherReadyAt = current.time + 0.06;
         current.reason = "未安全插中";
         current.shotIndex += 1;
-        settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+        const settlement = settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+        if (settlement.showOvertimeBanner) showOvertimeBanner();
         if (current.status === "playing") scheduleLauncherReady();
         else launcherVisibleRef.current = false;
         syncKnifeView();
@@ -536,7 +578,8 @@ export function KnifeHitPrototype({
         current.launcherReadyAt = current.time + 0.06;
         current.reason = "未安全插中";
         current.shotIndex += 1;
-        settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+        const settlement = settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+        if (settlement.showOvertimeBanner) showOvertimeBanner();
         if (current.status === "playing") scheduleLauncherReady();
         else launcherVisibleRef.current = false;
         syncKnifeView();
@@ -581,9 +624,10 @@ export function KnifeHitPrototype({
     current.flying = false;
     current.shotIndex = nextShotIndex;
     if (multiplayerRole) {
-      const owner = resolveKnifeTurnOwner(nextShotIndex - 1);
+      const owner = resolveKnifeTurnOwner(nextShotIndex - 1, knifeFirstOwner);
       addKnifeOwnerStat(current, owner, "hit");
-      settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+      const settlement = settleKnifeTurnBasedShot(current, shotCount, hasCountdown, countdown);
+      if (settlement.showOvertimeBanner) showOvertimeBanner();
       if (current.status === "playing") {
         showKnifeFeedback("good");
         current.launcherReadyAt = current.time + 0.06;
@@ -612,12 +656,12 @@ export function KnifeHitPrototype({
     scheduleLauncherReady();
     syncKnifeView();
     syncKnifeRuntimeState(performance.now(), true);
-  }, [countdown, forbiddenArcs, hasCountdown, knifeGeometry.fireAngle, mode, multiplayerRole, scheduleLauncherReady, shotCount, showKnifeFeedback, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [countdown, forbiddenArcs, hasCountdown, knifeFirstOwner, knifeGeometry.fireAngle, mode, multiplayerRole, scheduleLauncherReady, shotCount, showKnifeFeedback, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const launch = useCallback(() => {
     const current = runtimeRef.current;
     if (current.status !== "playing" || current.flying) return;
-    if (multiplayerRole && !isKnifeLocalTurn(current, multiplayerRole)) return;
+    if (multiplayerRole && !isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner)) return;
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     launcherReadyTimeoutRef.current = null;
@@ -629,7 +673,7 @@ export function KnifeHitPrototype({
       resolveShot();
       timeoutRef.current = null;
     }, KNIFE_FLIGHT_MS);
-  }, [multiplayerRole, resolveShot, syncKnifeRuntimeState, syncKnifeView]);
+  }, [knifeFirstOwner, multiplayerRole, resolveShot, syncKnifeRuntimeState, syncKnifeView]);
 
   useEffect(() => {
     let frameId = 0;
@@ -653,12 +697,12 @@ export function KnifeHitPrototype({
       if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
 
       let shouldSync = false;
-      if (current.timer !== null && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole))) {
+      if (current.timer !== null && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner))) {
         current.timer -= delta;
         if (current.timer <= 0) {
           showKnifeFeedback("bad");
           if (multiplayerRole) {
-            const owner = resolveKnifeTurnOwner(current.shotIndex);
+            const owner = resolveKnifeTurnOwner(current.shotIndex, knifeFirstOwner);
             if (!current.timedOutThisShot) {
               addKnifeOwnerStat(current, owner, "timeout");
               current.failures += 1;
@@ -718,10 +762,11 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, countdown, hasCountdown, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [baseRotationSpeed, countdown, hasCountdown, knifeFirstOwner, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
-  const remaining = Math.max(0, shotCount - view.shotIndex);
-  const localTurn = multiplayerRole ? isKnifeLocalTurn(view, multiplayerRole) : true;
+  const remaining = view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);
+  const localTurn = multiplayerRole ? isKnifeLocalTurn(view, multiplayerRole, knifeFirstOwner) : true;
+  const overtimeRoundLabel = formatKnifeOvertimeRoundLabel(view.shotIndex, shotCount);
   const wheelRotation = `rotate(${view.rotation}deg)`;
   const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible);
   const showOverlay = mode === "prototype";
@@ -764,7 +809,7 @@ export function KnifeHitPrototype({
   return (
     <div className="prototype-game-wrap">
       <div className="mini-score">
-        <span>已发射 {view.shotIndex}/{shotCount}</span>
+        <span>{view.overtime ? overtimeRoundLabel : `已发射 ${view.shotIndex}/${shotCount}`}</span>
         {mode === "base" ? <span>命中 {view.insertedAngles.length}/{shotCount}</span> : null}
         {multiplayerRole ? <span>{localTurn ? "你的回合" : "对方回合"}</span> : null}
         {hasCountdown ? <span>倒计时 {(view.timer ?? 0).toFixed(1)}s</span> : null}
@@ -815,6 +860,8 @@ export function KnifeHitPrototype({
           </div>
         </div>
         {hasCountdown ? <div className="knife-countdown-ghost" aria-hidden="true">{Math.ceil(Math.max(0, view.timer ?? 0))}</div> : null}
+        {multiplayerRole ? <div className="knife-turn-ghost" aria-hidden="true">{localTurn ? "你的回合" : "对方回合"}</div> : null}
+        {overtimeBannerVisible ? <div className="knife-overtime-banner" role="status">{overtimeRoundLabel}</div> : null}
         {showLauncher ? <div className={`knife-arrow knife-launcher ${view.flying ? "flying" : ""}`} /> : null}
         <div className="knife-shot-stack" aria-hidden="true">
           {Array.from({ length: remaining }, (_, index) => (

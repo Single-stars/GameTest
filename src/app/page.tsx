@@ -1008,7 +1008,7 @@ export default function Home() {
   }, [persistHomeworldState, transitionToRoute]);
 
   const openMultiplayerSelect = useCallback(() => {
-    void transitionToRoute("/multiplayer?select=1");
+    void transitionToRoute("/multiplayer");
   }, [transitionToRoute]);
 
   const openHomeworldMultiplayerEntry = useCallback(() => {

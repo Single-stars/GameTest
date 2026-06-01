@@ -345,6 +345,8 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.match(doodleSource, /respawnAwaitingInput: boolean;/);
   assert.match(doodleSource, /current\.respawnAwaitingInput = true;/);
   assert.match(doodleSource, /if \(current\.respawnAwaitingInput && current\.time < current\.respawnCameraUntil\) return;/);
+  assert.match(doodleSource, /if \(!current\.started\) \{\s*current\.time \+= delta;/);
+  assert.doesNotMatch(doodleSource, /if \(current\.respawnAwaitingInput && current\.time < current\.respawnCameraUntil\) \{\s*current\.time \+= delta;/);
   assert.match(doodleSource, /current\.playerVy = 0;/);
   assert.match(doodleSource, /current\.started = false;/);
   assert.match(doodleSource, /current\.jumpTurnAvailable = false;/);

@@ -375,9 +375,13 @@ test("fall down adds falling hazards and L platforms without more than two conse
   assert.match(fallDownSource, /function makeFallDownFallingHazards\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\): FallDownFallingHazard\[\]/);
   assert.match(fallDownSource, /function fallDownFallingHazardScreenY\(hazard: FallDownFallingHazard, time: number, stageHeight: number\)/);
   assert.match(fallDownSource, /function fallDownFallingHazardX\(hazard: FallDownFallingHazard, time: number, stageWidth: number\)/);
+  assert.match(componentSource, /const FALL_DOWN_FALLING_HAZARD_HITBOX_SCALE = 0\.72;/);
+  assert.match(fallDownSource, /function fallDownFallingHazardHitboxRadius\(hazard: FallDownFallingHazard\)/);
   assert.match(fallDownSource, /fallingHazards: makeFallDownFallingHazards\(level, runSeed, stageSize\)/);
   assert.match(fallDownSource, /for \(const hazard of current\.fallingHazards\)/);
   assert.match(fallDownSource, /fall-down-falling-hazard/);
+  assert.match(fallDownSource, /const hazardDistance = Math\.hypot\(current\.playerX - hazardX, playerScreenY - hazardY\);/);
+  assert.doesNotMatch(fallDownSource, /Math\.abs\(playerScreenY - hazardY\) <= PLAYER_SIZE \/ 2 \+ hazard\.size \/ 2 - 2/);
   assert.match(fallDownSource, /fall-platform-leg/);
   assert.match(fallDownSource, /ledgePlatformCount/);
   assert.doesNotMatch(fallDownSource, /leftGuard|rightGuard/);

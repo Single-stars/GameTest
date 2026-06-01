@@ -81,7 +81,7 @@ test("multiplayer winner falls back to score only when neither side finishes", (
   );
 });
 
-test("multiplayer winner uses latest result score and time instead of overriding with breakdown", () => {
+test("multiplayer winner uses final effective time from the settlement breakdown", () => {
   const self = result({
     passed: true,
     score: 100,
@@ -109,8 +109,8 @@ test("multiplayer winner uses latest result score and time instead of overriding
     }),
   });
 
-  assert.equal(resolveMultiplayerWinnerText(self, opponent), "你输了");
-  assert.equal(resolveMultiplayerWinnerText(opponent, self), "你赢了");
+  assert.equal(resolveMultiplayerWinnerText(self, opponent), "你赢了");
+  assert.equal(resolveMultiplayerWinnerText(opponent, self), "你输了");
 });
 
 test("multiplayer winner uses score first for knife score settlements", () => {

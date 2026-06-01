@@ -679,8 +679,8 @@ export function DoodleJumpPrototype({
         return;
       }
       if (!current.started) {
+        current.time += delta;
         if (current.respawnAwaitingInput && current.time < current.respawnCameraUntil) {
-          current.time += delta;
           current.cameraY = smoothDoodleRespawnCamera(
             current.respawnCameraStartY,
             current.respawnCameraEndY,

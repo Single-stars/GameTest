@@ -15,13 +15,13 @@ import {
 } from "@/lib/advanced-aim";
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
+import { createSeededRandom } from "@/lib/mini-games";
 import {
   clamp,
   getParamBoolean,
   getParamNumber,
   now,
   pointerKind,
-  rand,
   ROUND_SETTLEMENT_DELAY_MS,
   trial,
   type PointerKind,
@@ -48,7 +48,7 @@ type AdvancedAimMovingEntity = {
   y: number;
   size: number;
   active: boolean;
-  spawnedAt: number;
+  spawnedAt: number;
   entered: boolean;
   vx: number;
   vy: number;
@@ -135,6 +135,15 @@ function advancedAimTargetSpeed(config: AdvancedStageConfig, mode: AdvancedAimMo
   if (mode === "decoy") speed = base + config.level * 0.009;
   return speed;
 }
+
+function createAdvancedAimEntityRandom(config: AdvancedStageConfig, runSeed: string | undefined, kind: "target" | "distractor", index: number) {
+  if (!runSeed) return Math.random;
+  return createSeededRandom(`advanced-aim:${runSeed}:${config.dimension}:${config.level}:${config.variant}:${kind}:${index}`);
+}
+
+function aimRand(random: () => number, min: number, max: number) {
+  return random() * (max - min) + min;
+}
 
 function makeAdvancedAimMovingEntity({
   config,
@@ -142,22 +151,26 @@ function makeAdvancedAimMovingEntity({
   kind,
   mode,
   rect,
-  spawnedAt,
+  runSeed,
+
+  spawnedAt,
 }: {
   config: AdvancedStageConfig;
   index: number;
   kind: "target" | "distractor";
   mode: AdvancedAimMode;
-  rect: DOMRect;
+  rect: DOMRect;
+  runSeed?: string;
   spawnedAt: number;
 }): AdvancedAimMovingEntity {
+  const random = createAdvancedAimEntityRandom(config, runSeed, kind, index);
   const bounds = getAdvancedAimSpawnBounds(config, rect);
   const targetSize = getParamNumber(config, "targetSize", 52);
   const size = kind === "distractor" ? Math.max(34, targetSize - 5) : targetSize;
   const targetSpeedMultiplier = getParamNumber(config, "targetSpeedMultiplier", 1);
   const speed = advancedAimTargetSpeed(config, mode, kind) * targetSpeedMultiplier;
-  const baseX = rand(bounds.minX + size, bounds.maxX - size);
-  const baseY = rand(bounds.minY + size, bounds.maxY - size);
+  const baseX = aimRand(random, bounds.minX + size, bounds.maxX - size);
+  const baseY = aimRand(random, bounds.minY + size, bounds.maxY - size);
   const phase = index * 0.86 + (kind === "distractor" ? 1.7 : 0);
   const bossRoute =
     kind === "target"
@@ -177,28 +190,28 @@ function makeAdvancedAimMovingEntity({
           : advancedAimRouteFromConfig(config);
 
   if (route === "incoming") {
-    const side = Math.floor(rand(0, 4));
+    const side = Math.floor(aimRand(random, 0, 4));
     const start =
       side === 0
-        ? { x: -size, y: rand(bounds.minY, bounds.maxY) }
+        ? { x: -size, y: aimRand(random, bounds.minY, bounds.maxY) }
         : side === 1
-          ? { x: rect.width + size, y: rand(bounds.minY, bounds.maxY) }
+          ? { x: rect.width + size, y: aimRand(random, bounds.minY, bounds.maxY) }
           : side === 2
-            ? { x: rand(bounds.minX, bounds.maxX), y: -size }
-            : { x: rand(bounds.minX, bounds.maxX), y: rect.height + size };
+            ? { x: aimRand(random, bounds.minX, bounds.maxX), y: -size }
+            : { x: aimRand(random, bounds.minX, bounds.maxX), y: rect.height + size };
     const destination = {
       x:
         side === 0
           ? rect.width + size
           : side === 1
             ? -size
-            : rand(bounds.minX, bounds.maxX),
+            : aimRand(random, bounds.minX, bounds.maxX),
       y:
         side === 2
           ? rect.height + size
           : side === 3
             ? -size
-            : rand(bounds.minY, bounds.maxY),
+            : aimRand(random, bounds.minY, bounds.maxY),
     };
     const dx = destination.x - start.x;
     const dy = destination.y - start.y;
@@ -225,8 +238,8 @@ function makeAdvancedAimMovingEntity({
     };
   }
 
-  const vx = (Math.random() > 0.5 ? 1 : -1) * speed;
-  const vy = route === "horizontal" ? 0 : (Math.random() > 0.5 ? 1 : -1) * speed * 0.72;
+  const vx = (random() > 0.5 ? 1 : -1) * speed;
+  const vy = route === "horizontal" ? 0 : (random() > 0.5 ? 1 : -1) * speed * 0.72;
   const radiusX = Math.min((bounds.maxX - bounds.minX) * 0.28, 90);
   const radiusY = Math.min((bounds.maxY - bounds.minY) * 0.24, 70);
   return {
@@ -385,10 +398,12 @@ export function AdvancedAimRound({
   onComplete,
   onPracticeSuccess,
   onRuntimeState,
+  runSeed,
 }: RoundProps & {
   multiplayerPenaltyMode?: boolean;
   onPracticeSuccess?: () => void;
   onRuntimeState?: (state: AdvancedAimRuntimeState) => void;
+  runSeed?: string;
 }) {
   const config = advancedConfig!;
   const mode = getAdvancedAimMode(config);
@@ -552,14 +567,14 @@ export function AdvancedAimRound({
     const initialTargets =
       mode === "track" || mode === "decoy"
         ? Array.from({ length: targetCount }, (_, index) =>
-            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: startedAt }),
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, runSeed, spawnedAt: startedAt }),
           )
         : [];
     spawnedTargetsRef.current = initialTargets.length;
     publishTargets(initialTargets);
     publishDistractors(
       Array.from({ length: getParamNumber(config, "decoyCount", 0) }, (_, index) =>
-        makeAdvancedAimMovingEntity({ config, index, kind: "distractor", mode, rect, spawnedAt: startedAt }),
+        makeAdvancedAimMovingEntity({ config, index, kind: "distractor", mode, rect, runSeed, spawnedAt: startedAt }),
       ),
     );
 
@@ -576,7 +591,7 @@ export function AdvancedAimRound({
       feedbackResetTimerRef.current = null;
       finishedRef.current = true;
     };
-  }, [config, mode, publishArrows, publishDistractors, publishTargets, spawnIntervalMs, syncAimRuntimeState, targetCount]);
+  }, [config, mode, publishArrows, publishDistractors, publishTargets, runSeed, spawnIntervalMs, syncAimRuntimeState, targetCount]);
 
   useEffect(() => {
     const tick = () => {
@@ -597,7 +612,7 @@ export function AdvancedAimRound({
           const index = spawnedTargetsRef.current;
           nextTargets = [
             ...nextTargets,
-            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, spawnedAt: frameNow }),
+            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, runSeed, spawnedAt: frameNow }),
           ];
           spawnedTargetsRef.current += 1;
           lastSpawnAtRef.current = frameNow;
@@ -744,6 +759,7 @@ export function AdvancedAimRound({
                   kind: "target",
                   mode,
                   rect,
+                  runSeed,
                   spawnedAt: frameNow,
                 }),
               ];
@@ -812,7 +828,8 @@ export function AdvancedAimRound({
     multiplayerPenaltyMode,
     onPracticeSuccess,
     recordAimTrial,
-    spawnIntervalMs,
+    runSeed,
+    spawnIntervalMs,
     publishArrows,
     publishDistractors,
     publishTargets,

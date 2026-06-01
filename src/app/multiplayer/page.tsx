@@ -5,7 +5,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ModeTransitionOverlay, useModeTransition, type ModeTransitionRouteOptions } from "@/features/app-transition/mode-transition";
-import { ConnectionStatus } from "@/features/multiplayer/connection-status";
 import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
 import { MultiplayerLevelSelectRoom } from "@/features/multiplayer/multiplayer-level-select-room";
 import {
@@ -16,9 +15,6 @@ import {
   resolveSquareJumpHostFirst,
 } from "@/features/multiplayer/multiplayer-match-runtime";
 import { HostRoom } from "@/features/multiplayer/host-room";
-import { JoinRoom } from "@/features/multiplayer/join-room";
-import { MultiplayerEntry } from "@/features/multiplayer/multiplayer-entry";
-import { PlayerCard } from "@/features/multiplayer/player-card";
 import { PlayerAvatarSkinProvider, isPlayerAvatarSkinUnlocked, resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
 import { useCustomAvatarImage } from "@/features/player-avatar/use-custom-avatar-image";
@@ -43,13 +39,9 @@ import {
   DEFAULT_MULTIPLAYER_LEVEL_ID,
   DEFAULT_MULTIPLAYER_PLAY_MODE,
   MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
-  MULTIPLAYER_PLAY_MODES,
   areMultiplayerLevelSelectSlotsConfirmed,
   createDefaultMultiplayerLevelSelectState,
-  formatMultiplayerLevelDisplay,
-  getNextMultiplayerGameId,
   isDefaultMultiplayerLevelSelectState,
-  resolveMultiplayerLevelGroup,
   resolveMultiplayerLevelSelection,
   type MultiplayerLevelSelectState,
   type MultiplayerPlayMode,
@@ -60,8 +52,14 @@ import {
   buildInitialSnapshot,
   MultiplayerSession,
 } from "@/lib/multiplayer/multiplayer-session";
-import { MULTIPLAYER_ROOM_EXPIRED_MESSAGE } from "@/lib/multiplayer/protocol";
-import { getSignalingRoomStatus } from "@/lib/multiplayer/room-api";
+import { MULTIPLAYER_DISCONNECTED_MESSAGE, MULTIPLAYER_ROOM_EXPIRED_MESSAGE } from "@/lib/multiplayer/protocol";
+import {
+  clearActiveMultiplayerRoom,
+  getSignalingRoomStatus,
+  markActiveMultiplayerRoomIntentionallyLeft,
+  readActiveMultiplayerRoom,
+  writeStoredRoomToken,
+} from "@/lib/multiplayer/room-api";
 import type {
   GameResult,
   MultiplayerSnapshot,
@@ -181,6 +179,50 @@ function standaloneStatusText(status: MultiplayerSnapshot["status"]) {
   }
 }
 
+function standaloneConnectionStatusText(snapshot: MultiplayerSnapshot) {
+  switch (snapshot.connectionState) {
+    case "signaling":
+      return snapshot.status === "waiting" ? "等待好友加入" : "正在连接";
+    case "connected":
+      return standaloneStatusText(snapshot.status);
+    case "reconnecting":
+      return "正在重连";
+    case "stale":
+      return "等待对方恢复连接";
+    case "replaced":
+      return "已在其他标签页打开";
+    case "closed":
+      return standaloneStatusText(snapshot.status);
+    case "idle":
+    default:
+      return standaloneStatusText(snapshot.status);
+  }
+}
+
+function standaloneErrorText(errorMessage: string | null) {
+  if (!errorMessage) return "";
+  switch (errorMessage) {
+    case "guest-signaling-left":
+    case "peer-left-room":
+      return "好友已离开房间，请重新邀请或重新加入。";
+    case "host-signaling-left":
+      return "房主正在重连，请稍等。";
+    case "same-role-replaced":
+      return "这个房间已在另一个标签页打开。";
+    case "host-disbanded-room":
+      return "房主已解散房间，请重新创建房间。";
+    case "room-expired":
+    case MULTIPLAYER_ROOM_EXPIRED_MESSAGE:
+      return MULTIPLAYER_ROOM_EXPIRED_MESSAGE;
+    case MULTIPLAYER_DISCONNECTED_MESSAGE:
+      return MULTIPLAYER_DISCONNECTED_MESSAGE;
+    default:
+      return /^[a-z0-9_.:-]+$/i.test(errorMessage)
+        ? "联机连接已断开，请重新创建或加入房间。"
+        : errorMessage;
+  }
+}
+
 function copyRoomLinkWithFallback(text: string) {
   if (typeof document === "undefined" || !document.body) return false;
 
@@ -218,9 +260,8 @@ function MultiplayerPageContent() {
   const roomParam = (searchParams.get("room") ?? "").trim();
   const homeworldParam = searchParams.get("homeworld");
   const hostHomeworldParam = searchParams.get("host");
-  const selectParam = searchParams.get("select");
   const isHomeworldRoute = homeworldParam === "1";
-  const isStandaloneSelectRoute = selectParam === "1";
+  const isStandaloneSelectRoute = !isHomeworldRoute;
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
@@ -228,7 +269,7 @@ function MultiplayerPageContent() {
   const [homeworldState, setHomeworldState] = useState<HomeworldState>(() => createDefaultHomeworldState());
   const [homeworldReturnPose, setHomeworldReturnPose] = useState<HomeworldPlayerPoseState | null>(null);
   const [avatarLabOpen, setAvatarLabOpen] = useState(false);
-  const [hostSelectedGameId, setHostSelectedGameId] = useState<MiniGameId>("square-jump");
+  const [, setHostSelectedGameId] = useState<MiniGameId>("square-jump");
   const [hostSelectedLevelId, setHostSelectedLevelId] = useState(DEFAULT_MULTIPLAYER_LEVEL_ID);
   const [hostPlayMode, setHostPlayMode] = useState<MultiplayerPlayMode>(DEFAULT_MULTIPLAYER_PLAY_MODE);
   const [levelSelectOpen, setLevelSelectOpen] = useState(false);
@@ -275,27 +316,23 @@ function MultiplayerPageContent() {
     [runModeTransition],
   );
 
-  const hostSelectedLevelGroup = useMemo(
-    () => resolveMultiplayerLevelGroup(hostSelectedGameId),
-    [hostSelectedGameId],
-  );
   const battleLevel = useMemo(
     () => resolveMultiplayerLevelSelection(snapshot.match?.levelId ?? hostSelectedLevelId),
     [hostSelectedLevelId, snapshot.match?.levelId],
   );
-  const battleLevelDisplay = useMemo(() => formatMultiplayerLevelDisplay(battleLevel), [battleLevel]);
   const activePlayMode = snapshot.match?.playMode ?? hostPlayMode;
   const activeLevelSelectState = snapshot.levelSelectState ?? levelSelectState;
   const levelSelectSlotsConfirmed = areMultiplayerLevelSelectSlotsConfirmed(activeLevelSelectState);
-  const standalonePeerConnected = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);
+  const standalonePeerConnected = snapshot.connectionState === "connected" && snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);
   const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;
+  const standaloneConnectionErrorText = standaloneErrorText(snapshot.errorMessage);
   const standaloneRoomBarVisible = !standalonePeerConnected;
   const standaloneSelectionAvailable = standalonePeerConnected;
   const standaloneSelectionUnavailableMessage = snapshot.status === "waiting"
     ? "请先邀请好友加入房间"
     : "请先创建或加入房间";
   const standaloneLevelSelectRoomKey = `${snapshot.role ?? "idle"}:${snapshot.roomId ?? "none"}:${standaloneSelectionAvailable ? "active" : "entry"}`;
-  const levelSelectReadyAvailable = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer) && levelSelectSlotsConfirmed;
+  const levelSelectReadyAvailable = snapshot.connectionState === "connected" && snapshot.status === "connected" && Boolean(snapshot.opponentPlayer) && levelSelectSlotsConfirmed;
   const standaloneSelfSkin = resolvePlayerAvatarSkin(snapshot.selfPlayer?.skinId ?? selectedSkin);
   const levelSelectStartCountdownSeconds =
     levelSelectStartCountdownEndsAt !== null
@@ -319,10 +356,8 @@ function MultiplayerPageContent() {
   const roomLink = useMemo(() => {
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
-    return isStandaloneSelectRoute
-      ? `${window.location.origin}/multiplayer?select=1&room=${query}`
-      : `${window.location.origin}/multiplayer?room=${query}`;
-  }, [isStandaloneSelectRoute, snapshot.roomId]);
+    return `${window.location.origin}/multiplayer?room=${query}`;
+  }, [snapshot.roomId]);
   const homeworldRoomLink = useMemo(() => {
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
@@ -347,6 +382,7 @@ function MultiplayerPageContent() {
 
   const resetMultiplayerRoomToEntry = useCallback(
     (options: { suppressRoomParam?: boolean } = {}) => {
+      clearActiveMultiplayerRoom();
       cleanupSession();
       setLevelSelectOpen(false);
       setLevelSelectStartCountdownEndsAt(null);
@@ -371,9 +407,9 @@ function MultiplayerPageContent() {
       autoCreateHomeworldHostRef.current = false;
       setHomeworldEntryVisible(true);
       setSnapshot(buildInitialSnapshot());
-      router.replace(isHomeworldRoute ? "/multiplayer" : "/multiplayer?select=1");
+      router.replace("/multiplayer");
     },
-    [cleanupSession, isHomeworldRoute, isStandaloneSelectRoute, roomParam, router],
+    [cleanupSession, isStandaloneSelectRoute, roomParam, router],
   );
 
   const bootstrapSession = useCallback(
@@ -564,46 +600,10 @@ function MultiplayerPageContent() {
     setTransientRoomCodeCopyStatus(clipboardCopied ? "copied" : "manual");
   }, [ensureShareRoomIsLive, setTransientRoomCodeCopyStatus, snapshot.roomId]);
 
-  const toggleReady = useCallback(() => {
-    if (!sessionRef.current) return;
-    sessionRef.current.setReady(!snapshot.selfReady);
-  }, [snapshot.selfReady]);
-
-  const handleCycleLevelType = useCallback(() => {
-    setHostSelectedGameId((currentGameId) => {
-      const nextGameId = getNextMultiplayerGameId(currentGameId);
-      const nextGroup = resolveMultiplayerLevelGroup(nextGameId);
-      setHostSelectedLevelId(nextGroup.levels[0].levelId);
-      return nextGameId;
-    });
-  }, []);
-
-  const handleLevelChange = useCallback((levelId: string) => {
-    const nextLevel = resolveMultiplayerLevelSelection(levelId);
-    setHostSelectedGameId(nextLevel.gameId);
-    setHostSelectedLevelId(nextLevel.levelId);
-  }, []);
-
-  const handleLeave = useCallback(() => {
-    const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
-    sessionRef.current?.leave(leaveReason);
-    cleanupSession();
-    if (snapshot.role === "guest") suppressCurrentStandaloneRoomAutoJoin();
-    setSnapshot(buildInitialSnapshot());
-  }, [cleanupSession, snapshot.role, suppressCurrentStandaloneRoomAutoJoin]);
-
-  const handleReturnHome = useCallback(() => {
-    const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
-    void transitionToRoute("/", () => {
-      sessionRef.current?.leave(leaveReason);
-      cleanupSession();
-      setSnapshot(buildInitialSnapshot());
-    });
-  }, [cleanupSession, snapshot.role, transitionToRoute]);
-
   const handleExitHomeworldRoom = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
     void transitionToRoute("/", () => {
+      markActiveMultiplayerRoomIntentionallyLeft();
       sessionRef.current?.leave(leaveReason);
       cleanupSession();
       setSnapshot(buildInitialSnapshot());
@@ -667,6 +667,7 @@ function MultiplayerPageContent() {
     }
     await transitionInPage(async () => {
       const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
+      markActiveMultiplayerRoomIntentionallyLeft();
       sessionRef.current?.leave(leaveReason);
       cleanupSession();
       suppressCurrentStandaloneRoomAutoJoin();
@@ -678,7 +679,7 @@ function MultiplayerPageContent() {
         setLevelSelectState,
       });
       setLevelSelectStartCountdownEndsAt(null);
-      router.replace("/multiplayer?select=1");
+      router.replace("/multiplayer");
     });
   }, [cleanupSession, router, snapshot.role, suppressCurrentStandaloneRoomAutoJoin, transitionInPage, transitionToRoute]);
 
@@ -837,6 +838,28 @@ function MultiplayerPageContent() {
   }, [bootstrapSession, isStandaloneSelectRoute, roomParam, skinHydrated]);
 
   useEffect(() => {
+    if (!skinHydrated) return;
+    if (!isStandaloneSelectRoute) return;
+    if (roomParam) return;
+    if (sessionRef.current || snapshot.role || snapshot.status !== "idle") return;
+    const activeRoom = readActiveMultiplayerRoom();
+    if (!activeRoom || activeRoom.intentionallyLeft) return;
+    if (activeRoom.role === "host" && !activeRoom.token) {
+      clearActiveMultiplayerRoom();
+      return;
+    }
+    const standaloneAutoJoinKey = standaloneRoomAutoJoinKey(activeRoom.roomCode);
+    if (!standaloneAutoJoinKey) return;
+    if (suppressedAutoJoinRoomRef.current === standaloneAutoJoinKey) return;
+    if (autoJoinRoomRef.current === standaloneAutoJoinKey) return;
+    if (activeRoom.token) {
+      writeStoredRoomToken(activeRoom.roomCode, activeRoom.role, activeRoom.token);
+    }
+    autoJoinRoomRef.current = standaloneAutoJoinKey;
+    void bootstrapSession(activeRoom.role, activeRoom.roomCode);
+  }, [bootstrapSession, isStandaloneSelectRoute, roomParam, skinHydrated, snapshot.role, snapshot.status]);
+
+  useEffect(() => {
     if (standaloneJoinDialogOpen) return;
     setStandaloneJoinRoomCode(roomParam);
   }, [roomParam, standaloneJoinDialogOpen]);
@@ -935,6 +958,7 @@ function MultiplayerPageContent() {
     const levelSelectRoomActive = isHomeworldRoute ? levelSelectOpen : isStandaloneSelectRoute;
     const canCountDownInLevelSelect =
       levelSelectRoomActive &&
+      snapshot.connectionState === "connected" &&
       snapshot.status === "connected" &&
       !snapshot.match &&
       snapshot.selfReady &&
@@ -953,6 +977,7 @@ function MultiplayerPageContent() {
     levelSelectOpen,
     levelSelectSlotsConfirmed,
     snapshot.match,
+    snapshot.connectionState,
     snapshot.opponentReady,
     snapshot.selfReady,
     snapshot.status,
@@ -973,6 +998,7 @@ function MultiplayerPageContent() {
     if (levelSelectStartCountdownEndsAt === null) return;
     if (levelSelectStartCountdownNow < levelSelectStartCountdownEndsAt) return;
     if (snapshot.role !== "host") return;
+    if (snapshot.connectionState !== "connected") return;
     if (snapshot.status !== "connected") return;
     if (!snapshot.selfReady || !snapshot.opponentReady) return;
     if (!levelSelectSlotsConfirmed) return;
@@ -995,6 +1021,7 @@ function MultiplayerPageContent() {
     levelSelectStartCountdownEndsAt,
     levelSelectStartCountdownNow,
     snapshot.match,
+    snapshot.connectionState,
     snapshot.opponentPlayer,
     snapshot.opponentReady,
     snapshot.role,
@@ -1058,11 +1085,16 @@ function MultiplayerPageContent() {
     const shouldResetHomeworld =
       isHomeworldRoute &&
       (snapshot.errorMessage === "host-disbanded-room" || snapshot.errorMessage === MULTIPLAYER_ROOM_EXPIRED_MESSAGE);
-    const shouldResetStandalone = isStandaloneSelectRoute && (snapshot.role === "host" || snapshot.role === "guest");
+    const shouldResetStandalone =
+      isStandaloneSelectRoute &&
+      (snapshot.role === "host" || snapshot.role === "guest") &&
+      snapshot.connectionState !== "replaced" &&
+      snapshot.connectionState !== "reconnecting" &&
+      snapshot.connectionState !== "stale";
     const shouldResetLegacyRoute = !isHomeworldRoute && !isStandaloneSelectRoute && snapshot.errorMessage === MULTIPLAYER_ROOM_EXPIRED_MESSAGE;
     if (!shouldResetHomeworld && !shouldResetStandalone && !shouldResetLegacyRoute) return;
     resetMultiplayerRoomToEntry({ suppressRoomParam: true });
-  }, [isHomeworldRoute, isStandaloneSelectRoute, resetMultiplayerRoomToEntry, snapshot.errorMessage, snapshot.role, snapshot.status]);
+  }, [isHomeworldRoute, isStandaloneSelectRoute, resetMultiplayerRoomToEntry, snapshot.connectionState, snapshot.errorMessage, snapshot.role, snapshot.status]);
 
   const guestInHostHome =
     snapshot.role === "guest" &&
@@ -1236,8 +1268,9 @@ function MultiplayerPageContent() {
               </section>
             ) : null}
             <div className="multiplayer-select-status-text">
-              联机状态：{standaloneStatusText(snapshot.status)}
-              {snapshot.errorMessage ? ` · ${snapshot.errorMessage}` : ""}
+              联机状态：{standaloneConnectionStatusText(snapshot)}
+              {snapshot.opponentJoining ? " / 好友加入中" : ""}
+              {standaloneConnectionErrorText ? ` · ${standaloneConnectionErrorText}` : ""}
             </div>
             {standaloneJoinDialogOpen ? (
               <div className="multiplayer-join-dialog-backdrop" role="presentation" onPointerDown={closeStandaloneJoinDialog}>
@@ -1444,197 +1477,7 @@ function MultiplayerPageContent() {
     );
   }
 
-  const showEntry = snapshot.status === "idle";
-  const showRoom = snapshot.role === "host" && (snapshot.status === "waiting" || snapshot.status === "connected" || snapshot.status === "countdown");
-  const showHostLevelPicker = snapshot.status === "idle" || snapshot.role === "host";
-  const levelPickerLocked =
-    snapshot.match !== null ||
-    snapshot.status === "countdown" ||
-    snapshot.status === "playing" ||
-    snapshot.status === "finished";
-  return (
-    <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: "24px 16px 40px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h1 style={{ margin: 0 }}>联机挑战选关</h1>
-          <button type="button" onClick={handleReturnHome}>
-            返回首页
-          </button>
-        </div>
-        <p style={{ marginTop: 0, color: "#666" }}>
-          当前：{battleLevelDisplay.primary} / {battleLevelDisplay.secondary} / {activePlayMode === "co-op" ? "合作" : "对抗"}
-        </p>
-
-        <ConnectionStatus status={snapshot.status} errorMessage={snapshot.errorMessage} opponentJoining={snapshot.opponentJoining} />
-        {snapshot.opponentJoining ? <p className="multiplayer-mode-hint">好友加入中</p> : null}
-
-        {showHostLevelPicker ? (
-          <section className="multiplayer-level-scene" aria-label="联机选关场景">
-            <button
-              className="multiplayer-ground-button"
-              type="button"
-              disabled={levelPickerLocked}
-              onClick={handleCycleLevelType}
-            >
-              <span>关卡类型</span>
-              <strong>{hostSelectedLevelGroup.title}</strong>
-              <small>{hostSelectedLevelGroup.summary}</small>
-            </button>
-            <label className="multiplayer-ground-button" htmlFor="host-level-picker">
-              <span>难度和变体</span>
-              <select
-                id="host-level-picker"
-                value={hostSelectedLevelId}
-                disabled={levelPickerLocked}
-                onChange={(event) => handleLevelChange(event.currentTarget.value)}
-              >
-                {hostSelectedLevelGroup.levels.map((level) => {
-                  const display = formatMultiplayerLevelDisplay(level);
-                  return (
-                    <option key={level.levelId} value={level.levelId}>
-                      {display.primary} / {display.secondary}
-                    </option>
-                  );
-                })}
-              </select>
-              <small>{battleLevel.goalText}</small>
-            </label>
-            <div className="multiplayer-ground-button">
-              <span>玩法规则</span>
-              <div className="multiplayer-mode-buttons">
-                {MULTIPLAYER_PLAY_MODES.map((mode) => (
-                  <button
-                    type="button"
-                    key={mode.id}
-                    disabled={levelPickerLocked}
-                    className={hostPlayMode === mode.id ? "selected" : ""}
-                    aria-disabled={mode.id === "co-op" ? true : undefined}
-                    onClick={() => {
-                      if (mode.id === "co-op") {
-                        handleUnavailablePlayMode();
-                        return;
-                      }
-                      setHostPlayMode(mode.id);
-                    }}
-                  >
-                    {mode.title}
-                  </button>
-                ))}
-              </div>
-              {unavailableModeHint ? <em className="multiplayer-mode-hint" key={unavailableModeHint.id}>{unavailableModeHint.message}</em> : null}
-              <small>{MULTIPLAYER_PLAY_MODES.find((mode) => mode.id === activePlayMode)?.ruleText}</small>
-            </div>
-          </section>
-        ) : null}
-
-        {showEntry ? (
-          <section className="multiplayer-entry-grid" style={{ marginTop: 14 }}>
-            <MultiplayerEntry
-              onCreate={handleCreate}
-            />
-            <JoinRoom defaultRoomCode={roomParam} onJoin={handleJoin} />
-          </section>
-        ) : null}
-
-        {showRoom && roomLink ? (
-          <section style={{ marginTop: 14 }}>
-            <HostRoom
-              roomCode={snapshot.roomId ?? ""}
-              roomCodeCopyStatus={roomCodeCopyStatus}
-              roomLink={roomLink}
-              onCopy={handleCopyLink}
-              onCopyRoomCode={handleCopyRoomCode}
-              copyStatus={copyStatus}
-            />
-          </section>
-        ) : null}
-
-        <section style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <PlayerCard
-            title="你"
-            player={snapshot.selfPlayer}
-            fallbackSkin={selectedSkin}
-            ready={snapshot.selfReady}
-            state={snapshot.selfState}
-            result={snapshot.selfResult}
-          />
-          {snapshot.opponentPlayer ? (
-            <PlayerCard
-              title="对方"
-              player={snapshot.opponentPlayer}
-              ready={snapshot.opponentReady}
-              state={snapshot.opponentState}
-              result={snapshot.opponentResult}
-            />
-          ) : null}
-        </section>
-
-        {snapshot.status === "connected" ? (
-          <section style={{ marginTop: 14, display: "flex", gap: 10 }}>
-            <button type="button" onClick={toggleReady}>
-              {snapshot.selfReady ? "取消准备" : "准备"}
-            </button>
-            <button type="button" onClick={handleLeave}>
-              离开房间
-            </button>
-          </section>
-        ) : null}
-
-        {showGameShell ? (
-          <MultiplayerGameShell
-            countdownSeconds={countdownSeconds}
-            countdownRules={countdownRules}
-            coOpAssignmentText={coOpAssignmentText}
-            opponentPlayer={snapshot.opponentPlayer}
-            opponentResult={snapshot.opponentResult}
-            opponentState={snapshot.opponentState}
-            playMode={activePlayMode}
-            onForfeit={handleForfeit}
-            onRematch={handleRematch}
-            onReturnRoom={handleReturnRoom}
-            rematchRequestedByOpponent={snapshot.opponentReady}
-            rematchRequestedBySelf={snapshot.selfReady}
-            selfPlayer={snapshot.selfPlayer}
-            selfResult={snapshot.selfResult}
-            selfState={snapshot.selfState}
-            status={snapshot.status}
-            winnerText={winnerText}
-          >
-            {(snapshot.status === "playing" || snapshot.status === "finished") ? (
-              <MultiplayerMatchRuntime
-                level={battleLevel}
-                matchStageSize={matchStageSize}
-                opponentPlayer={snapshot.opponentPlayer}
-                opponentStateSubscription={subscribeOpponentState}
-                readOpponentStateMetrics={readOpponentStateMetrics}
-                opponentState={snapshot.opponentState}
-                playMode={activePlayMode}
-                reportInput={reportInput}
-                reportResult={reportResult}
-                reportState={reportState}
-                runSeed={runSeed}
-                selfRole={snapshot.role ?? "host"}
-                selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
-                selfSkinId={selectedSkin}
-              />
-            ) : null}
-          </MultiplayerGameShell>
-        ) : null}
-
-        {(snapshot.status === "failed" || snapshot.status === "disconnected") ? (
-          <section style={{ marginTop: 16, display: "flex", gap: 10 }}>
-            <button type="button" onClick={handleReturnHome}>
-              返回首页
-            </button>
-            <button type="button" onClick={handleCreate}>
-              重新创建房间
-            </button>
-          </section>
-        ) : null}
-        <ModeTransitionOverlay state={transitionState} />
-      </main>
-    </PlayerAvatarSkinProvider>
-  );
+  return renderStandaloneLevelSelect();
 }
 
 export default function MultiplayerPage() {
