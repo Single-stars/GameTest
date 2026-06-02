@@ -10,11 +10,13 @@ import type {
   NetLevelSelectStateMessage,
   NetMessage,
   NetReadyMessage,
+  NetReactionMessage,
   NetRematchMessage,
   NetResultMessage,
   NetReturnRoomMessage,
   NetStartMessage,
   NetStateMessage,
+  NetTiebreakerMessage,
   NetTimeSyncMessage,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
@@ -129,6 +131,10 @@ function isGravity(value: unknown) {
 
 function isSessionRole(value: unknown) {
   return value === "host" || value === "guest";
+}
+
+function isReactionKind(value: unknown) {
+  return value === "egg" || value === "coffee" || value === "cheer";
 }
 
 function isPlayerInfo(value: unknown): value is PlayerInfo {
@@ -255,6 +261,7 @@ function isResultMessage(value: unknown): value is NetResultMessage {
     isString(value.matchId) &&
     isNumber(value.score) &&
     isBoolean(value.passed) &&
+    (value.tiebreakerRound === undefined || isNumber(value.tiebreakerRound)) &&
     (value.timeMs === undefined || isNumber(value.timeMs)) &&
     (value.breakdown === undefined || isResultBreakdown(value.breakdown))
   );
@@ -282,6 +289,16 @@ function isForfeitMessage(value: unknown): value is NetForfeitMessage {
 function isReturnRoomMessage(value: unknown): value is NetReturnRoomMessage {
   if (!isRecord(value)) return false;
   return isProtocolV1(value.v) && value.kind === "return-room" && isString(value.matchId);
+}
+
+function isTiebreakerMessage(value: unknown): value is NetTiebreakerMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "tiebreaker" && isString(value.matchId) && isNumber(value.round) && isNumber(value.sentAt);
+}
+
+function isReactionMessage(value: unknown): value is NetReactionMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "reaction" && isString(value.matchId) && isReactionKind(value.reaction) && isNumber(value.sentAt);
 }
 
 function isHeartbeatMessage(value: unknown): value is NetHeartbeatMessage {
@@ -345,6 +362,8 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isRematchMessage(payload)) return payload;
   if (isForfeitMessage(payload)) return payload;
   if (isReturnRoomMessage(payload)) return payload;
+  if (isTiebreakerMessage(payload)) return payload;
+  if (isReactionMessage(payload)) return payload;
   if (isHeartbeatMessage(payload)) return payload;
   if (isTimeSyncMessage(payload)) return payload;
   if (isHomeworldStateMessage(payload)) return payload;
@@ -452,6 +471,7 @@ export function createResultMessage(data: Omit<NetResultMessage, "v" | "kind">):
     matchId: data.matchId,
     score: data.score,
     passed: data.passed,
+    tiebreakerRound: data.tiebreakerRound,
     timeMs: data.timeMs,
     breakdown: data.breakdown,
   };
@@ -471,6 +491,14 @@ export function createForfeitMessage(matchId: string): NetForfeitMessage {
 
 export function createReturnRoomMessage(matchId: string): NetReturnRoomMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "return-room", matchId };
+}
+
+export function createTiebreakerMessage(data: Omit<NetTiebreakerMessage, "v" | "kind">): NetTiebreakerMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "tiebreaker", matchId: data.matchId, round: data.round, sentAt: data.sentAt };
+}
+
+export function createReactionMessage(data: Omit<NetReactionMessage, "v" | "kind">): NetReactionMessage {
+  return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "reaction", matchId: data.matchId, reaction: data.reaction, sentAt: data.sentAt };
 }
 
 export function createHeartbeatMessage(sentAt: number): NetHeartbeatMessage {

@@ -1,8 +1,10 @@
 import type { AdvancedStageConfig } from "./advanced-challenges.ts";
 import { getAdvancedLevelState, type AdvancedLevelState } from "./advanced-progress.ts";
+import { ENDLESS_MODE_LEVEL, getEndlessLevelState } from "./endless-mode.ts";
 import type { MiniGameId } from "./mini-games/index.ts";
 
-const ADVANCED_LEVEL_MIN = 1;
+const ADVANCED_STANDARD_LEVEL_MIN = 1;
+const ADVANCED_LEVEL_MIN = ADVANCED_STANDARD_LEVEL_MIN;
 const ADVANCED_LEVEL_MAX = 10;
 
 export type AdvancedLobbyLevelPosition = "previous" | "selected" | "next" | "distant";
@@ -49,6 +51,9 @@ export function getAdvancedLobbyUnlockedLevel(currentLevel: number) {
 function normalizeSelectableLevel(currentLevel: number, requestedLevel?: number) {
   const fallback = defaultSelectableLevel(currentLevel);
   if (requestedLevel === undefined) return fallback;
+  if (requestedLevel === ENDLESS_MODE_LEVEL) {
+    return getEndlessLevelState(currentLevel) === "locked" ? fallback : ENDLESS_MODE_LEVEL;
+  }
 
   const level = clampDisplayLevel(requestedLevel);
   return getAdvancedLevelState(currentLevel, level) === "locked" ? fallback : level;
@@ -285,12 +290,15 @@ export function getAdvancedLobbyLevelItems({
   selectedLevel?: number;
 }): AdvancedLobbyLevelItem[] {
   const selected = normalizeSelectableLevel(currentLevel, selectedLevel);
-  return Array.from({ length: ADVANCED_LEVEL_MAX }, (_, index) => {
-    const level = index + 1;
+  const levels = [
+    ENDLESS_MODE_LEVEL,
+    ...Array.from({ length: ADVANCED_LEVEL_MAX }, (_, index) => index + ADVANCED_STANDARD_LEVEL_MIN),
+  ];
+  return levels.map((level) => {
     const offset = level - selected;
     const position: AdvancedLobbyLevelPosition =
       offset === 0 ? "selected" : offset === -1 ? "previous" : offset === 1 ? "next" : "distant";
-    const state = getAdvancedLevelState(currentLevel, level);
+    const state = level === ENDLESS_MODE_LEVEL ? getEndlessLevelState(currentLevel) : getAdvancedLevelState(currentLevel, level);
     return {
       level,
       offset,
@@ -308,6 +316,10 @@ export function resolveAdvancedLobbyClickLevel({
   currentLevel: number;
   requestedLevel: number;
 }) {
+  if (requestedLevel === ENDLESS_MODE_LEVEL) {
+    return getEndlessLevelState(currentLevel) === "locked" ? null : ENDLESS_MODE_LEVEL;
+  }
+  if (requestedLevel < ENDLESS_MODE_LEVEL) return null;
   const level = clampDisplayLevel(requestedLevel);
   return getAdvancedLevelState(currentLevel, level) === "locked" ? null : level;
 }
@@ -319,7 +331,7 @@ export function resolveAdvancedLobbySliderLevel({
   currentLevel: number;
   requestedLevel: number;
 }) {
-  return clampInteger(requestedLevel, ADVANCED_LEVEL_MIN, getAdvancedLobbyUnlockedLevel(currentLevel));
+  return clampInteger(requestedLevel, ADVANCED_STANDARD_LEVEL_MIN, getAdvancedLobbyUnlockedLevel(currentLevel));
 }
 
 export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
@@ -355,5 +367,5 @@ export function getAdvancedFailedResultGoalItems<T extends AdvancedResultGoalIte
 }
 
 export function getAdvancedLobbySliderOffsetRatio(selectedLevel: number) {
-  return (clampDisplayLevel(selectedLevel) - ADVANCED_LEVEL_MIN) / (ADVANCED_LEVEL_MAX - ADVANCED_LEVEL_MIN);
+  return (clampDisplayLevel(selectedLevel) - ADVANCED_STANDARD_LEVEL_MIN) / (ADVANCED_LEVEL_MAX - ADVANCED_STANDARD_LEVEL_MIN);
 }

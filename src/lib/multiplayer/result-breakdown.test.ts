@@ -218,6 +218,34 @@ test("multiplayer result comparison returns a draw when final effective times ar
   assert.equal(compareMultiplayerResults(opponent, self), 0);
 });
 
+test("multiplayer time settlements compare at one decimal precision", () => {
+  const self = {
+    passed: true,
+    score: 100,
+    timeMs: 15_921,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("doodle-1"), {
+      elapsedMs: 15_921,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const opponent = {
+    passed: true,
+    score: 900,
+    timeMs: 15_929,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("doodle-1"), {
+      elapsedMs: 15_929,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+
+  assert.equal(compareMultiplayerResults(self, opponent), 0);
+  assert.equal(compareMultiplayerResults(opponent, self), 0);
+});
+
 test("score settlement levels compare final score before finish time", () => {
   const self = {
     passed: true,
@@ -279,7 +307,7 @@ test("score settlement levels return a draw when final scores are identical", ()
   assert.equal(compareMultiplayerResults(opponent, self), 0);
 });
 
-test("incoming aim settlement records hits and mistake counts without time penalties", () => {
+test("incoming aim settlement scores hits and mistake penalties", () => {
   const breakdown = buildMultiplayerResultBreakdown(levelFor("aim-2"), {
     aimFlyOuts: 2,
     aimHits: 4,
@@ -292,19 +320,66 @@ test("incoming aim settlement records hits and mistake counts without time penal
   });
 
   assert.equal(breakdown.kind, "score");
-  assert.equal(breakdown.final.value, 4);
-  assert.equal(breakdown.final.unit, "count");
+  assert.equal(breakdown.final.value, 28);
+  assert.equal(breakdown.final.unit, "point");
   assert.deepEqual(
-    breakdown.formulaRows?.map((item) => [item.key, item.value, item.unit, item.amount, item.displayOnly, item.operation]),
+    breakdown.formulaRows?.map((item) => [item.key, item.value, item.unit, item.amount, item.operation]),
     [
-      ["aim-hit-count", 4, "count", 4, undefined, "base"],
-      ["aim-miss-penalty", 3, "count", undefined, true, "note"],
-      ["aim-flyout-penalty", 2, "count", undefined, true, "note"],
+      ["aim-hit-score", 4, "point", 40, "add"],
+      ["aim-miss-penalty", 3, "point", -6, "subtract"],
+      ["aim-flyout-penalty", 2, "point", -6, "subtract"],
+      ["aim-target-count", 6, "count", undefined, "note"],
     ],
   );
 });
 
-test("incoming aim comparison uses hits first, then fewer recorded mistakes, then draw", () => {
+test("aim settlement shows the total entered targets including appended tiebreakers", () => {
+  const breakdown = buildMultiplayerResultBreakdown(levelFor("aim-2"), {
+    aimFlyOuts: 1,
+    aimHits: 7,
+    aimMisses: 0,
+    aimTargetCount: 8,
+    elapsedMs: 12_000,
+    failures: 1,
+    passed: true,
+    progress: 1,
+  });
+
+  const targetRow = breakdown.formulaRows?.find((item) => item.key === "aim-target-count");
+
+  assert.equal(targetRow?.label, "进靶总数");
+  assert.equal(targetRow?.value, 8);
+  assert.equal(targetRow?.displayOnly, true);
+  assert.equal(targetRow?.operation, "note");
+});
+
+test("aim decoy and miss penalties change final score in multiplayer", () => {
+  const breakdown = buildMultiplayerResultBreakdown(levelFor("aim-3"), {
+    aimDecoyHits: 1,
+    aimHits: 8,
+    aimMisses: 2,
+    aimTargetCount: 8,
+    elapsedMs: 18_000,
+    failures: 3,
+    passed: true,
+    progress: 1,
+  });
+
+  assert.equal(breakdown.kind, "score");
+  assert.equal(breakdown.final.unit, "point");
+  assert.equal(breakdown.final.value, 71);
+  assert.deepEqual(
+    breakdown.formulaRows?.map((item) => [item.key, item.value, item.unit, item.amount, item.operation]),
+    [
+      ["aim-hit-score", 8, "point", 80, "add"],
+      ["aim-miss-penalty", 2, "point", -4, "subtract"],
+      ["aim-decoy-penalty", 1, "point", -5, "subtract"],
+      ["aim-target-count", 8, "count", undefined, "note"],
+    ],
+  );
+});
+
+test("incoming aim comparison uses final hit and mistake score", () => {
   const resultFor = (stats: { hits: number; misses: number; flyOuts: number; score: number; timeMs: number }) => ({
     passed: true,
     score: stats.score,
@@ -321,7 +396,7 @@ test("incoming aim comparison uses hits first, then fewer recorded mistakes, the
     }),
   });
 
-  assert.equal(compareMultiplayerResults(resultFor({ hits: 5, misses: 9, flyOuts: 9, score: 0, timeMs: 99_000 }), resultFor({ hits: 4, misses: 0, flyOuts: 0, score: 999, timeMs: 1_000 })), -1);
+  assert.equal(compareMultiplayerResults(resultFor({ hits: 5, misses: 9, flyOuts: 9, score: 0, timeMs: 99_000 }), resultFor({ hits: 4, misses: 0, flyOuts: 0, score: 999, timeMs: 1_000 })), 1);
   assert.equal(compareMultiplayerResults(resultFor({ hits: 4, misses: 1, flyOuts: 0, score: 0, timeMs: 99_000 }), resultFor({ hits: 4, misses: 2, flyOuts: 0, score: 999, timeMs: 1_000 })), -1);
   assert.equal(compareMultiplayerResults(resultFor({ hits: 4, misses: 1, flyOuts: 1, score: 0, timeMs: 99_000 }), resultFor({ hits: 4, misses: 1, flyOuts: 1, score: 999, timeMs: 1_000 })), 0);
 });
@@ -366,6 +441,38 @@ test("tiebreaker helper starts overtime only for tied versus levels with overtim
   assert.equal(shouldStartMultiplayerTiebreaker(levelFor("flappy-1"), tiedFlappy, { ...tiedFlappy }, "versus"), false);
   assert.equal(shouldStartMultiplayerTiebreaker(levelFor("knife-7"), tiedKnife, losingKnife, "versus"), false);
   assert.equal(shouldStartMultiplayerTiebreaker(levelFor("knife-7"), tiedKnife, { ...tiedKnife }, "co-op"), false);
+});
+
+test("aim tiebreaker is progressive only for aim levels and tied one-decimal races", () => {
+  const tiedAim = resultForAim(4, 1, 1);
+  const nearTiedFlappy = {
+    passed: true,
+    score: 100,
+    timeMs: 12_021,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("flappy-4"), {
+      collected: 4,
+      collectibleCount: 4,
+      elapsedMs: 20_021,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const nearTiedFlappyOpponent = {
+    ...nearTiedFlappy,
+    timeMs: 12_029,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("flappy-4"), {
+      collected: 4,
+      collectibleCount: 4,
+      elapsedMs: 20_029,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+
+  assert.equal(shouldStartMultiplayerTiebreaker(levelFor("aim-2"), tiedAim, { ...tiedAim }, "versus"), true);
+  assert.equal(shouldStartMultiplayerTiebreaker(levelFor("flappy-4"), nearTiedFlappy, nearTiedFlappyOpponent, "versus"), false);
 });
 
 function resultForAim(hits: number, misses: number, flyOuts: number) {

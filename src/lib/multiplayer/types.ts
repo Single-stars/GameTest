@@ -44,6 +44,14 @@ export type MultiplayerConnectionState =
   | "closed";
 
 export type SessionRole = "host" | "guest";
+export type MultiplayerReactionKind = "egg" | "coffee" | "cheer";
+
+export type MultiplayerReactionEvent = {
+  id: string;
+  from: "self" | "opponent";
+  kind: MultiplayerReactionKind;
+  sentAt: number;
+};
 
 export type PlayerInfo = {
   id: string;
@@ -68,6 +76,7 @@ export type MatchConfig = {
   logicWidth: number;
   logicHeight: number;
   startAt: number;
+  tiebreakerRound?: number;
 };
 
 export type CountdownState = {
@@ -175,6 +184,22 @@ export type NetReturnRoomMessage = {
   matchId: string;
 };
 
+export type NetReactionMessage = {
+  v: 1;
+  kind: "reaction";
+  matchId: string;
+  reaction: MultiplayerReactionKind;
+  sentAt: number;
+};
+
+export type NetTiebreakerMessage = {
+  v: 1;
+  kind: "tiebreaker";
+  matchId: string;
+  round: number;
+  sentAt: number;
+};
+
 export type NetHeartbeatMessage = {
   v: 1;
   kind: "heartbeat";
@@ -229,6 +254,7 @@ export type NetResultMessage = {
   matchId: string;
   score: number;
   passed: boolean;
+  tiebreakerRound?: number;
   timeMs?: number;
   breakdown?: GameResult["breakdown"];
 };
@@ -249,6 +275,8 @@ export type NetMessage =
   | NetRematchMessage
   | NetForfeitMessage
   | NetReturnRoomMessage
+  | NetReactionMessage
+  | NetTiebreakerMessage
   | NetHeartbeatMessage
   | NetTimeSyncMessage
   | NetHomeworldStateMessage
@@ -279,5 +307,6 @@ export type MultiplayerSnapshot = {
   levelSelectState: MultiplayerLevelSelectState | null;
   selfLevelSelectPresence: MultiplayerLevelSelectPresence | null;
   opponentLevelSelectPresence: MultiplayerLevelSelectPresence | null;
+  reactions: MultiplayerReactionEvent[];
   errorMessage: string | null;
 };

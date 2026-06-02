@@ -11,6 +11,7 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import type { SelfGameState } from "@/features/game-sync/types";
+import { getEndlessDifficulty, getEndlessKnifeConfig, getEndlessKnifeEffectiveWheelIndex } from "@/lib/endless-mode";
 import { MULTIPLAYER_FAST_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
 import {
   DEBUG_MINI_GAME_FPS,
@@ -23,6 +24,7 @@ import {
   useMiniGameFpsCounter,
   useMiniGameLowPowerMode,
   useMiniGameStageSize,
+  type EndlessMiniGameRuntime,
   type MiniGameCompletion,
   type MiniGameRunMode,
   type MiniGameStageSize,
@@ -42,6 +44,7 @@ import {
   type AngleArc,
   type KnifeOwner,
   type MiniGameLevelConfig,
+  type MiniGameParams,
 } from "@/lib/mini-games";
 
 const DEBUG_MINI_GAME_HITBOX = false;
@@ -52,6 +55,7 @@ const KNIFE_BASE_LAUNCHER_BOTTOM = 92;
 const KNIFE_COLLISION_DEGREES = 6;
 const KNIFE_FLIGHT_MS = 95;
 const KNIFE_FEEDBACK_MS = 420;
+const KNIFE_FINISH_DELAY_MS = 650;
 const KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 type KnifeFeedbackTone = "idle" | "good" | "bad";
 type KnifeForbiddenZone = {
@@ -279,7 +283,15 @@ function finiteStateNumber(value: number | undefined, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function applyKnifeRemoteState(frame: KnifeFrame, remoteState: SelfGameState) {
+function resolveKnifeRemoteStatus(current: KnifeFrame, remoteState: SelfGameState, multiplayerRole?: KnifeOwner): PrototypeStatus {
+  if (remoteState.status === "playing") return "playing";
+  if (current.winnerRole && multiplayerRole) {
+    return current.winnerRole === multiplayerRole ? "passed" : "failed";
+  }
+  return remoteState.status === "failed" ? "failed" : "passed";
+}
+
+function applyKnifeRemoteState(frame: KnifeFrame, remoteState: SelfGameState, multiplayerRole?: KnifeOwner) {
   if (typeof remoteState.knifeShotIndex !== "number") return false;
   frame.insertedAngles = [...(remoteState.knifeInsertedAngles ?? frame.insertedAngles)];
   frame.failedAngles = [...(remoteState.knifeFailedAngles ?? frame.failedAngles)];
@@ -299,7 +311,7 @@ function applyKnifeRemoteState(frame: KnifeFrame, remoteState: SelfGameState) {
   frame.guestDangerHits = finiteStateNumber(remoteState.knifeGuestDangerHits, frame.guestDangerHits);
   frame.flying = false;
   frame.failedAngle = frame.failedAngles.at(-1) ?? null;
-  frame.status = remoteState.status === "playing" ? "playing" : "passed";
+  frame.status = resolveKnifeRemoteStatus(frame, remoteState, multiplayerRole);
   frame.reason = frame.winnerRole ? "主局结束" : frame.reason;
   return true;
 }
@@ -354,7 +366,29 @@ function resolveKnifeWheelAvatarView(view: KnifeViewFrame, feedbackTone: KnifeFe
   return { action: "idle", expression: "scared" };
 }
 
+function createEndlessKnifeLevel(level: MiniGameLevelConfig, effectiveWheelIndex: number): MiniGameLevelConfig {
+  const knife = getEndlessKnifeConfig({ wheelIndex: effectiveWheelIndex });
+  const params: MiniGameParams = {
+    ...level.params,
+    baseRotationSpeed: knife.rotationSpeed,
+    forbiddenZoneCount: knife.forbiddenZoneCount,
+    shotCount: knife.requiredHits,
+    sineRotationEnabled: knife.sineRotationChance > 0,
+  };
+  if (knife.countdownSeconds === null) {
+    delete params.shotCountdown;
+  } else {
+    params.shotCountdown = knife.countdownSeconds;
+  }
+  return {
+    ...level,
+    levelId: `${level.levelId}-endless-${effectiveWheelIndex}`,
+    params,
+  };
+}
+
 export function KnifeHitPrototype({
+  endless,
   level,
   mode,
   runSeed,
@@ -367,8 +401,9 @@ export function KnifeHitPrototype({
   remoteState,
   remoteStateSubscription,
 }: {
+  endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
-  mode: MiniGameRunMode;
+  mode: MiniGameRunMode | "endless";
   runSeed: string;
   unlimitedRespawn?: boolean;
   multiplayerRole?: "host" | "guest";
@@ -381,23 +416,34 @@ export function KnifeHitPrototype({
 }) {
   const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
   const knifeGeometry = useMemo(() => getKnifeStageGeometry(stageSize), [stageSize]);
-  const shotCount = numberParam(level.params, "shotCount", 6);
-  const countdown = numberParam(level.params, "shotCountdown", 0);
-  const hasCountdown = typeof level.params.shotCountdown === "number";
-  const sineRotationEnabled = booleanParam(level.params, "sineRotationEnabled");
-  const phaseDuration = numberParam(level.params, "phaseDuration", 2.8);
-  const sweepPerPhase = numberParam(level.params, "sweepPerPhase", 405);
-  const baseRotationSpeed = numberParam(level.params, "baseRotationSpeed", 92);
-  const forbiddenArcs = useMemo<AngleArc[]>(() => generateKnifeForbiddenZones(level, runSeed), [level, runSeed]);
+  const isEndlessRun = Boolean(endless);
+  const [endlessWheelIndex, setEndlessWheelIndex] = useState(0);
+  const effectiveWheelIndex = isEndlessRun
+    ? getEndlessKnifeEffectiveWheelIndex({ debugDifficulty: endless?.debugDifficulty ?? 0, wheelIndex: endlessWheelIndex })
+    : 0;
+  const reportEndlessDifficulty = endless?.reportDifficulty;
+  const effectiveLevel = useMemo<MiniGameLevelConfig>(() => {
+    if (!isEndlessRun) return level;
+    return createEndlessKnifeLevel(level, effectiveWheelIndex);
+  }, [effectiveWheelIndex, isEndlessRun, level]);
+  const shotCount = numberParam(effectiveLevel.params, "shotCount", 6);
+  const countdown = numberParam(effectiveLevel.params, "shotCountdown", 0);
+  const hasCountdown = typeof effectiveLevel.params.shotCountdown === "number";
+  const sineRotationEnabled = booleanParam(effectiveLevel.params, "sineRotationEnabled");
+  const phaseDuration = numberParam(effectiveLevel.params, "phaseDuration", 2.8);
+  const sweepPerPhase = numberParam(effectiveLevel.params, "sweepPerPhase", 405);
+  const baseRotationSpeed = numberParam(effectiveLevel.params, "baseRotationSpeed", 92);
+  const forbiddenArcs = useMemo<AngleArc[]>(() => generateKnifeForbiddenZones(effectiveLevel, runSeed), [effectiveLevel, runSeed]);
   const forbiddenZones = useMemo<KnifeForbiddenZone[]>(
     () => forbiddenArcs.map((zone, index) => ({ id: index, localStart: zone.start, localEnd: zone.end })),
     [forbiddenArcs],
   );
-  const initialAngles = useMemo(() => generateKnifeInitialAngles(level, runSeed, forbiddenArcs), [forbiddenArcs, level, runSeed]);
+  const initialAngles = useMemo(() => generateKnifeInitialAngles(effectiveLevel, runSeed, forbiddenArcs), [effectiveLevel, forbiddenArcs, runSeed]);
   const knifeFirstOwner = useMemo(() => resolveKnifeFirstOwner(runSeed), [runSeed]);
   const timeoutRef = useRef<number | null>(null);
   const launcherReadyTimeoutRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  const finishDelayTimeoutRef = useRef<number | null>(null);
   const overtimeBannerTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
   const initialRuntime = useMemo(() => createKnifeRuntime(initialAngles, hasCountdown, countdown), [countdown, hasCountdown, initialAngles]);
@@ -408,6 +454,7 @@ export function KnifeHitPrototype({
   const completedRef = useRef(false);
   const lastAppliedRemoteSeqRef = useRef<number | null>(null);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+  const endlessRef = useRef(endless);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
@@ -422,11 +469,20 @@ export function KnifeHitPrototype({
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
 
+  useEffect(() => {
+    endlessRef.current = endless;
+  }, [endless]);
+
+  useEffect(() => {
+    if (!isEndlessRun) return;
+    reportEndlessDifficulty?.(getEndlessDifficulty({ progress: effectiveWheelIndex, maxRamp: 12 }));
+  }, [effectiveWheelIndex, isEndlessRun, reportEndlessDifficulty]);
+
   const syncKnifeRuntimeState = useCallback(
-    (time = performance.now(), force = false) => {
+    (time = performance.now(), force = false, options: { allowOffTurn?: boolean } = {}) => {
       if (!onRuntimeStateRef.current) return;
       const frame = runtimeRef.current;
-      if (multiplayerRole && frame.status === "playing" && !isKnifeLocalTurn(frame, multiplayerRole, knifeFirstOwner) && !force) return;
+      if (multiplayerRole && frame.status === "playing" && !isKnifeLocalTurn(frame, multiplayerRole, knifeFirstOwner) && !force && !options.allowOffTurn) return;
       if (!force && time - lastRuntimeSyncRef.current < KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS) return;
       lastRuntimeSyncRef.current = time;
       onRuntimeStateRef.current(makeKnifeRuntimeState(frame, shotCount, stageSize, knifeGeometry, multiplayerRole));
@@ -455,6 +511,7 @@ export function KnifeHitPrototype({
   useEffect(() => {
     return () => {
       if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
+      if (finishDelayTimeoutRef.current !== null) window.clearTimeout(finishDelayTimeoutRef.current);
       if (overtimeBannerTimeoutRef.current !== null) window.clearTimeout(overtimeBannerTimeoutRef.current);
     };
   }, []);
@@ -472,12 +529,60 @@ export function KnifeHitPrototype({
     }, 60);
   }, [knifeFirstOwner, multiplayerRole, syncKnifeView]);
 
+  const continueEndlessKnifeAfterFailure = useCallback(
+    (reason: string, failedAngle?: number) => {
+      const current = runtimeRef.current;
+      const canContinue = endlessRef.current?.loseLife(reason) ?? false;
+      if (typeof failedAngle === "number") {
+        current.failedAngles.push(failedAngle);
+        current.failedAngle = failedAngle;
+      }
+      current.failures += 1;
+      current.flying = false;
+      current.launcherReadyAt = current.time + 0.06;
+      current.reason = reason;
+      current.timer = hasCountdown ? countdown : null;
+      if (canContinue) {
+        current.status = "playing";
+        scheduleLauncherReady();
+      } else {
+        current.status = "failed";
+        launcherVisibleRef.current = false;
+      }
+      syncKnifeView();
+      syncKnifeRuntimeState(performance.now(), true);
+      return canContinue;
+    },
+    [countdown, hasCountdown, scheduleLauncherReady, syncKnifeRuntimeState, syncKnifeView],
+  );
+
+  const advanceEndlessKnifeWheel = useCallback(() => {
+    const nextWheelIndex = endlessWheelIndex + 1;
+    const nextEffectiveWheelIndex = getEndlessKnifeEffectiveWheelIndex({
+      debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
+      wheelIndex: nextWheelIndex,
+    });
+    const nextLevel = createEndlessKnifeLevel(level, nextEffectiveWheelIndex);
+    const nextForbiddenArcs = generateKnifeForbiddenZones(nextLevel, runSeed);
+    const nextInitialAngles = generateKnifeInitialAngles(nextLevel, runSeed, nextForbiddenArcs);
+    const nextCountdown = numberParam(nextLevel.params, "shotCountdown", 0);
+    const nextHasCountdown = typeof nextLevel.params.shotCountdown === "number";
+    const nextRuntime = createKnifeRuntime(nextInitialAngles, nextHasCountdown, nextCountdown);
+    setEndlessWheelIndex(nextWheelIndex);
+    runtimeRef.current = nextRuntime;
+    launcherVisibleRef.current = true;
+    completedRef.current = false;
+    setFeedbackTone("idle");
+    setView(makeKnifeView(nextRuntime, true));
+    syncKnifeRuntimeState(performance.now(), true);
+  }, [endlessWheelIndex, level, runSeed, syncKnifeRuntimeState]);
+
   const applyRemoteKnifeState = useCallback((nextRemoteState: SelfGameState) => {
     if (!multiplayerRole) return;
     const remoteSeq = nextRemoteState.seq ?? null;
     if (remoteSeq !== null && lastAppliedRemoteSeqRef.current !== null && remoteSeq <= lastAppliedRemoteSeqRef.current) return;
     const previousShotIndex = runtimeRef.current.shotIndex;
-    if (!applyKnifeRemoteState(runtimeRef.current, nextRemoteState)) return;
+    if (!applyKnifeRemoteState(runtimeRef.current, nextRemoteState, multiplayerRole)) return;
     lastAppliedRemoteSeqRef.current = remoteSeq;
     const current = runtimeRef.current;
     if (
@@ -492,7 +597,7 @@ export function KnifeHitPrototype({
     launcherVisibleRef.current = current.status === "playing" && isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner);
     syncKnifeView();
     if (current.status !== "playing" || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner)) {
-      syncKnifeRuntimeState(performance.now(), true);
+      syncKnifeRuntimeState(performance.now(), true, { allowOffTurn: true });
     }
   }, [knifeFirstOwner, multiplayerRole, shotCount, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView]);
 
@@ -522,6 +627,10 @@ export function KnifeHitPrototype({
 
     if (outcome.kind === "collision") {
       showKnifeFeedback("bad");
+      if (isEndlessRun) {
+        continueEndlessKnifeAfterFailure("collision", outcome.impactAngle);
+        return;
+      }
       if (multiplayerRole) {
         current.failedAngles.push(outcome.impactAngle);
         current.failedAngle = outcome.impactAngle;
@@ -571,6 +680,10 @@ export function KnifeHitPrototype({
     }
     if (outcome.kind === "forbidden") {
       showKnifeFeedback("bad");
+      if (isEndlessRun) {
+        continueEndlessKnifeAfterFailure("forbidden", outcome.impactAngle);
+        return;
+      }
       if (multiplayerRole) {
         current.failedAngles.push(outcome.impactAngle);
         current.failedAngle = outcome.impactAngle;
@@ -621,6 +734,7 @@ export function KnifeHitPrototype({
 
     const nextShotIndex = current.shotIndex + 1;
     current.insertedAngles.push(outcome.impactAngle);
+    endlessRef.current?.addScore(1);
     current.flying = false;
     current.shotIndex = nextShotIndex;
     if (multiplayerRole) {
@@ -640,6 +754,13 @@ export function KnifeHitPrototype({
       syncKnifeRuntimeState(performance.now(), true);
       return;
     }
+    if (isEndlessRun && current.insertedAngles.length >= shotCount) {
+      showKnifeFeedback("good");
+      launcherVisibleRef.current = false;
+      advanceEndlessKnifeWheel();
+      return;
+    }
+
     if (nextShotIndex >= shotCount) {
       current.status = current.failures > 0 && mode === "base" && !unlimitedRespawn ? "failed" : "passed";
       current.reason = `全部 ${shotCount} 发命中`;
@@ -656,7 +777,7 @@ export function KnifeHitPrototype({
     scheduleLauncherReady();
     syncKnifeView();
     syncKnifeRuntimeState(performance.now(), true);
-  }, [countdown, forbiddenArcs, hasCountdown, knifeFirstOwner, knifeGeometry.fireAngle, mode, multiplayerRole, scheduleLauncherReady, shotCount, showKnifeFeedback, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [advanceEndlessKnifeWheel, continueEndlessKnifeAfterFailure, countdown, forbiddenArcs, hasCountdown, isEndlessRun, knifeFirstOwner, knifeGeometry.fireAngle, mode, multiplayerRole, scheduleLauncherReady, shotCount, showKnifeFeedback, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const launch = useCallback(() => {
     const current = runtimeRef.current;
@@ -712,6 +833,8 @@ export function KnifeHitPrototype({
               current.launcherReadyAt = nextTime;
               launcherVisibleRef.current = true;
             }
+          } else if (isEndlessRun) {
+            continueEndlessKnifeAfterFailure("timeout");
           } else if (mode === "base") {
             const nextShotIndex = current.shotIndex + 1;
             current.failures += 1;
@@ -762,7 +885,7 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, countdown, hasCountdown, knifeFirstOwner, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const remaining = view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);
   const localTurn = multiplayerRole ? isKnifeLocalTurn(view, multiplayerRole, knifeFirstOwner) : true;
@@ -787,23 +910,26 @@ export function KnifeHitPrototype({
       hits: latest.insertedAngles.length,
       timeouts: 0,
     };
-    onComplete({
-      gameId: "knife",
-      levelId: level.levelId,
-      status: completionStatus,
-      reason: latest.reason,
-      elapsedMs: Math.round(latest.time * 1000),
-      stats: {
-        failures: latest.failures,
-        collisions: localStats.collisions,
-        dangerHits: localStats.dangerHits,
-        hits: localStats.hits,
-        shotCount,
-        fired: latest.shotIndex,
-        timeouts: localStats.timeouts,
-        forcedAdvance: mode === "base" && view.status === "failed",
-      },
-    });
+    finishDelayTimeoutRef.current = window.setTimeout(() => {
+      finishDelayTimeoutRef.current = null;
+      onComplete({
+        gameId: "knife",
+        levelId: level.levelId,
+        status: completionStatus,
+        reason: latest.reason,
+        elapsedMs: Math.round(latest.time * 1000),
+        stats: {
+          failures: latest.failures,
+          collisions: localStats.collisions,
+          dangerHits: localStats.dangerHits,
+          hits: localStats.hits,
+          shotCount,
+          fired: latest.shotIndex,
+          timeouts: localStats.timeouts,
+          forcedAdvance: mode === "base" && view.status === "failed",
+        },
+      });
+    }, KNIFE_FINISH_DELAY_MS);
   }, [level.levelId, mode, multiplayerRole, onComplete, shotCount, view.status]);
 
   return (

@@ -10,6 +10,8 @@ import type { MiniGameLevelConfig } from "@/lib/mini-games";
 
 import { getMultiplayerLevelRules, type MultiplayerSettlementMetric } from "./rules.ts";
 
+const MULTIPLAYER_TIME_COMPARE_PRECISION_MS = 100;
+
 export type MultiplayerResultBreakdownStats = {
   elapsedMs: number;
   failures?: number;
@@ -114,9 +116,21 @@ function countedAdjustmentEntry(level: MiniGameLevelConfig, key: string, value: 
 }
 
 function aimHitEntry(level: MiniGameLevelConfig, hits: number) {
-  const metric = findMetric(level, "aim-hit-count");
+  const metric = findMetric(level, "aim-hit-score") ?? findMetric(level, "aim-hit-count");
   if (!metric) return null;
-  return metricEntry(metric, hits, { amount: hits });
+  const valuePerEvent = finiteNumber(metric.valuePerEvent, 1);
+  return metricEntry(metric, hits, { amount: hits * valuePerEvent });
+}
+
+function aimTargetCountEntry(targetCount: number): GameResultBreakdownEntry | null {
+  if (targetCount <= 0) return null;
+  return {
+    key: "aim-target-count",
+    label: "进靶总数",
+    unit: "count",
+    value: targetCount,
+    displayOnly: true,
+  };
 }
 
 function compactEntries(entries: Array<GameResultBreakdownEntry | null>) {
@@ -173,13 +187,19 @@ function buildAimScoreBreakdown(level: MiniGameLevelConfig, stats: MultiplayerRe
   const aimMisses = wholeCount(stats.aimMisses);
   const aimFlyOuts = wholeCount(stats.aimFlyOuts);
   const aimDecoyHits = wholeCount(stats.aimDecoyHits);
+  const aimTargetCount = wholeCount(stats.aimTargetCount);
   const hitEntry = aimHitEntry(level, aimHits);
+  const targetCountEntry = aimTargetCountEntry(aimTargetCount);
   const adjustments = compactEntries([
     countedAdjustmentEntry(level, "aim-miss-penalty", aimMisses),
     countedAdjustmentEntry(level, "aim-flyout-penalty", aimFlyOuts),
     countedAdjustmentEntry(level, "aim-decoy-penalty", aimDecoyHits),
   ]);
-  const formulaRows = compactEntries([hitEntry]).map((entry) => formulaRow(entry, "base"));
+  const baseRows = compactEntries([hitEntry]).map((entry) => formulaRow(entry, operationForAmount(entry.amount)));
+  const finalScore = [...compactEntries([hitEntry]), ...adjustments].reduce(
+    (total, item) => total + (item.displayOnly ? 0 : finiteNumber(item.amount)),
+    0,
+  );
 
   return {
     version: 1,
@@ -191,12 +211,12 @@ function buildAimScoreBreakdown(level: MiniGameLevelConfig, stats: MultiplayerRe
     outcome: stats.passed ? "completed" : "failed",
     base: compactEntries([hitEntry]),
     adjustments,
-    formulaRows: [...formulaRows, ...adjustmentRows(adjustments)],
+    formulaRows: [...baseRows, ...adjustmentRows(adjustments), ...compactEntries([targetCountEntry]).map((entry) => formulaRow(entry, "note"))],
     final: {
-      label: "命中数",
+      label: "移动靶总分",
       lowerIsBetter: false,
-      unit: "count",
-      value: aimHits,
+      unit: "point",
+      value: finalScore,
     },
     tiebreakerText: rules.settlement.tiebreakerText,
   };
@@ -334,6 +354,10 @@ function compareNumberValues(selfValue: number, opponentValue: number, lowerIsBe
   return selfValue > opponentValue ? -1 : 1;
 }
 
+function roundMultiplayerTimeForComparison(value: number) {
+  return Math.round(value / MULTIPLAYER_TIME_COMPARE_PRECISION_MS) * MULTIPLAYER_TIME_COMPARE_PRECISION_MS;
+}
+
 function breakdownRows(result: GameResult) {
   const breakdown = result.breakdown;
   if (!breakdown) return [];
@@ -354,8 +378,10 @@ function aimMistakeCount(result: GameResult) {
 function compareAimScoreBreakdown(selfResult: GameResult, opponentResult: GameResult) {
   if (selfResult.breakdown?.gameId !== "aim" || opponentResult.breakdown?.gameId !== "aim") return null;
   if (selfResult.breakdown.kind !== "score" || opponentResult.breakdown.kind !== "score") return null;
-  const selfHits = numericBreakdownValue(selfResult, "aim-hit-count") ?? selfResult.breakdown.final.value;
-  const opponentHits = numericBreakdownValue(opponentResult, "aim-hit-count") ?? opponentResult.breakdown.final.value;
+  const scoreComparison = compareNumberValues(selfResult.breakdown.final.value, opponentResult.breakdown.final.value, false);
+  if (scoreComparison !== 0) return scoreComparison;
+  const selfHits = numericBreakdownValue(selfResult, "aim-hit-score") ?? numericBreakdownValue(selfResult, "aim-hit-count") ?? 0;
+  const opponentHits = numericBreakdownValue(opponentResult, "aim-hit-score") ?? numericBreakdownValue(opponentResult, "aim-hit-count") ?? 0;
   const hitComparison = compareNumberValues(selfHits, opponentHits, false);
   if (hitComparison !== 0) return hitComparison;
   return compareNumberValues(aimMistakeCount(selfResult), aimMistakeCount(opponentResult), true);
@@ -365,9 +391,17 @@ function compareBreakdownFinal(selfResult: GameResult, opponentResult: GameResul
   if (!selfResult.breakdown || !opponentResult.breakdown) return null;
   const aimComparison = compareAimScoreBreakdown(selfResult, opponentResult);
   if (aimComparison !== null) return aimComparison;
+  const selfFinalValue =
+    selfResult.breakdown.final.unit === "ms"
+      ? roundMultiplayerTimeForComparison(selfResult.breakdown.final.value)
+      : selfResult.breakdown.final.value;
+  const opponentFinalValue =
+    opponentResult.breakdown.final.unit === "ms"
+      ? roundMultiplayerTimeForComparison(opponentResult.breakdown.final.value)
+      : opponentResult.breakdown.final.value;
   return compareNumberValues(
-    selfResult.breakdown.final.value,
-    opponentResult.breakdown.final.value,
+    selfFinalValue,
+    opponentFinalValue,
     selfResult.breakdown.final.lowerIsBetter,
   );
 }
@@ -390,8 +424,8 @@ export function compareMultiplayerResults(selfResult: GameResult, opponentResult
   }
 
   if (selfResult.passed && opponentResult.passed) {
-    const selfTime = selfResult.timeMs ?? Number.POSITIVE_INFINITY;
-    const opponentTime = opponentResult.timeMs ?? Number.POSITIVE_INFINITY;
+    const selfTime = roundMultiplayerTimeForComparison(selfResult.timeMs ?? Number.POSITIVE_INFINITY);
+    const opponentTime = roundMultiplayerTimeForComparison(opponentResult.timeMs ?? Number.POSITIVE_INFINITY);
     if (selfTime < opponentTime) return -1;
     if (selfTime > opponentTime) return 1;
   }

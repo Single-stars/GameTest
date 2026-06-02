@@ -6,6 +6,7 @@ export type MultiplayerSettlementBaseKey =
   | "finish-time"
   | "effective-time"
   | "aim-hit-count"
+  | "aim-hit-score"
   | "final-score"
   | "progress"
   | "revives";
@@ -70,25 +71,33 @@ const collectibleTimeBonus: MultiplayerSettlementMetric = {
 const aimMissPenalty: MultiplayerSettlementMetric = {
   key: "aim-miss-penalty",
   label: "射空",
-  unit: "count",
-  description: "射空只记录次数，不换算成时间。",
-  displayOnly: true,
+  unit: "point",
+  valuePerEvent: -2,
+  description: "每次射空扣 2 分。",
 };
 
 const aimFlyOutPenalty: MultiplayerSettlementMetric = {
   key: "aim-flyout-penalty",
   label: "漏靶",
-  unit: "count",
-  description: "逃逸靶飞出屏幕只记录次数，不换算成时间。",
-  displayOnly: true,
+  unit: "point",
+  valuePerEvent: -3,
+  description: "逃逸靶飞出屏幕扣 3 分。",
 };
 
 const aimDecoyPenalty: MultiplayerSettlementMetric = {
   key: "aim-decoy-penalty",
   label: "打中干扰靶",
-  unit: "count",
-  description: "打中干扰靶只记录次数，不换算成时间。",
-  displayOnly: true,
+  unit: "point",
+  valuePerEvent: -5,
+  description: "打中干扰靶扣 5 分。",
+};
+
+const aimHitScore: MultiplayerSettlementMetric = {
+  key: "aim-hit-score",
+  label: "命中",
+  unit: "point",
+  valuePerEvent: 10,
+  description: "每次命中目标靶加 10 分。",
 };
 
 const knifeHitScore: MultiplayerSettlementMetric = {
@@ -217,44 +226,18 @@ function aimSettlement(level: MiniGameLevelConfig): MultiplayerSettlementRules {
   const adjustments = [aimMissPenalty];
   if (mode === "incoming" || mode === "boss") adjustments.push(aimFlyOutPenalty);
   if (mode === "decoy" || mode === "boss") adjustments.push(aimDecoyPenalty);
-  if (mode === "incoming") {
-    return {
-      kind: "score",
-      primaryMetric: "aim-hit-count",
-      resultTitle: "命中数",
-      winnerText: "流程结束后命中更多者获胜，同命中比失误次数，完全一致进入加赛",
-      baseMetrics: [
-        {
-          key: "aim-hit-count",
-          label: "命中",
-          unit: "count",
-          description: "逃逸靶流程结束后的命中数量。",
-        },
-      ],
-      adjustments,
-      tiebreakerText: "命中和失误次数相同进入高速逃逸靶加赛，完全一致继续下一轮。",
-    };
-  }
+  const tiebreakerText =
+    mode === "incoming"
+      ? "同分后原地追加 1 个靶：高速逃逸靶，仍平再追加 1 个。"
+      : "同分后原地追加 1 个移动靶，仍平再追加 1 个。";
   return {
-    kind: "effective-time",
-    primaryMetric: "effective-time",
-    resultTitle: "最终用时",
-    winnerText: "完成流程后最终用时更短者获胜，射空和干扰只记次数",
-    baseMetrics: [
-      {
-        key: "finish-time",
-        label: "完成时间",
-        unit: "ms",
-        description: "从比赛开始到射靶流程结束的原始时间。",
-      },
-      {
-        key: "effective-time",
-        label: "最终用时",
-        unit: "ms",
-        description: "完成流程的真实用时，射空、漏靶和干扰靶只展示次数。",
-      },
-    ],
+    kind: "score",
+    primaryMetric: "final-score",
+    resultTitle: "移动靶总分",
+    winnerText: "命中加分，射空、漏靶和干扰靶扣分；同分原地追加靶",
+    baseMetrics: [aimHitScore],
     adjustments,
+    tiebreakerText,
   };
 }
 
@@ -305,15 +288,15 @@ function knifeCountdownLines(level: MiniGameLevelConfig) {
 function aimCountdownLines(level: MiniGameLevelConfig) {
   const mode = aimMode(level);
   if (mode === "incoming") {
-    return ["流程结束比命中数", "射空只记次数", "漏靶只记次数"];
+    return ["流程结束比分数", "射空-2 漏靶-3", "同分追加 1 靶"];
   }
   if (mode === "decoy") {
-    return ["清空目标比最终用时", "射空只记次数", "打错只记次数"];
+    return ["清空目标比分数", "射空-2 打错-5", "同分追加 1 靶"];
   }
   if (mode === "boss") {
-    return ["综合靶比最终用时", "射空只记次数", "漏靶打错记次数"];
+    return ["综合靶比分数", "射空漏靶会扣分", "同分追加 1 靶"];
   }
-  return ["清空目标比最终用时", "射空只记次数"];
+  return ["清空目标比分数", "射空 -2 分", "同分追加 1 靶"];
 }
 
 export function getMultiplayerLevelRules(level: MiniGameLevelConfig): MultiplayerLevelRules {

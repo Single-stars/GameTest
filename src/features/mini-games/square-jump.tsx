@@ -39,6 +39,7 @@ import {
   useMiniGameScreenShake,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
+  type EndlessMiniGameRuntime,
   type MiniGameRunMode,
   type MiniGameStageSize,
   type PrototypeStatus,
@@ -65,6 +66,7 @@ import {
   type SquareJumpBaseJumpPlan,
   type SquareJumpBasePlatform,
 } from "@/lib/mini-games";
+import { getEndlessMiniGameStageConfig } from "@/lib/endless-mode";
 
 const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
@@ -219,6 +221,15 @@ function resolveSquareJumpRemoteAvatarView(remoteState: SelfGameState | null | u
     : { action: "idle", expression: "neutral" };
 }
 
+function smoothSpectatorCamera(current: SquareJumpBaseCamera, target: SelfGameState, delta: number): SquareJumpBaseCamera {
+  const blend = 1 - Math.exp(-Math.max(0, delta) * 7);
+  return {
+    cameraX: typeof target.cameraX === "number" ? current.cameraX + (target.cameraX - current.cameraX) * blend : current.cameraX,
+    cameraY: typeof target.cameraY === "number" ? current.cameraY + (target.cameraY - current.cameraY) * blend : current.cameraY,
+    scale: typeof target.cameraScale === "number" ? current.scale + (target.cameraScale - current.scale) * blend : current.scale,
+  };
+}
+
 function resolveSquareJumpTurnRole(turnIndex: number): SquareJumpCoOpRole {
   return turnIndex % 2 === 0 ? "first" : "second";
 }
@@ -273,6 +284,12 @@ function hasSquareJumpPlatformWindowChanged(runtime: SquareJumpUnifiedRuntime, a
     runtime.nextIndex !== nextPlatformIndex ||
     currentExitingPlatformIndex !== exitingPlatformIndex
   );
+}
+
+function resolveSquareJumpSpectatorPlatforms(
+  runtime: Pick<SquareJumpUnifiedRuntime, "currentPlatform" | "exitingPlatform" | "nextPlatform">,
+) {
+  return selectSquareJumpVisiblePlatforms(runtime.currentPlatform, runtime.nextPlatform, runtime.exitingPlatform);
 }
 
 function applySquareJumpAuthoritativeState(runtime: SquareJumpUnifiedRuntime, authoritativeState: SelfGameState | null | undefined) {
@@ -454,6 +471,57 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
   };
 }
 
+function makeEndlessSquareJumpSegmentLevel(
+  level: MiniGameLevelConfig,
+  progress: number,
+  debugDifficulty: number,
+): MiniGameLevelConfig {
+  const config = getEndlessMiniGameStageConfig({ debugDifficulty, miniGameId: "square-jump", progress });
+  return {
+    ...level,
+    levelId: `${level.levelId}-endless-${config.sourceAdvancedLevel}-${Math.floor(progress)}`,
+    params: {
+      ...level.params,
+      ...config.params,
+    },
+  };
+}
+
+function ensureEndlessSquareJumpPlatforms(
+  current: SquareJumpUnifiedRuntime,
+  level: MiniGameLevelConfig,
+  runSeed: string,
+  progress: number,
+  debugDifficulty: number,
+  requiredIndex: number,
+) {
+  if (current.platforms.length > requiredIndex + 2) return false;
+  const anchor = current.platforms[current.platforms.length - 1];
+  if (!anchor) return false;
+  const segmentLevel = makeEndlessSquareJumpSegmentLevel(level, progress, debugDifficulty);
+  const generated = generateSquareJumpPlatformSequence(segmentLevel, `${runSeed}:endless:${current.platforms.length}`, {
+    count: numberParam(segmentLevel.params, "jumpsRequired", 8) + 1,
+    platformY: anchor.y,
+    startX: anchor.x,
+    startWidth: anchor.width,
+  });
+  const first = generated[0];
+  if (!first) return false;
+  const offsetX = anchor.x - first.x;
+  let nextIndex = current.platforms.length;
+  for (const platform of generated.slice(1)) {
+    current.platforms.push({
+      ...platform,
+      finish: false,
+      id: `platform-${nextIndex}`,
+      x: platform.x + offsetX,
+      y: anchor.y,
+    });
+    nextIndex += 1;
+  }
+  return current.platforms.length > requiredIndex;
+}
+
 function makeSquareJumpUnifiedView(runtime: SquareJumpUnifiedRuntime): SquareJumpUnifiedRuntime {
   return {
     ...runtime,
@@ -497,7 +565,7 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
   current.doubleJumpUsed = false;
 
   if (!unlimitedRespawn && failures >= BASE_FAILURE_LIMIT) {
-    current.reason = "???? 3 ???????";
+    current.reason = "失败达到 3 次，进入下一关";
     current.state = "failed";
     current.status = "failed";
     return true;
@@ -529,6 +597,7 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
 }
 
 export function SquareJumpPrototype({
+  endless,
   level,
   logicStageSizeOverride,
   mode,
@@ -540,6 +609,7 @@ export function SquareJumpPrototype({
   remotePlayer,
   remoteStateSubscription,
   remoteState,
+  spectateRemoteState = null,
   unlimitedRespawn = false,
   coOpInputState = null,
   coOpInputStateSubscription = null,
@@ -548,9 +618,10 @@ export function SquareJumpPrototype({
   coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
 }: {
+  endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
-  mode: MiniGameRunMode;
+  mode: MiniGameRunMode | "endless";
   runSeed: string;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
@@ -559,6 +630,7 @@ export function SquareJumpPrototype({
   remotePlayer?: SquareJumpRemotePlayer | null;
   remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   remoteState?: SelfGameState | null;
+  spectateRemoteState?: SelfGameState | null;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
   coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
@@ -582,7 +654,16 @@ export function SquareJumpPrototype({
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
   const flyAwayLandingCatchDepth = numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25);
   const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
-  const initialRuntime = useMemo(() => createSquareJumpUnifiedRuntime(level, runSeed, logicStageSize), [level, logicStageSize, runSeed]);
+  const isEndlessRun = Boolean(endless);
+  const initialRuntime = useMemo(() => {
+    const runtime = createSquareJumpUnifiedRuntime(level, runSeed, logicStageSize);
+    if (isEndlessRun) {
+      runtime.platforms = runtime.platforms.map((platform) => (platform.finish ? { ...platform, finish: false } : platform));
+      runtime.currentPlatform = runtime.currentPlatform.finish ? { ...runtime.currentPlatform, finish: false } : runtime.currentPlatform;
+      runtime.nextPlatform = runtime.nextPlatform.finish ? { ...runtime.nextPlatform, finish: false } : runtime.nextPlatform;
+    }
+    return runtime;
+  }, [isEndlessRun, level, logicStageSize, runSeed]);
   const runtimeRef = useRef<SquareJumpUnifiedRuntime>(initialRuntime);
   const worldLayerRef = useRef<HTMLDivElement | null>(null);
   const progressBackgroundRef = useRef<HTMLDivElement | null>(null);
@@ -606,11 +687,13 @@ export function SquareJumpPrototype({
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
+  const spectateRemoteStateRef = useRef<SelfGameState | null>(spectateRemoteState);
   const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const tutorialPreviewRef = useRef<HTMLDivElement | null>(null);
   const squarePlatformRefs = useRef(new Map<string, HTMLDivElement>());
   const lastUiSyncRef = useRef(0);
   const lastRuntimeSyncRef = useRef(0);
+  const spectatorSceneTimeRef = useRef(0);
   const localChargeHeldRef = useRef(false);
   const remoteChargeHeldRef = useRef(false);
   const completedRef = useRef(false);
@@ -622,10 +705,19 @@ export function SquareJumpPrototype({
   const remotePlayerSkin = resolveSquareJumpRemoteSkin(remotePlayer);
   const coOpPlayerSkin = resolveSquareJumpCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+  const endlessRef = useRef(endless);
 
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    endlessRef.current = endless;
+  }, [endless]);
+
+  useEffect(() => {
+    spectateRemoteStateRef.current = spectateRemoteState;
+  }, [spectateRemoteState]);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -639,10 +731,11 @@ export function SquareJumpPrototype({
     lastRuntimeSyncRef.current = time;
     onRuntimeStateRef.current(makeSquareJumpRuntimeState(runtimeRef.current, localChargeHeldRef.current));
   }, []);
-  const canRecoverSquareJumpMiss = mode === "base" || unlimitedRespawn;
+  const canRecoverSquareJumpMiss = mode === "base" || unlimitedRespawn || isEndlessRun;
 
   useEffect(() => {
     runtimeRef.current = initialRuntime;
+    spectatorSceneTimeRef.current = initialRuntime.time;
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     localChargeHeldRef.current = false;
@@ -696,7 +789,7 @@ export function SquareJumpPrototype({
   }, [authoritativeStateSubscription, syncRuntimeState, syncView]);
 
   const updateSquareJumpDom = useCallback(
-    (current: SquareJumpUnifiedRuntime) => {
+    (current: SquareJumpUnifiedRuntime, spectatingRemote = false, sceneTime = current.time) => {
       if (progressBackgroundRef.current) {
         const backgroundStyle = squareProgressBackgroundStyle(current.camera);
         progressBackgroundRef.current.style.backgroundPosition = String(backgroundStyle.backgroundPosition ?? "");
@@ -705,7 +798,7 @@ export function SquareJumpPrototype({
         worldLayerRef.current.style.transform = `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale}) ${squareBaseWorldTransform(current.camera, logicStageSize)}`;
       }
 
-      const visiblePlatforms = selectSquareJumpVisiblePlatforms(current.currentPlatform, current.nextPlatform, current.exitingPlatform);
+      const visiblePlatforms = resolveSquareJumpSpectatorPlatforms(current);
       const visibleIds = new Set(visiblePlatforms.map((platform) => platform.id));
       for (const [id, node] of squarePlatformRefs.current) {
         if (!visibleIds.has(id)) node.style.display = "none";
@@ -717,7 +810,7 @@ export function SquareJumpPrototype({
         const isNext = platform.id === current.nextPlatform.id && !isCurrent;
         const isExiting = current.exitingPlatform?.id === platform.id;
         const visualOffsetY = isNext ? current.nextVisualOffsetY : isExiting ? current.exitingVisualOffsetY : 0;
-        const platformX = getSquareJumpBasePlatformX(platform, current.time);
+        const platformX = getSquareJumpBasePlatformX(platform, sceneTime);
         const platformHeight = getSquareJumpBasePlatformHeight({
           camera: current.camera,
           platformY: platform.y + visualOffsetY,
@@ -731,7 +824,10 @@ export function SquareJumpPrototype({
       }
 
       if (playerShellRef.current) {
-        playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
+        playerShellRef.current.style.display = "";
+        if (!spectatingRemote) {
+          playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
+        }
       }
       setSquareJumpAvatarChargeVars(playerAvatarRef.current, current);
       let remoteChargeHint = 0;
@@ -795,15 +891,29 @@ export function SquareJumpPrototype({
       current.jumpPlan = null;
 
       if (nextJumps >= requiredJumps) {
+        if (!isEndlessRun) {
         current.reason = `连续成功 ${requiredJumps} 次，到达终点平台`;
         current.state = "success";
         current.status = "passed";
         syncView();
         return true;
+        }
       }
 
       const cameraStart = { ...current.camera };
       const futureIndex = current.nextIndex + 1;
+      const endlessDistanceScore = Math.floor(Math.max(0, current.currentIndex * 160) / 100);
+      if (isEndlessRun) endlessRef.current?.setDistanceScore(endlessDistanceScore);
+      if (isEndlessRun) {
+        ensureEndlessSquareJumpPlatforms(
+          current,
+          level,
+          runSeed,
+          Math.max(endlessRef.current?.score ?? 0, endlessDistanceScore),
+          endlessRef.current?.debugDifficulty ?? 0,
+          futureIndex,
+        );
+      }
       const futurePlatform = current.platforms[futureIndex] ?? current.platforms[current.platforms.length - 1];
       const cameraEnd = fitSquareBaseCamera(landedPlatform, futurePlatform, current.playerX, logicStageSize);
       current.nextIndex = futureIndex;
@@ -822,7 +932,7 @@ export function SquareJumpPrototype({
       current.state = "advancing";
       return false;
     },
-    [logicStageSize, requiredJumps, stageHeight, syncView],
+    [isEndlessRun, level, logicStageSize, requiredJumps, runSeed, stageHeight, syncView],
   );
 
   const launchChargedJump = useCallback(() => {
@@ -961,10 +1071,10 @@ export function SquareJumpPrototype({
       last = time;
       const current = runtimeRef.current;
       let eventChanged = false;
-      const paintSquareFrame = () => {
+      const paintSquareFrame = (spectatingRemote = false, sceneTime = current.time) => {
         const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
         const renderStartedAt = perfEnabled ? performance.now() : 0;
-        updateSquareJumpDom(current);
+        updateSquareJumpDom(current, spectatingRemote, sceneTime);
         if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
       };
 
@@ -1009,7 +1119,15 @@ export function SquareJumpPrototype({
         if (current.started && (current.state === "idle" || current.state === "charging") && current.timer !== null) {
           current.timer -= delta;
           if (current.timer <= 0) {
-            fail("?????????");
+            if (isEndlessRun && endlessRef.current?.loseLife("timeout")) {
+              recoverSquareJumpBaseMiss(current, "倒计时结束", logicStageSize, true);
+              triggerScreenShake();
+              paintSquareFrame();
+              syncView(time);
+              frameId = requestAnimationFrame(tick);
+              return;
+            }
+            fail("倒计时结束");
             return;
           }
         }
@@ -1049,6 +1167,15 @@ export function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
+            if (isEndlessRun && !(endlessRef.current?.loseLife("fall") ?? false)) {
+              triggerScreenShake();
+              current.reason = "掉下去了";
+              current.state = "failed";
+              current.status = "failed";
+              paintSquareFrame();
+              syncView(time);
+              return;
+            }
             if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
@@ -1085,6 +1212,15 @@ export function SquareJumpPrototype({
           const screenX = stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
+            if (isEndlessRun && !(endlessRef.current?.loseLife("fall") ?? false)) {
+              triggerScreenShake();
+              current.reason = "掉下去了";
+              current.state = "failed";
+              current.status = "failed";
+              paintSquareFrame();
+              syncView(time);
+              return;
+            }
             if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
               paintSquareFrame();
@@ -1098,13 +1234,25 @@ export function SquareJumpPrototype({
         }
       }
 
-      paintSquareFrame();
+      const spectatorState = remoteSmootherRef.current.sample(time) ?? spectateRemoteStateRef.current;
+      const spectatingRemote = spectatorState?.status === "playing";
+      if (current.status !== "playing") {
+        spectatorSceneTimeRef.current = Math.max(spectatorSceneTimeRef.current, current.time);
+        if (spectatingRemote) spectatorSceneTimeRef.current += delta;
+      }
+      const spectatorViewChanged = current.status !== "playing" && hasSquareJumpPlatformWindowChanged(current, spectatorState);
+      if (current.status !== "playing" && spectatingRemote && spectatorState) {
+        current.camera = smoothSpectatorCamera(current.camera, spectatorState, delta);
+        syncSquareJumpAuthoritativePlatformWindow(current, spectatorState);
+      }
+
+      paintSquareFrame(current.status !== "playing" && spectatingRemote, current.status !== "playing" ? spectatorSceneTimeRef.current : current.time);
       if (current.status !== "playing" || eventChanged) {
         syncRuntimeState(time, true);
       } else {
         syncRuntimeState(time);
       }
-      if (current.status !== "playing" || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+      if (spectatorViewChanged || eventChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== view.status) {
         syncView(time);
       }
       frameId = requestAnimationFrame(tick);
@@ -1112,7 +1260,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
+  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -1158,9 +1306,9 @@ export function SquareJumpPrototype({
     <div className="prototype-game-wrap">
       <div className="mini-score">
         {coOpRole ? <span className="mini-coop-hint">{coOpTurnIsMine ? "轮到你蓄力" : "等待对方蓄力"}</span> : null}
-        <span>进度 {view.jumps}/{requiredJumps}</span>
+        {!isEndlessRun ? <span>进度 {view.jumps}/{requiredJumps}</span> : null}
         {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
-        {view.timer !== null ? <span>倒计�?{Math.max(0, view.timer).toFixed(1)}s</span> : null}
+        {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
       </div>
       <div
         className={`prototype-stage square-jump-stage gravity-${gravity} ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}

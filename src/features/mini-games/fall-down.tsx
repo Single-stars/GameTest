@@ -31,6 +31,7 @@ import {
   useMiniGameScreenShake,
   useMiniGamePerfMonitor,
   type MiniGameCompletion,
+  type EndlessMiniGameRuntime,
   type MiniGameRunMode,
   type MiniGameStageSize,
   type PrototypeStatus,
@@ -44,6 +45,7 @@ import {
   restoreFallDownFragilePlatformsForRespawn,
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
+import { getEndlessMiniGameStageConfig } from "@/lib/endless-mode";
 import type { SelfGameState } from "@/features/game-sync/types";
 import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
@@ -156,6 +158,11 @@ function resolveFallDownRemoteAvatarView(remoteState: FallDownRemoteState): Play
   return remoteState.direction && remoteState.direction !== "none"
     ? { action: "move", expression: "neutral" }
     : { action: "idle", expression: "neutral" };
+}
+
+function smoothSpectatorCamera(current: number, target: number, delta: number) {
+  const blend = 1 - Math.exp(-Math.max(0, delta) * 7);
+  return current + (target - current) * blend;
 }
 
 function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number, inputDirection: FallDownRuntime["inputDirection"] = runtime.inputDirection): FallDownRuntimeState {
@@ -396,6 +403,48 @@ function recoverFallDownBaseFailure(
   return true;
 }
 
+function recoverEndlessFallDownFailure(current: FallDownRuntime, reason: string, stageSize: MiniGameStageSize) {
+  current.failures += 1;
+  current.reason = reason;
+  current.status = "playing";
+  current.started = true;
+  current.inputDirection = 0;
+  current.vx = 0;
+  current.vy = Math.min(current.vy, 120);
+  current.respawnCameraUntil = 0;
+  current.respawnUntil = current.time + 1.1;
+
+  if (reason === "太慢了" || reason === "掉太深") {
+    restoreFallDownFragilePlatformsForRespawn(current.platforms);
+    const respawnPlatform = resolveFallDownLastSafePlatform(current);
+    current.currentPlatformId = respawnPlatform.id;
+    current.lastSafePlatformId = respawnPlatform.id;
+    current.playerX = fallPlatformX(respawnPlatform, current.time, stageSize.width);
+    current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
+    const visibleTop = current.cameraY + PLAYER_SIZE;
+    const visibleBottom = current.cameraY + stageSize.height - PLAYER_SIZE * 1.8;
+    if (current.playerY < visibleTop || current.playerY > visibleBottom) {
+      current.cameraY = Math.max(0, current.playerY - stageSize.height * 0.46);
+    }
+  }
+
+  current.pressureWorldY = current.cameraY - PLAYER_SIZE;
+}
+
+function carryFallDownMovingPlatformDuringRespawn(current: FallDownRuntime, previousTime: number, stageWidth: number) {
+  if (current.started) return;
+  const carriedPlatform = current.platforms.find((platform) => platform.id === current.currentPlatformId);
+  if (!carriedPlatform || carriedPlatform.kind !== "moving" || carriedPlatform.broken) return;
+  const previousPlatformX = fallPlatformX(carriedPlatform, previousTime, stageWidth);
+  const playerBottomIsOnPlatform = Math.abs(current.playerY + PLAYER_SIZE / 2 - carriedPlatform.y) <= 0.75;
+  const playerOverlapsPlatform =
+    current.playerX + PLAYER_SIZE / 2 >= previousPlatformX - carriedPlatform.width / 2 &&
+    current.playerX - PLAYER_SIZE / 2 <= previousPlatformX + carriedPlatform.width / 2;
+  if (!playerBottomIsOnPlatform || !playerOverlapsPlatform) return;
+  const platformDeltaX = fallPlatformX(carriedPlatform, current.time, stageWidth) - previousPlatformX;
+  current.playerX = clamp(current.playerX + platformDeltaX, PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
+}
+
 function applyFallDownAuthoritativeState(
   current: FallDownRuntime,
   authoritativeState: SelfGameState | null | undefined,
@@ -450,16 +499,114 @@ function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stag
   };
 }
 
+function makeEndlessFallDownSegmentLevel(
+  level: MiniGameLevelConfig,
+  progress: number,
+  debugDifficulty: number,
+): MiniGameLevelConfig {
+  const config = getEndlessMiniGameStageConfig({ debugDifficulty, miniGameId: "fall-down", progress });
+  return {
+    ...level,
+    levelId: `${level.levelId}-endless-${config.sourceAdvancedLevel}-${Math.floor(progress)}`,
+    params: {
+      ...level.params,
+      ...config.params,
+    },
+  };
+}
+
+function extendEndlessFallDownWorld(
+  current: FallDownRuntime,
+  level: MiniGameLevelConfig,
+  runSeed: string,
+  stageSize: MiniGameStageSize,
+  progress: number,
+  debugDifficulty: number,
+) {
+  const futureTargetY = current.cameraY + stageSize.height * 2.35;
+  const lowestPlatformY = current.platforms.reduce((lowest, platform) => Math.max(lowest, platform.y), 0);
+  if (lowestPlatformY >= futureTargetY) return false;
+
+  const segmentLevel = makeEndlessFallDownSegmentLevel(level, progress, debugDifficulty);
+  const generatedPlatforms = makeFallDownPlatforms(segmentLevel, `${runSeed}:endless:${Math.floor(lowestPlatformY)}`, stageSize.width)
+    .filter((platform) => platform.kind !== "finish")
+    .slice(1);
+  const firstSegmentY = generatedPlatforms[0]?.y;
+  if (firstSegmentY === undefined) return false;
+
+  let nextPlatformId = current.platforms.reduce((next, platform) => Math.max(next, platform.id + 1), 0);
+  const gap = numberParam(segmentLevel.params, "platformGapMin", 98);
+  const offsetY = lowestPlatformY + gap - firstSegmentY;
+  for (const platform of generatedPlatforms) {
+    current.platforms.push({
+      ...platform,
+      id: nextPlatformId,
+      kind: platform.kind === "finish" ? "normal" : platform.kind,
+      y: platform.y + offsetY,
+    });
+    nextPlatformId += 1;
+  }
+
+  const targetHazards = makeFallDownFallingHazards(segmentLevel, `${runSeed}:endless:${current.fallingHazards.length}`, stageSize);
+  const hazardsToAdd = Math.max(0, targetHazards.length - current.fallingHazards.length);
+  let nextHazardId = current.fallingHazards.reduce((next, hazard) => Math.max(next, hazard.id + 1), 0);
+  for (const hazard of targetHazards.slice(0, hazardsToAdd)) {
+    current.fallingHazards.push({
+      ...hazard,
+      id: nextHazardId,
+    });
+    nextHazardId += 1;
+  }
+
+  const pruneBeforeY = current.cameraY - stageSize.height * 0.85;
+  current.platforms = current.platforms.filter(
+    (platform) => platform.id === current.currentPlatformId || platform.id === current.lastSafePlatformId || platform.y >= pruneBeforeY,
+  );
+  return true;
+}
+
 function makeFallDownView(runtime: FallDownRuntime): FallDownRuntime {
   return {
     ...runtime,
-    platforms: runtime.platforms.map((platform) => ({ ...platform })),
+    platforms: resolveFallDownSpectatorPlatforms(runtime),
     fallingHazards: runtime.fallingHazards.map((hazard) => ({ ...hazard })),
   };
 }
 
+function resolveFallDownSpectatorPlatforms(runtime: FallDownRuntime) {
+  return runtime.platforms.map((platform) => ({ ...platform }));
+}
+
+function hasFallDownSpectatorPlatforms(runtime: FallDownRuntime, cameraY: number, stageHeight: number) {
+  return runtime.platforms.some((platform) => {
+    const screenY = platform.y - cameraY;
+    return !platform.broken && screenY >= -80 && screenY <= stageHeight + 80;
+  });
+}
+
+function restoreFallDownSpectatorPlatforms(
+  runtime: FallDownRuntime,
+  level: MiniGameLevelConfig,
+  runSeed: string,
+  stageSize: MiniGameStageSize,
+  cameraY: number,
+) {
+  if (hasFallDownSpectatorPlatforms(runtime, cameraY, stageSize.height)) return false;
+  const restored = createFallDownRuntime(level, runSeed, stageSize);
+  const minY = cameraY - stageSize.height * 0.75;
+  const maxY = cameraY + stageSize.height * 1.35;
+  const knownPlatformIds = new Set(runtime.platforms.map((platform) => platform.id));
+  const restoredPlatforms = restored.platforms.filter(
+    (platform) => !knownPlatformIds.has(platform.id) && platform.y >= minY && platform.y <= maxY,
+  );
+  if (restoredPlatforms.length === 0) return false;
+  runtime.platforms = [...runtime.platforms, ...restoredPlatforms.map((platform) => ({ ...platform }))].sort((left, right) => left.y - right.y);
+  return true;
+}
+
 export function FallDownPrototype({
   baseRevives,
+  endless,
   level,
   logicStageSizeOverride,
   mode,
@@ -471,6 +618,7 @@ export function FallDownPrototype({
   remotePlayer,
   remoteStateSubscription,
   remoteState,
+  spectateRemoteState = null,
   runSeed,
   unlimitedRespawn = false,
   coOpInputState = null,
@@ -481,9 +629,10 @@ export function FallDownPrototype({
   authoritativeStateSubscription = null,
 }: {
   baseRevives?: number;
+  endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
-  mode: MiniGameRunMode;
+  mode: MiniGameRunMode | "endless";
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: FallDownRuntimeState) => void;
@@ -491,6 +640,7 @@ export function FallDownPrototype({
   remotePlayer?: FallDownRemotePlayer | null;
   remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   remoteState?: SelfGameState | null;
+  spectateRemoteState?: SelfGameState | null;
   runSeed: string;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
@@ -523,9 +673,16 @@ export function FallDownPrototype({
   const fallDownPlayerSpeed = numberParam(level.params, "playerSpeed", 230);
   const fragileTime = numberParam(level.params, "fragileTime", 1.2);
   const topPressureSpeed = numberParam(level.params, "topPressureSpeed", 18);
+  const isEndlessRun = Boolean(endless);
   const initialRuntime = useMemo(
-    () => createFallDownRuntime(level, runSeed, logicStageSize),
-    [level, logicStageSize, runSeed],
+    () => {
+      const runtime = createFallDownRuntime(level, runSeed, logicStageSize);
+      if (isEndlessRun) {
+        runtime.platforms = runtime.platforms.map((platform) => (platform.kind === "finish" ? { ...platform, kind: "normal" } : platform));
+      }
+      return runtime;
+    },
+    [isEndlessRun, level, logicStageSize, runSeed],
   );
   const runtimeRef = useRef<FallDownRuntime>(initialRuntime);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
@@ -547,6 +704,8 @@ export function FallDownPrototype({
     }),
   );
   const coOpInputStateRef = useRef<SelfGameState | null>(coOpInputState);
+  const spectateRemoteStateRef = useRef<SelfGameState | null>(spectateRemoteState);
+  const spectatorSceneTimeRef = useRef(0);
   const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
@@ -563,6 +722,7 @@ export function FallDownPrototype({
   const remotePlayerSkin = resolveFallDownRemoteSkin(remotePlayer);
   const coOpPlayerSkin = resolveFallDownCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+  const endlessRef = useRef(endless);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -573,6 +733,14 @@ export function FallDownPrototype({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    endlessRef.current = endless;
+  }, [endless]);
+
+  useEffect(() => {
+    spectateRemoteStateRef.current = spectateRemoteState;
+  }, [spectateRemoteState]);
 
   const syncRuntimeState = useCallback(
     (time = performance.now(), force = false) => {
@@ -586,6 +754,7 @@ export function FallDownPrototype({
 
   useEffect(() => {
     runtimeRef.current = initialRuntime;
+    spectatorSceneTimeRef.current = initialRuntime.time;
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
@@ -637,9 +806,17 @@ export function FallDownPrototype({
   }, [authoritativeStateSubscription, requiredLayers, syncRuntimeState, syncView]);
 
   const updateFallDownDom = useCallback(
-    (current: FallDownRuntime) => {
+    (current: FallDownRuntime, spectatingRemote = false, sceneTime = current.time) => {
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
+      const activeFallDownParams = isEndlessRun
+        ? getEndlessMiniGameStageConfig({
+            debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
+            miniGameId: "fall-down",
+            progress: Math.max(endlessRef.current?.score ?? 0, Math.floor(Math.max(0, current.playerY) / 100)),
+          }).params
+        : level.params;
+      const activeFragileTime = numberParam(activeFallDownParams, "fragileTime", fragileTime);
 
       for (const [id, node] of fallPlatformRefs.current) {
         const platform = platformById.get(id);
@@ -647,13 +824,13 @@ export function FallDownPrototype({
           node.style.display = "none";
           continue;
         }
-        const platformX = fallPlatformX(platform, current.time, stageWidth);
+        const platformX = fallPlatformX(platform, sceneTime, stageWidth);
         const screenY = platform.y - current.cameraY;
         if (screenY < -80 || screenY > stageHeight + 80) {
           node.style.display = "none";
           continue;
         }
-        const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && current.time - platform.steppedAt >= Math.max(0, fragileTime - 0.45);
+        const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && sceneTime - platform.steppedAt >= Math.max(0, activeFragileTime - 0.45);
         node.style.display = "";
         node.className = `fall-platform kind-${platform.kind} ${platform.id === current.currentPlatformId ? "current" : ""} ${fragileWarning ? "fragile-warning" : ""}`;
         node.style.transform = transformPoint3d(platformX - platform.width / 2, screenY);
@@ -666,8 +843,8 @@ export function FallDownPrototype({
           node.style.display = "none";
           continue;
         }
-        const hazardX = fallDownFallingHazardX(hazard, current.time, stageWidth);
-        const hazardY = fallDownFallingHazardScreenY(hazard, current.time, stageHeight);
+        const hazardX = fallDownFallingHazardX(hazard, sceneTime, stageWidth);
+        const hazardY = fallDownFallingHazardScreenY(hazard, sceneTime, stageHeight);
         if (hazardY < -80 || hazardY > stageHeight + 80) {
           node.style.display = "none";
           continue;
@@ -677,7 +854,10 @@ export function FallDownPrototype({
       }
 
       if (playerShellRef.current) {
-        playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
+        playerShellRef.current.style.display = "";
+        if (!spectatingRemote) {
+          playerShellRef.current.style.transform = transformPoint3d(current.playerX - PLAYER_SIZE / 2, current.playerY - current.cameraY - PLAYER_SIZE / 2);
+        }
       }
       if (remotePlayerShellRef.current) {
         const frameTime = performance.now();
@@ -695,7 +875,7 @@ export function FallDownPrototype({
         }
       }
     },
-    [fragileTime, stageHeight, stageWidth],
+    [fragileTime, isEndlessRun, level.params, stageHeight, stageWidth],
   );
 
   const resumeFallDownInput = useCallback(
@@ -726,6 +906,20 @@ export function FallDownPrototype({
   const fail = useCallback(
     (reason: string): boolean => {
       const current = runtimeRef.current;
+      if (isEndlessRun) {
+        if (!(endlessRef.current?.loseLife(reason) ?? false)) {
+          current.status = "failed";
+          current.reason = reason;
+          current.inputDirection = 0;
+          current.vx = 0;
+          syncView();
+          return false;
+        }
+        recoverEndlessFallDownFailure(current, reason, logicStageSize);
+        triggerScreenShake();
+        syncView();
+        return true;
+      }
       if ((mode === "base" || unlimitedRespawn) && recoverFallDownBaseFailure(current, reason, logicStageSize, unlimitedRespawn, baseRevives, onBaseReviveUsed)) {
         triggerScreenShake();
         syncView();
@@ -743,7 +937,7 @@ export function FallDownPrototype({
       syncView();
       return false;
     },
-    [baseRevives, logicStageSize, mode, onBaseReviveUsed, syncView, triggerScreenShake, unlimitedRespawn],
+    [baseRevives, isEndlessRun, logicStageSize, mode, onBaseReviveUsed, syncView, triggerScreenShake, unlimitedRespawn],
   );
 
   function chooseFallDownDirection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -806,10 +1000,10 @@ export function FallDownPrototype({
       last = time;
       const current = runtimeRef.current;
       let eventChanged = false;
-      const paintFallDownFrame = (frame: FallDownRuntime) => {
+      const paintFallDownFrame = (frame: FallDownRuntime, spectatingRemote = false, sceneTime = frame.time) => {
         const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
         const renderStartedAt = perfEnabled ? performance.now() : 0;
-        updateFallDownDom(frame);
+        updateFallDownDom(frame, spectatingRemote, sceneTime);
         if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
       };
       const continueAfterRecoverableFailure = (reason: string) => {
@@ -841,7 +1035,17 @@ export function FallDownPrototype({
       }
 
       if (current.status !== "playing") {
-        paintFallDownFrame(current);
+        const spectatorState = remoteSmootherRef.current.sample(time) ?? spectateRemoteStateRef.current;
+        const spectatingRemote = spectatorState?.status === "playing";
+        spectatorSceneTimeRef.current = Math.max(spectatorSceneTimeRef.current, current.time);
+        if (spectatingRemote) spectatorSceneTimeRef.current += delta;
+        let spectatorViewChanged = false;
+        if (spectatingRemote && typeof spectatorState?.cameraY === "number") {
+          current.cameraY = smoothSpectatorCamera(current.cameraY, spectatorState.cameraY, delta);
+          spectatorViewChanged = restoreFallDownSpectatorPlatforms(current, level, runSeed, logicStageSize, spectatorState.cameraY);
+        }
+        paintFallDownFrame(current, spectatingRemote, spectatorSceneTimeRef.current);
+        if (spectatorViewChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) syncView(time);
         syncRuntimeState(time, true);
         if (keepRemoteRenderingAfterSettled) {
           frameId = requestAnimationFrame(tick);
@@ -852,6 +1056,7 @@ export function FallDownPrototype({
       if (current.status === "playing") {
         const previousTime = current.time;
         current.time += delta;
+        carryFallDownMovingPlatformDuringRespawn(current, previousTime, stageWidth);
 
         if (current.time < current.respawnCameraUntil) {
           current.cameraY = smoothFallDownRespawnCamera(
@@ -891,6 +1096,26 @@ export function FallDownPrototype({
         }
 
         if (current.started) {
+          const endlessProgress = Math.max(endlessRef.current?.score ?? 0, Math.floor(Math.max(0, current.playerY) / 100));
+          if (isEndlessRun) {
+            extendEndlessFallDownWorld(
+              current,
+              level,
+              runSeed,
+              logicStageSize,
+              endlessProgress,
+              endlessRef.current?.debugDifficulty ?? 0,
+            );
+          }
+          const activeFallDownParams = isEndlessRun
+            ? getEndlessMiniGameStageConfig({
+                debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
+                miniGameId: "fall-down",
+                progress: endlessProgress,
+              }).params
+            : level.params;
+          const activeTopPressureSpeed = numberParam(activeFallDownParams, "topPressureSpeed", topPressureSpeed);
+          const activeFragileTime = numberParam(activeFallDownParams, "fragileTime", fragileTime);
           let platformCarryX = 0;
           const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
           const carriedPlatform = platformById.get(current.currentPlatformId);
@@ -910,7 +1135,7 @@ export function FallDownPrototype({
           const pressureCameraY = advanceFallDownCamera({
             cameraY: current.cameraY,
             delta,
-            speed: topPressureSpeed,
+            speed: activeTopPressureSpeed,
           });
           current.cameraY =
             current.time < current.respawnCameraUntil
@@ -959,11 +1184,15 @@ export function FallDownPrototype({
             current.playerY = platformTop - PLAYER_SIZE / 2;
             current.vy = 0;
             current.currentPlatformId = platform.id;
+            const previousLayersReached = current.layersReached;
             current.layersReached = Math.max(current.layersReached, platform.id);
+            if (isEndlessRun && current.layersReached > previousLayersReached && platform.kind !== "finish") {
+              endlessRef.current?.setDistanceScore(Math.floor(Math.max(0, current.playerY) / 100));
+            }
             if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
             eventChanged = true;
-            if (platform.kind === "finish") {
+            if (platform.kind === "finish" && !isEndlessRun) {
               current.status = "passed";
               current.reason = `成功下降 ${requiredLayers} 层，到达终点平台`;
               paintFallDownFrame(current);
@@ -979,7 +1208,7 @@ export function FallDownPrototype({
 
           for (const platform of current.platforms) {
             const fragileState = expireFallDownFragilePlatform({
-              fragileTime: fragileTime,
+              fragileTime: activeFragileTime,
               kind: platform.kind,
               now: current.time,
               steppedAt: platform.steppedAt,
@@ -1022,7 +1251,7 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [authoritativeStateSubscription, coOpRole, fail, fallDownPlayerSpeed, fragileTime, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom, view.status]);
+  }, [authoritativeStateSubscription, coOpRole, fail, fallDownPlayerSpeed, fragileTime, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, runSeed, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
@@ -1050,11 +1279,19 @@ export function FallDownPrototype({
   }, [level.levelId, mode, onComplete, requiredLayers, view.status]);
 
   const showOverlay = mode === "prototype";
+  const viewFallDownParams = isEndlessRun
+    ? getEndlessMiniGameStageConfig({
+        debugDifficulty: endless?.debugDifficulty ?? 0,
+        miniGameId: "fall-down",
+        progress: Math.max(endless?.score ?? 0, Math.floor(Math.max(0, view.playerY) / 100)),
+      }).params
+    : level.params;
+  const viewFragileTime = numberParam(viewFallDownParams, "fragileTime", fragileTime);
   return (
     <div className="prototype-game-wrap">
       <div className="mini-score">
         {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
-        <span>进度 {view.layersReached}/{requiredLayers}</span>
+        {!isEndlessRun ? <span>进度 {view.layersReached}/{requiredLayers}</span> : null}
       </div>
       <div
         className={`prototype-stage fall-down-stage ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
@@ -1074,7 +1311,7 @@ export function FallDownPrototype({
           const platformX = fallPlatformX(platform, view.time, stageWidth);
           const screenY = platform.y - view.cameraY;
           if (screenY < -80 || screenY > stageHeight + 80 || platform.broken) return null;
-          const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && view.time - platform.steppedAt >= Math.max(0, fragileTime - 0.45);
+          const fragileWarning = platform.kind === "fragile" && platform.steppedAt !== null && view.time - platform.steppedAt >= Math.max(0, viewFragileTime - 0.45);
           return (
             <div
               className={`fall-platform kind-${platform.kind} ${platform.id === view.currentPlatformId ? "current" : ""} ${fragileWarning ? "fragile-warning" : ""}`}

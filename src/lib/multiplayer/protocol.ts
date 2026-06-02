@@ -15,6 +15,8 @@ export const MULTIPLAYER_PROTOCOL_VERSION = 1 as const;
 
 export const MULTIPLAYER_FAILED_MESSAGE = "当前网络无法直连，请更换网络或重新开房。";
 export const MULTIPLAYER_DISCONNECTED_MESSAGE = "对方已断开，联机已结束。";
+export const MULTIPLAYER_RECONNECTING_MESSAGE = "尝试重连中";
+export const MULTIPLAYER_ROOM_FULL_MESSAGE = "房间已有访客";
 export const MULTIPLAYER_ROOM_EXPIRED_REASON = "room-expired";
 export const MULTIPLAYER_ROOM_EXPIRED_MESSAGE = "房间已失效，请重新创建或加入房间。";
 

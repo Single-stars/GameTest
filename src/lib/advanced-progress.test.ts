@@ -14,6 +14,7 @@ import {
   getAdvancedLevelChallengeSnapshot,
   getAdvancedLevelTone,
   getAdvancedLevelToneForState,
+  getAdvancedEndlessBestScore,
   getLuckDrawStatusText,
   getLuckLevelTone,
   getLuckScoreTone,
@@ -31,6 +32,7 @@ import {
   parsePersistedGameState,
   markLegend100SkinUnlocked,
   recordAdvancedChallengeResult,
+  recordAdvancedEndlessScore,
   recordLuckDraw,
   recordLuckDrawBatch,
   setPersistedCurrentResult,
@@ -521,11 +523,41 @@ test("advanced level tone stays empty for the next pending or locked difficulty"
   assert.equal(getAdvancedLevelToneForState("locked", 6), "advanced-empty");
 });
 
+test("advanced endless scores are stored per dimension without changing star progress", () => {
+  const base = createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z");
+  assert.equal(getAdvancedEndlessBestScore(base, "memory"), 0);
+
+  const first = recordAdvancedEndlessScore(base, {
+    roundId: "memory",
+    score: 24,
+    completedAt: "2026-05-10T00:00:01.000Z",
+  });
+  assert.equal(getAdvancedEndlessBestScore(first, "memory"), 24);
+  assert.equal(getAdvancedEndlessBestScore(first, "search"), 0);
+  assert.equal(getAdvancedTotalStars(first), 0);
+
+  const lower = recordAdvancedEndlessScore(first, {
+    roundId: "memory",
+    score: 12,
+    completedAt: "2026-05-10T00:00:02.000Z",
+  });
+  assert.equal(getAdvancedEndlessBestScore(lower, "memory"), 24);
+
+  const higher = recordAdvancedEndlessScore(lower, {
+    roundId: "memory",
+    score: 39,
+    completedAt: "2026-05-10T00:00:03.000Z",
+  });
+  assert.equal(getAdvancedEndlessBestScore(higher, "memory"), 39);
+});
+
 test("advanced back destination keeps attempts inside the selected challenge flow", () => {
   assert.equal(getAdvancedBackDestination("select"), "result");
   assert.equal(getAdvancedBackDestination("intro"), "result");
   assert.equal(getAdvancedBackDestination("playing"), "challenge");
   assert.equal(getAdvancedBackDestination("base-playing"), "challenge");
+  assert.equal(getAdvancedBackDestination("endless-playing"), "challenge");
+  assert.equal(getAdvancedBackDestination("endless-complete"), "challenge");
   assert.equal(getAdvancedBackDestination("complete"), "challenge");
 });
 
@@ -541,6 +573,8 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "select" }), 1);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "intro" }), 1);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "playing" }), 2);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "endless-playing" }), 2);
+  assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "endless-complete" }), 2);
   assert.equal(getAppBackHistoryLayer({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "complete" }), 2);
   assert.equal(getAppBackHistoryLayer({ stage: "avatar-lab", restartConfirmOpen: false }), 1);
 
@@ -553,6 +587,10 @@ test("app back guard covers restart dialogs and advanced nested returns", () => 
   );
   assert.equal(
     resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "complete" }),
+    "guard",
+  );
+  assert.equal(
+    resolveAppBackNavigation({ stage: "advanced", restartConfirmOpen: false, advancedBackSource: "endless-playing" }),
     "guard",
   );
   assert.equal(

@@ -446,6 +446,21 @@ test("result messages carry settlement breakdown details", () => {
   assert.equal(parsed.breakdown?.formulaRows?.at(-1)?.key, "knife-timeout-penalty");
 });
 
+test("result messages carry the active tiebreaker round", () => {
+  const parsed = parseNetMessage(createResultMessage({
+    matchId: "match-aim-overtime",
+    passed: true,
+    score: 12,
+    tiebreakerRound: 2,
+    timeMs: 12000,
+  }));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "result");
+  if (parsed.kind !== "result") return;
+  assert.equal(parsed.tiebreakerRound, 2);
+});
+
 test("result messages accept count final units for hit-count settlements", () => {
   const parsed = parseNetMessage(createResultMessage({
     matchId: "match-count-breakdown",

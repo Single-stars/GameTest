@@ -1001,6 +1001,93 @@
   backdrop-filter: blur(18px);
 }
 
+.multiplayer-spectating-badge {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 72;
+  translate: -50% 0;
+  border: 1px solid rgba(24, 24, 24, 0.1);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 253, 248, 0.88);
+  color: var(--ink);
+  box-shadow: 0 10px 24px rgba(24, 24, 24, 0.12);
+  font-size: 12px;
+  font-weight: 950;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+}
+
+.multiplayer-spectator-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 82;
+  translate: -50% 0;
+  display: flex;
+  gap: 10px;
+  border: 2px solid rgba(24, 24, 24, 0.12);
+  border-radius: 999px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 42px rgba(24, 24, 24, 0.2), 0 0 0 6px rgba(255, 255, 255, 0.34);
+  backdrop-filter: blur(16px);
+}
+
+.multiplayer-spectator-toolbar button {
+  min-height: 42px;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: linear-gradient(180deg, #fff 0%, #f8f4e9 100%);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(24, 24, 24, 0.13);
+}
+
+.multiplayer-spectator-toolbar button span {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 20px;
+  transform: translateY(1px);
+}
+
+.multiplayer-reaction-float {
+  position: absolute;
+  left: calc(50% + var(--reaction-x, 0px));
+  bottom: max(82px, calc(env(safe-area-inset-bottom) + 82px + var(--reaction-y, 0px)));
+  z-index: 84;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  border: 2px solid rgba(24, 24, 24, 0.12);
+  border-radius: 999px;
+  padding: 7px 12px 7px 9px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  line-height: 1;
+  pointer-events: none;
+  animation: multiplayer-reaction-float 1500ms cubic-bezier(0.18, 0.9, 0.24, 1) both;
+  box-shadow: 0 16px 30px rgba(24, 24, 24, 0.22), 0 0 0 6px rgba(255, 255, 255, 0.28);
+  transform: rotate(var(--reaction-rotate, 0deg)) scale(var(--reaction-scale, 1));
+}
+
+.multiplayer-reaction-float strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.multiplayer-reaction-float small {
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
 .multiplayer-game-countdown-number {
   width: 94px;
   display: grid;
@@ -1179,6 +1266,28 @@
   display: flex;
   justify-content: center;
   gap: 8px;
+}
+
+@keyframes multiplayer-reaction-float {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) rotate(var(--reaction-rotate, 0deg)) scale(0.72);
+  }
+
+  16% {
+    opacity: 1;
+    transform: translate3d(0, -6px, 0) rotate(var(--reaction-rotate, 0deg)) scale(calc(var(--reaction-scale, 1) + 0.12));
+  }
+
+  54% {
+    opacity: 1;
+    transform: translate3d(var(--reaction-drift, 0px), -44px, 0) rotate(var(--reaction-exit-rotate, 0deg)) scale(var(--reaction-scale, 1));
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--reaction-drift, 0px), -108px, 0) rotate(var(--reaction-exit-rotate, 0deg)) scale(1.08);
+  }
 }
 
 @media (max-width: 560px) {

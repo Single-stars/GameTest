@@ -15,6 +15,7 @@ import { readMiniGameRuntimeSource } from "./test-utils.ts";
 type FlappySafeRespawnResolver = (options: {
   gates: readonly { distance: number; passed?: boolean }[];
   gateWidth: number;
+  invincibleForwardTravelDistance?: number;
   nextProgress: number;
   playerSize: number;
   playerX: number;
@@ -203,11 +204,43 @@ test("flappy safe respawn also keeps reverse-direction gates away from the playe
   assert.ok(safeGateX + gateWidth <= playerX - playerSize / 2 - 140);
 });
 
+test("flappy safe respawn accounts for forward travel during invincibility", () => {
+  const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
+  const gate = { distance: 250 };
+  const playerX = 92;
+  const stageWidth = 360;
+  const gateWidth = 54;
+  const playerSize = 32;
+  const nextProgress = stageWidth + gate.distance - (playerX - 8);
+  const safeApproachDistance = 140;
+  const invincibleForwardTravelDistance = 118 * 1.15;
+
+  const safeProgress = resolveFlappySafeRespawnProgress({
+    gates: [gate],
+    gateWidth,
+    invincibleForwardTravelDistance,
+    nextProgress,
+    playerSize,
+    playerX,
+    reverseDirection: false,
+    safeApproachDistance,
+    stageWidth,
+  });
+  const safeGateX = getFlappyGateScreenX(gate, {
+    progress: safeProgress,
+    reverseDirection: false,
+    stageWidth,
+  });
+
+  assert.ok(safeGateX >= playerX + playerSize / 2 + safeApproachDistance + invincibleForwardTravelDistance);
+});
+
 test("flappy recoverable failures use safe respawn instead of a fixed backtrack", () => {
   const componentSource = readMiniGameRuntimeSource();
   const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
 
   assert.match(flappyRuntimeSource, /resolveFlappySafeRespawnProgress/);
+  assert.match(flappyRuntimeSource, /invincibleForwardTravelDistance:\s*speed \* FLAPPY_RESPAWN_INVINCIBLE_SECONDS/);
   assert.doesNotMatch(flappyRuntimeSource, /Math\.max\(0, nextProgress - 92\)/);
 });
 

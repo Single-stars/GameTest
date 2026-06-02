@@ -51,9 +51,15 @@ function resolveKnifeScore(runtime: KnifeRuntimeState) {
 }
 
 function resolveAimScore(runtime: AdvancedAimRuntimeState) {
-  const progressScore = runtime.progress * 1000;
-  const penalty = (runtime.aimMisses + runtime.aimFlyOuts + runtime.aimDecoyHits) * 24;
-  return Math.max(0, Math.round(progressScore - penalty));
+  return Math.max(
+    0,
+    Math.round(
+      runtime.aimHits * 10 -
+        runtime.aimMisses * 2 -
+        runtime.aimFlyOuts * 3 -
+        runtime.aimDecoyHits * 5,
+    ),
+  );
 }
 
 function resolveSquareJumpScore(runtime: SquareJumpStateSnapshot) {
@@ -229,6 +235,7 @@ type MultiplayerRuntimeState = {
   platformIndex?: number;
   progress: number;
   status: "playing" | "passed" | "failed";
+  tiebreakerRound?: number;
   turns?: number;
   usedPlatformIds?: number[];
   vx?: number;
@@ -258,6 +265,7 @@ type MultiplayerMatchRuntimeProps = {
   selfRole: SessionRole;
   selfCustomAvatar?: PlayerInfo["customAvatar"] | null;
   selfSkinId?: string;
+  tiebreakerRound?: number;
 };
 
 function hashMultiplayerSeed(seed: string) {
@@ -333,6 +341,11 @@ function aimVariantIndex(level: MiniGameLevelConfig): AdvancedStageConfig["varia
   return (((level.order - 1) % 3) + 1) as 1 | 2 | 3;
 }
 
+function levelNumberParam(level: MiniGameLevelConfig, key: string, fallback: number) {
+  const value = level.params[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 function createAimAdvancedConfig(level: MiniGameLevelConfig): AdvancedStageConfig {
   return {
     dimension: "aim",
@@ -345,6 +358,8 @@ function createAimAdvancedConfig(level: MiniGameLevelConfig): AdvancedStageConfi
     params: {
       ...level.params,
       multiplayerPenaltyMode: true,
+      requiredHits: Math.max(1, levelNumberParam(level, "requiredHits", levelNumberParam(level, "targetCount", 1))),
+      targetCount: Math.max(1, levelNumberParam(level, "targetCount", 1)),
       unlimitedArrows: true,
     },
   };
@@ -365,6 +380,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
   selfRole,
   selfCustomAvatar,
   selfSkinId,
+  tiebreakerRound = 0,
 }: MultiplayerMatchRuntimeProps) {
   const syncRef = useRef<SimpleGameSync | null>(null);
   const localResultSentRef = useRef(false);
@@ -423,6 +439,10 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     sync.start();
     return cleanupSync;
   }, [cleanupSync, playMode, reportInput, reportState]);
+
+  useEffect(() => {
+    localResultSentRef.current = false;
+  }, [tiebreakerRound]);
 
   useEffect(() => {
     if (!opponentStateSubscription) return;
@@ -563,6 +583,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         breakdown,
         passed: nextState.status === "finished",
         score,
+        tiebreakerRound: runtime.tiebreakerRound,
         timeMs: Math.max(0, Math.round(runtime.elapsedMs)),
       });
     },
@@ -600,9 +621,9 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
 
   const handleAimRuntimeState = useCallback(
     (runtime: AdvancedAimRuntimeState) => {
+      if (level.gameId === "aim" && runtime.tiebreakerRound !== tiebreakerRound) return;
       handleRuntimeState(runtime, resolveAimScore);
-    },
-    [handleRuntimeState],
+    }, [handleRuntimeState, level.gameId, tiebreakerRound],
   );
 
   const handleKnifeRuntimeState = useCallback(
@@ -677,6 +698,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         remotePlayer={coOpMode ? null : opponentPlayer}
         remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
         remoteState={coOpMode ? null : opponentState}
+        spectateRemoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
@@ -697,6 +719,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         remotePlayer={coOpMode ? null : opponentPlayer}
         remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
         remoteState={coOpMode ? null : opponentState}
+        spectateRemoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
@@ -717,6 +740,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         remotePlayer={coOpMode ? null : opponentPlayer}
         remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
         remoteState={coOpMode ? null : opponentState}
+        spectateRemoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
@@ -728,6 +752,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         onComplete={() => undefined}
         onRuntimeState={handleAimRuntimeState}
         runSeed={runSeed}
+        tiebreakerRound={tiebreakerRound}
       />
     ) : level.gameId === "knife" ? (
       <KnifeHitPrototype
@@ -753,6 +778,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         remotePlayer={coOpMode ? null : opponentPlayer}
         remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
         remoteState={coOpMode ? null : opponentState}
+        spectateRemoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}
@@ -774,6 +800,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         remotePlayer={coOpMode ? null : opponentPlayer}
         remoteStateSubscription={coOpMode ? null : opponentStateSubscription}
         remoteState={coOpMode ? null : opponentState}
+        spectateRemoteState={coOpMode ? null : opponentState}
         runSeed={runSeed}
         logicStageSizeOverride={matchStageSize}
         unlimitedRespawn={!coOpMode}

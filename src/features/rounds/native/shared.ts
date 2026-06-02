@@ -1,4 +1,5 @@
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
+import { type EndlessMiniGameRuntime } from "@/features/mini-games/common";
 import { type PointerKind, type RoundId, type TrialEvent } from "@/lib/scoring";
 
 export type { PointerKind, TrialEvent };
@@ -6,6 +7,7 @@ export type { PointerKind, TrialEvent };
 export type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
   advancedConfig?: AdvancedStageConfig;
+  endless?: EndlessMiniGameRuntime;
 };
 
 export const now = () => performance.now();

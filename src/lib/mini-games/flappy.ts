@@ -32,6 +32,7 @@ export type FlappySafeRespawnOptions<T extends { distance: number; passed?: bool
   fallbackBacktrack?: number;
   gates: readonly T[];
   gateWidth: number;
+  invincibleForwardTravelDistance?: number;
   nextProgress: number;
   playerSize: number;
   playerX: number;
@@ -72,6 +73,7 @@ export function resolveFlappySafeRespawnProgress<T extends { distance: number; p
   fallbackBacktrack = 92,
   gates,
   gateWidth,
+  invincibleForwardTravelDistance = 0,
   nextProgress,
   playerSize,
   playerX,
@@ -81,8 +83,9 @@ export function resolveFlappySafeRespawnProgress<T extends { distance: number; p
 }: FlappySafeRespawnOptions<T>) {
   let respawnProgress = Math.max(0, nextProgress - fallbackBacktrack);
   const playerHalfSize = playerSize / 2;
-  const safeForwardGateX = playerX + playerHalfSize + safeApproachDistance;
-  const safeReverseGateRight = playerX - playerHalfSize - safeApproachDistance;
+  const effectiveSafeApproachDistance = safeApproachDistance + Math.max(0, invincibleForwardTravelDistance);
+  const safeForwardGateX = playerX + playerHalfSize + effectiveSafeApproachDistance;
+  const safeReverseGateRight = playerX - playerHalfSize - effectiveSafeApproachDistance;
 
   for (const gate of gates) {
     if (gate.passed) continue;

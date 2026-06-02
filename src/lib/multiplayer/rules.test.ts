@@ -103,25 +103,28 @@ test("countdown exposes all visible rules at once instead of rotating one line p
   ]);
 });
 
-test("aim rules record shot and escape counts without adding time penalties", () => {
+test("aim rules record shot and escape penalties without adding time penalties", () => {
   assert.deepEqual(rulesFor("aim-1").countdownLines, [
-    "清空目标比最终用时",
-    "射空只记次数",
+    "清空目标比分数",
+    "射空 -2 分",
+    "同分追加 1 靶",
   ]);
   assert.deepEqual(rulesFor("aim-2").countdownLines, [
-    "流程结束比命中数",
-    "射空只记次数",
-    "漏靶只记次数",
+    "流程结束比分数",
+    "射空-2 漏靶-3",
+    "同分追加 1 靶",
   ]);
   assert.equal(rulesFor("aim-2").settlement.kind, "score");
-  assert.match(rulesFor("aim-2").settlement.tiebreakerText ?? "", /高速逃逸靶加赛/);
+  assert.match(rulesFor("aim-2").settlement.tiebreakerText ?? "", /原地追加 1 个靶/);
   assert.deepEqual(adjustmentKeys("aim-3"), ["aim-miss-penalty", "aim-decoy-penalty"]);
-  for (const key of ["aim-miss-penalty", "aim-flyout-penalty"] as const) {
-    const metric = rulesFor("aim-2").settlement.adjustments.find((item) => item.key === key);
-    assert.equal(metric?.unit, "count");
-    assert.equal(metric?.valuePerEvent, undefined);
-    assert.equal(metric?.displayOnly, true);
-  }
+  const missMetric = rulesFor("aim-2").settlement.adjustments.find((item) => item.key === "aim-miss-penalty");
+  const flyOutMetric = rulesFor("aim-2").settlement.adjustments.find((item) => item.key === "aim-flyout-penalty");
+  assert.equal(missMetric?.unit, "point");
+  assert.equal(missMetric?.valuePerEvent, -2);
+  assert.equal(missMetric?.displayOnly, undefined);
+  assert.equal(flyOutMetric?.unit, "point");
+  assert.equal(flyOutMetric?.valuePerEvent, -3);
+  assert.equal(flyOutMetric?.displayOnly, undefined);
 });
 
 test("versus mode no longer presents stale score-first rules", () => {

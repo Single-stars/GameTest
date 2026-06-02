@@ -29,6 +29,7 @@ import {
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
   getAdvancedBackDestination,
+  getAdvancedEndlessBestScore,
   formatResultRankTitle,
   getAdvancedDimensionLevel,
   getAdvancedLevelState,
@@ -41,6 +42,7 @@ import {
   readAppBackHistoryLayer,
   readPersistedGameState,
   recordAdvancedChallengeResult,
+  recordAdvancedEndlessScore,
   recordLuckDraw,
   recordLuckDrawBatch,
   removePersistedGameState,
@@ -53,9 +55,11 @@ import {
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
+import { ENDLESS_MODE_LEVEL, isEndlessModeUnlocked } from "@/lib/endless-mode";
 import { rounds } from "@/features/game-flow/round-config";
 import { AdvancedChallengeScreen, type AdvancedChallengeState } from "@/features/advanced/advanced-challenge-screen";
 import { ModeTransitionOverlay, useModeTransition, type ModeTransitionRouteOptions } from "@/features/app-transition/mode-transition";
+import { type EndlessRoundCompletion } from "@/features/endless/endless-round-player";
 import { HomeScreen } from "@/features/game-flow/home-screen";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
 import {
@@ -259,7 +263,8 @@ export default function Home() {
     stage === "homeworld" ||
     stage === "outdoor-adventure" ||
     stage === "playing" ||
-    (stage === "advanced" && (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing"));
+    (stage === "advanced" &&
+      (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing" || advancedChallenge?.mode === "endless-playing"));
 
   const transitionToStage = useCallback(
     (nextStage: Stage, action?: () => void | Promise<void>) => {
@@ -764,7 +769,11 @@ export default function Home() {
       return;
     }
 
-    setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level: current.level });
+    setAdvancedChallenge({
+      mode: "intro",
+      roundId: current.roundId,
+      level: current.mode === "endless-playing" || current.mode === "endless-complete" ? ENDLESS_MODE_LEVEL : current.level,
+    });
     void transitionToStage("advanced");
   }, [releaseHistoryGuard, scrollResultToTop, transitionToStage]);
 
@@ -772,6 +781,11 @@ export default function Home() {
     const current = advancedChallengeRef.current;
     if (!current) return;
     const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
+    if (level === ENDLESS_MODE_LEVEL) {
+      if (!isEndlessModeUnlocked(advancedProgressRef.current, current.roundId)) return;
+      setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level });
+      return;
+    }
     if (getAdvancedLevelState(currentLevel, level) === "locked") return;
     setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level });
   }, []);
@@ -784,7 +798,18 @@ export default function Home() {
       level ??
       (current.mode === "select"
         ? Math.min(10, currentLevel + 1)
-        : current.level);
+        : current.mode === "endless-playing" || current.mode === "endless-complete"
+          ? ENDLESS_MODE_LEVEL
+          : current.level);
+    if (selectedLevel === ENDLESS_MODE_LEVEL) {
+      if (!isEndlessModeUnlocked(advancedProgressRef.current, current.roundId)) return;
+      setAdvancedChallenge({
+        mode: "endless-playing",
+        roundId: current.roundId,
+        attemptId: Date.now(),
+      });
+      return;
+    }
     if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
     setAdvancedChallenge({
       mode: "playing",
@@ -802,7 +827,10 @@ export default function Home() {
       level ??
       (current.mode === "select"
         ? Math.min(10, currentLevel + 1)
-        : current.level);
+        : current.mode === "endless-playing" || current.mode === "endless-complete"
+          ? ENDLESS_MODE_LEVEL
+          : current.level);
+    if (selectedLevel === ENDLESS_MODE_LEVEL) return;
     if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
     setAdvancedChallenge({
       mode: "base-playing",
@@ -873,6 +901,35 @@ export default function Home() {
       void transitionToStage("advanced");
     },
     [enqueueRewardItems, persistGameState, transitionToStage],
+  );
+
+  const completeAdvancedEndlessRound = useCallback(
+    (completion: EndlessRoundCompletion) => {
+      const current = advancedChallengeRef.current;
+      if (!current || current.mode !== "endless-playing") return;
+      const previousProgress = advancedProgressRef.current;
+      const previousBestScore = getAdvancedEndlessBestScore(previousProgress, current.roundId);
+      const nextProgress = recordAdvancedEndlessScore(previousProgress, {
+        roundId: current.roundId,
+        score: completion.score,
+      });
+      const bestScore = getAdvancedEndlessBestScore(nextProgress, current.roundId);
+
+      advancedProgressRef.current = nextProgress;
+      setAdvancedProgress(nextProgress);
+      persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+      setAdvancedChallenge({
+        mode: "endless-complete",
+        roundId: current.roundId,
+        score: completion.score,
+        bestScore,
+        previousBestScore,
+        reason: completion.reason,
+        revivesUsed: completion.revivesUsed,
+      });
+      void transitionToStage("advanced");
+    },
+    [persistGameState, transitionToStage],
   );
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
@@ -1155,9 +1212,11 @@ export default function Home() {
           advancedProgress={advancedProgress}
           challenge={advancedChallenge}
           debugToolsVisible={debugToolsVisible}
+          endlessBestScore={getAdvancedEndlessBestScore(advancedProgress, advancedChallenge.roundId)}
           onBack={requestAppBack}
           onBuildPerfectTrials={buildAdvancedPerfectTrials}
           onCompleteBaseRound={completeAdvancedBaseReplay}
+          onCompleteEndlessRound={completeAdvancedEndlessRound}
           onCompleteRound={completeAdvancedLevel}
           onOpenLuckDraw={openLuckDraw}
           onPickLevel={pickAdvancedLevel}

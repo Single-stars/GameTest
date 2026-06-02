@@ -52,7 +52,13 @@ import {
   buildInitialSnapshot,
   MultiplayerSession,
 } from "@/lib/multiplayer/multiplayer-session";
-import { MULTIPLAYER_DISCONNECTED_MESSAGE, MULTIPLAYER_ROOM_EXPIRED_MESSAGE } from "@/lib/multiplayer/protocol";
+import {
+  MULTIPLAYER_DISCONNECTED_MESSAGE,
+  MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_RECONNECTING_MESSAGE,
+  MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
+  MULTIPLAYER_ROOM_FULL_MESSAGE,
+} from "@/lib/multiplayer/protocol";
 import {
   clearActiveMultiplayerRoom,
   getSignalingRoomStatus,
@@ -62,6 +68,7 @@ import {
 } from "@/lib/multiplayer/room-api";
 import type {
   GameResult,
+  MultiplayerReactionKind,
   MultiplayerSnapshot,
   PlayerInfo,
   SelfGameState,
@@ -73,6 +80,7 @@ const LEVEL_SELECT_START_COUNTDOWN_MS = 3_000;
 const LEVEL_SELECT_COUNTDOWN_TICK_MS = 100;
 const HOST_ROOM_STATUS_GRACE_MS = 60_000;
 const MATCH_LOGIC_HEIGHT = 640;
+const MOVEMENT_SPECTATOR_GAME_IDS: ReadonlySet<MiniGameId> = new Set(["flappy", "doodle", "fall-down", "square-jump"]);
 type CopyStatus = "idle" | "copied" | "manual";
 type RoomShareCopyStatus = CopyStatus | "expired";
 
@@ -186,9 +194,9 @@ function standaloneConnectionStatusText(snapshot: MultiplayerSnapshot) {
     case "connected":
       return standaloneStatusText(snapshot.status);
     case "reconnecting":
-      return "正在重连";
+      return "尝试重连中";
     case "stale":
-      return "等待对方恢复连接";
+      return "尝试重连中";
     case "replaced":
       return "已在其他标签页打开";
     case "closed":
@@ -216,6 +224,10 @@ function standaloneErrorText(errorMessage: string | null) {
       return MULTIPLAYER_ROOM_EXPIRED_MESSAGE;
     case MULTIPLAYER_DISCONNECTED_MESSAGE:
       return MULTIPLAYER_DISCONNECTED_MESSAGE;
+    case MULTIPLAYER_RECONNECTING_MESSAGE:
+      return MULTIPLAYER_RECONNECTING_MESSAGE;
+    case MULTIPLAYER_ROOM_FULL_MESSAGE:
+      return MULTIPLAYER_ROOM_FULL_MESSAGE;
     default:
       return /^[a-z0-9_.:-]+$/i.test(errorMessage)
         ? "联机连接已断开，请重新创建或加入房间。"
@@ -445,12 +457,15 @@ function MultiplayerPageContent() {
       }
       try {
         await session.start();
-      } catch {
+      } catch (error) {
+        const errorMessage = error instanceof Error && error.message === MULTIPLAYER_ROOM_FULL_MESSAGE
+          ? MULTIPLAYER_ROOM_FULL_MESSAGE
+          : MULTIPLAYER_FAILED_MESSAGE;
         setSnapshot((current) => ({
           ...current,
           role,
           status: "failed",
-          errorMessage: "当前网络无法直连，请换个网络或重新创建房间。",
+          errorMessage,
         }));
       }
     },
@@ -1042,6 +1057,10 @@ function MultiplayerPageContent() {
     sessionRef.current?.reportResult(result);
   }, []);
 
+  const sendSpectatorReaction = useCallback((reaction: MultiplayerReactionKind) => {
+    sessionRef.current?.sendReaction(reaction);
+  }, []);
+
   const subscribeOpponentState = useCallback((listener: (state: SelfGameState) => void) => {
     return sessionRef.current?.subscribeOpponentState(listener) ?? (() => undefined);
   }, []);
@@ -1163,17 +1182,20 @@ function MultiplayerPageContent() {
             countdownRules={countdownRules}
             coOpAssignmentText={coOpAssignmentText}
             opponentPlayer={snapshot.opponentPlayer}
+            reactionEvents={snapshot.reactions}
             opponentResult={snapshot.opponentResult}
             opponentState={snapshot.opponentState}
             playMode={activePlayMode}
             onForfeit={handleForfeit}
             onRematch={handleRematch}
             onReturnRoom={handleReturnRoom}
+            onSpectatorReaction={sendSpectatorReaction}
             rematchRequestedByOpponent={snapshot.opponentReady}
             rematchRequestedBySelf={snapshot.selfReady}
             selfPlayer={snapshot.selfPlayer}
             selfResult={snapshot.selfResult}
             selfState={snapshot.selfState}
+            spectatorEnabled={MOVEMENT_SPECTATOR_GAME_IDS.has(battleLevel.gameId)}
             status={snapshot.status}
             winnerText={winnerText}
           >
@@ -1193,6 +1215,7 @@ function MultiplayerPageContent() {
                 selfRole={snapshot.role ?? "host"}
                 selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
                 selfSkinId={standaloneSelfSkin}
+                tiebreakerRound={snapshot.match?.tiebreakerRound ?? 0}
               />
             ) : null}
           </MultiplayerGameShell>
@@ -1366,17 +1389,20 @@ function MultiplayerPageContent() {
               countdownRules={countdownRules}
               coOpAssignmentText={coOpAssignmentText}
               opponentPlayer={snapshot.opponentPlayer}
+              reactionEvents={snapshot.reactions}
               opponentResult={snapshot.opponentResult}
               opponentState={snapshot.opponentState}
               playMode={activePlayMode}
               onForfeit={handleForfeit}
               onRematch={handleRematch}
               onReturnRoom={handleReturnRoom}
+              onSpectatorReaction={sendSpectatorReaction}
               rematchRequestedByOpponent={snapshot.opponentReady}
               rematchRequestedBySelf={snapshot.selfReady}
               selfPlayer={snapshot.selfPlayer}
               selfResult={snapshot.selfResult}
               selfState={snapshot.selfState}
+              spectatorEnabled={MOVEMENT_SPECTATOR_GAME_IDS.has(battleLevel.gameId)}
               status={snapshot.status}
               winnerText={winnerText}
             >
@@ -1396,6 +1422,7 @@ function MultiplayerPageContent() {
                   selfRole={snapshot.role ?? "host"}
                   selfCustomAvatar={snapshot.selfPlayer?.customAvatar}
                   selfSkinId={selectedSkin}
+                  tiebreakerRound={snapshot.match?.tiebreakerRound ?? 0}
                 />
               ) : null}
             </MultiplayerGameShell>

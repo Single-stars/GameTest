@@ -14,11 +14,11 @@ import {
 } from "./advanced-challenge-view.ts";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
-test("advanced lobby renders every level on one continuous track", () => {
-  const items = getAdvancedLobbyLevelItems({ currentLevel: 1, selectedLevel: 2 });
+test("advanced lobby renders endless plus every standard level on the circular track", () => {
+  const items = getAdvancedLobbyLevelItems({ currentLevel: 1, selectedLevel: 1 });
 
-  assert.equal(items.length, 10);
-  assert.deepEqual(items.map((item) => item.level), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.equal(items.length, 11);
+  assert.deepEqual(items.map((item) => item.level), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.deepEqual(
     items.slice(0, 4).map((item) => ({
       level: item.level,
@@ -28,21 +28,22 @@ test("advanced lobby renders every level on one continuous track", () => {
       selectable: item.selectable,
     })),
     [
-      { level: 1, offset: -1, position: "previous", state: "completed", selectable: true },
-      { level: 2, offset: 0, position: "selected", state: "current", selectable: true },
-      { level: 3, offset: 1, position: "next", state: "locked", selectable: false },
-      { level: 4, offset: 2, position: "distant", state: "locked", selectable: false },
+      { level: 0, offset: -1, position: "previous", state: "locked", selectable: false },
+      { level: 1, offset: 0, position: "selected", state: "completed", selectable: true },
+      { level: 2, offset: 1, position: "next", state: "current", selectable: true },
+      { level: 3, offset: 2, position: "distant", state: "locked", selectable: false },
     ],
   );
 });
 
 test("advanced lobby click switches only to unlocked levels", () => {
+  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 0 }), null);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 1 }), 1);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 2 }), 2);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 1, requestedLevel: 3 }), null);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 10 }), 10);
   assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 9, requestedLevel: 11 }), 10);
-  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 0, requestedLevel: 0 }), 1);
+  assert.equal(resolveAdvancedLobbyClickLevel({ currentLevel: 3, requestedLevel: 0 }), 0);
 });
 
 test("advanced lobby slider continuously maps to the requested unlocked level", () => {
@@ -53,6 +54,7 @@ test("advanced lobby slider continuously maps to the requested unlocked level", 
   assert.equal(getAdvancedLobbyUnlockedLevel(10), 10);
   assert.equal(getAdvancedLobbyUnlockedLevel(99), 10);
 
+  assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 1, requestedLevel: 0 }), 1);
   assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 1 }), 1);
   assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 2 }), 2);
   assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 3 }), 3);
@@ -61,12 +63,12 @@ test("advanced lobby slider continuously maps to the requested unlocked level", 
   assert.equal(resolveAdvancedLobbySliderLevel({ currentLevel: 3, requestedLevel: 0 }), 1);
 });
 
-test("advanced lobby slider visual offset uses the full ten-level track", () => {
+test("advanced lobby slider visual offset maps only the ten standard levels", () => {
+  assert.equal(getAdvancedLobbySliderOffsetRatio(0), 0);
   assert.equal(getAdvancedLobbySliderOffsetRatio(1), 0);
   assert.equal(getAdvancedLobbySliderOffsetRatio(2), 1 / 9);
   assert.equal(getAdvancedLobbySliderOffsetRatio(10), 1);
   assert.equal(getAdvancedLobbySliderOffsetRatio(99), 1);
-  assert.equal(getAdvancedLobbySliderOffsetRatio(0), 0);
 });
 
 test("advanced challenge goal items are derived from challenge config instead of hard-coded UI copy", () => {
@@ -241,7 +243,7 @@ test("advanced lobby level selection supports click and immediate one-step swipe
   assert.match(screenSource, /onClick=\{\(event\) => handleLevelButtonClick\(event,\s*item\.level\)\}/);
   assert.match(screenSource, /if \(clickedLevel !== null\) onPickLevel\(clickedLevel\);/);
   assert.doesNotMatch(screenSource, /handleLevelClick[\s\S]{0,240}onStartLevel\(clickedLevel\)/);
-  assert.match(screenSource, /disabled=\{!item\.selectable\}/);
+  assert.match(screenSource, /disabled=\{!item\.selectable && !isEndlessItem\}/);
   assert.match(screenSource, /advanced-lobby-track/);
   assert.match(screenSource, /lobbyTrackStyle/);
   assert.match(screenSource, /ADVANCED_LOBBY_SWIPE_STEP_PX/);
@@ -289,30 +291,71 @@ test("advanced lobby tap selection survives carousel pointer capture", () => {
 test("advanced lobby slider is controlled by the same selected level as circular clicks", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const endlessBranchStart = screenSource.indexOf("if (isEndlessItem)");
+  const endlessBranchEnd = screenSource.indexOf("const tone = getAdvancedLevelToneForState", endlessBranchStart);
+  const endlessBranchSource = screenSource.slice(endlessBranchStart, endlessBranchEnd);
+  const endlessSliderButtonStart = cssSource.indexOf(".advanced-endless-slider-button {");
+  const endlessSliderButtonEnd = cssSource.indexOf(".advanced-endless-slider-button.locked", endlessSliderButtonStart);
+  const endlessSliderButtonCss = cssSource.slice(endlessSliderButtonStart, endlessSliderButtonEnd);
+  const endlessLevelTextStart = cssSource.indexOf(".advanced-lobby-level.advanced-endless strong {");
+  const endlessLevelTextEnd = cssSource.indexOf(".advanced-lobby-level.advanced-endless small", endlessLevelTextStart);
+  const endlessLevelTextCss = cssSource.slice(endlessLevelTextStart, endlessLevelTextEnd);
 
+  assert.match(screenSource, /ENDLESS_MODE_LEVEL/);
+  assert.match(screenSource, /getAdvancedEndlessStatusLabel/);
+  assert.match(screenSource, /selectedLevel === ENDLESS_MODE_LEVEL/);
+  assert.match(screenSource, /const isEndlessItem = item\.level === ENDLESS_MODE_LEVEL;/);
+  assert.match(screenSource, /advanced-endless-slider-button/);
+  assert.match(screenSource, /advanced-lobby-slider-row/);
+  assert.match(screenSource, /handleLockedEndlessAttempt/);
+  assert.match(screenSource, /advanced-endless-lock-toast/);
+  assert.match(screenSource, /endlessShake/);
+  assert.match(screenSource, /onPickLevel\(ENDLESS_MODE_LEVEL\)/);
+  assert.match(screenSource, /∞/);
+  assert.match(screenSource, /无限模式/);
+  assert.match(screenSource, /endlessBestScore/);
+  assert.match(endlessBranchSource, /<strong>无尽模式<\/strong>/);
+  assert.match(endlessBranchSource, /<small>\{endlessBestScore > 0 \? `最高记录 \$\{endlessBestScore\}` : "未挑战"\}<\/small>/);
+  assert.doesNotMatch(endlessBranchSource, /<strong>∞<\/strong>/);
+  assert.doesNotMatch(endlessBranchSource, /无尽挑战<\/strong>/);
   assert.match(screenSource, /getAdvancedLobbyUnlockedLevel/);
   assert.match(screenSource, /resolveAdvancedLobbySliderLevel/);
   assert.match(screenSource, /const unlockedLevel = getAdvancedLobbyUnlockedLevel\(currentLevel\);/);
-  assert.match(screenSource, /const selectedLevel = resolveAdvancedLobbySliderLevel\(\{\s*currentLevel,\s*requestedLevel: activeLevel\s*}\);/);
+  assert.match(screenSource, /const activeLevel = challenge\.mode === "select" \? 1 :/);
+  assert.match(screenSource, /const selectedLevel = activeLevel === ENDLESS_MODE_LEVEL[\s\S]*resolveAdvancedLobbySliderLevel\(\{\s*currentLevel,\s*requestedLevel: activeLevel\s*}\);/);
   assert.match(screenSource, /const selectedTone = getAdvancedLevelToneForState\(selectedState,\s*selectedLevel\);/);
+  assert.match(screenSource, /const sliderLevel = selectedIsEndless \? 1 : selectedLevel;/);
   assert.match(screenSource, /const sliderVisualRef = React\.useRef<HTMLDivElement \| null>\(null\);/);
   assert.match(screenSource, /const \[sliderTravelPx,\s*setSliderTravelPx\] = React\.useState\(0\);/);
   assert.match(screenSource, /getAdvancedLobbySliderOffsetRatio/);
-  assert.match(screenSource, /const sliderThumbOffsetPx = sliderTravelPx \* getAdvancedLobbySliderOffsetRatio\(selectedLevel\);/);
+  assert.match(screenSource, /const sliderThumbOffsetPx = sliderTravelPx \* getAdvancedLobbySliderOffsetRatio\(sliderLevel\);/);
   assert.match(screenSource, /sliderVisual\.clientWidth/);
   assert.match(screenSource, /new ResizeObserver\(updateSliderTravel\)/);
   assert.match(screenSource, /function AdvancedLevelSelectionPanel/);
   assert.match(screenSource, /useBrowserLayoutEffect\(\(\) => \{[\s\S]*sliderVisualRef\.current[\s\S]*}, \[unlockedLevel\]\);/);
   assert.match(screenSource, /handleLevelClick/);
+  assert.match(screenSource, /sliderPointerStartedEndlessRef/);
+  assert.match(screenSource, /sliderChangedDuringPointerRef/);
+  assert.match(screenSource, /handleLevelSliderPointerDown/);
+  assert.match(screenSource, /handleLevelSliderPointerUp/);
+  assert.match(screenSource, /handleLevelSliderPointerCancel/);
+  assert.match(screenSource, /event\.currentTarget\.getBoundingClientRect\(\)/);
+  assert.match(screenSource, /if \(!sliderPointerStartedEndlessRef\.current\) return;/);
+  assert.match(screenSource, /if \(sliderChangedDuringPointerRef\.current\) return;/);
   assert.match(screenSource, /onClick=\{\(event\) => handleLevelButtonClick\(event,\s*item\.level\)\}/);
   assert.match(screenSource, /handleLevelSliderInput/);
   assert.match(screenSource, /onChange=\{handleLevelSliderInput\}/);
+  assert.match(screenSource, /onPointerDown=\{handleLevelSliderPointerDown\}/);
+  assert.match(screenSource, /onPointerUp=\{handleLevelSliderPointerUp\}/);
+  assert.match(screenSource, /onPointerCancel=\{handleLevelSliderPointerCancel\}/);
   assert.match(screenSource, /className=\{`advanced-lobby-slider \$\{selectedState\} \$\{selectedTone\}`\}/);
   assert.match(screenSource, /"--advanced-lobby-slider-thumb-offset": `\$\{sliderThumbOffsetPx\}px`/);
   assert.match(screenSource, /className="advanced-lobby-slider-visual"/);
   assert.match(screenSource, /ref=\{sliderVisualRef\}/);
   assert.match(screenSource, /className="advanced-lobby-slider-thumb-label"/);
-  assert.match(screenSource, /\{selectedLevel\}/);
+  assert.doesNotMatch(screenSource, /pointerEvents: selectedIsEndless \? "auto" : "none"/);
+  assert.doesNotMatch(screenSource, /onClick=\{handleSliderThumbLevelClick\}/);
+  assert.match(screenSource, /\{sliderLevel\}/);
   assert.doesNotMatch(screenSource, /advanced-lobby-slider-progress/);
   assert.doesNotMatch(screenSource, /advanced-lobby-slider-numbers/);
   assert.doesNotMatch(screenSource, /advanced-lobby-slider-number/);
@@ -320,8 +363,22 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.match(screenSource, /min=\{1\}/);
   assert.match(screenSource, /max=\{10\}/);
   assert.match(screenSource, /step=\{1\}/);
-  assert.match(screenSource, /value=\{selectedLevel\}/);
+  assert.match(screenSource, /value=\{sliderLevel\}/);
 
+  assert.match(cssSource, /\.advanced-lobby-slider-row\s*{/);
+  assert.match(cssSource, /\.advanced-endless-slider-button\s*{/);
+  assert.match(endlessSliderButtonCss, /width:\s*var\(--advanced-lobby-slider-thumb-size\);/);
+  assert.match(endlessSliderButtonCss, /border-radius:\s*10px;/);
+  assert.match(endlessSliderButtonCss, /linear-gradient\(145deg,\s*#111416,\s*#303235 58%,\s*#070809\);/);
+  assert.match(endlessSliderButtonCss, /color:\s*#f2f4f1;/);
+  assert.doesNotMatch(endlessSliderButtonCss, /background:\s*#fffaf1;/);
+  assert.doesNotMatch(endlessSliderButtonCss, /radial-gradient|text-shadow/);
+  assert.match(cssSource, /\.advanced-endless-slider-button\.selected\s*{[\s\S]*opacity:\s*1;/);
+  assert.match(cssSource, /\.advanced-lobby-level\.advanced-endless\.shake\s*{/);
+  assert.doesNotMatch(endlessLevelTextCss, /font-size:\s*40px;|text-shadow/);
+  assert.match(cssSource, /\.advanced-lobby-level\.advanced-endless\.selected strong\s*{[\s\S]*font-size:\s*32px;/);
+  assert.match(cssSource, /@keyframes advanced-endless-shake/);
+  assert.match(cssSource, /\.advanced-endless-lock-toast\s*{/);
   assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*--advanced-lobby-slider-thumb-size:\s*36px;/);
   assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*--advanced-lobby-slider-thumb-offset:\s*0px;/);
   assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*height:\s*40px;/);

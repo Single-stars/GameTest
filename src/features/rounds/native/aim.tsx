@@ -15,6 +15,7 @@ import {
 } from "@/lib/advanced-aim";
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
+import { getEndlessAimConfig } from "@/lib/endless-mode";
 import { createSeededRandom } from "@/lib/mini-games";
 import {
   clamp,
@@ -392,34 +393,55 @@ function paintAdvancedAimArrowElements(arrows: AdvancedAimArrowView[], elements:
   }
 }
 
+function getEndlessAimSpawnConfig(config: AdvancedStageConfig, score: number, debugDifficulty: number): AdvancedStageConfig {
+  const aim = getEndlessAimConfig({ hitCount: Math.max(score, debugDifficulty * 80) });
+  return {
+    ...config,
+    level: aim.sourceAdvancedLevel,
+    params: {
+      ...config.params,
+      decoyCount: Math.max(0, Math.round(aim.decoyChance * 4)),
+      spawnIntervalMs: aim.spawnIntervalMs,
+      targetSize: aim.targetSize,
+      targetSpeedMultiplier: aim.targetSpeedMultiplier,
+    },
+  };
+}
+
 export function AdvancedAimRound({
   advancedConfig,
+  endless,
   multiplayerPenaltyMode = false,
   onComplete,
   onPracticeSuccess,
   onRuntimeState,
   runSeed,
+  tiebreakerRound = 0,
 }: RoundProps & {
   multiplayerPenaltyMode?: boolean;
   onPracticeSuccess?: () => void;
   onRuntimeState?: (state: AdvancedAimRuntimeState) => void;
   runSeed?: string;
+  tiebreakerRound?: number;
 }) {
   const config = advancedConfig!;
-  const mode = getAdvancedAimMode(config);
-  const arrowCount = getParamNumber(config, "arrowCount", 8);
-  const targetCount = getParamNumber(config, "targetCount", arrowCount);
-  const requiredHits = getParamNumber(config, "requiredHits", targetCount);
-  const unlimitedArrows = getParamBoolean(config, "unlimitedArrows", false);
-  const replaceTargetOnHit = getParamBoolean(config, "replaceTargetOnHit", false);
+  const isEndless = Boolean(endless);
+  const mode = isEndless ? "boss" : getAdvancedAimMode(config);
+  const arrowCount = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "arrowCount", 8);
+  const targetCount = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "targetCount", arrowCount);
+  const requiredHits = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "requiredHits", targetCount);
+  const activeTiebreakerRound = Math.max(0, Math.round(tiebreakerRound));
+  const unlimitedArrows = isEndless || getParamBoolean(config, "unlimitedArrows", false);
+  const replaceTargetOnHit = isEndless || getParamBoolean(config, "replaceTargetOnHit", false);
   const keepTargetOnHit = getParamBoolean(config, "keepTargetOnHit", false);
-  const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
+  const failOnFlyOut = isEndless || getParamBoolean(config, "failOnFlyOut");
   const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
   const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
   const [distractors, setDistractors] = useState<AdvancedAimMovingEntity[]>([]);
   const [arrows, setArrows] = useState<AdvancedAimArrowView[]>([]);
   const [firedCount, setFiredCount] = useState(0);
-  const [hitCount, setHitCount] = useState(0);
+  const [hitCount, setHitCount] = useState(0);
+  const [activeRequiredHits, setActiveRequiredHits] = useState(requiredHits);
   const areaRef = useRef<HTMLDivElement | null>(null);
   const rectRef = useRef<DOMRect | null>(null);
   const targetsRef = useRef<AdvancedAimMovingEntity[]>([]);
@@ -433,7 +455,12 @@ export function AdvancedAimRound({
   const lastFrameAtRef = useRef(0);
   const firedCountRef = useRef(0);
   const hitCountRef = useRef(0);
-  const spawnedTargetsRef = useRef(0);
+  const spawnedTargetsRef = useRef(0);
+  const activeTargetCountRef = useRef(targetCount);
+  const activeRequiredHitsRef = useRef(requiredHits);
+  const lastAppliedTiebreakerRoundRef = useRef(activeTiebreakerRound);
+  const activeTiebreakerRoundRef = useRef(activeTiebreakerRound);
+  const activeTiebreakerRoundLatestRef = useRef(activeTiebreakerRound);
   const lastSpawnAtRef = useRef(0);
   const finishedRef = useRef(false);
   const completionTimerRef = useRef<number | null>(null);
@@ -447,6 +474,7 @@ export function AdvancedAimRound({
   const decoyHitCountRef = useRef(0);
   const lastRuntimeStateAtRef = useRef(0);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
+  const endlessRef = useRef(endless);
 
   const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
     const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
@@ -483,6 +511,15 @@ export function AdvancedAimRound({
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
 
+  useEffect(() => {
+    endlessRef.current = endless;
+  }, [endless]);
+
+  useEffect(() => {
+    activeTiebreakerRoundRef.current = activeTiebreakerRound;
+    activeTiebreakerRoundLatestRef.current = activeTiebreakerRound;
+  }, [activeTiebreakerRound]);
+
   const syncAimRuntimeState = useCallback(
     (frameNow = now(), status: AdvancedAimRuntimeState["status"] = "playing", force = false) => {
       if (!onRuntimeStateRef.current) return;
@@ -490,14 +527,14 @@ export function AdvancedAimRound({
       lastRuntimeStateAtRef.current = frameNow;
       const finishedTargets = hitCountRef.current + flyOutCountRef.current;
       const targetProgress = mode === "incoming" || mode === "boss"
-        ? finishedTargets / Math.max(1, targetCount)
-        : hitCountRef.current / Math.max(1, requiredHits);
+        ? finishedTargets / Math.max(1, activeTargetCountRef.current)
+        : hitCountRef.current / Math.max(1, activeRequiredHitsRef.current);
       onRuntimeStateRef.current({
         aimDecoyHits: decoyHitCountRef.current,
         aimFlyOuts: flyOutCountRef.current,
         aimHits: hitCountRef.current,
         aimMisses: missCountRef.current,
-        aimTargetCount: targetCount,
+        aimTargetCount: activeTargetCountRef.current,
         cameraY: 0,
         direction: "none",
         elapsedMs: Math.max(0, Math.round(frameNow - (startedAtRef.current || frameNow))),
@@ -505,11 +542,12 @@ export function AdvancedAimRound({
         phase: status === "playing" ? "aiming" : status,
         progress: Number(Math.max(0, Math.min(1, targetProgress)).toFixed(4)),
         status,
+        tiebreakerRound: activeTiebreakerRoundRef.current,
         x: 0,
         y: 0,
       });
     },
-    [mode, requiredHits, targetCount],
+    [mode],
   );
 
   const finish = useCallback(() => {
@@ -517,14 +555,15 @@ export function AdvancedAimRound({
     finishedRef.current = true;
     if (frameRef.current) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
-    const successStatus = multiplayerPenaltyMode || hitCountRef.current >= requiredHits ? "passed" : "failed";
+    const aimPassed = isEndless ? hitCountRef.current >= activeRequiredHitsRef.current : hitCountRef.current >= requiredHits;
+    const successStatus = multiplayerPenaltyMode || aimPassed ? "passed" : "failed";
     syncAimRuntimeState(now(), successStatus, true);
     const finalTrials = [...trialsRef.current];
     completionTimerRef.current = window.setTimeout(() => {
       completionTimerRef.current = null;
       onComplete(finalTrials);
     }, ROUND_SETTLEMENT_DELAY_MS);
-  }, [multiplayerPenaltyMode, onComplete, requiredHits, syncAimRuntimeState]);
+  }, [isEndless, multiplayerPenaltyMode, onComplete, requiredHits, syncAimRuntimeState]);
 
   const recordAimTrial = useCallback((patch: Omit<Partial<TrialEvent>, "roundId" | "trialIndex" | "viewport">) => {
     const item = trial("aim", trialsRef.current.length, patch);
@@ -535,11 +574,11 @@ export function AdvancedAimRound({
   const aimAttemptValue = useCallback(
     () => ({
       shotsFired: firedCountRef.current,
-      requiredHits,
+      requiredHits: activeRequiredHitsRef.current,
       hitCount: hitCountRef.current,
       arrowsLeft: unlimitedArrows ? null : Math.max(0, arrowCount - firedCountRef.current),
     }),
-    [arrowCount, requiredHits, unlimitedArrows],
+    [arrowCount, unlimitedArrows],
   );
 
   useEffect(() => {
@@ -556,24 +595,42 @@ export function AdvancedAimRound({
     flyOutCountRef.current = 0;
     decoyHitCountRef.current = 0;
     lastRuntimeStateAtRef.current = 0;
-    spawnedTargetsRef.current = 0;
+    const initialTiebreakerRound = multiplayerPenaltyMode ? activeTiebreakerRoundLatestRef.current : 0;
+    spawnedTargetsRef.current = 0;
+    activeTargetCountRef.current = isEndless ? 1 : targetCount;
+    activeRequiredHitsRef.current = initialTiebreakerRound > 0 ? 1 : requiredHits;
+    lastAppliedTiebreakerRoundRef.current = initialTiebreakerRound;
     lastSpawnAtRef.current = startedAt - spawnIntervalMs;
     lastFrameAtRef.current = startedAt;
     setFiredCount(0);
     setHitCount(0);
+    setActiveRequiredHits(initialTiebreakerRound > 0 ? 1 : requiredHits);
     setFeedbackTone("idle");
     publishArrows([]);
 
-    const initialTargets =
-      mode === "track" || mode === "decoy"
+    const tiebreakerTargetIndex = targetCount + initialTiebreakerRound - 1;
+    if (initialTiebreakerRound > 0) {
+      activeTargetCountRef.current = tiebreakerTargetIndex + 1;
+      spawnedTargetsRef.current = tiebreakerTargetIndex + 1;
+    }
+
+    const initialTargets =
+      initialTiebreakerRound > 0
+
+        ? [
+
+            makeAdvancedAimMovingEntity({ config, index: tiebreakerTargetIndex, kind: "target", mode, rect, runSeed, spawnedAt: startedAt }),
+          ]
+
+        : mode === "track" || mode === "decoy"
         ? Array.from({ length: targetCount }, (_, index) =>
             makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, runSeed, spawnedAt: startedAt }),
           )
         : [];
-    spawnedTargetsRef.current = initialTargets.length;
+    spawnedTargetsRef.current = initialTiebreakerRound > 0 ? tiebreakerTargetIndex + 1 : initialTargets.length;
     publishTargets(initialTargets);
     publishDistractors(
-      Array.from({ length: getParamNumber(config, "decoyCount", 0) }, (_, index) =>
+      initialTiebreakerRound > 0 ? [] : Array.from({ length: getParamNumber(config, "decoyCount", 0) }, (_, index) =>
         makeAdvancedAimMovingEntity({ config, index, kind: "distractor", mode, rect, runSeed, spawnedAt: startedAt }),
       ),
     );
@@ -591,7 +648,52 @@ export function AdvancedAimRound({
       feedbackResetTimerRef.current = null;
       finishedRef.current = true;
     };
-  }, [config, mode, publishArrows, publishDistractors, publishTargets, runSeed, spawnIntervalMs, syncAimRuntimeState, targetCount]);
+  }, [config, isEndless, mode, multiplayerPenaltyMode, publishArrows, publishDistractors, publishTargets, requiredHits, runSeed, spawnIntervalMs, syncAimRuntimeState, targetCount]);
+
+  useEffect(() => {
+    if (!multiplayerPenaltyMode || activeTiebreakerRound <= lastAppliedTiebreakerRoundRef.current) return;
+    const rect = rectRef.current ?? areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+    completionTimerRef.current = null;
+    finishedRef.current = false;
+    lastAppliedTiebreakerRoundRef.current = activeTiebreakerRound;
+    const frameNow = now();
+    lastFrameAtRef.current = frameNow;
+    lastRuntimeStateAtRef.current = 0;
+    const targetIndex = spawnedTargetsRef.current;
+    activeTargetCountRef.current = spawnedTargetsRef.current + 1;
+    activeRequiredHitsRef.current = hitCountRef.current + 1;
+    setActiveRequiredHits(activeRequiredHitsRef.current);
+    setFeedbackTone("idle");
+    publishArrows([]);
+    publishDistractors([]);
+    spawnedTargetsRef.current += 1;
+    publishTargets([
+      makeAdvancedAimMovingEntity({
+        config,
+        index: targetIndex,
+        kind: "target",
+        mode,
+        rect,
+        runSeed,
+        spawnedAt: frameNow,
+      }),
+    ]);
+    lastSpawnAtRef.current = frameNow;
+    syncAimRuntimeState(frameNow, "playing", true);
+  }, [
+    activeTiebreakerRound,
+    config,
+    mode,
+    multiplayerPenaltyMode,
+    publishArrows,
+    publishDistractors,
+    publishTargets,
+    runSeed,
+    syncAimRuntimeState,
+  ]);
 
   useEffect(() => {
     const tick = () => {
@@ -606,13 +708,29 @@ export function AdvancedAimRound({
       const deltaMs = Math.min(34, frameNow - (lastFrameAtRef.current || frameNow));
       lastFrameAtRef.current = frameNow;
 
-      let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
-      if ((mode === "incoming" || mode === "boss") && spawnedTargetsRef.current < targetCount) {
-        while (spawnedTargetsRef.current < targetCount && frameNow - lastSpawnAtRef.current >= spawnIntervalMs) {
+      let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      const endlessRuntime = endlessRef.current;
+      const activeSpawnIntervalMs = endlessRuntime
+        ? getEndlessAimConfig({ hitCount: Math.max(endlessRuntime.score, endlessRuntime.debugDifficulty * 80) }).spawnIntervalMs
+        : spawnIntervalMs;
+      const spawnConfig = endlessRuntime ? getEndlessAimSpawnConfig(config, endlessRuntime.score, endlessRuntime.debugDifficulty) : config;
+      const maxActiveEndlessTargets = endlessRuntime ? 1 : activeTargetCountRef.current;
+      if (
+        (mode === "incoming" || mode === "boss") &&
+        (endlessRuntime
+          ? nextTargets.filter((entity) => entity.kind === "target" && entity.active).length < maxActiveEndlessTargets
+          : spawnedTargetsRef.current < activeTargetCountRef.current)
+      ) {
+        while (
+          (endlessRuntime
+            ? nextTargets.filter((entity) => entity.kind === "target" && entity.active).length < maxActiveEndlessTargets
+            : spawnedTargetsRef.current < activeTargetCountRef.current) &&
+          frameNow - lastSpawnAtRef.current >= activeSpawnIntervalMs
+        ) {
           const index = spawnedTargetsRef.current;
           nextTargets = [
             ...nextTargets,
-            makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, runSeed, spawnedAt: frameNow }),
+            makeAdvancedAimMovingEntity({ config: spawnConfig, index, kind: "target", mode, rect, runSeed, spawnedAt: frameNow }),
           ];
           spawnedTargetsRef.current += 1;
           lastSpawnAtRef.current = frameNow;
@@ -638,7 +756,15 @@ export function AdvancedAimRound({
           },
         });
         flyOutCountRef.current += 1;
-        if (multiplayerPenaltyMode) {
+        if (endlessRuntime) {
+          nextTargets = nextTargets.map((entity) => (entity.id === flyOutTarget.id ? { ...entity, active: false } : entity));
+          showAimFeedback("bad");
+          if (!endlessRuntime.loseLife("fly_out")) {
+            finishedRef.current = true;
+            return;
+          }
+          syncAimRuntimeState(frameNow, "playing", true);
+        } else if (multiplayerPenaltyMode) {
           nextTargets = nextTargets.map((entity) => (entity.id === flyOutTarget.id ? { ...entity, active: false } : entity));
           showAimFeedback("bad");
           syncAimRuntimeState(frameNow, "playing", true);
@@ -648,8 +774,28 @@ export function AdvancedAimRound({
           return;
         }
       }
-
+
       let nextDistractors = distractorsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
+      if (endlessRuntime) {
+        const desiredDistractorCount = getParamNumber(spawnConfig, "decoyCount", 0);
+        const activeDistractorCount = nextDistractors.filter((entity) => entity.active).length;
+        if (activeDistractorCount < desiredDistractorCount) {
+          nextDistractors = [
+            ...nextDistractors,
+            ...Array.from({ length: desiredDistractorCount - activeDistractorCount }, (_, index) =>
+              makeAdvancedAimMovingEntity({
+                config: spawnConfig,
+                index: nextDistractors.length + index,
+                kind: "distractor",
+                mode,
+                rect,
+                runSeed,
+                spawnedAt: frameNow,
+              }),
+            ),
+          ];
+        }
+      }
       let blocked = false;
       let missed = false;
       const nextArrows = arrowsRef.current
@@ -680,6 +826,14 @@ export function AdvancedAimRound({
                 },
               });
               missCountRef.current += 1;
+              if (endlessRuntime) {
+                showAimFeedback("bad");
+                if (!endlessRuntime.loseLife("miss")) {
+                  finishedRef.current = true;
+                }
+                syncAimRuntimeState(frameNow, "playing", true);
+                return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
+              }
               if (unlimitedArrows) {
                 showAimFeedback("bad");
                 syncAimRuntimeState(frameNow, "playing", true);
@@ -711,11 +865,18 @@ export function AdvancedAimRound({
               },
             });
             decoyHitCountRef.current += 1;
-            showAimFeedback("bad", !multiplayerPenaltyMode);
-            nextDistractors = nextDistractors.map((entity) =>
-              entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
-            );
-            if (multiplayerPenaltyMode) {
+            showAimFeedback("bad", !(multiplayerPenaltyMode || endlessRuntime));
+            if (!multiplayerPenaltyMode) {
+              nextDistractors = nextDistractors.map((entity) =>
+                entity.id === result.collision?.entityId ? { ...entity, active: false } : entity,
+              );
+            }
+            if (endlessRuntime) {
+              if (!endlessRuntime.loseLife("decoy")) {
+                finishedRef.current = true;
+              }
+              syncAimRuntimeState(frameNow, "playing", true);
+            } else if (multiplayerPenaltyMode) {
               syncAimRuntimeState(frameNow, "playing", true);
             } else {
               blocked = true;
@@ -726,7 +887,8 @@ export function AdvancedAimRound({
           const hitTarget = nextTargets.find((entity) => entity.id === result.collision?.entityId);
           if (hitTarget) {
             hitCountRef.current += 1;
-            setHitCount(hitCountRef.current);
+            setHitCount(hitCountRef.current);
+            endlessRuntime?.addScore(1);
             recordAimTrial({
               shownAt: hitTarget.spawnedAt,
               responseAt: frameNow,
@@ -748,13 +910,17 @@ export function AdvancedAimRound({
             showAimFeedback("good");
             syncAimRuntimeState(frameNow, "playing", true);
             nextTargets = keepTargetOnHit ? nextTargets : nextTargets.map((entity) => (entity.id === hitTarget.id ? { ...entity, active: false } : entity));
-            if (replaceTargetOnHit && hitCountRef.current < requiredHits) {
+            if (
+              replaceTargetOnHit &&
+              hitCountRef.current < activeRequiredHitsRef.current &&
+              nextTargets.filter((entity) => entity.kind === "target" && entity.active).length < maxActiveEndlessTargets
+            ) {
               const replacementIndex = spawnedTargetsRef.current;
               spawnedTargetsRef.current += 1;
               nextTargets = [
                 ...nextTargets,
                 makeAdvancedAimMovingEntity({
-                  config,
+                  config: spawnConfig,
                   index: replacementIndex,
                   kind: "target",
                   mode,
@@ -786,7 +952,7 @@ export function AdvancedAimRound({
         finish();
         return;
       }
-      if (hitCountRef.current >= requiredHits) {
+      if (hitCountRef.current >= activeRequiredHitsRef.current) {
         onPracticeSuccess?.();
         showAimFeedback("good", true);
         finish();
@@ -795,7 +961,7 @@ export function AdvancedAimRound({
       if (
         multiplayerPenaltyMode &&
         (mode === "incoming" || mode === "boss") &&
-        spawnedTargetsRef.current >= targetCount &&
+        spawnedTargetsRef.current >= activeTargetCountRef.current &&
         nextTargets.every((target) => !target.active) &&
         nextArrows.every((arrow) => !arrow.active)
       ) {
@@ -818,6 +984,7 @@ export function AdvancedAimRound({
       frameRef.current = null;
     };
   }, [
+    activeTiebreakerRound,
     aimAttemptValue,
     arrowCount,
     config,
@@ -834,10 +1001,8 @@ export function AdvancedAimRound({
     publishDistractors,
     publishTargets,
     replaceTargetOnHit,
-    requiredHits,
     showAimFeedback,
     syncAimRuntimeState,
-    targetCount,
     unlimitedArrows,
   ]);
 
@@ -898,10 +1063,11 @@ export function AdvancedAimRound({
           : { action: "idle", expression: "neutral" };
   return (
     <div className={`game-area advanced-aim ${config.variant} mode-${mode} feedback-${feedbackTone}`} ref={areaRef} onPointerDown={shoot}>
-      <div className="mini-score advanced-aim-score">
+      <div className="mini-score advanced-aim-score">
         <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
-        <span>命中 {hitCount}/{requiredHits}</span>
-      </div>
+        {!isEndless ? <span>命中 {hitCount}/{activeRequiredHits}</span> : null}
+        {activeTiebreakerRound > 0 ? <span>加赛第{activeTiebreakerRound}轮 · 追加 1 靶</span> : null}
+      </div>
       <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""}`} aria-hidden="true">
         <PlayerAvatar
           {...shooterAvatarView}
@@ -1009,6 +1175,7 @@ export type AdvancedAimRuntimeState = {
   phase?: string;
   progress: number;
   status: "playing" | "passed" | "failed";
+  tiebreakerRound: number;
   x: number;
   y: number;
 };

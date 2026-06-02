@@ -702,7 +702,12 @@ export class RoomDurableObject {
       return jsonResponse({ error: "invalid-token" }, { status: 403 });
     }
 
-    if (role === "guest" && metadata.guestToken && token !== metadata.guestToken) {
+    const guestConnected = role === "guest" && this.hasRole("guest");
+    if (role === "guest" && metadata.guestToken && token !== metadata.guestToken && guestConnected) {
+      return jsonResponse({ error: "room-full" }, { status: 409 });
+    }
+
+    if (role === "guest" && metadata.guestToken && token !== metadata.guestToken && !guestConnected) {
       metadata.guestToken = token || randomToken();
     }
 

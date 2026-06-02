@@ -34,6 +34,7 @@ yarn-error.log*
 dev-server.*.log
 .dev-server.json
 .codex-logs/
+.codex-screenshots/
 
 # local agent planning notes
 task_plan.md

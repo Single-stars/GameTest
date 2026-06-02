@@ -9,15 +9,18 @@ import {
   createInputMessage,
   createLevelSelectPresenceMessage,
   createLevelSelectStateMessage,
+  createReactionMessage,
   createReadyMessage,
   createRematchMessage,
   createResultMessage,
   createReturnRoomMessage,
   createStateMessage,
+  createTiebreakerMessage,
 } from "@/lib/multiplayer/messages";
 import {
   MULTIPLAYER_DISCONNECTED_MESSAGE,
   MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_RECONNECTING_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_REASON,
   RoomSignalTransport,
@@ -26,6 +29,8 @@ import type {
   CountdownState,
   GameResult,
   MatchConfig,
+  MultiplayerReactionEvent,
+  MultiplayerReactionKind,
   MultiplayerSnapshot,
   NetMessage,
   PlayerInfo,
@@ -49,7 +54,7 @@ const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;
 const SELF_STATE_SNAPSHOT_SYNC_MS = 50;
 const REMATCH_COUNTDOWN_MS = 3_000;
 const HEARTBEAT_INTERVAL_MS = 2_000;
-const PEER_STALE_MS = 9_000;
+const PEER_STALE_MS = 22_000;
 
 function now() {
   return Date.now();
@@ -69,10 +74,6 @@ function createMatchId(seed: string) {
 
 function createRematchSeed(seed: string) {
   return `${seed}:again:${now()}:${Math.random().toString(36).slice(2)}`;
-}
-
-function createTiebreakerSeed(seed: string) {
-  return `${seed}:tiebreak:${now()}:${Math.random().toString(36).slice(2)}`;
 }
 
 export function buildInitialSnapshot(): MultiplayerSnapshot {
@@ -98,6 +99,7 @@ export function buildInitialSnapshot(): MultiplayerSnapshot {
     levelSelectState: null,
     selfLevelSelectPresence: null,
     opponentLevelSelectPresence: null,
+    reactions: [],
     errorMessage: null,
   };
 }
@@ -210,6 +212,7 @@ export class MultiplayerSession {
             opponentState: null,
             selfResult: null,
             opponentResult: null,
+            reactions: [],
             homeworldState: currentHomeworldState,
             selfHomeworldPresence: currentHomeworldPresence,
             opponentHomeworldPresence: currentOpponentHomeworldPresence,
@@ -233,6 +236,9 @@ export class MultiplayerSession {
         onMessage: (message) => this.handleMessage(message),
         onRemoteClockOffset: (offsetMs) => {
           this.remoteTimeOffsetMs = offsetMs;
+        },
+        onReconnecting: (message) => {
+          this.markPeerTemporarilyStale(message || MULTIPLAYER_RECONNECTING_MESSAGE);
         },
         onFailed: (message) => {
           if (isTerminalRoomDisconnect(message)) {
@@ -299,6 +305,7 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      reactions: [],
     });
     this.send({
       v: 1,
@@ -385,7 +392,9 @@ export class MultiplayerSession {
   reportResult(result: GameResult) {
     const matchId = this.currentMatchId();
     if (!matchId) return;
-    const matchedResult: GameResult = { ...result, matchId };
+    const reportedTiebreakerRound = Math.max(0, Math.round(result.tiebreakerRound ?? this.currentTiebreakerRound()));
+    if (reportedTiebreakerRound !== this.currentTiebreakerRound()) return;
+    const matchedResult: GameResult = { ...result, matchId, tiebreakerRound: reportedTiebreakerRound };
     if (this.snapshot.match?.playMode === "co-op") {
       this.patchSnapshot({
         selfResult: matchedResult,
@@ -394,7 +403,7 @@ export class MultiplayerSession {
     } else {
       this.patchSnapshot({ selfResult: matchedResult });
     }
-    this.send(createResultMessage({ ...matchedResult, matchId }));
+    this.send(createResultMessage({ ...matchedResult, matchId, tiebreakerRound: reportedTiebreakerRound }));
     this.tryFinishSession();
   }
 
@@ -493,6 +502,19 @@ export class MultiplayerSession {
     this.resetRound();
   }
 
+  sendReaction(reaction: MultiplayerReactionKind) {
+    const matchId = this.currentMatchId();
+    if (!matchId) return;
+    const sentAt = now();
+    this.appendReaction({
+      id: `self:${sentAt}:${Math.random().toString(36).slice(2)}`,
+      from: "self",
+      kind: reaction,
+      sentAt,
+    });
+    this.send(createReactionMessage({ matchId, reaction, sentAt }));
+  }
+
   leave(reason?: string) {
     this.transport?.close(reason);
     this.transport = null;
@@ -554,6 +576,14 @@ export class MultiplayerSession {
     return this.snapshot.match?.matchId ?? null;
   }
 
+  private currentTiebreakerRound() {
+    return Math.max(0, Math.round(this.snapshot.match?.tiebreakerRound ?? 0));
+  }
+
+  private isCurrentResultMessage(message: { matchId: string; tiebreakerRound?: number }) {
+    return this.isCurrentMatchMessage(message) && Math.max(0, Math.round(message.tiebreakerRound ?? 0)) === this.currentTiebreakerRound();
+  }
+
   private canUsePeerConnection() {
     return this.snapshot.connectionState === "connected" && this.transport?.isConnected === true;
   }
@@ -568,6 +598,12 @@ export class MultiplayerSession {
 
   private send(message: NetMessage) {
     this.transport?.send(message);
+  }
+
+  private appendReaction(reaction: MultiplayerReactionEvent) {
+    this.patchSnapshot({
+      reactions: [...this.snapshot.reactions, reaction].slice(-8),
+    });
   }
 
   private sendCurrentRoomSnapshots() {
@@ -683,12 +719,13 @@ export class MultiplayerSession {
         }
         break;
       case "result":
-        if (!this.isCurrentMatchMessage(message)) return;
+        if (!this.isCurrentResultMessage(message)) return;
         {
           const opponentResult: GameResult = {
             matchId: message.matchId,
             score: message.score,
             passed: message.passed,
+            tiebreakerRound: Math.max(0, Math.round(message.tiebreakerRound ?? 0)),
             timeMs: message.timeMs,
             breakdown: message.breakdown,
           };
@@ -744,6 +781,19 @@ export class MultiplayerSession {
       case "return-room":
         if (!this.isCurrentMatchMessage(message)) return;
         this.resetRound();
+        break;
+      case "tiebreaker":
+        if (!this.isCurrentMatchMessage(message)) return;
+        this.applyAimTiebreaker(message.round);
+        break;
+      case "reaction":
+        if (!this.isCurrentMatchMessage(message)) return;
+        this.appendReaction({
+          id: `opponent:${message.sentAt}:${message.reaction}`,
+          from: "opponent",
+          kind: message.reaction,
+          sentAt: message.sentAt,
+        });
         break;
       case "bye":
         if (this.role === "host") {
@@ -805,6 +855,7 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      reactions: [],
       opponentJoining: false,
     });
   }
@@ -906,6 +957,7 @@ export class MultiplayerSession {
       opponentState: null,
       selfResult: null,
       opponentResult: null,
+      reactions: [],
     });
     this.startCountdownTick();
   }
@@ -933,20 +985,49 @@ export class MultiplayerSession {
     });
   }
 
+  private applyAimTiebreaker(round: number) {
+    const match = this.snapshot.match;
+    if (!match) return;
+    const nextRound = Math.max(0, Math.round(round));
+    if (nextRound <= this.currentTiebreakerRound()) return;
+    this.patchSnapshot({
+      status: "playing",
+      countdown: null,
+      match: {
+        ...match,
+        tiebreakerRound: nextRound,
+      },
+      selfResult: null,
+      opponentResult: null,
+    });
+  }
+
+  private startAimTiebreaker() {
+    const match = this.snapshot.match;
+    if (!match) return;
+    const nextRound = this.currentTiebreakerRound() + 1;
+    this.applyAimTiebreaker(nextRound);
+    this.send(createTiebreakerMessage({
+      matchId: match.matchId,
+      round: nextRound,
+      sentAt: now(),
+    }));
+  }
+
   private tryFinishSession() {
     if (!this.snapshot.selfResult || !this.snapshot.opponentResult) return;
-    if (this.snapshot.match && this.role === "host") {
+    if (this.snapshot.match) {
       const level = resolveMultiplayerLevelSelection(this.snapshot.match.levelId);
       if (shouldStartMultiplayerTiebreaker(level, this.snapshot.selfResult, this.snapshot.opponentResult, this.snapshot.match.playMode)) {
-        this.startMatch({
-          levelId: this.snapshot.match.levelId,
-          playMode: this.snapshot.match.playMode,
-          seed: createTiebreakerSeed(this.snapshot.match.seed),
-          logicWidth: this.snapshot.match.logicWidth,
-          logicHeight: this.snapshot.match.logicHeight,
-          countdownMs: REMATCH_COUNTDOWN_MS,
-        });
-        return;
+        if (level.gameId === "aim") {
+          const nextRound = this.currentTiebreakerRound() + 1;
+          if (this.role === "host") {
+            this.startAimTiebreaker();
+          } else {
+            this.applyAimTiebreaker(nextRound);
+          }
+          return;
+        }
       }
     }
     this.patchSnapshot({
@@ -976,10 +1057,12 @@ export class MultiplayerSession {
 
   private notePeerMessage() {
     this.lastPeerMessageAt = now();
+    const connectionRecovered =
+      (this.snapshot.connectionState === "stale" || this.snapshot.connectionState === "reconnecting") &&
+      this.transport?.isConnected === true;
     if (
-      this.snapshot.errorMessage ||
-      this.snapshot.connectionState === "stale" ||
-      (this.snapshot.connectionState === "reconnecting" && this.transport?.isConnected === true)
+      (this.snapshot.errorMessage && this.snapshot.connectionState === "connected") ||
+      connectionRecovered
     ) {
       this.patchSnapshot({ connectionState: "connected", errorMessage: null });
     }
@@ -991,11 +1074,11 @@ export class MultiplayerSession {
     this.markPeerTemporarilyStale();
   }
 
-  private markPeerTemporarilyStale() {
+  private markPeerTemporarilyStale(message = MULTIPLAYER_RECONNECTING_MESSAGE) {
     this.stopCountdown();
     this.patchSnapshot({
       connectionState: "stale",
-      errorMessage: MULTIPLAYER_DISCONNECTED_MESSAGE,
+      errorMessage: message,
       selfReady: false,
       opponentReady: false,
       countdown: null,
@@ -1099,6 +1182,7 @@ export class MultiplayerSession {
       levelSelectState: null,
       selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,
+      reactions: [],
     });
   }
 

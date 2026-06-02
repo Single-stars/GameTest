@@ -270,11 +270,12 @@ export function isMultiplayerLevelSelectPresence(value: unknown): value is Multi
 }
 
 export function resolveMultiplayerLevelSelection(levelId: string | null | undefined) {
+  const baseLevelId = typeof levelId === "string" ? levelId.replace(/:tiebreak-\d+$/, "") : levelId;
   const selected = MULTIPLAYER_LEVEL_GROUPS
     .flatMap((group) => group.levels)
-    .find((level) => level.levelId === levelId);
+    .find((level) => level.levelId === baseLevelId);
 
-  if (selected) return selected;
+  if (selected) return typeof levelId === "string" && levelId !== selected.levelId ? { ...selected, levelId } : selected;
   return getMiniGameLevel("square-jump", DEFAULT_MULTIPLAYER_LEVEL_ID);
 }
 

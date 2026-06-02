@@ -35,7 +35,7 @@ test("square jump and fall down paint animation frames without per-frame React s
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
 
   assert.match(squareJumpSource, /lastUiSyncRef/);
-  assert.match(squareJumpSource, /updateSquareJumpDom\(current\)/);
+  assert.match(squareJumpSource, /updateSquareJumpDom\(current, spectatingRemote, sceneTime\)/);
   assert.match(squareJumpSource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
   assert.match(squareJumpSource, /playerShellRef/);
   assert.match(squareJumpSource, /squarePlatformRefs/);
@@ -43,7 +43,7 @@ test("square jump and fall down paint animation frames without per-frame React s
 
   assert.match(fallDownSource, /lastUiSyncRef/);
   assert.match(fallDownSource, /paintFallDownFrame\(current\)/);
-  assert.match(fallDownSource, /updateFallDownDom\(frame\)/);
+  assert.match(fallDownSource, /updateFallDownDom\(frame, spectatingRemote, sceneTime\)/);
   assert.match(fallDownSource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
   assert.match(fallDownSource, /playerShellRef/);
   assert.match(fallDownSource, /fallPlatformRefs/);
@@ -1431,7 +1431,7 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   const fallDownDomSource = fallDownSource.slice(fallDownSource.indexOf("const updateFallDownDom = useCallback"), fallDownSource.indexOf("const resumeFallDownInput"));
   const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
   const doodlePointerMoveSource = doodleSource.slice(doodleSource.indexOf("const updateDoodleDirection = useCallback"), doodleSource.indexOf("const beginDoodleDirection"));
-  const doodleDomSource = doodleSource.slice(doodleSource.indexOf("const updateDom = (current: DoodleFrame, frameTime: number) =>"), doodleSource.indexOf("const tick = (time: number) =>"));
+  const doodleDomSource = doodleSource.slice(doodleSource.indexOf("const updateDom = (current: DoodleFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time) =>"), doodleSource.indexOf("const tick = (time: number) =>"));
 
   assert.match(fallDownSource, /onPointerMove=\{updateFallDownDirection\}/);
   assert.match(fallDownPointerMoveSource, /fallDownInputDirectionRef\.current = direction;/);

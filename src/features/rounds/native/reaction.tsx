@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { getEndlessReactionConfig } from "@/lib/endless-mode";
 import {
   getParamNumber,
   getReactionSignalDelayMs,
@@ -33,9 +34,11 @@ function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "
 
 const REACTION_FEEDBACK_DELAY_MS = 400;
 
-export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps) {
+export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: RoundProps) {
   const config = advancedConfig!;
-  const lanes = getParamNumber(config, "lanes", 1);
+  const endlessSignalConfig = endless ? getEndlessReactionConfig({ score: Math.max(endless.score, endless.debugDifficulty * 90) }) : null;
+
+  const lanes = endlessSignalConfig?.lanes ?? getParamNumber(config, "lanes", 1);
   const isBoss = config.variant === "reaction-grid-boss";
   const totalSignals = getParamNumber(config, "signalCount", getParamNumber(config, "requiredGreenClicks", 5));
   const requiredGreenClicks = getParamNumber(config, "requiredGreenClicks", 1);
@@ -53,8 +56,13 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
 
   const timersRef = useRef<number[]>([]);
   const completionTimerRef = useRef<number | null>(null);
-  const finishedRef = useRef(false);
-  const sequenceRef = useRef<("green" | "red")[]>([]);
+  const finishedRef = useRef(false);
+  const endlessRef = useRef(endless);
+  const sequenceRef = useRef<("green" | "red")[]>([]);
+
+  useEffect(() => {
+    endlessRef.current = endless;
+  }, [endless]);
 
   const clearTimers = useCallback(() => {
     for (const timer of timersRef.current) window.clearTimeout(timer);
@@ -99,7 +107,25 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
         const shownAt = now();
         activeShownAtRef.current = shownAt;
         lastSignalShownAtRef.current = shownAt;
-        if (isBoss) {
+        const endlessRuntime = endlessRef.current;
+        if (endlessRuntime) {
+          const signalConfig = getEndlessReactionConfig({ score: Math.max(endlessRuntime.score, endlessRuntime.debugDifficulty * 90) });
+          const litCount = lanes > 1 && Math.random() < signalConfig.simultaneousGreenChance ? Math.min(2, lanes) : 1;
+          const ids = shuffle(Array.from({ length: lanes }, (_, id) => id)).slice(0, litCount);
+          const colors = ids.map(() => (Math.random() < signalConfig.redChance ? "red" : "green") as "green" | "red");
+
+          if (!colors.includes("green") && Math.random() > 0.35) colors[0] = "green";
+
+          const greenIds = new Set(ids.filter((_, index) => colors[index] === "green"));
+          activeGreenIdsRef.current = greenIds;
+          setCells((current) =>
+            current.map((cell) => {
+              const litIndex = ids.indexOf(cell.id);
+              if (litIndex < 0) return { ...cell, color: "idle", clicked: false, resultText: undefined };
+              return { ...cell, color: colors[litIndex], clicked: false, resultText: undefined };
+            }),
+          );
+        } else if (isBoss) {
           const litCount = Math.random() > 0.52 ? 2 : 1;
           const ids = shuffle(Array.from({ length: lanes }, (_, id) => id)).slice(0, litCount);
           const remaining = requiredGreenClicks - greenClicksRef.current;
@@ -135,6 +161,16 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
             const greenIds = activeGreenIdsRef.current;
             if (greenIds.size > 0 && clickedGreenIdsRef.current.size < greenIds.size) {
               setFeedbackTone("early");
+              const endlessRuntime = endlessRef.current;
+              if (endlessRuntime) {
+                if (endlessRuntime.loseLife("timeout")) {
+                  timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
+                } else {
+                  finishedRef.current = true;
+                  clearTimers();
+                }
+                return;
+              }
               finish(
                 trial("reaction", signalIndexRef.current, {
                   shownAt,
@@ -147,7 +183,12 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
               return;
             }
 
-            if (!isBoss) {
+            if (endlessRef.current) {
+              startSignal();
+              return;
+            }
+
+            if (!isBoss) {
               const color = sequenceRef.current[signalIndexRef.current] ?? "green";
               if (color === "red") {
                 trialsRef.current.push(
@@ -169,14 +210,14 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
             } else {
               startSignal();
             }
-          }, 1120),
+          }, endlessSignalConfig?.thresholdMs ?? 1120),
         );
       }, delay),
     );
-  }, [clearTimers, config.variant, finish, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
+  }, [clearTimers, config.variant, endlessSignalConfig?.thresholdMs, finish, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
 
   useEffect(() => {
-    if (!isBoss) {
+    if (!endlessRef.current && !isBoss) {
       const colors = Array.from({ length: totalSignals }, () => (Math.random() > 0.42 ? "green" : "red") as "green" | "red");
       if (!colors.includes("green")) colors[Math.floor(rand(0, colors.length))] = "green";
       sequenceRef.current = colors;
@@ -188,6 +229,16 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
   const clickCell = (event: ReactPointerEvent<HTMLButtonElement>, cell: AdvancedReactionCell) => {
     if (finishedRef.current || cell.color === "idle" || cell.clicked) {
       setFeedbackTone("early");
+      const endlessRuntime = endlessRef.current;
+      if (endlessRuntime) {
+        if (endlessRuntime.loseLife("wrong")) {
+          timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
+        } else {
+          finishedRef.current = true;
+          clearTimers();
+        }
+        return;
+      }
       finish(
         trial("reaction", signalIndexRef.current, {
           shownAt: activeShownAtRef.current || now(),
@@ -202,6 +253,16 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
     }
     if (cell.color === "red") {
       setFeedbackTone("early");
+      const endlessRuntime = endlessRef.current;
+      if (endlessRuntime) {
+        if (endlessRuntime.loseLife("false_alarm")) {
+          timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
+        } else {
+          finishedRef.current = true;
+          clearTimers();
+        }
+        return;
+      }
       finish(
         trial("reaction", signalIndexRef.current, {
           shownAt: activeShownAtRef.current,
@@ -219,6 +280,7 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
     const ms = Math.round(responseAt - activeShownAtRef.current);
     clickedGreenIdsRef.current.add(cell.id);
     greenClicksRef.current += 1;
+    endlessRef.current?.addScore(1);
     setFeedbackTone("good");
     trialsRef.current.push(
       trial("reaction", signalIndexRef.current, {
@@ -231,7 +293,12 @@ export function AdvancedReactionRound({ advancedConfig, onComplete }: RoundProps
     );
     setCells((current) => current.map((item) => (item.id === cell.id ? { ...item, clicked: true, resultText: `${ms} ms` } : item)));
 
-    if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {
+    if (endlessRef.current && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
+      timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
+      return;
+    }
+
+    if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {
       finish();
       return;
     }

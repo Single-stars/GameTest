@@ -163,21 +163,22 @@
   position: absolute;
   z-index: 30;
   left: 50%;
-  top: 50%;
-  min-width: 112px;
-  padding: 14px 24px;
-  border: 1px solid rgba(24, 24, 24, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 253, 248, 0.94);
-  box-shadow: 0 18px 42px rgba(24, 24, 24, 0.18);
+  top: 16px;
+  min-width: 104px;
+  padding: 8px 14px;
+  border: 1px solid rgba(24, 24, 24, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 10px 24px rgba(24, 24, 24, 0.14);
   color: var(--ink);
-  font-size: 28px;
-  font-weight: 900;
+  font-size: 15px;
+  font-weight: 950;
   line-height: 1;
   pointer-events: none;
   text-align: center;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, 0);
   animation: knife-overtime-banner 900ms ease both;
+  backdrop-filter: blur(12px);
 }
 
 .knife-stage.final-shot-ready .knife-launcher {
@@ -228,17 +229,17 @@
 @keyframes knife-overtime-banner {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.92);
+    transform: translate(-50%, -8px) scale(0.96);
   }
 
   16%,
   72% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, 0) scale(1);
   }
 
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.98);
+    transform: translate(-50%, -4px) scale(0.98);
   }
 }

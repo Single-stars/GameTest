@@ -46,6 +46,15 @@ const MINI_GAME_FRAME_BUDGET_MS = 1000 / 60;
 
 export type PrototypeStatus = "playing" | "passed" | "failed";
 export type MiniGameRunMode = "prototype" | "base" | "advanced";
+export type EndlessMiniGameRuntime = {
+  addScore: (amount?: number) => void;
+  debugDifficulty: number;
+  loseLife: (reason: string) => boolean;
+  reportDifficulty: (difficulty: number) => void;
+  revives: number;
+  score: number;
+  setDistanceScore: (distanceScore: number) => void;
+};
 export type MiniGameCompletion = {
   gameId: MiniGameId;
   levelId: string;

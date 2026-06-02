@@ -165,7 +165,9 @@ test("fall down fragile platforms expire without directly failing the player", (
   assert.match(fallDownSource, /if \(screenY < -80 \|\| screenY > stageHeight \+ 80 \|\| platform\.broken\) return null;/);
   assert.doesNotMatch(fallDownSource, /fragileRatio|fall-crack|--fragile-ratio|fragileRatio > 0\.72/);
   assert.match(fallDownSource, /const fragileTime = numberParam\(level\.params, "fragileTime", 1\.2\);/);
-  assert.match(fallDownSource, /const fragileWarning = platform\.kind === "fragile" && platform\.steppedAt !== null && view\.time - platform\.steppedAt >= Math\.max\(0, fragileTime - 0\.45\);/);
+  assert.match(fallDownSource, /const activeFragileTime = numberParam\(activeFallDownParams, "fragileTime", fragileTime\);/);
+  assert.match(fallDownSource, /const viewFragileTime = numberParam\(viewFallDownParams, "fragileTime", fragileTime\);/);
+  assert.match(fallDownSource, /const fragileWarning = platform\.kind === "fragile" && platform\.steppedAt !== null && view\.time - platform\.steppedAt >= Math\.max\(0, viewFragileTime - 0\.45\);/);
   assert.match(fallDownSource, /fragileWarning \? "fragile-warning" : ""/);
   assert.doesNotMatch(globalCss, /\.fall-crack/);
   assert.match(globalCss, /\.fall-platform\.kind-fragile \.fall-platform-top \{\s*background: #c7e1d1;\s*border-style: dashed;\s*\}/);
@@ -226,6 +228,24 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
   assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time, stageWidth\) - previousPlatformX/);
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
+});
+
+test("fall down respawn waits ride moving platforms before input resumes", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+  const respawnCarrySource = fallDownSource.slice(
+    fallDownSource.indexOf("function carryFallDownMovingPlatformDuringRespawn"),
+    fallDownSource.indexOf("function applyFallDownAuthoritativeState"),
+  );
+  const respawnCameraSource = fallDownSource.slice(
+    fallDownSource.indexOf("const previousTime = current.time;"),
+    fallDownSource.indexOf("if (!current.started && previousTime < current.respawnCameraUntil)"),
+  );
+
+  assert.match(respawnCarrySource, /if \(current\.started\) return;/);
+  assert.match(respawnCarrySource, /carriedPlatform\.kind !== "moving"/);
+  assert.match(respawnCarrySource, /fallPlatformX\(carriedPlatform, current\.time, stageWidth\) - previousPlatformX/);
+  assert.match(respawnCameraSource, /carryFallDownMovingPlatformDuringRespawn\(current, previousTime, stageWidth\);/);
 });
 
 test("fall down maps its player visuals through the shared avatar without warning state", () => {

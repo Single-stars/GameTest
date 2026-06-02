@@ -337,6 +337,7 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
 
   assert.match(componentSource, /lastSafePlatformId: number \| null;/);
   assert.match(componentSource, /function resolveDoodleLastSafePlatform/);
+  assert.match(doodleSource, /function syncDoodleRespawnPlayerWithPlatform/);
   assert.match(doodleSource, /const safeRespawnPlatform = resolveDoodleLastSafePlatform\(current\);/);
   assert.match(doodleSource, /current\.playerX = movingPlatformX\(safeRespawnPlatform, nextTime, logicStageWidth\);/);
   assert.match(doodleSource, /current\.playerY = safeRespawnPlatform\.y \+ PLAYER_SIZE \/ 2;/);
@@ -346,6 +347,8 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.match(doodleSource, /current\.respawnAwaitingInput = true;/);
   assert.match(doodleSource, /if \(current\.respawnAwaitingInput && current\.time < current\.respawnCameraUntil\) return;/);
   assert.match(doodleSource, /if \(!current\.started\) \{\s*current\.time \+= delta;/);
+  assert.match(doodleSource, /syncDoodleRespawnPlayerWithPlatform\(current, current\.time, logicStageWidth\);/);
+  assert.match(doodleSource, /frame\.playerX = movingPlatformX\(safePlatform, time, stageWidth\);/);
   assert.doesNotMatch(doodleSource, /if \(current\.respawnAwaitingInput && current\.time < current\.respawnCameraUntil\) \{\s*current\.time \+= delta;/);
   assert.match(doodleSource, /current\.playerVy = 0;/);
   assert.match(doodleSource, /current\.started = false;/);
@@ -358,7 +361,7 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
 test("doodle unlimited respawn race mode ignores missed risk platforms", () => {
   const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
 
-  assert.match(doodleSource, /if \(status === "playing" && !unlimitedRespawn && riskHit < riskTotal\)/);
+  assert.match(doodleSource, /if \(status === "playing" && !isEndlessRun && !unlimitedRespawn && riskHit < riskTotal\)/);
   assert.match(doodleSource, /if \(riskHit >= riskTotal \|\| unlimitedRespawn\) \{/);
   assert.match(doodleSource, /reason = unlimitedRespawn \? "站上最高终点平台" : `站上最高终点平台，必踩平台 \$\{riskHit\}\/\$\{riskTotal\}`/);
 });

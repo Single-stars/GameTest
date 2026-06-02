@@ -14,6 +14,8 @@ import {
   MULTIPLAYER_FAILED_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_REASON,
+  MULTIPLAYER_ROOM_FULL_MESSAGE,
+  MULTIPLAYER_RECONNECTING_MESSAGE,
   type MultiplayerDataChannelLabel,
 } from "@/lib/multiplayer/protocol";
 import {
@@ -33,8 +35,10 @@ import type { NetMessage } from "@/lib/multiplayer/types";
 export {
   MULTIPLAYER_DISCONNECTED_MESSAGE,
   MULTIPLAYER_FAILED_MESSAGE,
+  MULTIPLAYER_RECONNECTING_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_MESSAGE,
   MULTIPLAYER_ROOM_EXPIRED_REASON,
+  MULTIPLAYER_ROOM_FULL_MESSAGE,
 } from "@/lib/multiplayer/protocol";
 
 const SIGNAL_OPEN_TIMEOUT_MS = 12_000;
@@ -65,6 +69,7 @@ export type RoomSignalTransportEvents = {
   onMessage?: (message: NetMessage) => void;
   onRemoteClockOffset?: (offsetMs: number) => void;
   onFailed?: (message: string) => void;
+  onReconnecting?: (message: string) => void;
   onDisconnected?: (message: string) => void;
   onReplaced?: () => void;
 };
@@ -319,6 +324,7 @@ export class RoomSignalTransport {
       this.roomCode = this.targetRoomId;
       this.roleToken = readStoredRoomToken(this.roomCode, this.role);
       this.events.onPeerOpen?.(this.roomCode);
+      await this.ensureGuestSeatAvailable();
     }
 
     await this.openSignalSocket();
@@ -328,9 +334,24 @@ export class RoomSignalTransport {
   send(message: NetMessage) {
     const serialized = serializeNetMessage(message);
     const preferredChannel = message.kind === "input" ? this.inputChannel : message.kind === "state" ? this.stateChannel : this.controlChannel;
-    if (message.kind === "state" && !canSendReplaceableState(preferredChannel)) return;
-    if (channelIsOpen(preferredChannel)) {
+    if (message.kind === "state") {
+      if (!channelIsOpen(preferredChannel)) {
+        this.notifyReconnecting();
+        this.scheduleIceRestart(MULTIPLAYER_RECONNECTING_MESSAGE);
+        return;
+      }
+      if (!canSendReplaceableState(preferredChannel)) return;
+    }
+    if (!channelIsOpen(preferredChannel)) {
+      this.notifyReconnecting();
+      this.scheduleIceRestart(MULTIPLAYER_RECONNECTING_MESSAGE);
+      return;
+    }
+    try {
       preferredChannel.send(serialized);
+    } catch {
+      this.notifyReconnecting();
+      this.scheduleIceRestart(MULTIPLAYER_RECONNECTING_MESSAGE);
     }
   }
 
@@ -360,6 +381,19 @@ export class RoomSignalTransport {
 
   disconnectActiveConnection() {
     this.closePeerConnection();
+  }
+
+  private async ensureGuestSeatAvailable() {
+    if (this.role !== "guest" || !this.roomCode) return;
+    try {
+      const status = await getSignalingRoomStatus(this.roomCode);
+      if (status.exists && status.guestConnected === true && !this.roleToken) {
+        this.handleFailure(MULTIPLAYER_ROOM_FULL_MESSAGE);
+        throw new Error(MULTIPLAYER_ROOM_FULL_MESSAGE);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === MULTIPLAYER_ROOM_FULL_MESSAGE) throw error;
+    }
   }
 
   private async loadIceServers() {
@@ -600,12 +634,14 @@ export class RoomSignalTransport {
         this.ignoreNextControlClose = false;
         return;
       }
-      if (label !== MULTIPLAYER_DATA_CHANNELS.control || !this.connected) return;
-      this.scheduleIceRestart(MULTIPLAYER_DISCONNECTED_MESSAGE);
+      if (!this.connected) return;
+      this.notifyReconnecting();
+      if (this.connected) this.scheduleIceRestart(MULTIPLAYER_RECONNECTING_MESSAGE);
     };
 
     channel.onerror = () => {
       if (this.destroyed) return;
+      this.notifyReconnecting();
       this.scheduleIceRestart(MULTIPLAYER_FAILED_MESSAGE);
     };
   }
@@ -1050,6 +1086,11 @@ export class RoomSignalTransport {
     if (this.destroyed) return;
     this.events.onDisconnected?.(message);
     this.dispose();
+  }
+
+  private notifyReconnecting(message = MULTIPLAYER_RECONNECTING_MESSAGE) {
+    if (this.destroyed) return;
+    this.events.onReconnecting?.(message);
   }
 
   private handleReplaced() {

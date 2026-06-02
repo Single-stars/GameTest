@@ -20,7 +20,9 @@ import {
   getAdvancedLevelToneForState,
   type AdvancedProgress,
 } from "@/lib/advanced-progress";
+import { ENDLESS_MODE_LEVEL, getAdvancedEndlessStatusLabel, getEndlessLevelState } from "@/lib/endless-mode";
 import { type RoundId, type TrialEvent } from "@/lib/scoring";
+import { EndlessRoundPlayer, type EndlessRoundCompletion } from "@/features/endless/endless-round-player";
 import { rounds } from "@/features/game-flow/round-config";
 
 export type AdvancedChallengeState =
@@ -28,6 +30,16 @@ export type AdvancedChallengeState =
   | { mode: "intro"; roundId: RoundId; level: number }
   | { mode: "playing"; roundId: RoundId; level: number; attemptId: number }
   | { mode: "base-playing"; roundId: RoundId; level: number; attemptId: number }
+  | { mode: "endless-playing"; roundId: RoundId; attemptId: number }
+  | {
+      mode: "endless-complete";
+      roundId: RoundId;
+      score: number;
+      bestScore: number;
+      previousBestScore: number;
+      reason: string;
+      revivesUsed: number;
+    }
   | {
       mode: "complete";
       roundId: RoundId;
@@ -63,7 +75,7 @@ type AdvancedRoundRenderProps =
       onComplete: (trials: TrialEvent[]) => void;
     };
 
-type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" }>;
+type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" | "endless-complete" }>;
 
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const ADVANCED_LOBBY_SWIPE_STEP_PX = 28;
@@ -331,10 +343,50 @@ function AdvancedResultCard({
   );
 }
 
+function EndlessResultCard({
+  challenge,
+  onBack,
+  onStartLevel,
+}: {
+  challenge: Extract<AdvancedChallengeState, { mode: "endless-complete" }>;
+  onBack: () => void;
+  onStartLevel: (level: number) => void;
+}) {
+  const improved = challenge.bestScore > challenge.previousBestScore;
+  return (
+    <div className="advanced-result-card advanced-endless-result passed">
+      <p className="eyebrow">无限模式结算</p>
+      <div className="advanced-result-perfect">
+        <span className="advanced-result-goal-box" aria-hidden="true">∞</span>
+        <span>本次得分 {challenge.score}</span>
+      </div>
+      <ul className="advanced-result-goals">
+        <li className={`advanced-result-goal ${improved ? "complete" : "incomplete"}`}>
+          <span className="advanced-result-goal-box" aria-hidden="true">{improved ? "✓" : "·"}</span>
+          <span>历史最佳 {challenge.bestScore}</span>
+        </li>
+        <li className="advanced-result-goal incomplete">
+          <span className="advanced-result-goal-box" aria-hidden="true">❤</span>
+          <span>复活耗尽：{challenge.reason}</span>
+        </li>
+      </ul>
+      <div className="advanced-actions">
+        <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
+          再来一次
+        </button>
+        <button className="primary-button" type="button" onPointerDown={onBack}>
+          返回
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AdvancedLevelSelectionPanel({
   activeConfig,
   challenge,
   currentLevel,
+  endlessBestScore,
   selectedLevel,
   unlockedLevel,
   onPickLevel,
@@ -344,6 +396,7 @@ function AdvancedLevelSelectionPanel({
   activeConfig: AdvancedStageConfig;
   challenge: Exclude<AdvancedLobbyChallengeState, { mode: "complete" }>;
   currentLevel: number;
+  endlessBestScore: number;
   selectedLevel: number;
   unlockedLevel: number;
   onPickLevel: (level: number) => void;
@@ -358,21 +411,52 @@ function AdvancedLevelSelectionPanel({
   const lobbyPointerDownLevelRef = React.useRef<number | null>(null);
   const suppressNextLevelClickRef = React.useRef(false);
   const selectedLevelRef = React.useRef(selectedLevel);
+  const lockedEndlessNoticeTimerRef = React.useRef<number | null>(null);
+  const endlessShakeTimerRef = React.useRef<number | null>(null);
+  const sliderPointerStartedEndlessRef = React.useRef(false);
+  const sliderChangedDuringPointerRef = React.useRef(false);
   const [trackStepPx, setTrackStepPx] = React.useState(DEFAULT_LOBBY_TRACK_STEP_PX);
   const [sliderTravelPx, setSliderTravelPx] = React.useState(0);
+  const [lockedEndlessNoticeVisible, setLockedEndlessNoticeVisible] = React.useState(false);
+  const [endlessShake, setEndlessShake] = React.useState(false);
   const levelItems = getAdvancedLobbyLevelItems({ currentLevel, selectedLevel });
   const selectedItem = levelItems.find((item) => item.position === "selected");
-  const selectedState = selectedItem?.state ?? "locked";
+  const selectedIsEndless = selectedLevel === ENDLESS_MODE_LEVEL;
+  const sliderLevel = selectedIsEndless ? 1 : selectedLevel;
+  const endlessState = getEndlessLevelState(currentLevel);
+  const endlessUnlocked = endlessState !== "locked";
+  const selectedState = selectedIsEndless ? endlessState : selectedItem?.state ?? "locked";
   const selectedTone = getAdvancedLevelToneForState(selectedState, selectedLevel);
-  const sliderThumbOffsetPx = sliderTravelPx * getAdvancedLobbySliderOffsetRatio(selectedLevel);
-  const ruleItems = getAdvancedChallengeRuleItems(activeConfig);
+  const selectedEndlessState = selectedIsEndless ? endlessState : "current";
+  const selectedStatusLabel = selectedIsEndless ? getAdvancedEndlessStatusLabel(selectedEndlessState) : getAdvancedChallengeStatusLabel(selectedState);
+  const activeTitle = selectedIsEndless ? "无限模式" : activeConfig.stageTitle;
+  const sliderThumbOffsetPx = sliderTravelPx * getAdvancedLobbySliderOffsetRatio(sliderLevel);
+  const advancedRuleItems = getAdvancedChallengeRuleItems(activeConfig);
+  const ruleItems = selectedIsEndless
+    ? [
+        { icon: "target" as const, text: "完成动作得分" },
+        { icon: "ban" as const, text: "三次复活机会" },
+        { icon: "bolt" as const, text: "难度平滑提升" },
+      ]
+    : advancedRuleItems;
   const lobbyTrackStyle = {
-    "--advanced-lobby-anchor": `${(selectedLevel - 1) * trackStepPx}px`,
+    "--advanced-lobby-anchor": `${selectedLevel * trackStepPx}px`,
   } as React.CSSProperties;
 
   React.useEffect(() => {
     selectedLevelRef.current = selectedLevel;
   }, [selectedLevel]);
+
+  React.useEffect(() => {
+    return () => {
+      if (lockedEndlessNoticeTimerRef.current !== null) {
+        window.clearTimeout(lockedEndlessNoticeTimerRef.current);
+      }
+      if (endlessShakeTimerRef.current !== null) {
+        window.clearTimeout(endlessShakeTimerRef.current);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     const carousel = carouselRef.current;
@@ -396,7 +480,7 @@ function AdvancedLevelSelectionPanel({
     if (!sliderVisual) return undefined;
 
     const updateSliderTravel = () => {
-      setSliderTravelPx(unlockedLevel > 1 ? sliderVisual.clientWidth : 0);
+      setSliderTravelPx(sliderVisual.clientWidth);
     };
 
     updateSliderTravel();
@@ -407,7 +491,34 @@ function AdvancedLevelSelectionPanel({
     return () => observer.disconnect();
   }, [unlockedLevel]);
 
+  const handleLockedEndlessAttempt = React.useCallback(() => {
+    setLockedEndlessNoticeVisible(true);
+    setEndlessShake(false);
+    if (lockedEndlessNoticeTimerRef.current !== null) {
+      window.clearTimeout(lockedEndlessNoticeTimerRef.current);
+    }
+    if (endlessShakeTimerRef.current !== null) {
+      window.clearTimeout(endlessShakeTimerRef.current);
+    }
+    window.setTimeout(() => setEndlessShake(true), 0);
+    endlessShakeTimerRef.current = window.setTimeout(() => setEndlessShake(false), 420);
+    lockedEndlessNoticeTimerRef.current = window.setTimeout(() => setLockedEndlessNoticeVisible(false), 1800);
+  }, []);
+
+  const handleEndlessButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (!endlessUnlocked) {
+      handleLockedEndlessAttempt();
+      return;
+    }
+    onPickLevel(ENDLESS_MODE_LEVEL);
+  };
+
   const handleLevelClick = (level: number) => {
+    if (level === ENDLESS_MODE_LEVEL && !endlessUnlocked) {
+      handleLockedEndlessAttempt();
+      return;
+    }
     const clickedLevel = resolveAdvancedLobbyClickLevel({ currentLevel, requestedLevel: level });
     if (clickedLevel !== null) onPickLevel(clickedLevel);
   };
@@ -417,7 +528,31 @@ function AdvancedLevelSelectionPanel({
       currentLevel,
       requestedLevel: Number(event.currentTarget.value),
     });
+    if (selectedIsEndless) sliderChangedDuringPointerRef.current = true;
     if (sliderLevel !== selectedLevel) onPickLevel(sliderLevel);
+  };
+
+  const handleLevelSliderPointerDown = (event: React.PointerEvent<HTMLInputElement>) => {
+    void event;
+    sliderPointerStartedEndlessRef.current = selectedIsEndless;
+    sliderChangedDuringPointerRef.current = false;
+  };
+
+  const handleLevelSliderPointerUp = (event: React.PointerEvent<HTMLInputElement>) => {
+    if (!sliderPointerStartedEndlessRef.current) return;
+    sliderPointerStartedEndlessRef.current = false;
+    if (sliderChangedDuringPointerRef.current) return;
+    sliderChangedDuringPointerRef.current = false;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerRatio = bounds.width > 0 ? Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) : 0;
+    const requestedLevel = Math.round(1 + pointerRatio * 9);
+    const sliderLevel = resolveAdvancedLobbySliderLevel({ currentLevel, requestedLevel });
+    onPickLevel(sliderLevel);
+  };
+
+  const handleLevelSliderPointerCancel = () => {
+    sliderPointerStartedEndlessRef.current = false;
+    sliderChangedDuringPointerRef.current = false;
   };
 
   const handleLevelButtonClick = (event: React.MouseEvent<HTMLButtonElement>, level: number) => {
@@ -451,6 +586,26 @@ function AdvancedLevelSelectionPanel({
     suppressNextLevelClickRef.current = true;
 
     const direction = deltaX < 0 ? 1 : -1;
+    if (direction < 0 && selectedLevelRef.current <= 1) {
+      lobbySwipeStartXRef.current = event.clientX;
+      if (!endlessUnlocked) {
+        handleLockedEndlessAttempt();
+      } else if (selectedLevelRef.current !== ENDLESS_MODE_LEVEL) {
+        selectedLevelRef.current = ENDLESS_MODE_LEVEL;
+        onPickLevel(ENDLESS_MODE_LEVEL);
+      }
+      event.preventDefault();
+      return;
+    }
+    if (selectedLevelRef.current === ENDLESS_MODE_LEVEL) {
+      lobbySwipeStartXRef.current = event.clientX;
+      if (direction > 0) {
+        selectedLevelRef.current = 1;
+        onPickLevel(1);
+      }
+      event.preventDefault();
+      return;
+    }
     const nextLevel = resolveAdvancedLobbySliderLevel({
       currentLevel,
       requestedLevel: selectedLevelRef.current + direction,
@@ -510,14 +665,34 @@ function AdvancedLevelSelectionPanel({
         <div className="advanced-lobby-track" style={lobbyTrackStyle}>
           {levelItems.map((item) => {
             const selected = item.position === "selected";
+            const isEndlessItem = item.level === ENDLESS_MODE_LEVEL;
+            if (isEndlessItem) {
+              const statusLabel = getAdvancedEndlessStatusLabel(endlessState);
+              return (
+                <button
+                  aria-disabled={!item.selectable}
+                  aria-label={`无限模式${statusLabel}`}
+                  className={`advanced-lobby-level advanced-endless ${item.position} ${item.state} ${selected ? "selected" : ""} ${endlessShake ? "shake" : ""}`}
+                  data-level={item.level}
+                  disabled={!item.selectable && !isEndlessItem}
+                  key={item.level}
+                  type="button"
+                  onClick={(event) => handleLevelButtonClick(event, item.level)}
+                >
+                  <strong>无尽模式</strong>
+                  <small>{endlessBestScore > 0 ? `最高记录 ${endlessBestScore}` : "未挑战"}</small>
+                </button>
+              );
+            }
             const tone = getAdvancedLevelToneForState(item.state, item.level);
             const itemConfig = getAdvancedStageConfig(challenge.roundId, item.level);
+            const statusLabel = getAdvancedChallengeStatusLabel(item.state);
             return (
               <button
-                aria-label={`${itemConfig.stageTitle}${getAdvancedChallengeStatusLabel(item.state)}`}
+                aria-label={`${itemConfig.stageTitle}${statusLabel}`}
                 className={`advanced-lobby-level ${item.position} ${item.state} ${tone} ${selected ? "selected" : ""}`}
                 data-level={item.level}
-                disabled={!item.selectable}
+                disabled={!item.selectable && !isEndlessItem}
                 key={item.level}
                 type="button"
                 onClick={(event) => handleLevelButtonClick(event, item.level)}
@@ -527,37 +702,56 @@ function AdvancedLevelSelectionPanel({
                     ✓
                   </span>
                 ) : null}
-                <strong>第 {item.level} 关</strong>
-                <small>{getAdvancedChallengeStatusLabel(item.state)}</small>
+                <strong>{`第 ${item.level} 关`}</strong>
+                <small>{statusLabel}</small>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div
-        className={`advanced-lobby-slider ${selectedState} ${selectedTone}`}
-        style={{ "--advanced-lobby-slider-thumb-offset": `${sliderThumbOffsetPx}px` } as React.CSSProperties}
-      >
-        <div className="advanced-lobby-slider-visual" ref={sliderVisualRef} aria-hidden="true">
-          <span className="advanced-lobby-slider-thumb-label">{selectedLevel}</span>
+      <div className="advanced-lobby-slider-row">
+        <button
+          aria-disabled={!endlessUnlocked}
+          aria-label={`无限模式${getAdvancedEndlessStatusLabel(endlessState)}`}
+          className={`advanced-endless-slider-button ${endlessState} ${selectedIsEndless ? "selected" : ""} ${endlessShake ? "shake" : ""}`}
+          type="button"
+          onClick={handleEndlessButtonClick}
+        >
+          ∞
+        </button>
+        <div
+          className={`advanced-lobby-slider ${selectedState} ${selectedTone}`}
+          style={{ "--advanced-lobby-slider-thumb-offset": `${sliderThumbOffsetPx}px` } as React.CSSProperties}
+        >
+          <div className="advanced-lobby-slider-visual" ref={sliderVisualRef} aria-hidden="true">
+            <span className="advanced-lobby-slider-thumb-label">{sliderLevel}</span>
+          </div>
+          <input
+            aria-label="Select advanced level"
+            className="advanced-lobby-range"
+            max={10}
+            min={1}
+            step={1}
+            type="range"
+            value={sliderLevel}
+            onChange={handleLevelSliderInput}
+            onPointerCancel={handleLevelSliderPointerCancel}
+            onPointerDown={handleLevelSliderPointerDown}
+            onPointerUp={handleLevelSliderPointerUp}
+          />
         </div>
-        <input
-          aria-label="Select advanced level"
-          className="advanced-lobby-range"
-          max={10}
-          min={1}
-          step={1}
-          type="range"
-          value={selectedLevel}
-          onChange={handleLevelSliderInput}
-        />
       </div>
+      {lockedEndlessNoticeVisible ? (
+        <div className="advanced-endless-lock-toast" role="status">
+          通过进阶前三关后解锁
+        </div>
+      ) : null}
 
       <div className="advanced-goal-card">
         <div className="advanced-goal-heading">
-          <h2>{activeConfig.stageTitle}</h2>
-          <span>{getAdvancedChallengeStatusLabel(selectedState)}</span>
+          <h2>{activeTitle}</h2>
+          <span>{selectedStatusLabel}</span>
         </div>
         <ul>
           {ruleItems.map((item) => (
@@ -570,11 +764,13 @@ function AdvancedLevelSelectionPanel({
       </div>
 
       <div className="advanced-lobby-actions">
-        <button className="secondary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onRestartBaseRound(selectedLevel)}>
-          重新挑战基础关
-        </button>
+        {selectedIsEndless ? null : (
+          <button className="secondary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onRestartBaseRound(selectedLevel)}>
+            重新挑战基础关
+          </button>
+        )}
         <button className="primary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onStartLevel(selectedLevel)}>
-          开始挑战
+          {selectedIsEndless ? "开始无尽" : "开始挑战"}
         </button>
       </div>
     </div>
@@ -584,6 +780,7 @@ function AdvancedLevelSelectionPanel({
 function AdvancedLobbyContent({
   challenge,
   currentLevel,
+  endlessBestScore,
   round,
   unlockedLevel,
   onBack,
@@ -594,6 +791,7 @@ function AdvancedLobbyContent({
 }: {
   challenge: AdvancedLobbyChallengeState;
   currentLevel: number;
+  endlessBestScore: number;
   round: AdvancedRoundConfig;
   unlockedLevel: number;
   onBack: () => void;
@@ -602,9 +800,11 @@ function AdvancedLobbyContent({
   onRestartBaseRound: (level: number) => void;
   onStartLevel: (level: number) => void;
 }) {
-  const activeLevel = challenge.mode === "select" ? unlockedLevel : challenge.level;
-  const selectedLevel = resolveAdvancedLobbySliderLevel({ currentLevel, requestedLevel: activeLevel });
-  const activeConfig = getAdvancedStageConfig(challenge.roundId, selectedLevel);
+  const activeLevel = challenge.mode === "select" ? 1 : challenge.mode === "endless-complete" ? ENDLESS_MODE_LEVEL : challenge.level;
+  const selectedLevel = activeLevel === ENDLESS_MODE_LEVEL
+    ? ENDLESS_MODE_LEVEL
+    : resolveAdvancedLobbySliderLevel({ currentLevel, requestedLevel: activeLevel });
+  const activeConfig = getAdvancedStageConfig(challenge.roundId, Math.max(1, selectedLevel));
   const goalItems = getAdvancedChallengeGoalItems(activeConfig);
   const [baseRulesOpen, setBaseRulesOpen] = React.useState(false);
   const baseRuleDetailsRef = React.useRef<HTMLDetailsElement | null>(null);
@@ -632,12 +832,21 @@ function AdvancedLobbyContent({
       </header>
 
       <div className="advanced-hero advanced-hero-with-rule">
-        <AdaptiveAdvancedHeroTitle
-          title={getAdvancedChallengeHeroTitle({
-            roundTitle: round.title,
-            stageTitle: activeConfig.stageTitle,
-          })}
-        />
+        {selectedLevel === ENDLESS_MODE_LEVEL ? (
+          <AdaptiveAdvancedHeroTitle
+            title={getAdvancedChallengeHeroTitle({
+              roundTitle: round.title,
+              stageTitle: "无限模式",
+            })}
+          />
+        ) : (
+          <AdaptiveAdvancedHeroTitle
+            title={getAdvancedChallengeHeroTitle({
+              roundTitle: round.title,
+              stageTitle: activeConfig.stageTitle,
+            })}
+          />
+        )}
         <details
           className="advanced-rule-details"
           onToggle={(event) => setBaseRulesOpen(event.currentTarget.open)}
@@ -662,11 +871,14 @@ function AdvancedLobbyContent({
           onOpenLuckDraw={onOpenLuckDraw}
           onStartLevel={onStartLevel}
         />
+      ) : challenge.mode === "endless-complete" ? (
+        <EndlessResultCard challenge={challenge} onBack={onBack} onStartLevel={onStartLevel} />
       ) : (
         <AdvancedLevelSelectionPanel
           activeConfig={activeConfig}
           challenge={challenge}
           currentLevel={currentLevel}
+          endlessBestScore={endlessBestScore}
           selectedLevel={selectedLevel}
           unlockedLevel={unlockedLevel}
           onPickLevel={onPickLevel}
@@ -682,9 +894,11 @@ export function AdvancedChallengeScreen({
   advancedProgress,
   challenge,
   debugToolsVisible,
+  endlessBestScore,
   onBack,
   onBuildPerfectTrials,
   onCompleteBaseRound,
+  onCompleteEndlessRound,
   onCompleteRound,
   onOpenLuckDraw,
   onPickLevel,
@@ -695,9 +909,11 @@ export function AdvancedChallengeScreen({
   advancedProgress: AdvancedProgress;
   challenge: AdvancedChallengeState;
   debugToolsVisible: boolean;
+  endlessBestScore: number;
   onBack: () => void;
   onBuildPerfectTrials: (config: AdvancedStageConfig) => TrialEvent[];
   onCompleteBaseRound: (record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => void;
+  onCompleteEndlessRound: (completion: EndlessRoundCompletion) => void;
   onCompleteRound: (trials: TrialEvent[]) => void;
   onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
@@ -777,6 +993,33 @@ export function AdvancedChallengeScreen({
     );
   }
 
+  if (challenge.mode === "endless-playing") {
+    return (
+      <section className="play-screen advanced-play-screen endless-play-screen" aria-live="polite">
+        <header className="round-header advanced-round-header">
+          <AdaptiveAdvancedHeaderTitle
+            title={getAdvancedChallengeHeroTitle({
+              roundTitle: round.title,
+              stageTitle: "无限模式",
+            })}
+          />
+          <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
+              重试
+            </button>
+          </div>
+        </header>
+        <EndlessRoundPlayer
+          bestScore={endlessBestScore}
+          debugToolsVisible={debugToolsVisible}
+          key={`endless-${challenge.roundId}-${challenge.attemptId}`}
+          onComplete={onCompleteEndlessRound}
+          roundId={challenge.roundId}
+        />
+      </section>
+    );
+  }
+
   if (challenge.mode === "base-playing") {
     return (
       <section className="play-screen advanced-base-play-screen" aria-live="polite">
@@ -803,6 +1046,7 @@ export function AdvancedChallengeScreen({
     <AdvancedLobbyContent
       challenge={challenge}
       currentLevel={currentLevel}
+      endlessBestScore={endlessBestScore}
       round={round}
       unlockedLevel={unlockedLevel}
       onBack={onBack}

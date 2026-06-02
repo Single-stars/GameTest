@@ -435,8 +435,9 @@ test("multiplayer transport drops replaceable state frames under data channel ba
   assert.match(p2pClientSource, /maxRetransmits: 0/);
   assert.match(p2pClientSource, /function canSendRealtimeState/);
   assert.match(source, /function canSendReplaceableState/);
-  assert.match(source, /if \(message\.kind === "state" && !canSendReplaceableState\(preferredChannel\)\) return;/);
-  assert.match(source, /channel\.bufferedAmount/);
+  assert.match(source, /if \(message\.kind === "state"\) \{/);
+  assert.match(source, /if \(!channelIsOpen\(preferredChannel\)\) \{[\s\S]{0,180}this\.scheduleIceRestart\(MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(source, /if \(!canSendReplaceableState\(preferredChannel\)\) return;/);
   assert.doesNotMatch(source, /message\.kind !== "state"[\s\S]{0,120}bufferedAmount/);
 });
 
@@ -1164,7 +1165,7 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(workerSource, /type: "peer-left"/);
   assert.match(workerSource, /clearGuestToken\(\)/);
   assert.match(workerSource, /metadata\.guestToken = null/);
-  assert.doesNotMatch(workerSource, /room-full/);
+  assert.match(workerSource, /room-full/);
   assert.match(workerSource, /"guest-signaling-left"/);
   assert.match(sessionSource, /opponentJoining:\s*false/);
   assert.match(sessionSource, /onPeerDisconnected: \(message\) => \{/);
@@ -1172,6 +1173,52 @@ test("host keeps room reusable when guests leave and clears opponent snapshot fo
   assert.match(sessionSource, /opponentReady:\s*false/);
   assert.match(sessionSource, /opponentState:\s*null/);
   assert.match(sessionSource, /opponentResult:\s*null/);
+});
+
+test("online guest seats cannot be stolen by a fresh invite link without the existing guest token", () => {
+  const workerSource = readSource("../../../cloudflare/worker.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const protocolSource = readSource("./protocol.ts");
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+
+  assert.match(workerSource, /const guestConnected = role === "guest" && this\.hasRole\("guest"\);/);
+  assert.match(workerSource, /metadata\.guestToken && token !== metadata\.guestToken && guestConnected/);
+  assert.match(workerSource, /return jsonResponse\(\{ error: "room-full" \}, \{ status: 409 \}\);/);
+  assert.match(workerSource, /metadata\.guestToken && token !== metadata\.guestToken && !guestConnected[\s\S]{0,180}metadata\.guestToken = token \|\| randomToken\(\)/);
+  assert.match(workerSource, /this\.closeExistingRoleSocket\(role\)/);
+  assert.match(protocolSource, /MULTIPLAYER_ROOM_FULL_MESSAGE/);
+  assert.match(transportSource, /MULTIPLAYER_ROOM_FULL_MESSAGE/);
+  assert.match(transportSource, /status\.exists && status\.guestConnected === true && !this\.roleToken/);
+  assert.match(pageSource, /case MULTIPLAYER_ROOM_FULL_MESSAGE:/);
+});
+
+test("WebRTC transport surfaces half-open data channels as reconnecting instead of silently dropping room traffic", () => {
+  const transportSource = readSource("./webrtc-transport.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+
+  assert.match(transportSource, /onReconnecting\?: \(message: string\) => void;/);
+  assert.match(transportSource, /private notifyReconnecting/);
+  assert.match(transportSource, /notifyReconnecting\(message = MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(transportSource, /this\.events\.onReconnecting\?\.\(message\)/);
+  assert.match(transportSource, /if \(message\.kind === "state"\) \{[\s\S]{0,220}!channelIsOpen\(preferredChannel\)[\s\S]{0,120}this\.scheduleIceRestart\(MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(transportSource, /if \(!channelIsOpen\(preferredChannel\)\) \{[\s\S]{0,160}this\.scheduleIceRestart\(MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(transportSource, /catch \{[\s\S]{0,140}this\.scheduleIceRestart\(MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(transportSource, /channel\.onclose = \(\) => \{[\s\S]{0,420}if \(this\.connected\) this\.scheduleIceRestart\(MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(sessionSource, /onReconnecting: \(message\) => \{/);
+  assert.match(sessionSource, /this\.markPeerTemporarilyStale\(message \|\| MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+});
+
+test("multiplayer reconnect recovery only returns to connected after every data channel is healthy", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const notePeerMessageSource = sessionSource.slice(
+    sessionSource.indexOf("private notePeerMessage()"),
+    sessionSource.indexOf("private checkPeerStale()"),
+  );
+
+  assert.match(notePeerMessageSource, /const connectionRecovered =[\s\S]{0,160}this\.transport\?\.isConnected === true/);
+  assert.match(notePeerMessageSource, /this\.snapshot\.connectionState === "stale" \|\| this\.snapshot\.connectionState === "reconnecting"/);
+  assert.match(notePeerMessageSource, /this\.snapshot\.errorMessage && this\.snapshot\.connectionState === "connected"[\s\S]{0,80}\|\|[\s\S]{0,40}connectionRecovered/);
+  assert.doesNotMatch(notePeerMessageSource, /this\.snapshot\.connectionState === "stale" \|\|[\s\S]{0,220}patchSnapshot\(\{ connectionState: "connected"/);
 });
 
 test("host shows when a guest socket is joining before the direct connection opens", () => {
@@ -1220,6 +1267,20 @@ test("host clears half-open guest slots with heartbeat stale detection so rooms 
   assert.match(transportSource, /disconnectActiveConnection\(\)/);
   assert.match(transportSource, /closePeerConnection\(\)/);
   assert.match(workerSource, /closeExistingRoleSocket\(role\)/);
+});
+
+test("idle multiplayer presence waits longer before showing concise reconnect copy", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const protocolSource = readSource("./protocol.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const staleSource = sessionSource.slice(sessionSource.indexOf("private markPeerTemporarilyStale"), sessionSource.indexOf("private preserveRoomAfterConnectionIssue"));
+
+  assert.match(sessionSource, /const PEER_STALE_MS = 22_000;/);
+  assert.match(protocolSource, /MULTIPLAYER_RECONNECTING_MESSAGE = "尝试重连中"/);
+  assert.match(staleSource, /markPeerTemporarilyStale\(message = MULTIPLAYER_RECONNECTING_MESSAGE\)/);
+  assert.match(staleSource, /errorMessage:\s*message/);
+  assert.match(pageSource, /case "reconnecting":[\s\S]{0,80}return "尝试重连中"/);
+  assert.doesNotMatch(pageSource, /等待对方恢复连接 · 对方已断开，联机已结束/);
 });
 
 test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconnects", () => {
@@ -1479,6 +1540,18 @@ test("multiplayer aim allows rapid follow-up shots while previous arrows are sti
 }
 );
 
+test("multiplayer aim keeps distractor targets visible after penalty hits", () => {
+  const aimSource = readSource("../../features/rounds/native/aim.tsx");
+  const distractorCollisionSource = aimSource.slice(
+    aimSource.indexOf('if (result.collision.kind === "distractor")'),
+    aimSource.indexOf("const hitTarget = nextTargets.find", aimSource.indexOf('if (result.collision.kind === "distractor")')),
+  );
+
+  assert.match(distractorCollisionSource, /showAimFeedback\("bad", !\(multiplayerPenaltyMode \|\| endlessRuntime\)\)/);
+  assert.match(distractorCollisionSource, /if \(!multiplayerPenaltyMode\) \{[\s\S]*nextDistractors = nextDistractors\.map/);
+  assert.doesNotMatch(distractorCollisionSource, /else if \(multiplayerPenaltyMode\) \{[\s\S]*nextDistractors/);
+});
+
 test("multiplayer level select wall titles stay on one fitted line", () => {
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
   const wallRule = cssRule(cssSource, ".multiplayer-level-wall");
@@ -1564,6 +1637,17 @@ test("knife versus uses shared turn state and turn-owner calculation", () => {
   assert.doesNotMatch(knifeSource, /settleKnifeOvertimeMiss/);
 });
 
+test("knife remote turn application keeps both peers on the same playable turn and delays finish enough to see failures", () => {
+  const knifeSource = readSource("../../features/mini-games/knife.tsx");
+
+  assert.match(knifeSource, /const KNIFE_FINISH_DELAY_MS = 650;/);
+  assert.match(knifeSource, /finishDelayTimeoutRef/);
+  assert.match(knifeSource, /function resolveKnifeRemoteStatus/);
+  assert.match(knifeSource, /current\.winnerRole === multiplayerRole \? "passed" : "failed"/);
+  assert.match(knifeSource, /syncKnifeRuntimeState\(performance\.now\(\), true, \{ allowOffTurn: true \}\)/);
+  assert.doesNotMatch(knifeSource, /frame\.status = remoteState\.status === "playing" \? "playing" : "passed";/);
+});
+
 test("multiplayer result panel renders compact ordered settlement breakdown rows", () => {
   const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
@@ -1598,16 +1682,137 @@ test("multiplayer result panel renders compact ordered settlement breakdown rows
   assert.match(articleRule, /align-content:\s*start;/);
 });
 
-test("tied versus matches with overtime rules auto-start a tiebreaker before showing results", () => {
+test("multiplayer results show collectible counts, one-decimal time, and spectator reactions", () => {
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(shellSource, /formatBreakdownDisplayAmount/);
+  assert.match(shellSource, /item\.key === "collectible-time-bonus"/);
+  assert.match(shellSource, /\.toFixed\(1\)/);
+  assert.match(shellSource, /multiplayer-spectator-toolbar/);
+  assert.match(shellSource, /label:\s*reaction\.label/);
+  assert.doesNotMatch(shellSource, /event\.from === "self" \? reaction\.label :/);
+  assert.match(shellSource, /砸鸡蛋/);
+  assert.match(shellSource, /递咖啡/);
+  assert.match(shellSource, /加油/);
+  assert.match(cssSource, /\.multiplayer-spectator-toolbar/);
+  assert.match(cssSource, /\.multiplayer-reaction-float/);
+  assert.match(cssSource, /\.multiplayer-game-result-panel/);
+  assert.match(cssSource, /backdrop-filter:\s*blur/);
+});
+
+test("tied versus matches with overtime rules continue before showing results", () => {
   const sessionSource = readSource("./multiplayer-session.ts");
   const resultSource = readSource("./result-breakdown.ts");
 
   assert.match(resultSource, /export function shouldStartMultiplayerTiebreaker/);
   assert.match(resultSource, /compareMultiplayerResults\(selfResult, opponentResult\) === 0/);
   assert.match(sessionSource, /shouldStartMultiplayerTiebreaker\(level, this\.snapshot\.selfResult, this\.snapshot\.opponentResult, this\.snapshot\.match\.playMode\)/);
-  assert.match(sessionSource, /seed: createTiebreakerSeed\(this\.snapshot\.match\.seed\)/);
-  assert.match(sessionSource, /countdownMs: REMATCH_COUNTDOWN_MS/);
+  assert.match(sessionSource, /const nextRound = this\.currentTiebreakerRound\(\) \+ 1/);
+  assert.match(sessionSource, /this\.role === "host"[\s\S]{0,80}this\.startAimTiebreaker\(\)[\s\S]{0,120}this\.applyAimTiebreaker\(nextRound\)/);
+  assert.match(sessionSource, /startAimTiebreaker\(\)/);
+  assert.match(sessionSource, /tiebreakerRound:\s*nextRound/);
+  assert.match(sessionSource, /selfResult:\s*null/);
+  assert.match(sessionSource, /opponentResult:\s*null/);
+  assert.doesNotMatch(sessionSource, /if \(this\.snapshot\.match && this\.role === "host"\)[\s\S]{0,260}shouldStartMultiplayerTiebreaker/);
   assert.doesNotMatch(sessionSource, /status:\s*"finished"[\s\S]{0,160}shouldStartMultiplayerTiebreaker/);
+});
+
+test("aim tiebreakers append one target in the active match", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const aimSource = readSource("../../features/rounds/native/aim.tsx");
+
+  assert.doesNotMatch(sessionSource, /createTiebreakerLevelId/);
+  assert.match(sessionSource, /createTiebreakerMessage/);
+  assert.match(runtimeSource, /tiebreakerRound=\{tiebreakerRound\}/);
+  assert.doesNotMatch(runtimeSource, /tiebreakerTargetBonus/);
+  assert.match(aimSource, /activeTargetCountRef\.current = spawnedTargetsRef\.current \+ 1/);
+  assert.match(aimSource, /activeRequiredHitsRef\.current = hitCountRef\.current \+ 1/);
+  assert.match(aimSource, /publishTargets\(\[\s*makeAdvancedAimMovingEntity/);
+  assert.match(aimSource, /加赛第\{activeTiebreakerRound\}轮/);
+  assert.match(aimSource, /const initialTiebreakerRound = multiplayerPenaltyMode \? activeTiebreakerRoundLatestRef\.current : 0/);
+  assert.match(aimSource, /if \(initialTiebreakerRound > 0\) \{/);
+  assert.match(aimSource, /const tiebreakerTargetIndex = targetCount \+ initialTiebreakerRound - 1/);
+  assert.match(aimSource, /activeTargetCountRef\.current = tiebreakerTargetIndex \+ 1/);
+  assert.match(aimSource, /spawnedTargetsRef\.current = tiebreakerTargetIndex \+ 1/);
+  assert.match(aimSource, /activeRequiredHitsRef\.current = initialTiebreakerRound > 0 \? 1 : requiredHits/);
+  assert.match(aimSource, /setActiveRequiredHits\(initialTiebreakerRound > 0 \? 1 : requiredHits\)/);
+  assert.match(aimSource, /makeAdvancedAimMovingEntity\(\{\s*config,\s*index: tiebreakerTargetIndex,/);
+  assert.doesNotMatch(aimSource, /publishTargets\(\[\s*\.\.\.targetsRef\.current/);
+  assert.doesNotMatch(aimSource, /activeTargetCountRef\.current \+= 1/);
+  assert.match(aimSource, /追加 1 靶/);
+  assert.doesNotMatch(aimSource, /targetCount[\s\S]{0,120}\+ tiebreakerTargetBonus/);
+});
+
+test("aim tiebreaker runtime results are scoped to the active overtime round", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const aimSource = readSource("../../features/rounds/native/aim.tsx");
+
+  assert.match(aimSource, /const activeTiebreakerRoundRef = useRef\(activeTiebreakerRound\)/);
+  assert.match(aimSource, /activeTiebreakerRoundRef\.current = activeTiebreakerRound/);
+  assert.match(aimSource, /tiebreakerRound:\s*activeTiebreakerRoundRef\.current/);
+  assert.match(aimSource, /tiebreakerRound:\s*number;/);
+  assert.match(runtimeSource, /tiebreakerRound\?: number;/);
+  assert.match(runtimeSource, /if \(level\.gameId === "aim" && runtime\.tiebreakerRound !== tiebreakerRound\) return;/);
+  assert.match(runtimeSource, /tiebreakerRound:\s*runtime\.tiebreakerRound/);
+  assert.match(runtimeSource, /},\s*\[handleRuntimeState, level\.gameId, tiebreakerRound\]/);
+  assert.match(sessionSource, /const reportedTiebreakerRound = Math\.max\(0, Math\.round\(result\.tiebreakerRound \?\? this\.currentTiebreakerRound\(\)\)\)/);
+  assert.match(sessionSource, /if \(reportedTiebreakerRound !== this\.currentTiebreakerRound\(\)\) return;/);
+  assert.match(sessionSource, /tiebreakerRound:\s*reportedTiebreakerRound/);
+});
+
+test("only movement games let successful players spectate the opponent with a smooth camera handoff", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+  const flappySource = readSource("../../features/mini-games/flappy.tsx");
+  const squareJumpSource = readSource("../../features/mini-games/square-jump.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(pageSource, /MOVEMENT_SPECTATOR_GAME_IDS\.has\(battleLevel\.gameId\)/);
+  assert.match(shellSource, /spectatorEnabled = false/);
+  assert.match(shellSource, /spectatorEnabled &&[\s\S]{0,180}Boolean\(selfResult\?\.passed\)/);
+  assert.match(runtimeSource, /spectateRemoteState=\{coOpMode \? null : opponentState\}/);
+  assert.match(doodleSource, /spectateRemoteState\?: SelfGameState \| null;/);
+  assert.match(fallDownSource, /spectateRemoteState\?: SelfGameState \| null;/);
+  assert.match(flappySource, /spectateRemoteState\?: SelfGameState \| null;/);
+  assert.match(squareJumpSource, /spectateRemoteState\?: SelfGameState \| null;/);
+  assert.match(doodleSource, /smoothSpectatorCamera/);
+  assert.match(fallDownSource, /smoothSpectatorCamera/);
+  assert.match(flappySource, /smoothSpectatorCamera/);
+  assert.match(squareJumpSource, /smoothSpectatorCamera/);
+  assert.match(doodleSource, /resolveDoodleSpectatorPlatforms/);
+  assert.match(doodleSource, /function syncDoodleSpectatorPlatformUsage\(frame: DoodleFrame, spectatorState: SelfGameState\)/);
+  assert.match(doodleSource, /const usedPlatformIds = new Set\(spectatorState\.usedPlatformIds \?\? \[\]\)/);
+  assert.match(doodleSource, /platform\.used = usedPlatformIds\.has\(platform\.id\)/);
+  assert.match(doodleSource, /spectatorViewChanged = syncDoodleSpectatorPlatformUsage\(current, spectatorState\) \|\| spectatorViewChanged/);
+  assert.match(fallDownSource, /resolveFallDownSpectatorPlatforms/);
+  assert.match(flappySource, /resolveFlappySpectatorGates/);
+  assert.match(squareJumpSource, /resolveSquareJumpSpectatorPlatforms/);
+  assert.match(doodleSource, /platform\.y >= minY && platform\.y <= maxY \? \{ \.\.\.platform, used: false \} : platform/);
+  assert.match(doodleSource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
+  assert.match(fallDownSource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
+  assert.match(flappySource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
+  assert.match(squareJumpSource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
+  for (const source of [doodleSource, fallDownSource, flappySource, squareJumpSource]) {
+    assert.match(source, /const spectatingRemote = spectatorState\?\.status === "playing"/);
+    assert.match(source, /const spectatorSceneTimeRef = useRef\(0\)/);
+    assert.match(source, /if \(spectatingRemote\) spectatorSceneTimeRef\.current \+= delta;/);
+    assert.match(source, /playerShellRef\.current\.style\.display = ""/);
+    assert.match(source, /if \(!spectatingRemote\) \{/);
+    assert.doesNotMatch(source, /playerShellRef\.current\.style\.display = spectatingRemote \? "none" : ""/);
+  }
+  assert.match(doodleSource, /spectatorViewChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.match(fallDownSource, /spectatorViewChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.match(flappySource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS\) \{\s*syncFlappyView\(time\);/);
+  assert.match(squareJumpSource, /const spectatorViewChanged = current\.status !== "playing" && hasSquareJumpPlatformWindowChanged\(current, spectatorState\);/);
+  assert.match(squareJumpSource, /spectatorViewChanged \|\| eventChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.doesNotMatch(squareJumpSource, /current\.status !== "playing" \|\| eventChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
+  assert.match(cssSource, /\.multiplayer-spectating-badge/);
 });
 
 test("co-op players keep local simulation active instead of rendering host authoritative playback", () => {

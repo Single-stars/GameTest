@@ -93,7 +93,7 @@ test("advanced lobby rules render stable check icons", () => {
 
   assert.match(screenSource, /function formatReactionAverageGoalText/);
   assert.match(screenSource, /平均反应 \$\{averageMs === null \? "--" : averageMs}\/\$\{thresholdMs}ms/);
-  assert.match(screenSource, /const ruleItems = getAdvancedChallengeRuleItems\(activeConfig\);/);
+  assert.match(screenSource, /const advancedRuleItems = getAdvancedChallengeRuleItems\(activeConfig\);/);
   assert.match(screenSource, /ruleItems\.map/);
   assert.match(screenSource, /className="advanced-goal-item complete"/);
   assert.match(screenSource, /className="advanced-goal-box"/);

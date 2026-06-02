@@ -116,6 +116,7 @@ export type GameResult = {
   matchId?: string;
   score: number;
   passed: boolean;
+  tiebreakerRound?: number;
   timeMs?: number;
   breakdown?: GameResultBreakdown;
 };

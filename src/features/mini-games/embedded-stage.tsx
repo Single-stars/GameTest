@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type EndlessMiniGameRuntime,
   type MiniGameCompletion,
   type MiniGameRunMode,
 } from "@/features/mini-games/common";
@@ -12,12 +13,15 @@ import { SquareJumpPrototype } from "@/features/mini-games/square-jump";
 import {
   getMiniGameLevel,
   type MiniGameId,
+  type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 
 export function MiniGameEmbeddedStage({
   baseRevives,
+  endless,
   gameId,
   levelId,
+  levelOverride,
   mode = "prototype",
   onBackToSelect = () => undefined,
   onBaseReviveUsed,
@@ -26,28 +30,31 @@ export function MiniGameEmbeddedStage({
   runSeed,
 }: {
   baseRevives?: number;
+  endless?: EndlessMiniGameRuntime;
   gameId: MiniGameId;
   levelId: string;
-  mode?: MiniGameRunMode;
+  levelOverride?: MiniGameLevelConfig;
+  mode?: MiniGameRunMode | "endless";
   onBackToSelect?: () => void;
   onBaseReviveUsed?: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart?: () => void;
   runSeed: string;
 }) {
-  const level = getMiniGameLevel(gameId, levelId);
+  const level = levelOverride ?? getMiniGameLevel(gameId, levelId);
   const stageKey = `${gameId}-${levelId}-${runSeed}`;
+  const sharedUnlimitedRespawn = Boolean(endless) && mode !== "endless";
   if (gameId === "doodle") {
-    return <DoodleJumpPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <DoodleJumpPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "flappy") {
-    return <FlappyPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <FlappyPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "square-jump") {
-    return <SquareJumpPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <SquareJumpPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "fall-down") {
-    return <FallDownPrototype key={stageKey} baseRevives={baseRevives} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+    return <FallDownPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
-  return <KnifeHitPrototype key={stageKey} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} />;
+  return <KnifeHitPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
 }
