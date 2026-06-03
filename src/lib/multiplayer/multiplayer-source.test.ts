@@ -1798,7 +1798,7 @@ test("only movement games let successful players spectate the opponent with a sm
   assert.match(fallDownSource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
   assert.match(flappySource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
   assert.match(squareJumpSource, /const spectatorState = remoteSmootherRef\.current\.sample\(time\) \?\? spectateRemoteStateRef\.current/);
-  for (const source of [doodleSource, fallDownSource, flappySource, squareJumpSource]) {
+  for (const source of [doodleSource, fallDownSource, squareJumpSource]) {
     assert.match(source, /const spectatingRemote = spectatorState\?\.status === "playing"/);
     assert.match(source, /const spectatorSceneTimeRef = useRef\(0\)/);
     assert.match(source, /if \(spectatingRemote\) spectatorSceneTimeRef\.current \+= delta;/);
@@ -1806,6 +1806,14 @@ test("only movement games let successful players spectate the opponent with a sm
     assert.match(source, /if \(!spectatingRemote\) \{/);
     assert.doesNotMatch(source, /playerShellRef\.current\.style\.display = spectatingRemote \? "none" : ""/);
   }
+  assert.match(flappySource, /const spectatingRemote = spectatorState\?\.status === "playing"/);
+  assert.match(flappySource, /const spectatorSceneTimeRef = useRef\(0\)/);
+  assert.match(flappySource, /if \(spectatingRemote\) spectatorSceneTimeRef\.current \+= delta;/);
+  assert.match(flappySource, /playerShellRef\.current\.style\.display = ""/);
+  assert.match(flappySource, /const localPlayerWorldX = playerX \+ getFlappySignedProgress\(current\.progress, reverseDirection\);/);
+  assert.match(flappySource, /const playerScreenX = spectatingRemote \? localPlayerWorldX - localCameraX : getFlappyPlayerScreenX\(\{/);
+  assert.doesNotMatch(flappySource, /if \(!spectatingRemote\) \{[\s\S]{0,260}playerShellRef\.current\.style\.transform/);
+  assert.doesNotMatch(flappySource, /playerShellRef\.current\.style\.display = spectatingRemote \? "none" : ""/);
   assert.match(doodleSource, /spectatorViewChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
   assert.match(fallDownSource, /spectatorViewChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS/);
   assert.match(flappySource, /time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS\) \{\s*syncFlappyView\(time\);/);
@@ -1877,7 +1885,7 @@ test("Flappy multiplayer remote playback uses visual camera progress and RAF sam
   assert.match(runtimeStateSource, /cameraX:\s*signedDisplayProgress/);
   assert.match(runtimeStateSource, /x:\s*playerX \+ signedDisplayProgress/);
   assert.match(runtimeStateSource, /vx:\s*isActivelyScrolling \? \(reverseDirection \? -speed : speed\) : 0/);
-  assert.match(updateDomSource, /const sampledRemote = remoteSmootherRef\.current\.sample\(frameTime\);/);
+  assert.match(updateDomSource, /const sampledRemote = remoteSmootherRef\.current\.sample\(frameTime\) \?\? \(spectatingRemote \? spectateRemoteStateRef\.current : null\);/);
   assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, reverseDirection\);/);
   assert.match(updateDomSource, /const visualRemote = remoteVisualSmootherRef\.current\.update\(sampledRemote, frameTime\);/);
   assert.match(updateDomSource, /const remoteScreenX = visualRemote\.x - localCameraX;/);

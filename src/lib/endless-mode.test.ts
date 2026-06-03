@@ -270,10 +270,34 @@ test("endless braking uses continuous scenery and hazards that approach the runn
 test("endless aim starts from early difficulty while preserving one-at-a-time spawn logic", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const aimSource = readFileSync(new URL("../features/rounds/native/aim.tsx", import.meta.url), "utf8");
+  const early = getEndlessAimConfig({ hitCount: 0 });
+  const middle = getEndlessAimConfig({ hitCount: 42 });
+  const late = getEndlessAimConfig({ hitCount: 80 });
+
+  assert.equal(early.aimMode, "track");
+  assert.equal(early.route, "circle");
+  assert.equal(early.decoyCount, 0);
+  assert.equal(early.failOnFlyOut, false);
+  assert.equal(early.incomingChance, 0);
+  assert.equal(middle.decoyCount > early.decoyCount, true);
+  assert.equal(middle.targetSpeedMultiplier > early.targetSpeedMultiplier, true);
+  assert.equal(late.aimMode, "boss");
+  assert.equal(late.route, "mixed");
+  assert.equal(late.failOnFlyOut, true);
 
   assert.doesNotMatch(runtimeSource, /difficulty:\s*roundId === "aim" \? 1 : 0/);
   assert.match(runtimeSource, /getEndlessReusableStageConfig\(\{\s*difficulty:\s*0,\s*roundId\s*}\)/);
+  assert.match(runtimeSource, /const aim = getEndlessAimConfig\(\{ hitCount: 0 }\);/);
+  assert.match(runtimeSource, /aimMode:\s*aim\.aimMode/);
+  assert.match(runtimeSource, /route:\s*aim\.route/);
+  assert.match(runtimeSource, /decoyCount:\s*aim\.decoyCount/);
+  assert.match(runtimeSource, /failOnFlyOut:\s*aim\.failOnFlyOut/);
+  assert.doesNotMatch(runtimeSource, /aimMode:\s*"boss"/);
+  assert.doesNotMatch(runtimeSource, /runSeed="endless-aim"/);
   assert.match(aimSource, /const maxActiveEndlessTargets = endlessRuntime \? 1 : activeTargetCountRef\.current;/);
+  assert.match(aimSource, /const initialTargetCount = isEndless \? 1 : targetCount;/);
+  assert.match(aimSource, /const activeSpawnMode = getAdvancedAimMode\(spawnConfig\);/);
+  assert.match(aimSource, /mode: activeSpawnMode/);
   assert.match(aimSource, /nextTargets\.filter\(\(entity\) => entity\.kind === "target" && entity\.active\)\.length < maxActiveEndlessTargets/);
   assert.match(aimSource, /activeTargetCountRef\.current = isEndless \? 1 :/);
 });

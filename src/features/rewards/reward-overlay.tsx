@@ -19,6 +19,11 @@ export type RewardOverlayItem =
       kind: "rank";
       before: string;
       after: string;
+    }
+  | {
+      id: string;
+      kind: "endless";
+      roundTitle: string;
     };
 
 function RewardSkinCard({
@@ -73,6 +78,25 @@ function RewardRankCard({
         <strong className="reward-rank-value reward-rank-old">{item.before}</strong>
         <strong className="reward-rank-value reward-rank-new">{item.after}</strong>
       </div>
+    </div>
+  );
+}
+
+function RewardEndlessCard({
+  item,
+  revealSettled,
+}: {
+  item: Extract<RewardOverlayItem, { kind: "endless" }>;
+  revealSettled: boolean;
+}) {
+  return (
+    <div className={`reward-overlay-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label="无尽模式已解锁">
+      <span className="reward-overlay-eyebrow">无尽模式已解锁</span>
+      <span className="reward-endless-symbol" aria-hidden="true">∞</span>
+      <span className="reward-endless-copy">
+        <strong>{item.roundTitle}</strong>
+        <small>可以进入无尽挑战</small>
+      </span>
     </div>
   );
 }
@@ -149,8 +173,10 @@ function RewardOverlayContent({
     <div className="reward-overlay" role="presentation" onClick={handleOverlayClick}>
       {item.kind === "skin" ? (
         <RewardSkinCard key={item.id} item={item} onClick={handleSkinCardClick} revealSettled={itemRevealSettled} skinCelebrating={itemSkinCelebrating} />
-      ) : (
+      ) : item.kind === "rank" ? (
         <RewardRankCard key={item.id} item={item} revealSettled={itemRevealSettled} />
+      ) : (
+        <RewardEndlessCard key={item.id} item={item} revealSettled={itemRevealSettled} />
       )}
     </div>
   );

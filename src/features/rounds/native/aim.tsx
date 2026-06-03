@@ -400,7 +400,10 @@ function getEndlessAimSpawnConfig(config: AdvancedStageConfig, score: number, de
     level: aim.sourceAdvancedLevel,
     params: {
       ...config.params,
-      decoyCount: Math.max(0, Math.round(aim.decoyChance * 4)),
+      aimMode: aim.aimMode,
+      decoyCount: aim.decoyCount,
+      failOnFlyOut: aim.failOnFlyOut,
+      route: aim.route,
       spawnIntervalMs: aim.spawnIntervalMs,
       targetSize: aim.targetSize,
       targetSpeedMultiplier: aim.targetSpeedMultiplier,
@@ -426,15 +429,16 @@ export function AdvancedAimRound({
 }) {
   const config = advancedConfig!;
   const isEndless = Boolean(endless);
-  const mode = isEndless ? "boss" : getAdvancedAimMode(config);
+  const mode = getAdvancedAimMode(config);
   const arrowCount = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "arrowCount", 8);
   const targetCount = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "targetCount", arrowCount);
+  const initialTargetCount = isEndless ? 1 : targetCount;
   const requiredHits = isEndless ? Number.MAX_SAFE_INTEGER : getParamNumber(config, "requiredHits", targetCount);
   const activeTiebreakerRound = Math.max(0, Math.round(tiebreakerRound));
   const unlimitedArrows = isEndless || getParamBoolean(config, "unlimitedArrows", false);
   const replaceTargetOnHit = isEndless || getParamBoolean(config, "replaceTargetOnHit", false);
   const keepTargetOnHit = getParamBoolean(config, "keepTargetOnHit", false);
-  const failOnFlyOut = isEndless || getParamBoolean(config, "failOnFlyOut");
+  const failOnFlyOut = getParamBoolean(config, "failOnFlyOut");
   const spawnIntervalMs = getParamNumber(config, "spawnIntervalMs", 820);
   const [targets, setTargets] = useState<AdvancedAimMovingEntity[]>([]);
   const [distractors, setDistractors] = useState<AdvancedAimMovingEntity[]>([]);
@@ -623,7 +627,7 @@ export function AdvancedAimRound({
           ]
 
         : mode === "track" || mode === "decoy"
-        ? Array.from({ length: targetCount }, (_, index) =>
+        ? Array.from({ length: initialTargetCount }, (_, index) =>
             makeAdvancedAimMovingEntity({ config, index, kind: "target", mode, rect, runSeed, spawnedAt: startedAt }),
           )
         : [];
@@ -648,7 +652,7 @@ export function AdvancedAimRound({
       feedbackResetTimerRef.current = null;
       finishedRef.current = true;
     };
-  }, [config, isEndless, mode, multiplayerPenaltyMode, publishArrows, publishDistractors, publishTargets, requiredHits, runSeed, spawnIntervalMs, syncAimRuntimeState, targetCount]);
+  }, [config, initialTargetCount, isEndless, mode, multiplayerPenaltyMode, publishArrows, publishDistractors, publishTargets, requiredHits, runSeed, spawnIntervalMs, syncAimRuntimeState, targetCount]);
 
   useEffect(() => {
     if (!multiplayerPenaltyMode || activeTiebreakerRound <= lastAppliedTiebreakerRoundRef.current) return;
@@ -710,13 +714,13 @@ export function AdvancedAimRound({
 
       let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
       const endlessRuntime = endlessRef.current;
-      const activeSpawnIntervalMs = endlessRuntime
-        ? getEndlessAimConfig({ hitCount: Math.max(endlessRuntime.score, endlessRuntime.debugDifficulty * 80) }).spawnIntervalMs
-        : spawnIntervalMs;
       const spawnConfig = endlessRuntime ? getEndlessAimSpawnConfig(config, endlessRuntime.score, endlessRuntime.debugDifficulty) : config;
+      const activeSpawnMode = getAdvancedAimMode(spawnConfig);
+      const activeSpawnIntervalMs = getParamNumber(spawnConfig, "spawnIntervalMs", spawnIntervalMs);
+      const activeFailOnFlyOut = endlessRuntime ? getParamBoolean(spawnConfig, "failOnFlyOut") : failOnFlyOut;
       const maxActiveEndlessTargets = endlessRuntime ? 1 : activeTargetCountRef.current;
       if (
-        (mode === "incoming" || mode === "boss") &&
+        (activeSpawnMode === "incoming" || activeSpawnMode === "boss") &&
         (endlessRuntime
           ? nextTargets.filter((entity) => entity.kind === "target" && entity.active).length < maxActiveEndlessTargets
           : spawnedTargetsRef.current < activeTargetCountRef.current)
@@ -730,14 +734,14 @@ export function AdvancedAimRound({
           const index = spawnedTargetsRef.current;
           nextTargets = [
             ...nextTargets,
-            makeAdvancedAimMovingEntity({ config: spawnConfig, index, kind: "target", mode, rect, runSeed, spawnedAt: frameNow }),
+            makeAdvancedAimMovingEntity({ config: spawnConfig, index, kind: "target", mode: activeSpawnMode, rect, runSeed, spawnedAt: frameNow }),
           ];
           spawnedTargetsRef.current += 1;
           lastSpawnAtRef.current = frameNow;
         }
       }
 
-      const flyOutTarget = failOnFlyOut
+      const flyOutTarget = activeFailOnFlyOut
         ? nextTargets.find((entity) => entity.kind === "target" && entity.active && advancedAimEntityLeftField(entity, rect))
         : undefined;
       if (flyOutTarget) {
@@ -787,7 +791,7 @@ export function AdvancedAimRound({
                 config: spawnConfig,
                 index: nextDistractors.length + index,
                 kind: "distractor",
-                mode,
+                mode: activeSpawnMode,
                 rect,
                 runSeed,
                 spawnedAt: frameNow,
@@ -916,14 +920,18 @@ export function AdvancedAimRound({
               nextTargets.filter((entity) => entity.kind === "target" && entity.active).length < maxActiveEndlessTargets
             ) {
               const replacementIndex = spawnedTargetsRef.current;
+              const replacementSpawnConfig = endlessRuntime
+                ? getEndlessAimSpawnConfig(config, Math.max(endlessRuntime.score, hitCountRef.current), endlessRuntime.debugDifficulty)
+                : spawnConfig;
+              const replacementSpawnMode = getAdvancedAimMode(replacementSpawnConfig);
               spawnedTargetsRef.current += 1;
               nextTargets = [
                 ...nextTargets,
                 makeAdvancedAimMovingEntity({
-                  config: spawnConfig,
+                  config: replacementSpawnConfig,
                   index: replacementIndex,
                   kind: "target",
-                  mode,
+                  mode: replacementSpawnMode,
                   rect,
                   runSeed,
                   spawnedAt: frameNow,

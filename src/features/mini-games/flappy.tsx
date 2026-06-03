@@ -56,7 +56,9 @@ import {
 const FLAPPY_GATE_WIDTH = 54;
 const FLAPPY_START_PLATFORM_HEIGHT = 12;
 const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
-const FLAPPY_RESPAWN_INVINCIBLE_SECONDS = 1.15;
+const FLAPPY_RESPAWN_INVINCIBLE_SECONDS = 1.55;
+const FLAPPY_RESPAWN_CAMERA_SECONDS = 0.45;
+const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = FLAPPY_RESPAWN_INVINCIBLE_SECONDS + 0.45;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
 
@@ -231,25 +233,52 @@ function resolveFlappyDisplayProgress(frame: FlappyFrame) {
   return frame.displayProgress + (frame.progress - frame.displayProgress) * smoothFlappyRespawnProgress(progress);
 }
 
+function getFlappyRespawnForwardTravelDistance(speed: number) {
+  return Math.max(0, speed) * FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS;
+}
+
 function recoverEndlessFlappyFailure({
   current,
+  nextProgress,
+  playerX,
   reason,
   recoveryY,
+  reverseDirection,
+  speed,
   stageHeight,
+  stageWidth,
   time,
 }: {
   current: FlappyFrame;
+  nextProgress: number;
+  playerX: number;
   reason: string;
   recoveryY: number | null;
+  reverseDirection: boolean;
+  speed: number;
   stageHeight: number;
+  stageWidth: number;
   time: number;
 }) {
+  const respawnProgressEnd = resolveFlappySafeRespawnProgress({
+    gates: current.gates,
+    gateWidth: FLAPPY_GATE_WIDTH,
+    invincibleForwardTravelDistance: getFlappyRespawnForwardTravelDistance(speed),
+    nextProgress,
+    playerSize: PLAYER_SIZE,
+    playerX,
+    reverseDirection,
+    stageWidth,
+  });
   current.failures += 1;
   current.status = "playing";
   current.reason = reason;
-  current.started = true;
-  current.respawnProgressStart = 0;
-  current.respawnProgressUntil = 0;
+  current.progress = respawnProgressEnd;
+  current.displayProgress = nextProgress;
+  current.respawnProgressStart = time;
+  current.respawnProgressUntil = time + FLAPPY_RESPAWN_CAMERA_SECONDS;
+  current.displayProgress = resolveFlappyDisplayProgress(current);
+  current.started = false;
   current.playerY = clamp(recoveryY ?? current.playerY, PLAYER_SIZE / 2 + 14, stageHeight - PLAYER_SIZE / 2 - 14);
   current.playerVy = 0;
   current.invincibleUntil = time + FLAPPY_RESPAWN_INVINCIBLE_SECONDS;
@@ -481,6 +510,9 @@ export function FlappyPrototype({
 
   useEffect(() => {
     spectateRemoteStateRef.current = spectateRemoteState;
+    if (spectateRemoteState?.status === "playing") {
+      remoteSmootherRef.current.push(spectateRemoteState, spectateRemoteState.receivedAt ?? performance.now());
+    }
   }, [spectateRemoteState]);
 
   const syncFlappyRuntimeState = useCallback((time = performance.now(), force = false) => {
@@ -544,7 +576,9 @@ export function FlappyPrototype({
   const pulse = useCallback(() => {
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
+    const wasRespawnWaiting = !current.started && current.invincibleUntil > 0;
     current.started = true;
+    if (wasRespawnWaiting) current.invincibleUntil = Math.max(current.invincibleUntil, current.time + FLAPPY_RESPAWN_INVINCIBLE_SECONDS);
     current.playerTurns += 1;
     const anomaly = isEndlessRun ? getEndlessFlappyAnomaly(current.passed, endlessRef.current?.debugDifficulty ?? 0) : null;
     current.playerVy = reversedGravity || anomaly?.active ? 335 : -335;
@@ -600,23 +634,22 @@ export function FlappyPrototype({
         }
       }
 
+      const localCameraX = getFlappySignedProgress(current.displayProgress, reverseDirection);
       if (playerShellRef.current) {
         playerShellRef.current.style.display = "";
-        if (!spectatingRemote) {
-          const playerScreenX = getFlappyPlayerScreenX({
-            displayProgress: current.displayProgress,
-            playerX,
-            progress: current.progress,
-            reverseDirection,
-          });
-          playerShellRef.current.style.transform = transformPoint3d(playerScreenX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
-        }
+        const localPlayerWorldX = playerX + getFlappySignedProgress(current.progress, reverseDirection);
+        const playerScreenX = spectatingRemote ? localPlayerWorldX - localCameraX : getFlappyPlayerScreenX({
+          displayProgress: current.displayProgress,
+          playerX,
+          progress: current.progress,
+          reverseDirection,
+        });
+        playerShellRef.current.style.transform = transformPoint3d(playerScreenX - PLAYER_SIZE / 2, current.playerY - PLAYER_SIZE / 2);
       }
       if (remotePlayerShellRef.current) {
-        const sampledRemote = remoteSmootherRef.current.sample(frameTime);
+        const sampledRemote = remoteSmootherRef.current.sample(frameTime) ?? (spectatingRemote ? spectateRemoteStateRef.current : null);
         const visualRemote = remoteVisualSmootherRef.current.update(sampledRemote, frameTime);
         if (visualRemote && typeof visualRemote.x === "number" && typeof visualRemote.y === "number") {
-          const localCameraX = getFlappySignedProgress(current.displayProgress, reverseDirection);
           const remoteScreenX = visualRemote.x - localCameraX;
           remotePlayerShellRef.current.style.display = "";
           remotePlayerShellRef.current.style.transform = `${transformPoint3d(
@@ -772,9 +805,14 @@ export function FlappyPrototype({
         if (endlessRef.current?.loseLife(reason) ?? false) {
           recoverEndlessFlappyFailure({
             current,
+            nextProgress,
+            playerX,
             reason,
             recoveryY: endlessRecoveryY,
+            reverseDirection,
+            speed: activeSpeed,
             stageHeight,
+            stageWidth,
             time: nextTime,
           });
           updateDom(current, time);
@@ -800,7 +838,7 @@ export function FlappyPrototype({
           const respawnProgressEnd = resolveFlappySafeRespawnProgress({
             gates: current.gates,
             gateWidth: FLAPPY_GATE_WIDTH,
-            invincibleForwardTravelDistance: speed * FLAPPY_RESPAWN_INVINCIBLE_SECONDS,
+            invincibleForwardTravelDistance: getFlappyRespawnForwardTravelDistance(speed),
             nextProgress,
             playerSize: PLAYER_SIZE,
             playerX,
@@ -810,7 +848,7 @@ export function FlappyPrototype({
           current.progress = respawnProgressEnd;
           current.displayProgress = nextProgress;
           current.respawnProgressStart = nextTime;
-          current.respawnProgressUntil = nextTime + 0.38;
+          current.respawnProgressUntil = nextTime + FLAPPY_RESPAWN_CAMERA_SECONDS;
           current.displayProgress = resolveFlappyDisplayProgress(current);
           current.started = false;
           current.playerY = initialPlayerY;
@@ -835,7 +873,7 @@ export function FlappyPrototype({
         const respawnProgressEnd = resolveFlappySafeRespawnProgress({
           gates: current.gates,
           gateWidth: FLAPPY_GATE_WIDTH,
-          invincibleForwardTravelDistance: speed * FLAPPY_RESPAWN_INVINCIBLE_SECONDS,
+          invincibleForwardTravelDistance: getFlappyRespawnForwardTravelDistance(speed),
           nextProgress,
           playerSize: PLAYER_SIZE,
           playerX,
@@ -845,7 +883,7 @@ export function FlappyPrototype({
         current.progress = respawnProgressEnd;
         current.displayProgress = nextProgress;
         current.respawnProgressStart = nextTime;
-        current.respawnProgressUntil = nextTime + 0.38;
+        current.respawnProgressUntil = nextTime + FLAPPY_RESPAWN_CAMERA_SECONDS;
         current.displayProgress = resolveFlappyDisplayProgress(current);
         current.started = false;
         current.playerY = initialPlayerY;

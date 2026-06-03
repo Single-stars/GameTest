@@ -6,6 +6,14 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+function sourceBetween(source: string, startMarker: string, endMarker: string) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1);
+  return source.slice(start, end);
+}
+
 test("base native rounds require a successful practice attempt before formal scoring", () => {
   const reactionSource = readSource("../features/rounds/native/reaction.tsx");
   const aimSource = readSource("../features/rounds/native/aim.tsx");
@@ -95,6 +103,8 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardOverlaySource, /export type RewardOverlayItem/);
   assert.match(rewardOverlaySource, /kind:\s*"skin"/);
   assert.match(rewardOverlaySource, /kind:\s*"rank"/);
+  assert.match(rewardOverlaySource, /kind:\s*"endless"/);
+  assert.match(rewardOverlaySource, /roundTitle:\s*string/);
   assert.match(rewardOverlaySource, /PlayerAvatar[\s\S]*skin=\{item\.skin\}[\s\S]*size=\{160\}/);
   assert.match(rewardOverlaySource, /useEffect\(\(\)\s*=>\s*\{[\s\S]*setSkinCelebrating\(true\)/);
   assert.match(rewardOverlaySource, /setRevealSettled\(true\)/);
@@ -120,15 +130,26 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.doesNotMatch(rewardOverlaySource, /<RewardOverlayContent key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardSkinCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardRankCard key=\{item\.id\}/);
+  assert.match(rewardOverlaySource, /<RewardEndlessCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /onOpenAvatarLabSkin\(item\.skin\)/);
   assert.doesNotMatch(rewardOverlaySource, /onOpenLuckDraw\(\)/);
   assert.doesNotMatch(rewardOverlaySource, /reward-overlay-actions/);
+  assert.match(rewardOverlaySource, /reward-endless-card/);
+  assert.match(rewardOverlaySource, /reward-endless-symbol/);
+  assert.match(rewardOverlaySource, /item\.roundTitle/);
   assert.match(rewardOverlaySource, /段位提升！/);
 
   assert.match(pageSource, /const \[rewardQueue,\s*setRewardQueue\] = useState<RewardOverlayItem\[\]>\(\[\]\);/);
   assert.match(pageSource, /const activeRewardItem = rewardQueue\[0\] \?\? null;/);
   assert.match(pageSource, /createSkinRewardItems\(previousProgress,\s*nextProgress/);
+  assert.match(pageSource, /function createEndlessRewardItem\(previousProgress: AdvancedProgress, nextProgress: AdvancedProgress, roundId: RoundId, source: string\): RewardOverlayItem \| null/);
+  assert.match(pageSource, /!isEndlessModeUnlocked\(previousProgress, roundId\) && isEndlessModeUnlocked\(nextProgress, roundId\)/);
+  assert.match(pageSource, /kind:\s*"endless"/);
   assert.match(pageSource, /\.\.\.createSkinRewardItems\([\s\S]*createRankRewardItem/);
+  assert.match(
+    pageSource,
+    /\.\.\.createSkinRewardItems\(previousProgress, nextProgress, `advanced-\$\{current\.roundId\}-\$\{current\.level\}`\),[\s\S]*\.\.\.compactRewardItems\(\[rankReward\]\),[\s\S]*\.\.\.compactRewardItems\(\[endlessReward\]\),/,
+  );
   assert.match(pageSource, /pendingLuckRewardItemsRef/);
   assert.match(pageSource, /onRevealRewards=\{revealPendingLuckRewards\}/);
   assert.match(luckSource, /onRevealRewards\?:\s*\(outcome:\s*LuckDrawOutcome\) => void/);
@@ -159,6 +180,9 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardCss, /\.reward-rank-eyebrow\s*{[^}]*font-size:\s*clamp\(18px,\s*4vw,\s*24px\);/);
   assert.match(rewardCss, /\.reward-rank-eyebrow\s*{[^}]*text-shadow:/);
   assert.match(rewardCss, /\.reward-rank-value\s*{[^}]*text-shadow:/);
+  assert.match(rewardCss, /\.reward-endless-card/);
+  assert.match(rewardCss, /\.reward-endless-symbol/);
+  assert.match(rewardCss, /\.reward-endless-copy/);
   assert.match(rewardCss, /reward-rank-switch-old 1080ms 160ms/);
   assert.match(rewardCss, /reward-rank-switch-new 1080ms 160ms/);
   assert.match(rewardCss, /@media \(prefers-reduced-motion: reduce\)/);
@@ -275,11 +299,16 @@ test("advanced lobby supports one-level swipe and first-three-level tutorial ove
   assert.match(advancedCss, /\.advanced-lobby-carousel[\s\S]*touch-action:\s*none;/);
 });
 
-test("advanced in-round top-right actions restart the current challenge instead of navigating back", () => {
+test("advanced in-round top-right actions keep retry and add an explicit return", () => {
   const advancedScreenSource = readSource("../features/advanced/advanced-challenge-screen.tsx");
   const playingSource = advancedScreenSource.slice(
     advancedScreenSource.indexOf('if (challenge.mode === "playing")'),
-    advancedScreenSource.indexOf('if (challenge.mode === "base-playing")'),
+    advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")'),
+  );
+  const endlessPlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")');
+  const endlessPlayingSource = advancedScreenSource.slice(
+    endlessPlayingStart,
+    advancedScreenSource.indexOf('if (challenge.mode === "base-playing")', endlessPlayingStart),
   );
   const basePlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "base-playing")');
   const basePlayingSource = advancedScreenSource.slice(
@@ -288,9 +317,33 @@ test("advanced in-round top-right actions restart the current challenge instead 
   );
 
   assert.match(playingSource, /onPointerDown=\{\(\) => onStartLevel\(challenge\.level\)\}/);
-  assert.doesNotMatch(playingSource, /onPointerDown=\{onBack\}/);
+  assert.match(playingSource, /onPointerDown=\{onBack\}/);
+  assert.match(endlessPlayingSource, /onPointerDown=\{\(\) => onStartLevel\(ENDLESS_MODE_LEVEL\)\}/);
+  assert.match(endlessPlayingSource, /onPointerDown=\{onBack\}/);
   assert.match(basePlayingSource, /onPointerDown=\{\(\) => onRestartBaseRound\(challenge\.level\)\}/);
-  assert.doesNotMatch(basePlayingSource, /onPointerDown=\{onBack\}/);
+  assert.match(basePlayingSource, /onPointerDown=\{onBack\}/);
+});
+
+test("advanced endless locked feedback is centered and restrained", () => {
+  const advancedCss = readSource("../app/styles/base-flow/advanced.css");
+  const advancedScreenSource = readSource("../features/advanced/advanced-challenge-screen.tsx");
+
+  assert.match(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*top:\s*clamp\(34px,\s*6%,\s*44px\);/);
+  assert.match(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*width:\s*fit-content;/);
+  assert.match(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*max-width:\s*calc\(100% - 56px\);/);
+  assert.match(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*transform:\s*translate\(-50%,\s*-100%\);/);
+  assert.match(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*border-radius:\s*999px;/);
+  assert.doesNotMatch(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*width:\s*min\(320px,\s*calc\(100% - 36px\)\);/);
+  assert.match(advancedScreenSource, /endlessShakeTimerRef\.current = window\.setTimeout\(\(\) => setEndlessShake\(false\), 240\);/);
+  assert.match(advancedScreenSource, /lockedEndlessNoticeTimerRef\.current = window\.setTimeout\(\(\) => setLockedEndlessNoticeVisible\(false\), 1150\);/);
+  assert.match(advancedCss, /@keyframes advanced-endless-shake\s*{[\s\S]*transform:\s*translateY\(-1px\) scale\(var\(--advanced-lobby-level-scale, 1\)\);[\s\S]*transform:\s*translateY\(1px\) scale\(var\(--advanced-lobby-level-scale, 1\)\);/);
+  const shakeKeyframes = sourceBetween(advancedCss, "@keyframes advanced-endless-shake", ".advanced-lobby-badge");
+  assert.match(advancedCss, /\.advanced-lobby-level\s*{[\s\S]*--advanced-lobby-level-scale:\s*1;/);
+  assert.match(advancedCss, /\.advanced-lobby-level\.previous,\s*[\s\S]*\.advanced-lobby-level\.next\s*{[\s\S]*--advanced-lobby-level-scale:\s*0\.86;[\s\S]*transform:\s*scale\(var\(--advanced-lobby-level-scale\)\);/);
+  assert.match(shakeKeyframes, /scale\(var\(--advanced-lobby-level-scale, 1\)\)/);
+  assert.doesNotMatch(advancedCss, /advanced-lobby-level\.advanced-endless\.selected strong\s*{[\s\S]*font-size:/);
+  assert.doesNotMatch(shakeKeyframes, /translateX\(-6px\)/);
+  assert.doesNotMatch(shakeKeyframes, /translateX\(6px\)/);
 });
 
 test("bubble expansion surfaces use the measured viewport and internal scrolling for mobile browsers", () => {

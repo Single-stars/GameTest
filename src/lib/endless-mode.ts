@@ -49,8 +49,12 @@ export type EndlessReactionConfig = EndlessSourceConfig & {
 };
 
 export type EndlessAimConfig = EndlessSourceConfig & {
+  aimMode: "track" | "incoming" | "decoy" | "boss";
   decoyChance: number;
+  decoyCount: number;
+  failOnFlyOut: boolean;
   incomingChance: number;
+  route: "circle" | "ellipse" | "figure-eight" | "diagonal" | "incoming" | "mixed";
   spawnIntervalMs: number;
   targetSize: number;
   targetSpeedMultiplier: number;
@@ -226,10 +230,23 @@ export function getEndlessAimConfig({ hitCount }: { hitCount: number }): Endless
   const source = getEndlessReusableStageConfig({ difficulty, roundId: "aim" });
   const sourceSize = Number(source.sourceConfig.params.targetSize);
   const sourceSpeedMultiplier = Number(source.sourceConfig.params.targetSpeedMultiplier);
+  const decoyCount = difficulty < 0.26 ? 0 : difficulty < 0.52 ? 1 : difficulty < 0.78 ? 2 : 3;
+  const aimMode = difficulty < 0.26 ? "track" : difficulty < 0.48 ? "decoy" : difficulty < 0.72 ? "incoming" : "boss";
+  const route = aimMode === "track"
+    ? "circle"
+    : aimMode === "decoy"
+      ? "diagonal"
+      : aimMode === "incoming"
+        ? "incoming"
+        : "mixed";
   return {
     ...source,
+    aimMode,
     decoyChance: chanceAfter(difficulty, 0.32, 0.42),
+    decoyCount,
+    failOnFlyOut: aimMode === "incoming" || aimMode === "boss",
     incomingChance: chanceAfter(difficulty, 0.44, 0.54),
+    route,
     spawnIntervalMs: Math.round(lerp(980, 460, difficulty)),
     targetSize: Math.round(lerp(Number.isFinite(sourceSize) ? sourceSize : 58, 34, difficulty)),
     targetSpeedMultiplier: lerp(Number.isFinite(sourceSpeedMultiplier) ? sourceSpeedMultiplier : 1.1, 2.45, difficulty),

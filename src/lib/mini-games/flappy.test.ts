@@ -240,8 +240,42 @@ test("flappy recoverable failures use safe respawn instead of a fixed backtrack"
   const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
 
   assert.match(flappyRuntimeSource, /resolveFlappySafeRespawnProgress/);
-  assert.match(flappyRuntimeSource, /invincibleForwardTravelDistance:\s*speed \* FLAPPY_RESPAWN_INVINCIBLE_SECONDS/);
+  assert.match(componentSource, /const FLAPPY_RESPAWN_CAMERA_SECONDS = 0\.45;/);
+  assert.match(componentSource, /const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = FLAPPY_RESPAWN_INVINCIBLE_SECONDS \+ 0\.45;/);
+  assert.match(componentSource, /function getFlappyRespawnForwardTravelDistance\(speed: number\)/);
+  assert.match(flappyRuntimeSource, /invincibleForwardTravelDistance:\s*getFlappyRespawnForwardTravelDistance\(speed\)/);
+  assert.match(flappyRuntimeSource, /respawnProgressUntil = nextTime \+ FLAPPY_RESPAWN_CAMERA_SECONDS/);
+  assert.doesNotMatch(flappyRuntimeSource, /invincibleForwardTravelDistance:\s*speed \* FLAPPY_RESPAWN_INVINCIBLE_SECONDS/);
   assert.doesNotMatch(flappyRuntimeSource, /Math\.max\(0, nextProgress - 92\)/);
+});
+
+test("endless flappy life recovery shares the safe respawn path", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const recoverySource = componentSource.slice(componentSource.indexOf("function recoverEndlessFlappyFailure"), componentSource.indexOf("function makeFlappyView"));
+  const endlessFailureSource = componentSource.slice(
+    componentSource.indexOf("if (isEndlessRun && status === \"failed\")"),
+    componentSource.indexOf("if (mode === \"base\" && status === \"failed\")"),
+  );
+
+  assert.match(recoverySource, /resolveFlappySafeRespawnProgress/);
+  assert.match(recoverySource, /invincibleForwardTravelDistance:\s*getFlappyRespawnForwardTravelDistance\(speed\)/);
+  assert.match(recoverySource, /current\.started = false;/);
+  assert.match(recoverySource, /current\.respawnProgressUntil = time \+ FLAPPY_RESPAWN_CAMERA_SECONDS;/);
+  assert.match(recoverySource, /current\.invincibleUntil = time \+ FLAPPY_RESPAWN_INVINCIBLE_SECONDS;/);
+  assert.match(endlessFailureSource, /speed:\s*activeSpeed,/);
+  assert.match(endlessFailureSource, /stageWidth,/);
+});
+
+test("flappy respawn invincibility is refreshed when play resumes after waiting", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+  const pulseSource = flappyRuntimeSource.slice(
+    flappyRuntimeSource.indexOf("const pulse = useCallback"),
+    flappyRuntimeSource.indexOf("useEffect(() => {", flappyRuntimeSource.indexOf("const pulse = useCallback")),
+  );
+
+  assert.match(pulseSource, /const wasRespawnWaiting = !current\.started && current\.invincibleUntil > 0;/);
+  assert.match(pulseSource, /if \(wasRespawnWaiting\) current\.invincibleUntil = Math\.max\(current\.invincibleUntil, current\.time \+ FLAPPY_RESPAWN_INVINCIBLE_SECONDS\);/);
 });
 
 test("flappy multiplayer clock keeps running while waiting after a respawn", () => {
@@ -343,4 +377,19 @@ test("flappy renders the local player anchored while the respawn camera moves", 
   assert.match(waitingSource, /current\.time \+= delta;/);
   assert.match(waitingSource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
   assert.doesNotMatch(flappyRuntimeSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(playerX - PLAYER_SIZE \/ 2/);
+});
+
+test("flappy renders the finished local player in world space while spectating", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+  const updateDomSource = flappyRuntimeSource.slice(
+    flappyRuntimeSource.indexOf("const updateDom = ("),
+    flappyRuntimeSource.indexOf("const tick = (time: number)", flappyRuntimeSource.indexOf("const updateDom = (")),
+  );
+
+  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, reverseDirection\);/);
+  assert.match(updateDomSource, /const localPlayerWorldX = playerX \+ getFlappySignedProgress\(current\.progress, reverseDirection\);/);
+  assert.match(updateDomSource, /const playerScreenX = spectatingRemote \? localPlayerWorldX - localCameraX : getFlappyPlayerScreenX\(\{/);
+  assert.match(updateDomSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(playerScreenX - PLAYER_SIZE \/ 2, current\.playerY - PLAYER_SIZE \/ 2\);/);
+  assert.doesNotMatch(updateDomSource, /if \(!spectatingRemote\) \{[\s\S]{0,260}playerShellRef\.current\.style\.transform/);
 });

@@ -49,7 +49,7 @@ export type MiniGameRunMode = "prototype" | "base" | "advanced";
 export type EndlessMiniGameRuntime = {
   addScore: (amount?: number) => void;
   debugDifficulty: number;
-  loseLife: (reason: string) => boolean;
+  loseLife: (reason: string, finishDelayMs?: number) => boolean;
   reportDifficulty: (difficulty: number) => void;
   revives: number;
   score: number;

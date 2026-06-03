@@ -15,9 +15,14 @@ import {
 const LOCKED_GAME_SURFACE_SELECTOR = [
   ".app-shell-play",
   ".play-screen",
+  ".advanced-screen",
+  ".advanced-play-screen",
+  ".endless-play-screen",
   ".homeworld-screen",
   ".outdoor-adventure-room",
   ".outdoor-round-play",
+  ".multiplayer-select-shell",
+  ".multiplayer-level-room",
   ".multiplayer-game-shell",
 ].join(", ");
 

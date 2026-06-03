@@ -150,16 +150,38 @@ test("advanced reaction green click feedback keeps the full green background lik
 });
 
 test("base and advanced reaction green click feedback lasts 400ms", () => {
+  const miniGameCommonSource = read(new URL("../features/mini-games/common.tsx", import.meta.url));
+  const endlessSource = read(new URL("../features/endless/endless-round-player.tsx", import.meta.url));
   const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
   const cssSource = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
   const baseReadySuccessSource = sourceBetween(reactionSource, 'if (status === "ready") {', "  return (");
+  const baseCoreSource = sourceBetween(reactionSource, "function ReactionRoundCore", "export function ReactionRound");
+  const advancedReactionSource = sourceBetween(reactionSource, "type AdvancedReactionCell", "export function ReactionRound");
+  const finalAdvancedSuccessSource = sourceBetween(
+    advancedReactionSource,
+    'if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {',
+    'if (!isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {',
+  );
 
   assert.match(baseReadySuccessSource, /setFeedbackTone\("good"\)/);
-  assert.match(baseReadySuccessSource, /\}, 400\);/);
+  assert.match(baseCoreSource, /function getReactionCompletionDelay\(step: number, trialCount: number\)/);
+  assert.match(baseCoreSource, /step >= trialCount \? REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS : REACTION_FEEDBACK_DELAY_MS/);
+  assert.match(baseCoreSource, /getReactionCompletionDelay\(nextStep, trialCount\)/);
+  assert.match(baseCoreSource, /getReactionCompletionDelay\(stepRef\.current, trialCount\)/);
+  assert.doesNotMatch(baseCoreSource, /\}, 360\);/);
+  assert.doesNotMatch(baseCoreSource, /\}, 400\);/);
   assert.match(cssBlock(cssSource, ".reaction-pad.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
   assert.match(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 400;/);
   assert.match(cssBlock(cssSource, ".advanced-reaction-grid.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
   assert.match(reactionSource, /window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /const finishAfterFeedback = useCallback/);
+  assert.match(advancedReactionSource, /REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS/);
+  assert.match(finalAdvancedSuccessSource, /finishAfterFeedback\(\);/);
+  assert.match(miniGameCommonSource, /loseLife:\s*\(reason: string, finishDelayMs\?: number\) => boolean;/);
+  assert.match(endlessSource, /finish\(reason, finishDelayMs\);/);
+  assert.match(advancedReactionSource, /loseLife\("timeout", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /loseLife\("wrong", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /loseLife\("false_alarm", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
   assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 240;/);
   assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 360;/);
 });
@@ -197,6 +219,22 @@ test("advanced aim flashes success and failure feedback around the play field", 
   assert.match(cssSource, /\.advanced-aim\.feedback-good::after/);
   assert.match(cssSource, /\.advanced-aim\.feedback-bad::after/);
   assert.match(cssSource, /@keyframes advanced-aim-feedback/);
+});
+
+test("moving target rounds share the rounded game-area stage frame", () => {
+  const aimCss = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+  const multiplayerCss = read(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url));
+  const aimStageBlock = cssBlock(aimCss, ".advanced-aim");
+
+  assert.match(aimStageBlock, /position:\s*relative;/);
+  assert.match(aimStageBlock, /min-height:\s*0;/);
+  assert.match(aimStageBlock, /overflow:\s*hidden;/);
+  assert.match(aimStageBlock, /border:\s*1px solid var\(--line\);/);
+  assert.match(aimStageBlock, /border-radius:\s*var\(--radius-sm\);/);
+  assert.match(aimStageBlock, /background:\s*var\(--surface\);/);
+  assert.match(aimStageBlock, /box-shadow:\s*var\(--shadow\);/);
+  assert.match(aimCss, /\.play-screen > \.advanced-aim,\s*\.endless-game-host > \.advanced-aim\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*align-self:\s*stretch;/);
+  assert.match(multiplayerCss, /\.multiplayer-game-shell-main > \.advanced-aim\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*align-self:\s*stretch;/);
 });
 
 test("advanced aim settles immediately with persistent failure feedback when an arrow misses", () => {

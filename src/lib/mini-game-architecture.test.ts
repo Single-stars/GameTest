@@ -825,10 +825,12 @@ test("mini-game stages use native measured dimensions instead of visual scaling"
 test("gameplay fullscreen surfaces use the guarded mobile viewport", () => {
   const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const guardSource = readFileSync(new URL("../features/layout/game-viewport-guard.tsx", import.meta.url), "utf8");
   const viewportGuardUrl = new URL("../features/layout/game-viewport-guard.tsx", import.meta.url);
   const viewportHelperUrl = new URL("../features/layout/game-viewport.ts", import.meta.url);
   const shellCss = readFileSync(new URL("../app/styles/base-flow/shell.css", import.meta.url), "utf8");
   const playFrameCss = readFileSync(new URL("../app/styles/base-flow/play-frame.css", import.meta.url), "utf8");
+  const advancedCss = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
   const homeworldCss = readFileSync(new URL("../app/styles/base-flow/homeworld.css", import.meta.url), "utf8");
   const outdoorCss = readFileSync(new URL("../app/styles/outdoor-adventure.css", import.meta.url), "utf8");
   const multiplayerCss = readFileSync(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url), "utf8");
@@ -840,12 +842,21 @@ test("gameplay fullscreen surfaces use the guarded mobile viewport", () => {
   assert.match(layoutSource, /export const viewport: Viewport = \{[\s\S]*viewportFit:\s*"cover"/);
   assert.match(layoutSource, /<GameViewportGuard \/>[\s\S]*<MobileLongPressGuard \/>/);
   assert.match(pageSource, /const playShellActive =/);
+  assert.match(guardSource, /\.advanced-screen/);
+  assert.match(guardSource, /\.advanced-play-screen/);
+  assert.match(guardSource, /\.endless-play-screen/);
+  assert.match(guardSource, /\.multiplayer-select-shell/);
+  assert.match(guardSource, /\.multiplayer-level-room/);
   assert.match(shellCss, /\.app-shell\.app-shell-play \{[\s\S]*--game-viewport-height/);
   assert.match(playFrameCss, /\.play-screen \{[\s\S]*--game-viewport-height/);
+  assert.match(advancedCss, /\.advanced-screen[\s\S]*var\(--game-viewport-height/);
+  assert.match(advancedCss, /\.endless-play-screen[\s\S]*var\(--game-viewport-height/);
   assert.match(homeworldCss, /\.homeworld-screen \{[\s\S]*--game-viewport-height/);
   assert.match(outdoorCss, /\.outdoor-adventure-room \{[\s\S]*--game-viewport-height/);
   assert.match(outdoorCss, /\.outdoor-round-play \{[\s\S]*--game-viewport-height/);
   assert.match(multiplayerCss, /\.multiplayer-game-shell \{[\s\S]*--game-viewport-height/);
+  assert.match(multiplayerCss, /\.multiplayer-select-shell \{[\s\S]*--game-viewport-height/);
+  assert.match(multiplayerCss, /\.multiplayer-level-room \{[\s\S]*--game-viewport-height/);
   assert.match(commonSource, /shouldCommitMiniGameStageSize/);
   assert.match(commonSource, /recoveryTimeoutId/);
 });

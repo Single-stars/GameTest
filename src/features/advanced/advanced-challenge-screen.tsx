@@ -355,7 +355,7 @@ function EndlessResultCard({
   const improved = challenge.bestScore > challenge.previousBestScore;
   return (
     <div className="advanced-result-card advanced-endless-result passed">
-      <p className="eyebrow">无限模式结算</p>
+      <p className="eyebrow">无尽模式结算</p>
       <div className="advanced-result-perfect">
         <span className="advanced-result-goal-box" aria-hidden="true">∞</span>
         <span>本次得分 {challenge.score}</span>
@@ -429,7 +429,7 @@ function AdvancedLevelSelectionPanel({
   const selectedTone = getAdvancedLevelToneForState(selectedState, selectedLevel);
   const selectedEndlessState = selectedIsEndless ? endlessState : "current";
   const selectedStatusLabel = selectedIsEndless ? getAdvancedEndlessStatusLabel(selectedEndlessState) : getAdvancedChallengeStatusLabel(selectedState);
-  const activeTitle = selectedIsEndless ? "无限模式" : activeConfig.stageTitle;
+  const activeTitle = selectedIsEndless ? "无尽模式" : activeConfig.stageTitle;
   const sliderThumbOffsetPx = sliderTravelPx * getAdvancedLobbySliderOffsetRatio(sliderLevel);
   const advancedRuleItems = getAdvancedChallengeRuleItems(activeConfig);
   const ruleItems = selectedIsEndless
@@ -501,8 +501,8 @@ function AdvancedLevelSelectionPanel({
       window.clearTimeout(endlessShakeTimerRef.current);
     }
     window.setTimeout(() => setEndlessShake(true), 0);
-    endlessShakeTimerRef.current = window.setTimeout(() => setEndlessShake(false), 420);
-    lockedEndlessNoticeTimerRef.current = window.setTimeout(() => setLockedEndlessNoticeVisible(false), 1800);
+    endlessShakeTimerRef.current = window.setTimeout(() => setEndlessShake(false), 240);
+    lockedEndlessNoticeTimerRef.current = window.setTimeout(() => setLockedEndlessNoticeVisible(false), 1150);
   }, []);
 
   const handleEndlessButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -671,7 +671,7 @@ function AdvancedLevelSelectionPanel({
               return (
                 <button
                   aria-disabled={!item.selectable}
-                  aria-label={`无限模式${statusLabel}`}
+                  aria-label={`无尽模式${statusLabel}`}
                   className={`advanced-lobby-level advanced-endless ${item.position} ${item.state} ${selected ? "selected" : ""} ${endlessShake ? "shake" : ""}`}
                   data-level={item.level}
                   disabled={!item.selectable && !isEndlessItem}
@@ -713,7 +713,7 @@ function AdvancedLevelSelectionPanel({
       <div className="advanced-lobby-slider-row">
         <button
           aria-disabled={!endlessUnlocked}
-          aria-label={`无限模式${getAdvancedEndlessStatusLabel(endlessState)}`}
+          aria-label={`无尽模式${getAdvancedEndlessStatusLabel(endlessState)}`}
           className={`advanced-endless-slider-button ${endlessState} ${selectedIsEndless ? "selected" : ""} ${endlessShake ? "shake" : ""}`}
           type="button"
           onClick={handleEndlessButtonClick}
@@ -836,7 +836,7 @@ function AdvancedLobbyContent({
           <AdaptiveAdvancedHeroTitle
             title={getAdvancedChallengeHeroTitle({
               roundTitle: round.title,
-              stageTitle: "无限模式",
+              stageTitle: "无尽模式",
             })}
           />
         ) : (
@@ -946,6 +946,9 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+              返回
+            </button>
             <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
               重试
             </button>
@@ -1000,10 +1003,13 @@ export function AdvancedChallengeScreen({
           <AdaptiveAdvancedHeaderTitle
             title={getAdvancedChallengeHeroTitle({
               roundTitle: round.title,
-              stageTitle: "无限模式",
+              stageTitle: "无尽模式",
             })}
           />
           <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+              返回
+            </button>
             <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
               重试
             </button>
@@ -1028,9 +1034,14 @@ export function AdvancedChallengeScreen({
             <p className="eyebrow">{round.measure}基础关</p>
             <h1>{round.title}</h1>
           </div>
-          <button className="advanced-back-button" type="button" onPointerDown={() => onRestartBaseRound(challenge.level)}>
+          <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+              返回
+            </button>
+            <button className="advanced-back-button" type="button" onPointerDown={() => onRestartBaseRound(challenge.level)}>
             重试
-          </button>
+            </button>
+          </div>
         </header>
         {renderRound({
           key: `advanced-base-${challenge.roundId}-${challenge.attemptId}`,

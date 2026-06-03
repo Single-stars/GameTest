@@ -72,7 +72,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
   }, []);
 
   const finish = useCallback(
-    (extra?: TrialEvent) => {
+    (extra?: TrialEvent, delayMs = ROUND_SETTLEMENT_DELAY_MS) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
       clearTimers();
@@ -80,11 +80,18 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       completionTimerRef.current = window.setTimeout(() => {
         completionTimerRef.current = null;
         onComplete(finalTrials);
-      }, ROUND_SETTLEMENT_DELAY_MS);
+      }, delayMs);
     },
     [clearTimers, onComplete],
   );
 
+  const finishAfterFeedback = useCallback(
+    (extra?: TrialEvent) => {
+      finish(extra, REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS);
+    },
+    [finish],
+  );
+
   const resetCells = useCallback(() => {
     setCells(Array.from({ length: lanes }, (_, id) => ({ id, color: "idle" })));
     setFeedbackTone("idle");
@@ -163,7 +170,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
               setFeedbackTone("early");
               const endlessRuntime = endlessRef.current;
               if (endlessRuntime) {
-                if (endlessRuntime.loseLife("timeout")) {
+                if (endlessRuntime.loseLife("timeout", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
                   timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
                 } else {
                   finishedRef.current = true;
@@ -203,7 +210,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
               }
               if (signalIndexRef.current >= totalSignals) {
                 setFeedbackTone("good");
-                finish();
+                finishAfterFeedback();
               } else {
                 startSignal();
               }
@@ -214,7 +221,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
         );
       }, delay),
     );
-  }, [clearTimers, config.variant, endlessSignalConfig?.thresholdMs, finish, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
+  }, [clearTimers, config.variant, endlessSignalConfig?.thresholdMs, finish, finishAfterFeedback, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
 
   useEffect(() => {
     if (!endlessRef.current && !isBoss) {
@@ -231,7 +238,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       setFeedbackTone("early");
       const endlessRuntime = endlessRef.current;
       if (endlessRuntime) {
-        if (endlessRuntime.loseLife("wrong")) {
+        if (endlessRuntime.loseLife("wrong", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
           timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
         } else {
           finishedRef.current = true;
@@ -255,7 +262,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       setFeedbackTone("early");
       const endlessRuntime = endlessRef.current;
       if (endlessRuntime) {
-        if (endlessRuntime.loseLife("false_alarm")) {
+        if (endlessRuntime.loseLife("false_alarm", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
           timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
         } else {
           finishedRef.current = true;
@@ -299,13 +306,13 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
     }
 
     if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {
-      finish();
+      finishAfterFeedback();
       return;
     }
     if (!isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
       signalIndexRef.current += 1;
       if (signalIndexRef.current >= totalSignals) {
-        finish();
+        finishAfterFeedback();
       } else {
         timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
       }
@@ -357,7 +364,11 @@ function ReactionRoundCore({
   const transitionTimerRef = useRef<number | null>(null);
   const stepRef = useRef(1);
   const finishedRef = useRef(false);
-  const answeredRef = useRef(false);
+  const answeredRef = useRef(false);
+
+  function getReactionCompletionDelay(step: number, trialCount: number) {
+    return step >= trialCount ? REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS : REACTION_FEEDBACK_DELAY_MS;
+  }
 
   const startStep = useCallback((nextStep: number) => {
     if (readyTimerRef.current) window.clearTimeout(readyTimerRef.current);
@@ -409,7 +420,7 @@ function ReactionRoundCore({
         } else {
           startStep(nextStep + 1);
         }
-      }, 360);
+      }, getReactionCompletionDelay(nextStep, trialCount));
     }, delay + 1800);
   }, [onComplete, trialCount]);
 
@@ -451,7 +462,7 @@ function ReactionRoundCore({
         } else {
           startStep(stepRef.current + 1);
         }
-      }, 360);
+      }, getReactionCompletionDelay(stepRef.current, trialCount));
       return;
     }
 
@@ -481,7 +492,7 @@ function ReactionRoundCore({
         } else {
           startStep(stepRef.current + 1);
         }
-      }, 400);
+      }, getReactionCompletionDelay(stepRef.current, trialCount));
     }
   };
 

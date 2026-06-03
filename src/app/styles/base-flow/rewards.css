@@ -189,6 +189,69 @@ button.reward-overlay-card {
   animation: none;
 }
 
+.reward-endless-card {
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+  padding: 30px 24px 26px;
+}
+
+.reward-endless-symbol {
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(24, 24, 24, 0.18);
+  border-radius: 999px;
+  background: #202326;
+  color: #fffdf8;
+  font-size: 70px;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: inset 0 0 0 7px rgba(255, 255, 255, 0.1), 0 16px 34px rgba(24, 24, 24, 0.18);
+}
+
+.reward-endless-copy {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.reward-endless-copy strong {
+  color: var(--ink);
+  font-size: clamp(28px, 7vw, 42px);
+  font-weight: 950;
+  line-height: 1.05;
+}
+
+.reward-endless-copy small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.reward-endless-card .reward-overlay-eyebrow,
+.reward-endless-symbol,
+.reward-endless-copy {
+  opacity: 0;
+  animation: reward-content-reveal 360ms 980ms ease both;
+}
+
+.reward-endless-card.is-settled .reward-overlay-eyebrow,
+.reward-endless-card.is-settled .reward-endless-symbol,
+.reward-endless-card.is-settled .reward-endless-copy {
+  opacity: 1;
+  transform: translateY(0);
+  animation: none;
+}
+
+.reward-endless-symbol {
+  animation-delay: 1060ms;
+}
+
+.reward-endless-copy {
+  animation-delay: 1180ms;
+}
+
 @keyframes reward-overlay-fade-in {
   0% {
     opacity: 0;

@@ -376,6 +376,10 @@
     font-size: 26px;
   }
 
+  .advanced-lobby-level.advanced-endless.selected strong {
+    font-size: clamp(16px, 4.4vw, 22px);
+  }
+
   .advanced-lobby-badge {
     right: 10px;
     bottom: 10px;

@@ -111,13 +111,13 @@ function buildEndlessSegment(roundId: RoundId): EndlessSegment {
   if (roundId === "aim") {
     const aim = getEndlessAimConfig({ hitCount: 0 });
     config = updateStageParams(config, {
-      aimMode: "boss",
+      aimMode: aim.aimMode,
       arrowCount: ENDLESS_NATIVE_TARGET_LIMIT,
-      decoyCount: 0,
-      failOnFlyOut: true,
+      decoyCount: aim.decoyCount,
+      failOnFlyOut: aim.failOnFlyOut,
       replaceTargetOnHit: true,
       requiredHits: ENDLESS_NATIVE_TARGET_LIMIT,
-      route: "mixed",
+      route: aim.route,
       spawnIntervalMs: aim.spawnIntervalMs,
       targetCount: ENDLESS_NATIVE_TARGET_LIMIT,
       targetSize: aim.targetSize,
@@ -142,6 +142,7 @@ function useEndlessRun({
   const startedAtRef = useRef(0);
   const completedRef = useRef(false);
   const coreActionsRef = useRef(0);
+  const finishTimerRef = useRef<number | null>(null);
   const revivesRef = useRef(ENDLESS_STARTING_REVIVES);
   const [coreActions, setCoreActions] = useState(0);
   const [revives, setRevives] = useState(ENDLESS_STARTING_REVIVES);
@@ -154,37 +155,51 @@ function useEndlessRun({
   }, []);
 
   const finish = useCallback(
-    (reason: string) => {
+    (reason: string, finishDelayMs = 0) => {
       if (completedRef.current) return;
       completedRef.current = true;
-      const endedAt = typeof performance === "undefined" ? Date.now() : performance.now();
-      onComplete({
-        bonusActions: 0,
-        coreActions: coreActionsRef.current,
-        elapsedMs: Math.max(0, Math.round(endedAt - startedAtRef.current)),
-        reason,
-        revivesUsed: ENDLESS_STARTING_REVIVES - revivesRef.current,
-        roundId,
-        score: getEndlessScore({ coreActions: coreActionsRef.current }),
-      });
+      const complete = () => {
+        finishTimerRef.current = null;
+        const endedAt = typeof performance === "undefined" ? Date.now() : performance.now();
+        onComplete({
+          bonusActions: 0,
+          coreActions: coreActionsRef.current,
+          elapsedMs: Math.max(0, Math.round(endedAt - startedAtRef.current)),
+          reason,
+          revivesUsed: ENDLESS_STARTING_REVIVES - revivesRef.current,
+          roundId,
+          score: getEndlessScore({ coreActions: coreActionsRef.current }),
+        });
+      };
+      if (finishDelayMs > 0) {
+        finishTimerRef.current = window.setTimeout(complete, finishDelayMs);
+      } else {
+        complete();
+      }
     },
     [onComplete, roundId],
   );
 
   const loseLife = useCallback(
-    (reason: string) => {
+    (reason: string, finishDelayMs = 0) => {
       if (completedRef.current) return false;
       const nextRevives = Math.max(0, revivesRef.current - 1);
       revivesRef.current = nextRevives;
       setRevives(nextRevives);
       if (nextRevives <= 0) {
-        finish(reason);
+        finish(reason, finishDelayMs);
         return false;
       }
       return true;
     },
     [finish],
   );
+
+  React.useEffect(() => {
+    return () => {
+      if (finishTimerRef.current !== null) window.clearTimeout(finishTimerRef.current);
+    };
+  }, []);
 
   const addScore = useCallback((amount = 1) => {
     const safeAmount = Math.max(1, Math.floor(Number.isFinite(amount) ? amount : 1));
@@ -291,9 +306,11 @@ function EndlessHud({
 
 function EndlessNativeRound({
   api,
+  runSeed,
   segment,
 }: {
   api: EndlessRunApi;
+  runSeed: string;
   segment: EndlessSegment;
 }) {
   const ignoreRoundCompletion = useCallback(() => undefined, []);
@@ -302,7 +319,7 @@ function EndlessNativeRound({
     return <AdvancedReactionRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} />;
   }
   if (segment.config.dimension === "aim") {
-    return <AdvancedAimRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} runSeed="endless-aim" />;
+    return <AdvancedAimRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} runSeed={runSeed} />;
   }
   return <AdvancedBrakingRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} />;
 }
@@ -337,15 +354,17 @@ function EndlessMiniGameRound({
 
 function EndlessGameByRound({
   api,
+  runSeed,
   segment,
 }: {
   api: EndlessRunApi;
+  runSeed: string;
   segment: EndlessSegment;
 }) {
   if (segment.miniLevel) {
     return <EndlessMiniGameRound api={api} segment={segment} />;
   }
-  return <EndlessNativeRound api={api} segment={segment} />;
+  return <EndlessNativeRound api={api} runSeed={runSeed} segment={segment} />;
 }
 
 export function EndlessRoundPlayer({
@@ -361,6 +380,7 @@ export function EndlessRoundPlayer({
 }) {
   const api = useEndlessRun({ onComplete, roundId });
   const segment = useMemo(() => buildEndlessSegment(roundId), [roundId]);
+  const runSeed = useMemo(() => createMiniGameRunSeed(`endless-${roundId}`, roundId), [roundId]);
   const difficultyState = getEndlessRoundDifficultyState({
     debugDifficulty: api.debugDifficulty,
     reportedDifficulty: api.reportedDifficulty,
@@ -377,7 +397,7 @@ export function EndlessRoundPlayer({
         difficultyState={difficultyState}
       />
       <div className="endless-game-host" data-source-level={difficultyState.sourceAdvancedLevel}>
-        <EndlessGameByRound api={api} segment={segment} />
+        <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} />
       </div>
     </div>
   );

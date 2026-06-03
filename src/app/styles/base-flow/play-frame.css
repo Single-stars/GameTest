@@ -163,7 +163,7 @@
   pointer-events: none;
 }
 
-.advanced-play-screen .game-area,
+.advanced-play-screen .game-area:not(.advanced-aim),
 .advanced-play-screen .braking-panel {
   border: 0;
   background: transparent;

@@ -254,7 +254,17 @@
 }
 
 .multiplayer-select-shell {
+  width: 100vw;
+  width: 100dvw;
+  width: var(--game-viewport-width, 100dvw);
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
+  height: 100dvh;
   min-height: 100dvh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
   background: #fff;
 }
 
@@ -596,6 +606,18 @@
   position: fixed;
   inset: 0;
   z-index: 1200;
+  width: 100vw;
+  width: 100dvw;
+  width: var(--game-viewport-width, 100dvw);
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
+  height: 100dvh;
+  min-height: 100dvh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   overflow: hidden;
   background: #fff;
   color: #18231b;
@@ -959,6 +981,12 @@
 }
 
 .multiplayer-game-shell-main > .game-area {
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+}
+
+.multiplayer-game-shell-main > .advanced-aim {
   width: 100%;
   height: 100%;
   align-self: stretch;

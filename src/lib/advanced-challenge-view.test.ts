@@ -291,6 +291,7 @@ test("advanced lobby tap selection survives carousel pointer capture", () => {
 test("advanced lobby slider is controlled by the same selected level as circular clicks", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const responsiveCssSource = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
   const endlessBranchStart = screenSource.indexOf("if (isEndlessItem)");
   const endlessBranchEnd = screenSource.indexOf("const tone = getAdvancedLevelToneForState", endlessBranchStart);
   const endlessBranchSource = screenSource.slice(endlessBranchStart, endlessBranchEnd);
@@ -312,7 +313,8 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.match(screenSource, /endlessShake/);
   assert.match(screenSource, /onPickLevel\(ENDLESS_MODE_LEVEL\)/);
   assert.match(screenSource, /∞/);
-  assert.match(screenSource, /无限模式/);
+  assert.match(screenSource, /无尽模式/);
+  assert.doesNotMatch(screenSource, /无限模式/);
   assert.match(screenSource, /endlessBestScore/);
   assert.match(endlessBranchSource, /<strong>无尽模式<\/strong>/);
   assert.match(endlessBranchSource, /<small>\{endlessBestScore > 0 \? `最高记录 \$\{endlessBestScore\}` : "未挑战"\}<\/small>/);
@@ -376,7 +378,15 @@ test("advanced lobby slider is controlled by the same selected level as circular
   assert.match(cssSource, /\.advanced-endless-slider-button\.selected\s*{[\s\S]*opacity:\s*1;/);
   assert.match(cssSource, /\.advanced-lobby-level\.advanced-endless\.shake\s*{/);
   assert.doesNotMatch(endlessLevelTextCss, /font-size:\s*40px;|text-shadow/);
-  assert.match(cssSource, /\.advanced-lobby-level\.advanced-endless\.selected strong\s*{[\s\S]*font-size:\s*32px;/);
+  assert.match(endlessLevelTextCss, /max-width:\s*calc\(100% - 12px\);/);
+  assert.match(endlessLevelTextCss, /font-size:\s*clamp\(16px,\s*4\.4vw,\s*22px\);/);
+  assert.match(endlessLevelTextCss, /white-space:\s*nowrap;/);
+  assert.match(endlessLevelTextCss, /word-break:\s*keep-all;/);
+  assert.match(endlessLevelTextCss, /letter-spacing:\s*0;/);
+  assert.doesNotMatch(endlessLevelTextCss, /white-space:\s*normal;/);
+  assert.doesNotMatch(endlessLevelTextCss, /overflow-wrap:\s*anywhere;/);
+  assert.doesNotMatch(cssSource, /\.advanced-lobby-level\.advanced-endless\.selected strong\s*{[\s\S]*font-size:/);
+  assert.match(responsiveCssSource, /\.advanced-lobby-level\.advanced-endless\.selected strong\s*{[\s\S]*font-size:\s*clamp\(16px,\s*4\.4vw,\s*22px\);/);
   assert.match(cssSource, /@keyframes advanced-endless-shake/);
   assert.match(cssSource, /\.advanced-endless-lock-toast\s*{/);
   assert.match(cssSource, /\.advanced-lobby-slider\s*{[\s\S]*--advanced-lobby-slider-thumb-size:\s*36px;/);
@@ -416,6 +426,13 @@ test("advanced base replay uses a two-row play layout so the round is playable",
 
   assert.match(screenSource, /className="play-screen advanced-base-play-screen"/);
   assert.match(cssSource, /\.advanced-base-play-screen\s*{[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+});
+
+test("advanced lobby hero keeps the same frame height when endless title is selected", () => {
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(cssSource, /\.advanced-hero\s*{[\s\S]*height:\s*78px;/);
+  assert.match(cssSource, /\.advanced-hero\s*{[\s\S]*align-content:\s*center;/);
 });
 
 test("advanced lobby visual structure removes text badges and keeps boundary levels in fixed columns", () => {

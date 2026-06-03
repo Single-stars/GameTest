@@ -206,6 +206,16 @@ function createRankRewardItem({
   };
 }
 
+function createEndlessRewardItem(previousProgress: AdvancedProgress, nextProgress: AdvancedProgress, roundId: RoundId, source: string): RewardOverlayItem | null {
+  if (!(!isEndlessModeUnlocked(previousProgress, roundId) && isEndlessModeUnlocked(nextProgress, roundId))) return null;
+  const roundTitle = rounds.find((round) => round.id === roundId)?.title ?? "无尽模式";
+  return {
+    id: `${source}-endless-${roundId}`,
+    kind: "endless",
+    roundTitle,
+  };
+}
+
 function compactRewardItems(items: Array<RewardOverlayItem | null | undefined>) {
   return items.filter((item): item is RewardOverlayItem => item !== null && item !== undefined);
 }
@@ -871,6 +881,7 @@ export default function Home() {
             source: `advanced-${current.roundId}-${current.level}`,
           })
         : null;
+      const endlessReward = createEndlessRewardItem(previousProgress, nextProgress, current.roundId, `advanced-${current.roundId}-${current.level}`);
 
       advancedProgressRef.current = nextProgress;
       setAdvancedProgress(nextProgress);
@@ -878,6 +889,7 @@ export default function Home() {
       enqueueRewardItems([
         ...createSkinRewardItems(previousProgress, nextProgress, `advanced-${current.roundId}-${current.level}`),
         ...compactRewardItems([rankReward]),
+        ...compactRewardItems([endlessReward]),
       ]);
       setAdvancedChallenge({
         mode: "complete",
