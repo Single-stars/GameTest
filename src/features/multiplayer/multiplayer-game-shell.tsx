@@ -4,6 +4,7 @@ import { type CSSProperties, type ReactNode, useMemo, useRef, useState } from "r
 
 import { PlayerAvatar } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import type { AdvancedLevelTone } from "@/lib/advanced-progress";
 import type { MultiplayerPlayMode } from "@/lib/multiplayer/level-select";
 import type {
   GameResult,
@@ -227,6 +228,7 @@ export function MultiplayerGameShell({
   countdownSeconds,
   countdownRules = [],
   coOpAssignmentText,
+  difficultyTone,
   opponentPlayer,
   opponentResult,
   opponentState,
@@ -249,6 +251,7 @@ export function MultiplayerGameShell({
   countdownSeconds: number | null;
   countdownRules?: string[];
   coOpAssignmentText?: string | null;
+  difficultyTone?: AdvancedLevelTone;
   opponentPlayer: PlayerInfo | null;
   opponentResult: GameResult | null;
   opponentState: SelfGameState | null;
@@ -316,7 +319,7 @@ export function MultiplayerGameShell({
     : reactions;
 
   return (
-    <section className="multiplayer-game-shell play-screen" aria-label="联机游戏">
+    <section className="multiplayer-game-shell play-screen" data-difficulty-tone={difficultyTone} aria-label="联机游戏">
       <header className="multiplayer-progress-hud" aria-label="联机进度">
         <div className="multiplayer-progress-wrap">
           <div

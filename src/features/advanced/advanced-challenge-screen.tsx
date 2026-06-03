@@ -17,6 +17,7 @@ import {
   getAdvancedChallengeStatusLabel,
   getAdvancedCompletionActions,
   getAdvancedDimensionLevel,
+  getAdvancedLevelTone,
   getAdvancedLevelToneForState,
   type AdvancedProgress,
 } from "@/lib/advanced-progress";
@@ -937,7 +938,7 @@ export function AdvancedChallengeScreen({
     };
 
     return (
-      <section className="play-screen advanced-play-screen" aria-live="polite">
+      <section className="play-screen advanced-play-screen" data-difficulty-tone={getAdvancedLevelTone(challenge.level)} aria-live="polite">
         <header className="round-header advanced-round-header">
           <AdaptiveAdvancedHeaderTitle
             title={getAdvancedChallengeHeroTitle({
@@ -1015,6 +1016,9 @@ export function AdvancedChallengeScreen({
             </button>
           </div>
         </header>
+        <div className="progress-track endless-progress-track" aria-hidden="true">
+          <span />
+        </div>
         <EndlessRoundPlayer
           bestScore={endlessBestScore}
           debugToolsVisible={debugToolsVisible}

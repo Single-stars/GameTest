@@ -913,36 +913,49 @@
   height: var(--game-viewport-height, 100dvh);
   min-height: var(--game-viewport-height, 100dvh);
   max-height: var(--game-viewport-height, 100dvh);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto 4px minmax(0, 1fr);
+}
+
+.endless-progress-track span {
+  width: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--gold), var(--red));
+  opacity: 0.72;
 }
 
 .endless-shell {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  transition: background 620ms ease;
 }
 
 .endless-hud {
-  position: absolute;
-  z-index: 12;
-  inset: 10px 10px auto 10px;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 44px;
   display: grid;
   grid-template-columns: auto minmax(0, auto) minmax(120px, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 10px;
+  border: var(--hud-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  background: var(--hud-bg);
+  box-shadow: var(--shadow-soft), inset 0 0 0 1px var(--difficulty-edge, transparent);
+  backdrop-filter: blur(14px);
   pointer-events: none;
 }
 
-.endless-score,
-.endless-difficulty,
 .endless-debug-panel {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(8, 10, 12, 0.72);
-  color: #f4f5f2;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(7px);
+  border: var(--hud-border);
+  border-radius: var(--radius-sm);
+  background: var(--hud-bg);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft), inset 0 0 0 1px var(--difficulty-edge, transparent);
+  backdrop-filter: blur(14px);
 }
 
 .endless-hearts {
@@ -953,11 +966,10 @@
   padding: 2px 0;
   font-size: 18px;
   line-height: 1;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.34);
 }
 
 .endless-heart {
-  color: rgba(255, 255, 255, 0.22);
+  color: rgba(24, 24, 24, 0.16);
 }
 
 .endless-heart.active {
@@ -971,7 +983,9 @@
   align-items: baseline;
   gap: 8px;
   min-height: 34px;
-  padding: 5px 10px;
+  border-left: 1px solid rgba(24, 24, 24, 0.12);
+  padding: 0 4px 0 12px;
+  color: var(--ink);
 }
 
 .endless-score strong {
@@ -980,7 +994,7 @@
 }
 
 .endless-score span {
-  color: rgba(244, 245, 242, 0.72);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 850;
   white-space: nowrap;
@@ -992,7 +1006,9 @@
   gap: 4px;
   min-width: min(220px, 42vw);
   max-width: 280px;
-  padding: 6px 9px;
+  border-left: 1px solid rgba(24, 24, 24, 0.12);
+  padding: 0 4px 0 12px;
+  color: var(--ink);
 }
 
 .endless-difficulty-row {
@@ -1000,7 +1016,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #f4f5f2;
+  color: var(--ink);
   font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
@@ -1011,28 +1027,27 @@
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(24, 24, 24, 0.1);
 }
 
 .endless-difficulty-meter span {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, #86efac, #facc15, #fb7185);
+  background: linear-gradient(90deg, var(--difficulty-meter-start, #31b775), var(--difficulty-meter-end, #f5bd54));
 }
 
 .endless-difficulty-next {
-  color: rgba(244, 245, 242, 0.68);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .endless-debug-panel {
-  position: absolute;
-  z-index: 13;
-  top: 54px;
-  right: 10px;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: stretch;
   pointer-events: auto;
   padding: 5px;
 }
@@ -1044,7 +1059,7 @@
   place-items: center;
   border-radius: 7px;
   padding: 0 9px;
-  color: #f4f5f2;
+  color: var(--ink);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
@@ -1066,26 +1081,36 @@
 
 .endless-debug-jumps button {
   min-height: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(24, 24, 24, 0.14);
   border-radius: 7px;
   padding: 0 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f4f5f2;
+  background: rgba(255, 253, 248, 0.72);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
 }
 
 .endless-debug-jumps button.active {
-  border-color: #d6d9d2;
-  background: #e9ece6;
-  color: #121416;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fffdf8;
 }
 
 .endless-game-host {
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   display: grid;
+}
+
+.endless-game-host[data-difficulty-tone] {
+  background:
+    var(--difficulty-shell-wash, transparent),
+    var(--difficulty-host-bg, transparent);
+  box-shadow: inset 0 0 0 1px var(--difficulty-edge, transparent);
+  transition: background 620ms ease, box-shadow 620ms ease;
 }
 
 .advanced-braking.endless-runner .advanced-brake-track {

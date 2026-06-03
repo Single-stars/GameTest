@@ -11,6 +11,7 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
 import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
@@ -163,6 +164,14 @@ function resolveFallDownRemoteAvatarView(remoteState: FallDownRemoteState): Play
 function smoothSpectatorCamera(current: number, target: number, delta: number) {
   const blend = 1 - Math.exp(-Math.max(0, delta) * 7);
   return current + (target - current) * blend;
+}
+
+function syncFallDownWaveParallax(stage: HTMLDivElement | null, playerX: number, playerY: number, cameraY: number, stageWidth: number) {
+  if (!stage) return;
+  const horizontalOffset = playerX - stageWidth * 0.5;
+  const verticalOffset = playerY - cameraY;
+  stage.style.setProperty("--difficulty-wave-parallax-x", (cameraY * 0.1 + horizontalOffset * 0.22).toFixed(2));
+  stage.style.setProperty("--difficulty-wave-parallax-y", (-cameraY * 0.86 + verticalOffset * 0.05).toFixed(2));
 }
 
 function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: number, inputDirection: FallDownRuntime["inputDirection"] = runtime.inputDirection): FallDownRuntimeState {
@@ -807,6 +816,7 @@ export function FallDownPrototype({
 
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime, spectatingRemote = false, sceneTime = current.time) => {
+      syncFallDownWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, stageWidth);
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
       const activeFallDownParams = isEndlessRun
@@ -875,7 +885,7 @@ export function FallDownPrototype({
         }
       }
     },
-    [fragileTime, isEndlessRun, level.params, stageHeight, stageWidth],
+    [fragileTime, isEndlessRun, level.params, stageHeight, stageRef, stageWidth],
   );
 
   const resumeFallDownInput = useCallback(
@@ -1304,6 +1314,7 @@ export function FallDownPrototype({
         onPointerMove={updateFallDownDirection}
         onPointerUp={stopDirection}
       >
+        <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div style={worldLayerStyle}>

@@ -13,6 +13,7 @@ import {
 import { readMiniGameRuntimeSource } from "./test-utils.ts";
 
 type FlappySafeRespawnResolver = (options: {
+  fallbackBacktrack?: number;
   gates: readonly { distance: number; passed?: boolean }[];
   gateWidth: number;
   invincibleForwardTravelDistance?: number;
@@ -20,7 +21,7 @@ type FlappySafeRespawnResolver = (options: {
   playerSize: number;
   playerX: number;
   reverseDirection: boolean;
-  safeApproachDistance: number;
+  safeApproachDistance?: number;
   stageWidth: number;
 }) => number;
 
@@ -167,6 +168,24 @@ test("flappy safe respawn backs up far enough before the blocking gate", () => {
   assert.ok(safeGateX >= playerX + playerSize / 2 + 140);
 });
 
+test("flappy default safe respawn stays close to the failure point when no gate blocks it", () => {
+  const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
+  const nextProgress = 520;
+
+  const safeProgress = resolveFlappySafeRespawnProgress({
+    gates: [],
+    gateWidth: 54,
+    nextProgress,
+    playerSize: 32,
+    playerX: 92,
+    reverseDirection: false,
+    stageWidth: 360,
+  });
+
+  assert.ok(safeProgress >= nextProgress - 36);
+  assert.ok(safeProgress <= nextProgress - 20);
+});
+
 test("flappy safe respawn also keeps reverse-direction gates away from the player", () => {
   const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
   const gate = { distance: 250 };
@@ -204,7 +223,7 @@ test("flappy safe respawn also keeps reverse-direction gates away from the playe
   assert.ok(safeGateX + gateWidth <= playerX - playerSize / 2 - 140);
 });
 
-test("flappy safe respawn accounts for forward travel during invincibility", () => {
+test("flappy safe respawn uses only a small invincibility buffer instead of a long backtrack", () => {
   const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
   const gate = { distance: 250 };
   const playerX = 92;
@@ -212,7 +231,7 @@ test("flappy safe respawn accounts for forward travel during invincibility", () 
   const gateWidth = 54;
   const playerSize = 32;
   const nextProgress = stageWidth + gate.distance - (playerX - 8);
-  const safeApproachDistance = 140;
+  const safeApproachDistance = 44;
   const invincibleForwardTravelDistance = 118 * 1.15;
 
   const safeProgress = resolveFlappySafeRespawnProgress({
@@ -232,7 +251,9 @@ test("flappy safe respawn accounts for forward travel during invincibility", () 
     stageWidth,
   });
 
-  assert.ok(safeGateX >= playerX + playerSize / 2 + safeApproachDistance + invincibleForwardTravelDistance);
+  assert.ok(safeGateX >= playerX + playerSize / 2 + safeApproachDistance);
+  assert.ok(safeGateX < playerX + playerSize / 2 + safeApproachDistance + 48);
+  assert.ok(nextProgress - safeProgress < 96);
 });
 
 test("flappy recoverable failures use safe respawn instead of a fixed backtrack", () => {
@@ -241,7 +262,7 @@ test("flappy recoverable failures use safe respawn instead of a fixed backtrack"
 
   assert.match(flappyRuntimeSource, /resolveFlappySafeRespawnProgress/);
   assert.match(componentSource, /const FLAPPY_RESPAWN_CAMERA_SECONDS = 0\.45;/);
-  assert.match(componentSource, /const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = FLAPPY_RESPAWN_INVINCIBLE_SECONDS \+ 0\.45;/);
+  assert.match(componentSource, /const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = 0\.28;/);
   assert.match(componentSource, /function getFlappyRespawnForwardTravelDistance\(speed: number\)/);
   assert.match(flappyRuntimeSource, /invincibleForwardTravelDistance:\s*getFlappyRespawnForwardTravelDistance\(speed\)/);
   assert.match(flappyRuntimeSource, /respawnProgressUntil = nextTime \+ FLAPPY_RESPAWN_CAMERA_SECONDS/);

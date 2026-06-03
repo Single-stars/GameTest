@@ -149,7 +149,7 @@ test("advanced reaction green click feedback keeps the full green background lik
   assert.match(greenClickedBlock, /box-shadow:\s*var\(--glow-success\);/);
 });
 
-test("base and advanced reaction green click feedback lasts 400ms", () => {
+test("base, advanced, and endless reaction green click feedback share one uninterrupted 620ms window", () => {
   const miniGameCommonSource = read(new URL("../features/mini-games/common.tsx", import.meta.url));
   const endlessSource = read(new URL("../features/endless/endless-round-player.tsx", import.meta.url));
   const reactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
@@ -162,28 +162,47 @@ test("base and advanced reaction green click feedback lasts 400ms", () => {
     'if (greenClicksRef.current >= requiredGreenClicks && (isBoss || config.variant === "reaction-dual-green")) {',
     'if (!isBoss && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {',
   );
+  const endlessGreenSuccessSource = sourceBetween(
+    advancedReactionSource,
+    "if (endlessRef.current && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {",
+    "if (greenClicksRef.current >= requiredGreenClicks",
+  );
+  const endlessWrongClickSource = sourceBetween(
+    advancedReactionSource,
+    'if (finishedRef.current || cell.color === "idle" || cell.clicked) {',
+    'if (cell.color === "red") {',
+  );
+  const endlessFalseAlarmSource = sourceBetween(
+    advancedReactionSource,
+    'if (cell.color === "red") {',
+    "const responseAt = now();",
+  );
 
   assert.match(baseReadySuccessSource, /setFeedbackTone\("good"\)/);
   assert.match(baseCoreSource, /function getReactionCompletionDelay\(step: number, trialCount: number\)/);
-  assert.match(baseCoreSource, /step >= trialCount \? REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS : REACTION_FEEDBACK_DELAY_MS/);
+  assert.match(baseCoreSource, /return REACTION_FEEDBACK_DELAY_MS;/);
   assert.match(baseCoreSource, /getReactionCompletionDelay\(nextStep, trialCount\)/);
   assert.match(baseCoreSource, /getReactionCompletionDelay\(stepRef\.current, trialCount\)/);
   assert.doesNotMatch(baseCoreSource, /\}, 360\);/);
   assert.doesNotMatch(baseCoreSource, /\}, 400\);/);
-  assert.match(cssBlock(cssSource, ".reaction-pad.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
-  assert.match(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 400;/);
-  assert.match(cssBlock(cssSource, ".advanced-reaction-grid.good::after"), /animation:\s*advanced-reaction-feedback 400ms ease;/);
+  assert.match(cssBlock(cssSource, ".reaction-pad.good::after"), /animation:\s*advanced-reaction-feedback 620ms cubic-bezier\(0\.18, 0\.84, 0\.24, 1\);/);
+  assert.match(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 620;/);
+  assert.match(cssBlock(cssSource, ".advanced-reaction-grid.good::after"), /animation:\s*advanced-reaction-feedback 620ms cubic-bezier\(0\.18, 0\.84, 0\.24, 1\);/);
   assert.match(reactionSource, /window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(endlessGreenSuccessSource, /clearTimers\(\);[\s\S]*window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(endlessWrongClickSource, /clearTimers\(\);[\s\S]*window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(endlessFalseAlarmSource, /clearTimers\(\);[\s\S]*window\.setTimeout\(startSignal, REACTION_FEEDBACK_DELAY_MS\)/);
   assert.match(advancedReactionSource, /const finishAfterFeedback = useCallback/);
-  assert.match(advancedReactionSource, /REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS/);
+  assert.match(advancedReactionSource, /finish\(extra, REACTION_FEEDBACK_DELAY_MS\);/);
   assert.match(finalAdvancedSuccessSource, /finishAfterFeedback\(\);/);
   assert.match(miniGameCommonSource, /loseLife:\s*\(reason: string, finishDelayMs\?: number\) => boolean;/);
   assert.match(endlessSource, /finish\(reason, finishDelayMs\);/);
-  assert.match(advancedReactionSource, /loseLife\("timeout", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
-  assert.match(advancedReactionSource, /loseLife\("wrong", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
-  assert.match(advancedReactionSource, /loseLife\("false_alarm", REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /loseLife\("timeout", REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /loseLife\("wrong", REACTION_FEEDBACK_DELAY_MS\)/);
+  assert.match(advancedReactionSource, /loseLife\("false_alarm", REACTION_FEEDBACK_DELAY_MS\)/);
   assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 240;/);
   assert.doesNotMatch(reactionSource, /const REACTION_FEEDBACK_DELAY_MS = 360;/);
+  assert.doesNotMatch(reactionSource, /REACTION_FEEDBACK_DELAY_MS \+ ROUND_SETTLEMENT_DELAY_MS/);
 });
 
 test("aim rounds fire arrows in the clicked direction from a visible charge launcher", () => {
@@ -232,7 +251,7 @@ test("moving target rounds share the rounded game-area stage frame", () => {
   assert.match(aimStageBlock, /border:\s*1px solid var\(--line\);/);
   assert.match(aimStageBlock, /border-radius:\s*var\(--radius-sm\);/);
   assert.match(aimStageBlock, /background:\s*var\(--surface\);/);
-  assert.match(aimStageBlock, /box-shadow:\s*var\(--shadow\);/);
+  assert.match(aimStageBlock, /box-shadow:\s*var\(--shadow\),\s*inset 0 0 0 1px var\(--difficulty-edge, transparent\);/);
   assert.match(aimCss, /\.play-screen > \.advanced-aim,\s*\.endless-game-host > \.advanced-aim\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*align-self:\s*stretch;/);
   assert.match(multiplayerCss, /\.multiplayer-game-shell-main > \.advanced-aim\s*{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*align-self:\s*stretch;/);
 });
@@ -406,6 +425,152 @@ test("advanced goal copy follows grouped level rules with fallback text", () => 
   assert.match(viewSource, /group === "258" \|\| group === "10"/);
   assert.match(viewSource, /group === "369" \|\| group === "10"/);
   assert.match(viewTestSource, /advanced mini-game goals follow level-group rules and fallback copy/);
+});
+
+test("advanced, endless, and multiplayer play surfaces share neutral wave backgrounds with difficulty tones", () => {
+  const advancedScreenSource = read(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url));
+  const endlessSource = read(new URL("../features/endless/endless-round-player.tsx", import.meta.url));
+  const multiplayerPageSource = read(new URL("../app/multiplayer/page.tsx", import.meta.url));
+  const multiplayerShellSource = read(new URL("../features/multiplayer/multiplayer-game-shell.tsx", import.meta.url));
+  const advancedCss = read(new URL("../app/styles/base-flow/advanced.css", import.meta.url));
+  const commonCss = read(new URL("../app/styles/mini-games/common.css", import.meta.url));
+  const waveBackdropSource = read(new URL("../features/visuals/difficulty-wave-backdrop.tsx", import.meta.url));
+  const nativeAimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
+  const nativeReactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
+  const nativeBrakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+  const doodleSource = read(new URL("../features/mini-games/doodle.tsx", import.meta.url));
+  const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
+  const fallDownSource = read(new URL("../features/mini-games/fall-down.tsx", import.meta.url));
+  const knifeSource = read(new URL("../features/mini-games/knife.tsx", import.meta.url));
+  const squareJumpSource = read(new URL("../features/mini-games/square-jump.tsx", import.meta.url));
+  const aimCss = read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url));
+  const brakingCss = read(new URL("../app/styles/base-flow/native-braking.css", import.meta.url));
+  const reactionCss = read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url));
+  const multiplayerCss = read(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url));
+  const neutralWaveStageBackgroundSource = sourceBetween(
+    commonCss,
+    "[data-difficulty-tone] .prototype-stage.doodle-stage,",
+    "\n}\n\n[data-difficulty-tone] .prototype-stage .flappy-background span,",
+  );
+  const aimToneBlock = cssBlock(aimCss, "[data-difficulty-tone] .advanced-aim");
+  const brakingToneBlock = cssBlock(brakingCss, "[data-difficulty-tone] .advanced-braking");
+
+  assert.match(advancedScreenSource, /getAdvancedLevelTone/);
+  assert.match(advancedScreenSource, /data-difficulty-tone=\{getAdvancedLevelTone\(challenge\.level\)\}/);
+  assert.match(endlessSource, /const difficultyTone = getAdvancedLevelTone\(difficultyState\.sourceAdvancedLevel\);/);
+  assert.match(endlessSource, /data-difficulty-tone=\{difficultyTone\}/);
+  assert.match(multiplayerPageSource, /const battleDifficultyTone = getAdvancedLevelTone\(battleLevel\.order\);/);
+  assert.match(multiplayerPageSource, /difficultyTone=\{battleDifficultyTone\}/);
+  assert.match(multiplayerShellSource, /difficultyTone\?: AdvancedLevelTone;/);
+  assert.match(multiplayerShellSource, /data-difficulty-tone=\{difficultyTone\}/);
+  assert.match(commonCss, /\[data-difficulty-tone="advanced-tier-1"\]/);
+  assert.match(commonCss, /\[data-difficulty-tone="advanced-tier-2"\]/);
+  assert.match(commonCss, /\[data-difficulty-tone="advanced-tier-3"\]/);
+  assert.match(commonCss, /\[data-difficulty-tone="advanced-gold"\]/);
+  assert.match(commonCss, /--difficulty-stage-wash/);
+  assert.match(commonCss, /--difficulty-edge/);
+  assert.match(commonCss, /--difficulty-corner-glow/);
+  assert.match(commonCss, /--difficulty-nonreaction-wave-opacity: 0\.12;/);
+  assert.match(commonCss, /\.difficulty-wave-backdrop/);
+  assert.match(commonCss, /--difficulty-wave-color/);
+  assert.match(commonCss, /--difficulty-wave-color: rgb\(46, 196, 182\);/);
+  assert.match(commonCss, /--difficulty-wave-color: rgb\(47, 128, 237\);/);
+  assert.match(commonCss, /--difficulty-wave-color: rgb\(126, 87, 194\);/);
+  assert.match(commonCss, /--difficulty-wave-color: rgb\(222, 158, 48\);/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.doodle-stage/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.flappy-stage\.endless-gravity-anomaly/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-heavy/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.fall-down-stage/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.knife-stage/);
+  assert.match(neutralWaveStageBackgroundSource, /#fffdf8/);
+  assert.match(neutralWaveStageBackgroundSource, /#f7f2e9/);
+  assert.match(neutralWaveStageBackgroundSource, /rgba\(255, 253, 248, 0\.98\)/);
+  assert.match(neutralWaveStageBackgroundSource, /--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity, 0\.12\);/);
+  assert.doesNotMatch(neutralWaveStageBackgroundSource, /--difficulty-stage-wash|--difficulty-cell-bg|--difficulty-stage-base/);
+  assert.match(aimToneBlock, /--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity, 0\.12\);/);
+  assert.match(aimToneBlock, /#fffdf8/);
+  assert.match(aimToneBlock, /#f7f2e9/);
+  assert.match(aimToneBlock, /rgba\(255, 253, 248, 0\.98\)/);
+  assert.doesNotMatch(aimToneBlock, /--difficulty-stage-wash|--difficulty-cell-bg|--difficulty-stage-base/);
+  assert.match(brakingToneBlock, /--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity, 0\.12\);/);
+  assert.match(brakingToneBlock, /#fffdf8/);
+  assert.match(brakingToneBlock, /#f7f2e9/);
+  assert.match(brakingToneBlock, /rgba\(255, 253, 248, 0\.98\)/);
+  assert.doesNotMatch(brakingToneBlock, /--difficulty-stage-wash|--difficulty-cell-bg|--difficulty-stage-base/);
+  assert.doesNotMatch(reactionCss, /--difficulty-nonreaction-wave-opacity|--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage \.flappy-background span/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage \.square-progress-background/);
+  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-light::before/);
+  assert.match(commonCss, /background:\s*none;/);
+  assert.doesNotMatch(commonCss, /--difficulty-motion-opacity|--difficulty-motion-x|--difficulty-motion-y/);
+  assert.doesNotMatch(commonCss, /--difficulty-wave-mask|@keyframes difficulty-wave-drift|-webkit-mask-image|mask-image|mask-size|rotate\(-/);
+  assert.doesNotMatch(commonCss, /--difficulty-particle-field|--difficulty-flow-field|difficulty-ambient-drift/);
+  assert.match(commonCss, /transition:\s*background 620ms ease, box-shadow 620ms ease;/);
+  assert.match(commonCss, /box-shadow:\s*var\(--shadow-soft\),\s*inset 0 0 0 1px var\(--difficulty-edge, transparent\);/);
+  assert.match(waveBackdropSource, /export function DifficultyWaveBackdrop/);
+  assert.match(waveBackdropSource, /requestAnimationFrame/);
+  assert.match(waveBackdropSource, /Math\.sin/);
+  assert.match(waveBackdropSource, /lineWidth = wave\.strokeWidth/);
+  assert.match(waveBackdropSource, /lineCap = "round"/);
+  assert.match(waveBackdropSource, /spacing: strokeWidth \* 2/);
+  assert.match(waveBackdropSource, /function softenParallax\(value: number, limit: number\)/);
+  assert.match(waveBackdropSource, /easedParallaxX/);
+  assert.match(waveBackdropSource, /easedParallaxY/);
+  assert.match(waveBackdropSource, /parallaxBlend = reducedMotion \? 1 : 1 - Math\.exp\(-deltaSeconds \* 7\.2\)/);
+  assert.match(waveBackdropSource, /parallaxStepLimit = clamp\(Math\.max\(width, height\) \* 0\.72, 320, 620\)/);
+  assert.match(waveBackdropSource, /easedParallaxX \+= softenParallax\(parallaxX - easedParallaxX, parallaxStepLimit\) \* parallaxBlend/);
+  assert.match(waveBackdropSource, /easedParallaxY \+= softenParallax\(parallaxY - easedParallaxY, parallaxStepLimit\) \* parallaxBlend/);
+  assert.doesNotMatch(waveBackdropSource, /targetParallaxX|targetParallaxY|parallaxLimit = clamp\(Math\.max\(width, height\) \* 3\.2/);
+  assert.match(waveBackdropSource, /phaseDrift = reducedMotion \? 0 : seconds \* 0\.4/);
+  assert.match(waveBackdropSource, /groupDrift = reducedMotion \? 0 : seconds \* 22/);
+  assert.match(waveBackdropSource, /centerComfortFade = context\.createRadialGradient/);
+  assert.match(waveBackdropSource, /globalCompositeOperation = "destination-in"/);
+  assert.match(waveBackdropSource, /addColorStop\(0, "rgba\(0, 0, 0, 0\.38\)"\)/);
+  assert.match(waveBackdropSource, /addColorStop\(1, "rgba\(0, 0, 0, 1\)"\)/);
+  assert.match(waveBackdropSource, /--difficulty-wave-parallax-x/);
+  assert.match(waveBackdropSource, /--difficulty-wave-parallax-y/);
+  assert.match(waveBackdropSource, /parallaxX/);
+  assert.match(waveBackdropSource, /parallaxY/);
+  assert.match(waveBackdropSource, /parallaxAlong/);
+  assert.match(waveBackdropSource, /parallaxAcross/);
+  assert.match(waveBackdropSource, /lineDrift = groupDrift \+ parallaxAlong \* 0\.82/);
+  assert.match(waveBackdropSource, /shapeDrift = parallaxAcross \* 0\.3/);
+  assert.doesNotMatch(waveBackdropSource, /% wave\.spacing|TARGET_FPS_INTERVAL_MS/);
+  assert.match(nativeAimSource, /DifficultyWaveBackdrop/);
+  assert.match(nativeAimSource, /<DifficultyWaveBackdrop \/>/);
+  for (const source of [nativeReactionSource, nativeBrakingSource, doodleSource, flappySource, fallDownSource, knifeSource, squareJumpSource]) {
+    assert.match(source, /DifficultyWaveBackdrop/);
+    assert.match(source, /<DifficultyWaveBackdrop \/>/);
+  }
+  for (const source of [doodleSource, flappySource, fallDownSource, squareJumpSource]) {
+    assert.match(source, /--difficulty-wave-parallax-x/);
+    assert.match(source, /--difficulty-wave-parallax-y/);
+    assert.doesNotMatch(source, /--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
+  }
+  assert.match(flappySource, /function syncFlappyWaveParallax\([^)]*displayProgress: number,[^)]*playerY: number,[^)]*stageHeight: number,[^)]*reverseDirection: boolean/);
+  assert.match(flappySource, /drift \* 0\.95/);
+  assert.match(flappySource, /drift \* 0\.18/);
+  assert.match(flappySource, /verticalOffset \* 0\.12/);
+  assert.match(doodleSource, /function syncDoodleWaveParallax\([^)]*playerX: number,[^)]*playerY: number,[^)]*cameraY: number,[^)]*stageWidth: number/);
+  assert.match(doodleSource, /horizontalOffset \* 0\.22/);
+  assert.match(doodleSource, /verticalOffset \* 0\.05/);
+  assert.match(doodleSource, /cameraY \* 0\.86/);
+  assert.match(fallDownSource, /function syncFallDownWaveParallax\([^)]*playerX: number,[^)]*playerY: number,[^)]*cameraY: number,[^)]*stageWidth: number/);
+  assert.match(fallDownSource, /horizontalOffset \* 0\.22/);
+  assert.match(fallDownSource, /verticalOffset \* 0\.05/);
+  assert.match(fallDownSource, /-cameraY \* 0\.86/);
+  assert.match(squareJumpSource, /camera\.cameraX \* 0\.9/);
+  assert.match(squareJumpSource, /camera\.cameraY \* 0\.24/);
+  for (const source of [nativeAimSource, nativeReactionSource, nativeBrakingSource, knifeSource]) {
+    assert.doesNotMatch(source, /--difficulty-wave-parallax-x|--difficulty-wave-parallax-y|--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
+  }
+  assert.match(reactionCss, /var\(--difficulty-stage-wash, transparent\)/);
+  assert.match(reactionCss, /var\(--difficulty-cell-bg, #fbf7ef\)/);
+  assert.match(advancedCss, /\.endless-game-host\[data-difficulty-tone\]/);
+  assert.match(advancedCss, /var\(--difficulty-shell-wash, transparent\)/);
+  assert.match(multiplayerCss, /\.multiplayer-game-shell\[data-difficulty-tone\]/);
+  assert.match(multiplayerCss, /var\(--difficulty-shell-wash, transparent\)/);
+  assert.doesNotMatch([advancedCss, reactionCss, multiplayerCss].join("\n"), /--difficulty-particle-field|--difficulty-flow-field|difficulty-ambient-drift/);
 });
 
 test("mini-game stages share a reusable screen shake hook and CSS feedback class", () => {

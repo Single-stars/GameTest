@@ -1,3 +1,75 @@
+[data-difficulty-tone="advanced-tier-1"] {
+  --difficulty-stage-base: #f6fcfa;
+  --difficulty-stage-wash: radial-gradient(ellipse at 18% 14%, rgba(46, 196, 182, 0.16), transparent 42%), radial-gradient(ellipse at 86% 82%, rgba(47, 128, 237, 0.08), transparent 48%), linear-gradient(150deg, rgba(46, 196, 182, 0.08), rgba(255, 253, 248, 0) 58%);
+  --difficulty-shell-wash: radial-gradient(ellipse at 16% 10%, rgba(46, 196, 182, 0.16), transparent 36%), radial-gradient(ellipse at 86% 78%, rgba(47, 128, 237, 0.08), transparent 40%), linear-gradient(180deg, #f7fcfa 0%, #f2fbff 100%);
+  --difficulty-corner-glow: rgba(46, 196, 182, 0.22);
+  --difficulty-edge: rgba(46, 196, 182, 0.22);
+  --difficulty-wave-color: rgb(46, 196, 182);
+  --difficulty-wave-opacity: 0.12;
+  --difficulty-cell-bg: #f4fbf8;
+  --difficulty-cell-bg-soft: rgba(244, 251, 248, 0.9);
+  --difficulty-meter-start: #2ec4b6;
+  --difficulty-meter-end: #2f80ed;
+  --difficulty-host-bg: linear-gradient(180deg, rgba(46, 196, 182, 0.07), rgba(255, 253, 248, 0));
+  --difficulty-shell-top: #f7fcfa;
+  --difficulty-shell-bottom: #f2fbff;
+}
+
+[data-difficulty-tone="advanced-tier-2"] {
+  --difficulty-stage-base: #f5f9ff;
+  --difficulty-stage-wash: radial-gradient(ellipse at 82% 14%, rgba(47, 128, 237, 0.16), transparent 42%), radial-gradient(ellipse at 16% 84%, rgba(79, 197, 188, 0.09), transparent 48%), linear-gradient(150deg, rgba(47, 128, 237, 0.08), rgba(255, 253, 248, 0) 58%);
+  --difficulty-shell-wash: radial-gradient(ellipse at 84% 12%, rgba(47, 128, 237, 0.16), transparent 36%), radial-gradient(ellipse at 14% 82%, rgba(79, 197, 188, 0.08), transparent 42%), linear-gradient(180deg, #f6f9ff 0%, #eff5ff 100%);
+  --difficulty-corner-glow: rgba(47, 128, 237, 0.22);
+  --difficulty-edge: rgba(47, 128, 237, 0.2);
+  --difficulty-wave-color: rgb(47, 128, 237);
+  --difficulty-wave-opacity: 0.11;
+  --difficulty-cell-bg: #f4f8ff;
+  --difficulty-cell-bg-soft: rgba(244, 248, 255, 0.9);
+  --difficulty-meter-start: #2f80ed;
+  --difficulty-meter-end: #5370e8;
+  --difficulty-host-bg: linear-gradient(180deg, rgba(47, 128, 237, 0.07), rgba(255, 253, 248, 0));
+  --difficulty-shell-top: #f6f9ff;
+  --difficulty-shell-bottom: #eff5ff;
+}
+
+[data-difficulty-tone="advanced-tier-3"] {
+  --difficulty-stage-base: #faf7ff;
+  --difficulty-stage-wash: radial-gradient(ellipse at 22% 82%, rgba(126, 87, 194, 0.15), transparent 44%), radial-gradient(ellipse at 86% 18%, rgba(189, 99, 169, 0.1), transparent 46%), linear-gradient(150deg, rgba(126, 87, 194, 0.07), rgba(255, 253, 248, 0) 58%);
+  --difficulty-shell-wash: radial-gradient(ellipse at 18% 84%, rgba(126, 87, 194, 0.15), transparent 38%), radial-gradient(ellipse at 86% 16%, rgba(189, 99, 169, 0.1), transparent 42%), linear-gradient(180deg, #fbf8ff 0%, #f3f0ff 100%);
+  --difficulty-corner-glow: rgba(126, 87, 194, 0.22);
+  --difficulty-edge: rgba(126, 87, 194, 0.2);
+  --difficulty-wave-color: rgb(126, 87, 194);
+  --difficulty-wave-opacity: 0.1;
+  --difficulty-cell-bg: #faf7ff;
+  --difficulty-cell-bg-soft: rgba(250, 247, 255, 0.9);
+  --difficulty-meter-start: #7e57c2;
+  --difficulty-meter-end: #bd63a9;
+  --difficulty-host-bg: linear-gradient(180deg, rgba(126, 87, 194, 0.07), rgba(255, 253, 248, 0));
+  --difficulty-shell-top: #fbf8ff;
+  --difficulty-shell-bottom: #f3f0ff;
+}
+
+[data-difficulty-tone="advanced-gold"] {
+  --difficulty-stage-base: #fffaf0;
+  --difficulty-stage-wash: radial-gradient(ellipse at 72% 18%, rgba(255, 190, 80, 0.2), transparent 40%), radial-gradient(ellipse at 14% 82%, rgba(205, 142, 45, 0.08), transparent 48%), linear-gradient(150deg, rgba(255, 207, 87, 0.09), rgba(255, 253, 248, 0) 58%);
+  --difficulty-shell-wash: radial-gradient(ellipse at 76% 12%, rgba(255, 190, 80, 0.2), transparent 36%), radial-gradient(ellipse at 14% 82%, rgba(205, 142, 45, 0.08), transparent 42%), linear-gradient(180deg, #fffaf0 0%, #fff3dc 100%);
+  --difficulty-corner-glow: rgba(255, 190, 80, 0.26);
+  --difficulty-edge: rgba(222, 158, 48, 0.22);
+  --difficulty-wave-color: rgb(222, 158, 48);
+  --difficulty-wave-opacity: 0.11;
+  --difficulty-cell-bg: #fffaf0;
+  --difficulty-cell-bg-soft: rgba(255, 250, 240, 0.92);
+  --difficulty-meter-start: #ffbe50;
+  --difficulty-meter-end: #cd8e2d;
+  --difficulty-host-bg: linear-gradient(180deg, rgba(255, 190, 80, 0.08), rgba(255, 253, 248, 0));
+  --difficulty-shell-top: #fffaf0;
+  --difficulty-shell-bottom: #fff3dc;
+}
+
+[data-difficulty-tone] {
+  --difficulty-nonreaction-wave-opacity: 0.12;
+}
+
 .prototype-game-wrap {
   position: relative;
   width: min(100%, 390px);
@@ -29,13 +101,51 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  background:
+    var(--difficulty-stage-wash, transparent),
+    var(--difficulty-stage-base, var(--surface));
+  box-shadow: var(--shadow-soft), inset 0 0 0 1px var(--difficulty-edge, transparent);
   contain: layout paint;
+  isolation: isolate;
+  transition: background 620ms ease, box-shadow 620ms ease;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+}
+
+[data-difficulty-tone] .prototype-stage.doodle-stage,
+[data-difficulty-tone] .prototype-stage.flappy-stage,
+[data-difficulty-tone] .prototype-stage.flappy-stage.reverse,
+[data-difficulty-tone] .prototype-stage.flappy-stage.endless-gravity-anomaly,
+[data-difficulty-tone] .prototype-stage.square-jump-stage,
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-light,
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-heavy,
+[data-difficulty-tone] .prototype-stage.fall-down-stage,
+[data-difficulty-tone] .prototype-stage.knife-stage {
+  --difficulty-wave-opacity: var(--difficulty-nonreaction-wave-opacity, 0.12);
+  background:
+    radial-gradient(ellipse at 50% 8%, rgba(255, 253, 248, 0.98), transparent 58%),
+    linear-gradient(180deg, #fffdf8 0%, #f7f2e9 100%);
+  transition: background 620ms ease, box-shadow 620ms ease;
+}
+
+[data-difficulty-tone] .prototype-stage .flappy-background span,
+[data-difficulty-tone] .prototype-stage .square-progress-background,
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-light::before,
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-heavy::before {
+  background: none;
+  opacity: 0;
+  animation: none;
+}
+
+.difficulty-wave-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .prototype-stage:focus-visible {

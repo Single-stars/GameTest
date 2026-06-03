@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import type { SelfGameState } from "@/features/game-sync/types";
 import { getEndlessDifficulty, getEndlessKnifeConfig, getEndlessKnifeEffectiveWheelIndex } from "@/lib/endless-mode";
 import { MULTIPLAYER_FAST_STATE_SYNC_MS } from "@/lib/multiplayer/protocol";
@@ -958,6 +959,7 @@ export function KnifeHitPrototype({
           }
         }}
       >
+        <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <div className="knife-wheel-wrap">
           <div className="knife-wheel" ref={wheelRef} style={{ transform: wheelRotation }}>

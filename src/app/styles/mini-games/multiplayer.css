@@ -869,6 +869,15 @@
     linear-gradient(180deg, #fff9eb 0%, #f8fbff 100%);
 }
 
+.multiplayer-game-shell[data-difficulty-tone] {
+  background:
+    var(--difficulty-shell-wash, transparent),
+    radial-gradient(circle at 92% 8%, var(--difficulty-corner-glow, transparent), transparent 28%),
+    linear-gradient(180deg, var(--difficulty-shell-top, #fff9eb) 0%, var(--difficulty-shell-bottom, #f8fbff) 100%);
+  box-shadow: inset 0 0 0 1px var(--difficulty-edge, transparent);
+  transition: background 620ms ease, box-shadow 620ms ease;
+}
+
 .multiplayer-progress-hud {
   min-height: 44px;
   display: grid;

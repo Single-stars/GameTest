@@ -16,6 +16,7 @@ import {
   type PlayerAvatarView,
 } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
 import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
@@ -498,6 +499,14 @@ function smoothSpectatorCamera(current: number, target: number, delta: number) {
   return current + (target - current) * blend;
 }
 
+function syncDoodleWaveParallax(stage: HTMLDivElement | null, playerX: number, playerY: number, cameraY: number, stageWidth: number) {
+  if (!stage) return;
+  const horizontalOffset = playerX - stageWidth * 0.5;
+  const verticalOffset = playerY - cameraY;
+  stage.style.setProperty("--difficulty-wave-parallax-x", (cameraY * 0.1 + horizontalOffset * 0.22).toFixed(2));
+  stage.style.setProperty("--difficulty-wave-parallax-y", (cameraY * 0.86 + verticalOffset * 0.05).toFixed(2));
+}
+
 export function DoodleJumpPrototype({
   autoStart = false,
   baseRevives,
@@ -782,6 +791,7 @@ export function DoodleJumpPrototype({
     let last = performance.now();
 
     const updateDom = (current: DoodleFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time) => {
+      syncDoodleWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, logicStageWidth);
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.hazards.map((hazard) => [hazard.id, hazard]));
       if (playerShellRef.current) {
@@ -1095,7 +1105,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [authoritativeStateSubscription, baseRevives, coOpRole, isEndlessRun, level, logicStageHeight, logicStageSize, logicStageWidth, mode, onBaseReviveUsed, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, runSeed, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, visibleBuffer, world.targetHeight]);
+  }, [authoritativeStateSubscription, baseRevives, coOpRole, isEndlessRun, level, logicStageHeight, logicStageSize, logicStageWidth, mode, onBaseReviveUsed, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, runSeed, stageRef, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, visibleBuffer, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
   const worldLayerStyle = {
@@ -1158,6 +1168,7 @@ export function DoodleJumpPrototype({
         onPointerMove={updateDoodleDirection}
         onPointerUp={stopDoodleDirection}
       >
+        <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="doodle-world-layer" style={worldLayerStyle}>

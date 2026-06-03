@@ -9,6 +9,7 @@ import {
   AdvancedReactionRound,
 } from "@/features/rounds/native";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
+import { getAdvancedLevelTone } from "@/lib/advanced-progress";
 import {
   ENDLESS_REACTION_THRESHOLD_MS,
   ENDLESS_STARTING_REVIVES,
@@ -387,16 +388,17 @@ export function EndlessRoundPlayer({
     roundId,
     score: api.score,
   });
+  const difficultyTone = getAdvancedLevelTone(difficultyState.sourceAdvancedLevel);
 
   return (
-    <div className="endless-shell">
+    <div className="endless-shell" data-difficulty-tone={difficultyTone}>
       <EndlessHud
         api={api}
         bestScore={bestScore}
         debugToolsVisible={debugToolsVisible}
         difficultyState={difficultyState}
       />
-      <div className="endless-game-host" data-source-level={difficultyState.sourceAdvancedLevel}>
+      <div className="endless-game-host" data-source-level={difficultyState.sourceAdvancedLevel} data-difficulty-tone={difficultyTone}>
         <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} />
       </div>
     </div>

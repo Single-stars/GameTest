@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { getEndlessReactionConfig } from "@/lib/endless-mode";
 import {
   getParamNumber,
@@ -32,7 +33,7 @@ function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "
   return cell.color === "green" ? { action: "idle", expression: "neutral" } : { action: "sleep", expression: "sleepy" };
 }
 
-const REACTION_FEEDBACK_DELAY_MS = 400;
+const REACTION_FEEDBACK_DELAY_MS = 620;
 
 export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: RoundProps) {
   const config = advancedConfig!;
@@ -87,7 +88,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
 
   const finishAfterFeedback = useCallback(
     (extra?: TrialEvent) => {
-      finish(extra, REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS);
+      finish(extra, REACTION_FEEDBACK_DELAY_MS);
     },
     [finish],
   );
@@ -170,7 +171,8 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
               setFeedbackTone("early");
               const endlessRuntime = endlessRef.current;
               if (endlessRuntime) {
-                if (endlessRuntime.loseLife("timeout", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
+                if (endlessRuntime.loseLife("timeout", REACTION_FEEDBACK_DELAY_MS)) {
+                  clearTimers();
                   timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
                 } else {
                   finishedRef.current = true;
@@ -238,7 +240,8 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       setFeedbackTone("early");
       const endlessRuntime = endlessRef.current;
       if (endlessRuntime) {
-        if (endlessRuntime.loseLife("wrong", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
+        if (endlessRuntime.loseLife("wrong", REACTION_FEEDBACK_DELAY_MS)) {
+          clearTimers();
           timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
         } else {
           finishedRef.current = true;
@@ -262,7 +265,8 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       setFeedbackTone("early");
       const endlessRuntime = endlessRef.current;
       if (endlessRuntime) {
-        if (endlessRuntime.loseLife("false_alarm", REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS)) {
+        if (endlessRuntime.loseLife("false_alarm", REACTION_FEEDBACK_DELAY_MS)) {
+          clearTimers();
           timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
         } else {
           finishedRef.current = true;
@@ -299,8 +303,9 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
       }),
     );
     setCells((current) => current.map((item) => (item.id === cell.id ? { ...item, clicked: true, resultText: `${ms} ms` } : item)));
-
+
     if (endlessRef.current && activeGreenIdsRef.current.size === clickedGreenIdsRef.current.size) {
+      clearTimers();
       timersRef.current.push(window.setTimeout(startSignal, REACTION_FEEDBACK_DELAY_MS));
       return;
     }
@@ -325,6 +330,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
 
   return (
     <div className={`advanced-reaction-grid cells-${lanes} ${feedbackTone}`}>
+      <DifficultyWaveBackdrop />
       {cells.map((cell) => (
         <button
           className={`advanced-reaction-cell ${cell.color} ${cell.clicked ? "clicked" : ""}`}
@@ -367,7 +373,9 @@ function ReactionRoundCore({
   const answeredRef = useRef(false);
 
   function getReactionCompletionDelay(step: number, trialCount: number) {
-    return step >= trialCount ? REACTION_FEEDBACK_DELAY_MS + ROUND_SETTLEMENT_DELAY_MS : REACTION_FEEDBACK_DELAY_MS;
+    void step;
+    void trialCount;
+    return REACTION_FEEDBACK_DELAY_MS;
   }
 
   const startStep = useCallback((nextStep: number) => {

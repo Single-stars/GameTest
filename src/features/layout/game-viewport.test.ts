@@ -76,6 +76,20 @@ test("game viewport lock rejects address-bar height churn but accepts real corre
   );
 });
 
+test("game viewport lock accepts normal same-width height corrections", async () => {
+  assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
+  const { shouldCommitGameViewportSize } = await import("./game-viewport.ts");
+
+  assert.equal(
+    shouldCommitGameViewportSize(
+      { height: 790, width: 390 },
+      { height: 720, width: 390 },
+      { locked: true },
+    ),
+    true,
+  );
+});
+
 test("mini game stage measurement ignores tiny transient rectangles", async () => {
   assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
   const { shouldCommitMiniGameStageSize } = await import("./game-viewport.ts");

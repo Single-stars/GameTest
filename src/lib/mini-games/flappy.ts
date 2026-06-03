@@ -6,6 +6,8 @@ import {
   numberParam,
 } from "./shared.ts";
 
+const FLAPPY_INVINCIBLE_SAFE_APPROACH_BUFFER = 24;
+
 export type GeneratedFlappyGate = {
   id: number;
   distance: number;
@@ -70,7 +72,7 @@ export function getFlappyPlayerScreenX({
 }
 
 export function resolveFlappySafeRespawnProgress<T extends { distance: number; passed?: boolean }>({
-  fallbackBacktrack = 92,
+  fallbackBacktrack = 28,
   gates,
   gateWidth,
   invincibleForwardTravelDistance = 0,
@@ -78,12 +80,13 @@ export function resolveFlappySafeRespawnProgress<T extends { distance: number; p
   playerSize,
   playerX,
   reverseDirection,
-  safeApproachDistance = 150,
+  safeApproachDistance = 44,
   stageWidth,
 }: FlappySafeRespawnOptions<T>) {
   let respawnProgress = Math.max(0, nextProgress - fallbackBacktrack);
   const playerHalfSize = playerSize / 2;
-  const effectiveSafeApproachDistance = safeApproachDistance + Math.max(0, invincibleForwardTravelDistance);
+  const effectiveSafeApproachDistance =
+    safeApproachDistance + Math.min(FLAPPY_INVINCIBLE_SAFE_APPROACH_BUFFER, Math.max(0, invincibleForwardTravelDistance));
   const safeForwardGateX = playerX + playerHalfSize + effectiveSafeApproachDistance;
   const safeReverseGateRight = playerX - playerHalfSize - effectiveSafeApproachDistance;
 

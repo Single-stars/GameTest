@@ -12,6 +12,7 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarGravity, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
 import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import type { SelfGameState } from "@/features/game-sync/types";
@@ -148,6 +149,12 @@ function squareProgressBackgroundStyle(camera: SquareJumpBaseCamera): CSSPropert
     backgroundPosition: `${parallaxX * 0.06}px 0, ${parallaxX * 0.14}px 0, ${parallaxX * 0.22}px 0`,
     willChange: "background-position",
   };
+}
+
+function syncSquareJumpWaveParallax(stage: HTMLDivElement | null, camera: SquareJumpBaseCamera) {
+  if (!stage) return;
+  stage.style.setProperty("--difficulty-wave-parallax-x", (-camera.cameraX * 0.9).toFixed(2));
+  stage.style.setProperty("--difficulty-wave-parallax-y", (-camera.cameraY * 0.24).toFixed(2));
 }
 
 type SquareJumpUnifiedState = "idle" | "charging" | "jumping" | "airCharging" | "falling" | "advancing" | "success" | "failed";
@@ -790,6 +797,7 @@ export function SquareJumpPrototype({
 
   const updateSquareJumpDom = useCallback(
     (current: SquareJumpUnifiedRuntime, spectatingRemote = false, sceneTime = current.time) => {
+      syncSquareJumpWaveParallax(stageRef.current, current.camera);
       if (progressBackgroundRef.current) {
         const backgroundStyle = squareProgressBackgroundStyle(current.camera);
         progressBackgroundRef.current.style.backgroundPosition = String(backgroundStyle.backgroundPosition ?? "");
@@ -858,7 +866,7 @@ export function SquareJumpPrototype({
         }
       }
     },
-    [level, platformY, stageHeight, logicStageSize, stageWidth, worldLayerOffsetX, worldLayerOffsetY, worldLayerScale],
+    [level, platformY, stageHeight, logicStageSize, stageRef, stageWidth, worldLayerOffsetX, worldLayerOffsetY, worldLayerScale],
   );
 
   const fail = useCallback(
@@ -1320,6 +1328,7 @@ export function SquareJumpPrototype({
         onPointerLeave={cancelCharge}
         onPointerUp={releaseJump}
       >
+        <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="square-progress-background" ref={progressBackgroundRef} style={squareProgressBackgroundStyle(view.camera)} aria-hidden="true" />

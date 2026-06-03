@@ -14,6 +14,7 @@ import {
   type AdvancedAimEntity,
 } from "@/lib/advanced-aim";
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { type AdvancedStageConfig } from "@/lib/advanced-challenges";
 import { getEndlessAimConfig } from "@/lib/endless-mode";
 import { createSeededRandom } from "@/lib/mini-games";
@@ -1071,6 +1072,7 @@ export function AdvancedAimRound({
           : { action: "idle", expression: "neutral" };
   return (
     <div className={`game-area advanced-aim ${config.variant} mode-${mode} feedback-${feedbackTone}`} ref={areaRef} onPointerDown={shoot}>
+      <DifficultyWaveBackdrop />
       <div className="mini-score advanced-aim-score">
         <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
         {!isEndless ? <span>命中 {hitCount}/{activeRequiredHits}</span> : null}

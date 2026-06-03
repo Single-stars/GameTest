@@ -10,6 +10,7 @@ import {
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
 import { RemoteVisualSmoother, applyRemoteAvatarVisual } from "@/features/multiplayer/remote-visual-smoother";
 import {
@@ -58,7 +59,7 @@ const FLAPPY_START_PLATFORM_HEIGHT = 12;
 const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 const FLAPPY_RESPAWN_INVINCIBLE_SECONDS = 1.55;
 const FLAPPY_RESPAWN_CAMERA_SECONDS = 0.45;
-const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = FLAPPY_RESPAWN_INVINCIBLE_SECONDS + 0.45;
+const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = 0.28;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
 
@@ -155,6 +156,14 @@ function smoothSpectatorCamera(current: number, target: number, delta: number) {
 function resolveFlappyDirection(reverseDirection: boolean): PlayerAvatarDirection {
   void reverseDirection;
   return "none";
+}
+
+function syncFlappyWaveParallax(stage: HTMLDivElement | null, displayProgress: number, playerY: number, stageHeight: number, reverseDirection: boolean) {
+  if (!stage) return;
+  const drift = reverseDirection ? displayProgress : -displayProgress;
+  const verticalOffset = playerY - stageHeight * 0.5;
+  stage.style.setProperty("--difficulty-wave-parallax-x", (drift * 0.95 + verticalOffset * 0.12).toFixed(2));
+  stage.style.setProperty("--difficulty-wave-parallax-y", (drift * 0.18 + verticalOffset * 0.12).toFixed(2));
 }
 
 function flappyStartPlatformY(stageHeight: number) {
@@ -592,6 +601,7 @@ export function FlappyPrototype({
 
     const updateDom = (current: FlappyFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time) => {
       const renderProgress = current.displayProgress;
+      syncFlappyWaveParallax(stageRef.current, renderProgress, current.playerY, stageHeight, reverseDirection);
       const activeFlappyParams = isEndlessRun
         ? getEndlessFlappyRuntimeParams(level, Math.max(endlessRef.current?.score ?? 0, Math.floor(Math.max(0, current.progress) / 160)), endlessRef.current?.debugDifficulty ?? 0)
         : level.params;
@@ -917,7 +927,7 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
+  }, [backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const viewAnomaly = isEndlessRun ? getEndlessFlappyAnomaly(view.passed, endless?.debugDifficulty ?? 0) : null;
@@ -972,6 +982,7 @@ export function FlappyPrototype({
           pulse();
         }}
       >
+        <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <div style={worldLayerStyle}>
           <div className="flappy-background" aria-hidden="true">

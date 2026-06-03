@@ -24,7 +24,7 @@ import {
   writePersistedPlayerAvatarSkin,
 } from "@/features/player-avatar/player-avatar-storage";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
-import { createDefaultAdvancedProgress, readPersistedGameState, type AdvancedProgress } from "@/lib/advanced-progress";
+import { createDefaultAdvancedProgress, getAdvancedLevelTone, readPersistedGameState, type AdvancedProgress } from "@/lib/advanced-progress";
 import {
   HOMEWORLD_INITIAL_PLAYER,
   createDefaultHomeworldState,
@@ -332,6 +332,7 @@ function MultiplayerPageContent() {
     () => resolveMultiplayerLevelSelection(snapshot.match?.levelId ?? hostSelectedLevelId),
     [hostSelectedLevelId, snapshot.match?.levelId],
   );
+  const battleDifficultyTone = getAdvancedLevelTone(battleLevel.order);
   const activePlayMode = snapshot.match?.playMode ?? hostPlayMode;
   const activeLevelSelectState = snapshot.levelSelectState ?? levelSelectState;
   const levelSelectSlotsConfirmed = areMultiplayerLevelSelectSlotsConfirmed(activeLevelSelectState);
@@ -1181,6 +1182,7 @@ function MultiplayerPageContent() {
             countdownSeconds={countdownSeconds}
             countdownRules={countdownRules}
             coOpAssignmentText={coOpAssignmentText}
+            difficultyTone={battleDifficultyTone}
             opponentPlayer={snapshot.opponentPlayer}
             reactionEvents={snapshot.reactions}
             opponentResult={snapshot.opponentResult}
@@ -1388,6 +1390,7 @@ function MultiplayerPageContent() {
               countdownSeconds={countdownSeconds}
               countdownRules={countdownRules}
               coOpAssignmentText={coOpAssignmentText}
+              difficultyTone={battleDifficultyTone}
               opponentPlayer={snapshot.opponentPlayer}
               reactionEvents={snapshot.reactions}
               opponentResult={snapshot.opponentResult}

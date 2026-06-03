@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { PlayerAvatar, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import {
   getAdvancedBrakeDangerLeft,
   getAdvancedBrakeEventOptions,
@@ -822,6 +823,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
       onPointerDown={begin}
       onPointerUp={release}
     >
+      <DifficultyWaveBackdrop />
       {showAdvancedBrakingMiniScore ? (
       <div className="mini-score">
 

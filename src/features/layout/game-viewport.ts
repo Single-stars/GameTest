@@ -63,6 +63,10 @@ export function shouldCommitGameViewportSize(
   if (widthChanged) return true;
   if (!options.locked) return true;
 
+  if (next.height < previous.height) {
+    return next.height >= previous.height * COLLAPSED_VISUAL_VIEWPORT_RATIO;
+  }
+
   return next.height >= previous.height * LOCKED_HEIGHT_CORRECTION_RATIO;
 }
 

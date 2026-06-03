@@ -352,6 +352,21 @@ test("endless HUD exposes real difficulty without mixing debug jump controls int
   assert.match(cssSource, /\.endless-debug-panel summary\s*\{/);
 });
 
+test("endless play uses the same frame rhythm as base and advanced stages without covering the game", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const screenCss = sourceBetween(cssSource, ".endless-play-screen {", ".endless-shell {");
+  const shellCss = sourceBetween(cssSource, ".endless-shell {", ".endless-hud {");
+  const hudCss = sourceBetween(cssSource, ".endless-hud {", ".endless-debug-panel {");
+  const debugCss = sourceBetween(cssSource, ".endless-debug-panel {\n  grid-column:", ".endless-debug-panel summary");
+
+  assert.match(screenSource, /<div className="progress-track endless-progress-track" aria-hidden="true">/);
+  assert.match(screenCss, /grid-template-rows:\s*auto 4px minmax\(0, 1fr\);/);
+  assert.match(shellCss, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
+  assert.doesNotMatch(hudCss, /position:\s*absolute|inset:/);
+  assert.doesNotMatch(debugCss, /position:\s*absolute|top:\s*|right:/);
+});
+
 test("endless HUD can use gameplay-reported difficulty for mechanics that do not ramp by score", () => {
   const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
   const knifeSource = readFileSync(new URL("../features/mini-games/knife.tsx", import.meta.url), "utf8");
