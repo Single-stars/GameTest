@@ -125,8 +125,8 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardOverlaySource, /reward-rank-new/);
   assert.doesNotMatch(rewardOverlaySource, /reward-rank-arrow/);
   assert.match(rewardOverlaySource, /RANK_REWARD_REVEAL_COMPLETE_MS = 1260/);
-  assert.match(rewardOverlaySource, /item\.kind === "rank" \? RANK_REWARD_REVEAL_COMPLETE_MS : SKIN_REWARD_REVEAL_COMPLETE_MS/);
-  assert.match(rewardOverlaySource, /if \(item\.kind === "rank"\) return;/);
+  assert.match(rewardOverlaySource, /\(item\.kind === "rank" \|\| item\.kind === "endless"\) \? RANK_REWARD_REVEAL_COMPLETE_MS : SKIN_REWARD_REVEAL_COMPLETE_MS/);
+  assert.match(rewardOverlaySource, /if \(item\.kind === "rank" \|\| item\.kind === "endless"\) return;/);
   assert.doesNotMatch(rewardOverlaySource, /<RewardOverlayContent key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardSkinCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardRankCard key=\{item\.id\}/);
@@ -135,7 +135,11 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.doesNotMatch(rewardOverlaySource, /onOpenLuckDraw\(\)/);
   assert.doesNotMatch(rewardOverlaySource, /reward-overlay-actions/);
   assert.match(rewardOverlaySource, /reward-endless-card/);
-  assert.match(rewardOverlaySource, /reward-endless-symbol/);
+  assert.match(rewardOverlaySource, /reward-rank-card reward-endless-card/);
+  assert.match(rewardOverlaySource, /reward-rank-switch reward-endless-switch/);
+  assert.match(rewardOverlaySource, /reward-rank-value reward-rank-old/);
+  assert.match(rewardOverlaySource, /reward-rank-value reward-rank-new/);
+  assert.doesNotMatch(rewardOverlaySource, /reward-endless-symbol/);
   assert.match(rewardOverlaySource, /item\.roundTitle/);
   assert.match(rewardOverlaySource, /段位提升！/);
 
@@ -181,8 +185,11 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardCss, /\.reward-rank-eyebrow\s*{[^}]*text-shadow:/);
   assert.match(rewardCss, /\.reward-rank-value\s*{[^}]*text-shadow:/);
   assert.match(rewardCss, /\.reward-endless-card/);
-  assert.match(rewardCss, /\.reward-endless-symbol/);
-  assert.match(rewardCss, /\.reward-endless-copy/);
+  assert.match(rewardCss, /\.reward-endless-card\s*{[^}]*background:\s*transparent;/);
+  assert.match(rewardCss, /\.reward-endless-switch/);
+  assert.match(rewardCss, /\.reward-endless-subtitle/);
+  assert.doesNotMatch(rewardCss, /\.reward-endless-symbol/);
+  assert.doesNotMatch(rewardCss, /\.reward-endless-copy/);
   assert.match(rewardCss, /reward-rank-switch-old 1080ms 160ms/);
   assert.match(rewardCss, /reward-rank-switch-new 1080ms 160ms/);
   assert.match(rewardCss, /@media \(prefers-reduced-motion: reduce\)/);

@@ -90,13 +90,13 @@ function RewardEndlessCard({
   revealSettled: boolean;
 }) {
   return (
-    <div className={`reward-overlay-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label="无尽模式已解锁">
-      <span className="reward-overlay-eyebrow">无尽模式已解锁</span>
-      <span className="reward-endless-symbol" aria-hidden="true">∞</span>
-      <span className="reward-endless-copy">
-        <strong>{item.roundTitle}</strong>
-        <small>可以进入无尽挑战</small>
-      </span>
+    <div className={`reward-overlay-card reward-rank-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label="无尽模式已解锁">
+      <span className="reward-rank-eyebrow reward-endless-eyebrow">无尽模式已解锁</span>
+      <div className="reward-rank-switch reward-endless-switch" aria-live="polite">
+        <strong className="reward-rank-value reward-rank-old">无尽模式</strong>
+        <strong className="reward-rank-value reward-rank-new">{item.roundTitle}</strong>
+      </div>
+      <span className="reward-endless-subtitle">可以进入无尽挑战</span>
     </div>
   );
 }
@@ -117,7 +117,7 @@ function RewardOverlayContent({
   const itemSkinCelebrating = activeItemId === item.id ? skinCelebrating : false;
 
   useEffect(() => {
-    const revealMs = item.kind === "rank" ? RANK_REWARD_REVEAL_COMPLETE_MS : SKIN_REWARD_REVEAL_COMPLETE_MS;
+    const revealMs = (item.kind === "rank" || item.kind === "endless") ? RANK_REWARD_REVEAL_COMPLETE_MS : SKIN_REWARD_REVEAL_COMPLETE_MS;
     const revealTimer = window.setTimeout(() => {
       setActiveItemId(item.id);
       setRevealSettled(true);
@@ -155,7 +155,7 @@ function RewardOverlayContent({
 
   const handleOverlayClick = () => {
     if (!itemRevealSettled) {
-      if (item.kind === "rank") return;
+      if (item.kind === "rank" || item.kind === "endless") return;
     }
     if (finishReveal()) return;
     onDismiss();
