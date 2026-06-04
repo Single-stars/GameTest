@@ -49,11 +49,14 @@ export type MiniGameRunMode = "prototype" | "base" | "advanced";
 export type EndlessMiniGameRuntime = {
   addScore: (amount?: number) => void;
   debugDifficulty: number;
+  energyPercent: number;
+  gainEnergy: (amount?: number) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;
   reportDifficulty: (difficulty: number) => void;
   revives: number;
   score: number;
-  setDistanceScore: (distanceScore: number) => void;
+  setDistanceScore: (distanceScore: number, gainEnergyFromDistance?: boolean) => void;
+  shieldCharges: number;
 };
 export type MiniGameCompletion = {
   gameId: MiniGameId;

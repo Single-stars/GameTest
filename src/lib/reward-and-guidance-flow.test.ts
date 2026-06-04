@@ -139,6 +139,9 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardOverlaySource, /reward-rank-switch reward-endless-switch/);
   assert.match(rewardOverlaySource, /reward-rank-value reward-rank-old/);
   assert.match(rewardOverlaySource, /reward-rank-value reward-rank-new/);
+  assert.match(rewardOverlaySource, /reward-endless-unlock-label/);
+  assert.match(rewardOverlaySource, />已解锁<\/span>/);
+  assert.match(rewardOverlaySource, /\{item\.roundTitle\}·无尽模式/);
   assert.doesNotMatch(rewardOverlaySource, /reward-endless-symbol/);
   assert.match(rewardOverlaySource, /item\.roundTitle/);
   assert.match(rewardOverlaySource, /段位提升！/);

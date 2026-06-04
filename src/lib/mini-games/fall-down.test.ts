@@ -412,7 +412,11 @@ test("fall down adds falling hazards and L platforms without more than two conse
   assert.match(fallDownSource, /if \(!isStandingOnPlatform\) return playerX;/);
   assert.match(fallDownSource, /platformX - platform\.width \/ 2 - \(FALL_DOWN_LEDGE_WIDTH - 2\)/);
   assert.match(fallDownSource, /platformX \+ platform\.width \/ 2 - 2/);
+  assert.match(fallDownSource, /function resolveFallDownLedgeShape\(/);
+  assert.match(fallDownSource, /if \(kind !== "moving" && x < stageWidth \* 0\.34\) return "l-left";/);
+  assert.match(fallDownSource, /if \(kind !== "moving" && x > stageWidth \* 0\.66\) return "l-right";/);
   assert.match(fallDownSource, /rand\(\) < 0\.5 \? "l-left" : "l-right"/);
+  assert.match(fallDownSource, /resolveFallDownLedgeShape\(\{[\s\S]*baseShape[\s\S]*kind[\s\S]*stageWidth[\s\S]*x[\s\S]*\}\)/);
   assert.match(fallDownSource, /platform\.shape !== "flat" && platform\.id === view\.currentPlatformId/);
   assert.match(fallDownSource, /left: platform\.shape === "l-left" \? `-\$\{FALL_DOWN_LEDGE_WIDTH - 2\}px` : undefined/);
   assert.match(fallDownSource, /right: platform\.shape === "l-right" \? `-\$\{FALL_DOWN_LEDGE_WIDTH - 2\}px` : undefined/);

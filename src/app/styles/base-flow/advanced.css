@@ -913,13 +913,7 @@
   height: var(--game-viewport-height, 100dvh);
   min-height: var(--game-viewport-height, 100dvh);
   max-height: var(--game-viewport-height, 100dvh);
-  grid-template-rows: auto 4px minmax(0, 1fr);
-}
-
-.endless-progress-track span {
-  width: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--gold), var(--red));
-  opacity: 0.72;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .endless-shell {
@@ -958,6 +952,37 @@
   backdrop-filter: blur(14px);
 }
 
+.endless-vitality {
+  position: relative;
+  min-width: 64px;
+  display: grid;
+  gap: 4px;
+}
+
+.endless-vitality.shielded::after {
+  content: "";
+  position: absolute;
+  inset: -6px -7px;
+  border: 2px solid rgba(47, 128, 237, 0.5);
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px rgba(47, 128, 237, 0.1), 0 0 22px rgba(47, 128, 237, 0.24);
+  animation: endless-shield-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes endless-shield-pulse {
+  0%,
+  100% {
+    opacity: 0.56;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
 .endless-hearts {
   display: flex;
   align-items: center;
@@ -975,6 +1000,22 @@
 .endless-heart.active {
   color: #ff6b78;
   text-shadow: 0 0 12px rgba(255, 107, 120, 0.45);
+}
+
+.endless-energy-meter {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(47, 155, 104, 0.18);
+}
+
+.endless-energy-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 160ms ease;
 }
 
 .endless-score {
@@ -1114,98 +1155,58 @@
 }
 
 .advanced-braking.endless-runner .advanced-brake-track {
+  --advanced-brake-world-offset: 0px;
   position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(47, 155, 104, 0.08), rgba(255, 253, 248, 0) 62%),
-    #fbf7ef;
+  background: #fbf7ef;
 }
 
-.advanced-braking.endless-runner .advanced-brake-lane {
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(24, 24, 24, 0.08) 0 1px, transparent 1px 52px),
-    linear-gradient(180deg, transparent 0 72%, rgba(24, 24, 24, 0.07) 72% 100%);
-  background-position:
-    calc(0px - var(--advanced-brake-world-offset, 0px)) 0,
-    0 0;
-  background-size:
-    52px 100%,
-    auto;
-}
-
-.advanced-brake-scenery {
+.advanced-braking.endless-runner .advanced-brake-track::before {
+  content: "";
   position: absolute;
   z-index: 0;
   inset: 0;
   pointer-events: none;
-  overflow: hidden;
   background:
-    linear-gradient(180deg, transparent 0 58%, rgba(47, 155, 104, 0.08) 58% 59%, transparent 59%),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 72px,
-      rgba(24, 24, 24, 0.08) 72px 76px,
-      transparent 76px 180px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 108px,
-      rgba(47, 128, 237, 0.1) 108px 112px,
-      transparent 112px 180px
-    );
+    linear-gradient(180deg, rgba(47, 155, 104, 0.08), rgba(255, 253, 248, 0) 62%),
+    radial-gradient(ellipse at 50% 58%, rgba(47, 128, 237, 0.09), transparent 58%);
   background-position:
     0 0,
-    calc(0px - var(--advanced-brake-world-offset, 0px)) 0,
     calc(0px - var(--advanced-brake-world-offset, 0px)) 0;
-  opacity: 0.72;
+  background-size:
+    auto,
+    260px 100%;
+  opacity: 0.48;
+  transform: translateZ(0);
+  will-change: background-position;
 }
 
-.advanced-brake-scenery-post {
+.advanced-braking.endless-runner .advanced-brake-lane {
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 0 72%, rgba(24, 24, 24, 0.07) 72% 100%);
+}
+
+.advanced-brake-rule-backdrop-text {
   position: absolute;
-  bottom: 22px;
-  width: 4px;
-  height: 46px;
-  border-radius: 999px;
-  background: rgba(24, 24, 24, 0.16);
-  box-shadow: 0 10px 0 rgba(24, 24, 24, 0.08);
-  transform: translateX(calc(var(--post-x, 0px) - var(--advanced-brake-world-offset, 0px)));
+  z-index: 0;
+  top: clamp(8px, 3.2vw, 18px);
+  left: clamp(10px, 4vw, 28px);
+  right: clamp(10px, 4vw, 28px);
+  height: clamp(34px, 9vw, 58px);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: rgba(122, 34, 34, 0.72);
+  font-size: clamp(18px, 4.8vw, 34px);
+  font-weight: 950;
+  line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(255, 253, 248, 0.88), 0 10px 24px rgba(122, 34, 34, 0.18);
+  opacity: 0.88;
 }
 
-.advanced-brake-scenery-post:nth-child(1) {
-  --post-x: 36px;
-}
-
-.advanced-brake-scenery-post:nth-child(2) {
-  --post-x: 128px;
-}
-
-.advanced-brake-scenery-post:nth-child(3) {
-  --post-x: 220px;
-}
-
-.advanced-brake-scenery-post:nth-child(4) {
-  --post-x: 312px;
-}
-
-.advanced-brake-scenery-post:nth-child(5) {
-  --post-x: 404px;
-}
-
-.advanced-brake-scenery-post:nth-child(6) {
-  --post-x: 496px;
-}
-
-.advanced-brake-scenery-post:nth-child(7) {
-  --post-x: 588px;
-}
-
-.advanced-brake-scenery-post:nth-child(8) {
-  --post-x: 680px;
-}
-
-.advanced-brake-scenery-post:nth-child(9) {
-  --post-x: 772px;
+.advanced-brake-track > .advanced-brake-lane {
+  z-index: 1;
 }
 
 .advanced-braking.dual-lane-warning .advanced-brake-track {

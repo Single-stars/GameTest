@@ -858,6 +858,26 @@ test("square jump base advance keeps two platforms visible and advances by camer
   assert.doesNotMatch(componentSource, /current\.playerX = current\.advancePlan\.playerEndX/);
 });
 
+test("square jump final landing keeps the previous platform in a smooth exit state", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const globalCss = readAppCssSource();
+  const advanceSource = componentSource.slice(
+    componentSource.indexOf("const advanceToNextPlatform = useCallback("),
+    componentSource.indexOf("const launchChargedJump = useCallback("),
+  );
+  const exitingPlatformRule = globalCss.slice(
+    globalCss.indexOf(".square-jump-base-platform.exiting {"),
+    globalCss.indexOf("}", globalCss.indexOf(".square-jump-base-platform.exiting {")) + 1,
+  );
+
+  assert.match(
+    advanceSource,
+    /if \(nextJumps >= requiredJumps\) \{[\s\S]*?if \(!isEndlessRun\) \{[\s\S]*?current\.exitingPlatform = leavingPlatform;[\s\S]*?current\.exitingVisualOffsetY = 0;[\s\S]*?current\.status = "passed";/,
+  );
+  assert.match(exitingPlatformRule, /transition:\s*[^;]*(?:opacity|transform)/);
+  assert.match(exitingPlatformRule, /will-change:\s*transform,\s*opacity/);
+});
+
 test("square jump base and multiplayer misses respawn on the current platform with smooth camera recovery", () => {
   const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function recoverSquareJumpBaseMiss"), componentSource.indexOf("export function SquareJumpPrototype"));

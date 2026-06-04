@@ -27,6 +27,7 @@ import {
   shouldForceAdvancedBrakeFakeEvent,
   type AdvancedBrakeAction,
   type AdvancedBrakeEvent,
+  type AdvancedStageConfig,
 } from "@/lib/advanced-challenges";
 import { getEndlessBrakingConfig, getEndlessDifficulty, getEndlessReusableStageConfig } from "@/lib/endless-mode";
 import { DINO_SAFE_STOP_WINDOW_MS, resolveDinoStop } from "@/lib/scoring";
@@ -59,6 +60,15 @@ type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 const ENDLESS_BRAKE_RUNNER_LEFT_PERCENT = 16;
 const ENDLESS_BRAKE_SCENERY_LOOP_PX = 360;
 
+function resolveAdvancedBrakingLaneCount(config: AdvancedStageConfig) {
+  const configuredLanes = getParamNumber(config, "lanes", 1);
+  const dualRule = config.params.dualRule;
+  if (dualRule === "single-red-stop" || dualRule === "double-red-stop" || config.level === 10) {
+    return Math.max(2, configuredLanes);
+  }
+  return configuredLanes;
+}
+
 function resolveAdvancedBrakingAvatarView(holding: boolean, feedback: AdvancedBrakingFeedback): PlayerAvatarView {
   if (feedback === "success") return { action: "celebrate", expression: "happy", effect: "sparkles" };
   if (feedback === "crashed") return { action: "hit", expression: "hurt" };
@@ -73,7 +83,9 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const endlessDifficulty = endless ? Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: endless.score }), endless.debugDifficulty) : 0;
 
-  const lanes = endless ? (endlessDifficulty >= 0.48 ? 2 : 1) : getParamNumber(config, "lanes", 1);
+  const initialLaneCount = resolveAdvancedBrakingLaneCount(
+    endless ? getEndlessReusableStageConfig({ difficulty: endlessDifficulty, roundId: "braking" }).sourceConfig : config,
+  );
 
   const eventCountMin = getParamNumber(config, "eventCountMin", getParamNumber(config, "hazardCount", 2));
 
@@ -94,6 +106,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
   const finishSafeDistance = getParamNumber(config, "finishSafeDistance", 12);
   const allowGray = getParamBoolean(config, "allowGray", false);
   const ruleHint = getAdvancedBrakeRuleHint(config.level, config.params.dualRule);
+  const [activeRuleHint, setActiveRuleHint] = useState(ruleHint);
+  const [activeLaneCount, setActiveLaneCount] = useState(initialLaneCount);
 
   const eventCountTarget = useMemo(
 
@@ -103,12 +117,11 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   );
 
-  const activeEventCountTarget = endless ? Number.MAX_SAFE_INTEGER : eventCountTarget;
+  const activeEventCountTarget = endless ? Number.POSITIVE_INFINITY : eventCountTarget;
 
   const initialEventDelayMs = useMemo(() => rand(minEventDelayMs, maxEventDelayMs), [maxEventDelayMs, minEventDelayMs]);
 
   const [progress, setProgress] = useState(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
-  const [endlessWorldOffset, setEndlessWorldOffset] = useState(0);
 
   const [holding, setHolding] = useState(false);
 
@@ -116,6 +129,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
   const endlessDistanceRef = useRef(0);
+  const endlessWorldOffsetRef = useRef(0);
 
   const holdingRef = useRef(false);
 
@@ -149,6 +163,15 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const trackRef = useRef<HTMLDivElement | null>(null);
 
+  const syncEndlessWorldOffset = useCallback((distance: number) => {
+    const nextOffset = distance % ENDLESS_BRAKE_SCENERY_LOOP_PX;
+    endlessWorldOffsetRef.current = nextOffset;
+    trackRef.current?.style.setProperty("--advanced-brake-world-offset", `${nextOffset}px`);
+    const panel = trackRef.current?.closest(".advanced-braking") as HTMLElement | null;
+    panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -0.48)}`);
+    panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 140) * 8)}`);
+  }, []);
+
   const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
   const [dualLaneWarning, setDualLaneWarning] = useState(false);
 
@@ -157,6 +180,18 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
   useEffect(() => {
     endlessRef.current = endless;
   }, [endless]);
+
+  useEffect(() => {
+    if (!endless) {
+      setActiveRuleHint(ruleHint);
+      setActiveLaneCount(resolveAdvancedBrakingLaneCount(config));
+      return;
+    }
+
+    const activeConfig = getEndlessReusableStageConfig({ difficulty: endlessDifficulty, roundId: "braking" }).sourceConfig;
+    setActiveRuleHint(getAdvancedBrakeRuleHint(activeConfig.level, activeConfig.params.dualRule));
+    setActiveLaneCount(resolveAdvancedBrakingLaneCount(activeConfig));
+  }, [config, endless, endlessDifficulty, ruleHint]);
 
 
 
@@ -341,6 +376,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
     const activeConfig = endlessRuntime
       ? getEndlessReusableStageConfig({ difficulty: activeDifficulty, roundId: "braking" }).sourceConfig
       : config;
+    setActiveRuleHint(getAdvancedBrakeRuleHint(activeConfig.level, activeConfig.params.dualRule));
+    setActiveLaneCount(resolveAdvancedBrakingLaneCount(activeConfig));
     const activeBrake = endlessRuntime ? getEndlessBrakingConfig({ distance: endlessDistance }) : null;
     const activeAllowGray = endlessRuntime ? activeDifficulty >= 0.22 : allowGray;
     const activeReactionWindowMs = activeBrake?.reactionWindowMs ?? reactionWindowMs;
@@ -363,7 +400,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
         eventIndex: hazardIndexRef.current,
         eventCount: activeEventCountTarget,
       }),
-      forceRuleDanger: shouldForceAdvancedBrakeRuleDangerEvent({
+      forceRuleDanger: endlessRuntime ? false : shouldForceAdvancedBrakeRuleDangerEvent({
         level: activeConfig.level,
         ruleDangerEventUsed: ruleDangerEventUsedRef.current,
         eventIndex: hazardIndexRef.current,
@@ -539,7 +576,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
           distanceDelta = (delta * activeSpeedPerSecond) / 1000;
           endlessDistanceRef.current = activeDistance + distanceDelta;
           activeEndless.setDistanceScore(Math.floor(endlessDistanceRef.current));
-          setEndlessWorldOffset(endlessDistanceRef.current % ENDLESS_BRAKE_SCENERY_LOOP_PX);
+          syncEndlessWorldOffset(endlessDistanceRef.current);
         }
 
         const finishLeft = Math.max(0, 100 - runnerWidthPercent);
@@ -663,6 +700,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
     speedPerSecond,
 
     startHazard,
+
+    syncEndlessWorldOffset,
 
     trackMetrics,
 
@@ -811,12 +850,12 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
 
 
-  const showAdvancedBrakingMiniScore = !endless || Boolean(ruleHint);
+  const showAdvancedBrakingMiniScore = !endless || Boolean(activeRuleHint);
 
   return (
 
     <div
-      className={`braking-panel advanced-braking lanes-${lanes} ${holding ? "holding" : ""} ${advancedFeedback} ${endless ? "endless-runner" : ""} ${dualLaneWarning ? "dual-lane-warning" : ""}`}
+      className={`braking-panel advanced-braking lanes-${activeLaneCount} ${holding ? "holding" : ""} ${advancedFeedback} ${endless ? "endless-runner" : ""} ${dualLaneWarning ? "dual-lane-warning" : ""}`}
       role="application"
       aria-label="长按游戏区域前进，松手急停"
       onPointerCancel={release}
@@ -828,25 +867,20 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
       <div className="mini-score">
 
         {!endless ? <span>{Math.round(Math.min(100, progress + trackMetrics.runnerWidthPercent))}%</span> : null}
-        {ruleHint ? <span>{ruleHint}</span> : null}
+        {activeRuleHint ? <span>{activeRuleHint}</span> : null}
 
       </div>
       ) : null}
 
-      <div className="advanced-brake-track" aria-hidden="true" ref={trackRef}>
+      <div
+        className="advanced-brake-track"
+        aria-hidden="true"
+        ref={trackRef}
+      >
 
-        {endless ? (
-          <div
-            className="advanced-brake-scenery"
-            style={{ "--advanced-brake-world-offset": `${endlessWorldOffset}px` } as React.CSSProperties}
-          >
-            {Array.from({ length: 9 }, (_, index) => (
-              <span className="advanced-brake-scenery-post" key={index} />
-            ))}
-          </div>
-        ) : null}
+        {activeRuleHint ? <div className="advanced-brake-rule-backdrop-text">{activeRuleHint}</div> : null}
 
-        {Array.from({ length: lanes }, (_, lane) => (
+        {Array.from({ length: activeLaneCount }, (_, lane) => (
 
           <div className="advanced-brake-lane" key={lane}>
 

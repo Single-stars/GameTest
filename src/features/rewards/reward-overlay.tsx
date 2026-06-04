@@ -90,11 +90,11 @@ function RewardEndlessCard({
   revealSettled: boolean;
 }) {
   return (
-    <div className={`reward-overlay-card reward-rank-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label="无尽模式已解锁">
-      <span className="reward-rank-eyebrow reward-endless-eyebrow">无尽模式已解锁</span>
+    <div className={`reward-overlay-card reward-rank-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label={`已解锁${item.roundTitle}·无尽模式`}>
+      <span className="reward-rank-eyebrow reward-endless-eyebrow reward-endless-unlock-label">已解锁</span>
       <div className="reward-rank-switch reward-endless-switch" aria-live="polite">
-        <strong className="reward-rank-value reward-rank-old">无尽模式</strong>
-        <strong className="reward-rank-value reward-rank-new">{item.roundTitle}</strong>
+        <strong className="reward-rank-value reward-rank-old" aria-hidden="true">已解锁</strong>
+        <strong className="reward-rank-value reward-rank-new">{item.roundTitle}·无尽模式</strong>
       </div>
       <span className="reward-endless-subtitle">可以进入无尽挑战</span>
     </div>

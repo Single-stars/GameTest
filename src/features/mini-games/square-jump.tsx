@@ -900,11 +900,13 @@ export function SquareJumpPrototype({
 
       if (nextJumps >= requiredJumps) {
         if (!isEndlessRun) {
-        current.reason = `连续成功 ${requiredJumps} 次，到达终点平台`;
-        current.state = "success";
-        current.status = "passed";
-        syncView();
-        return true;
+          current.exitingPlatform = leavingPlatform;
+          current.exitingVisualOffsetY = 0;
+          current.reason = `连续成功 ${requiredJumps} 次，到达终点平台`;
+          current.state = "success";
+          current.status = "passed";
+          syncView();
+          return true;
         }
       }
 

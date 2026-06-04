@@ -1049,6 +1049,29 @@ test("standalone host keeps selected level state when a guest joins", () => {
   assert.match(connectedHandlerSource, /levelSelectState:\s*currentLevelSelectState/);
 });
 
+test("multiplayer mobile dialogs stay inside the stable game viewport", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const joinBackdropRule = cssRule(cssSource, ".multiplayer-join-dialog-backdrop");
+  const joinDialogRule = cssRule(cssSource, ".multiplayer-join-dialog");
+  const confirmDialogRule = cssRule(cssSource, ".multiplayer-confirm-dialog");
+  const resultPanelRule = cssRule(cssSource, ".multiplayer-game-result-panel");
+  const countdownPanelRule = cssRule(cssSource, ".multiplayer-game-countdown-panel");
+
+  assert.match(joinBackdropRule, /width:\s*var\(--game-viewport-width,\s*100dvw\);/);
+  assert.match(joinBackdropRule, /height:\s*var\(--game-viewport-height,\s*100dvh\);/);
+  assert.match(joinBackdropRule, /padding:\s*max\(18px, env\(safe-area-inset-top\)\)/);
+  assert.match(joinBackdropRule, /overflow-y:\s*auto;/);
+  assert.match(joinBackdropRule, /overscroll-behavior:\s*contain;/);
+  assert.match(joinDialogRule, /max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) -/);
+  assert.match(joinDialogRule, /overflow-y:\s*auto;/);
+  assert.match(confirmDialogRule, /max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) -/);
+  assert.match(confirmDialogRule, /overflow-y:\s*auto;/);
+  assert.match(resultPanelRule, /max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) -/);
+  assert.match(resultPanelRule, /overflow-y:\s*auto;/);
+  assert.match(countdownPanelRule, /max-height:\s*calc\(var\(--game-viewport-height,\s*100dvh\) -/);
+  assert.match(countdownPanelRule, /overflow-y:\s*auto;/);
+});
+
 test("standalone multiplayer room controls hide after peer connection and ready requires two players", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");

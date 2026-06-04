@@ -1016,9 +1016,6 @@ export function AdvancedChallengeScreen({
             </button>
           </div>
         </header>
-        <div className="progress-track endless-progress-track" aria-hidden="true">
-          <span />
-        </div>
         <EndlessRoundPlayer
           bestScore={endlessBestScore}
           debugToolsVisible={debugToolsVisible}

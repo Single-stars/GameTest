@@ -314,4 +314,5 @@ test("knife multiplayer renders turn and overtime prompts without smoothing remo
   assert.doesNotMatch(runtimeSource, /frame\.rotation = normalizeDegrees\(remoteState\.angle\)/);
   assert.match(cssSource, /\.knife-turn-ghost/);
   assert.match(cssSource, /\.knife-overtime-banner/);
+  assert.match(cssSource, /\.knife-overtime-banner\s*{[\s\S]*top:\s*max\(16px,\s*calc\(env\(safe-area-inset-top\) \+ 12px\)\);/);
 });

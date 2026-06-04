@@ -191,18 +191,43 @@ button.reward-overlay-card {
 
 .reward-endless-card {
   background: transparent;
+  gap: 2px;
 }
 
 .reward-endless-switch {
-  min-height: clamp(108px, 22vw, 148px);
+  min-height: clamp(74px, 18vw, 112px);
+}
+
+.reward-endless-unlock-label {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: reward-overlay-fade-in 420ms 120ms ease-out both;
+}
+
+.reward-endless-card .reward-rank-old {
+  display: none;
+}
+
+.reward-endless-card .reward-rank-new {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: reward-overlay-fade-in 520ms 220ms ease-out both;
 }
 
 .reward-endless-subtitle {
-  color: rgba(255, 253, 248, 0.86);
-  font-size: clamp(16px, 3.8vw, 22px);
-  font-weight: 950;
-  line-height: 1.2;
-  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.38);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.reward-endless-card.is-settled .reward-endless-unlock-label,
+.reward-endless-card.is-settled .reward-rank-new {
+  opacity: 1;
+  transform: translateY(0);
+  animation: none;
 }
 
 @keyframes reward-overlay-fade-in {

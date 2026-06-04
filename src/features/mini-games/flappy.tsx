@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 
 import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
@@ -60,6 +61,8 @@ const FLAPPY_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 const FLAPPY_RESPAWN_INVINCIBLE_SECONDS = 1.55;
 const FLAPPY_RESPAWN_CAMERA_SECONDS = 0.45;
 const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = 0.28;
+const FLAPPY_GRAVITY_FLIP_TRANSITION_SECONDS = 0.72;
+const FLAPPY_GRAVITY_FLIP_INVINCIBLE_SECONDS = 1.2;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate;
 
@@ -103,6 +106,12 @@ type FlappyViewFrame = {
   status: PrototypeStatus;
   time: number;
   visibleGates: FlappyGate[];
+};
+
+type FlappyGravityFlipTransition = {
+  startedAt: number;
+  targetFlipped: boolean;
+  until: number;
 };
 
 export type FlappyRuntimeState = {
@@ -251,7 +260,7 @@ function recoverEndlessFlappyFailure({
   nextProgress,
   playerX,
   reason,
-  recoveryY,
+  respawnY,
   reverseDirection,
   speed,
   stageHeight,
@@ -262,7 +271,7 @@ function recoverEndlessFlappyFailure({
   nextProgress: number;
   playerX: number;
   reason: string;
-  recoveryY: number | null;
+  respawnY: number;
   reverseDirection: boolean;
   speed: number;
   stageHeight: number;
@@ -288,7 +297,7 @@ function recoverEndlessFlappyFailure({
   current.respawnProgressUntil = time + FLAPPY_RESPAWN_CAMERA_SECONDS;
   current.displayProgress = resolveFlappyDisplayProgress(current);
   current.started = false;
-  current.playerY = clamp(recoveryY ?? current.playerY, PLAYER_SIZE / 2 + 14, stageHeight - PLAYER_SIZE / 2 - 14);
+  current.playerY = respawnY;
   current.playerVy = 0;
   current.invincibleUntil = time + FLAPPY_RESPAWN_INVINCIBLE_SECONDS;
 }
@@ -329,10 +338,11 @@ function formatFlappyCollectibleMissReason(collected: number, collectibleCount: 
 
 function getEndlessFlappyAnomaly(gateIndex: number, debugDifficulty: number) {
   const effectiveGateIndex = Math.max(gateIndex, Math.floor(debugDifficulty * 90));
-  if (effectiveGateIndex < 18) return { active: false, warning: false };
+  if (effectiveGateIndex < 18) return { active: false, targetFlipped: false, warning: false };
   const phase = effectiveGateIndex % 18;
   return {
     active: phase >= 12 && phase <= 15,
+    targetFlipped: phase >= 10 && phase <= 15,
     warning: phase >= 10 && phase <= 11,
   };
 }
@@ -443,13 +453,15 @@ export function FlappyPrototype({
   const worldLayerScale = Math.min(visualStageWidth / stageWidth, visualStageHeight / stageHeight);
   const worldLayerOffsetX = (visualStageWidth - stageWidth * worldLayerScale) / 2;
   const worldLayerOffsetY = (visualStageHeight - stageHeight * worldLayerScale) / 2;
-  const worldLayerStyle = {
+  const worldLayerTransform = `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`;
+  const worldLayerStyle: CSSProperties & Record<"--flappy-world-transform", string> = {
+    "--flappy-world-transform": worldLayerTransform,
     height: `${stageHeight}px`,
     left: 0,
     position: "absolute" as const,
     top: 0,
-    transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
-    transformOrigin: "top left",
+    transform: "var(--flappy-world-transform) rotate(var(--flappy-world-rotation, 0deg))",
+    transformOrigin: "50% 50%",
     width: `${stageWidth}px`,
   };
   const startPlatformY = flappyStartPlatformY(stageHeight);
@@ -495,10 +507,14 @@ export function FlappyPrototype({
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const spectateRemoteStateRef = useRef<SelfGameState | null>(spectateRemoteState);
   const endlessRef = useRef(endless);
+  const gravityFlippedRef = useRef(false);
+  const gravityFlipTransitionRef = useRef<FlappyGravityFlipTransition | null>(null);
   const isEndlessRun = Boolean(endless);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
+  const [managedGravityFlipped, setManagedGravityFlipped] = useState(false);
+  const [managedGravityFlipTransition, setManagedGravityFlipTransition] = useState<FlappyGravityFlipTransition | null>(null);
   const remotePlayerSkin = resolveFlappyRemoteSkin(remotePlayer);
 
   const syncFlappyView = useCallback(
@@ -541,12 +557,38 @@ export function FlappyPrototype({
     );
   }, [collectibleCount, gateCount, playerX, reverseDirection, speed]);
 
+  const beginManagedGravityFlipTransition = useCallback((current: FlappyFrame, nextTime: number, targetFlipped: boolean) => {
+    const existingTransition = gravityFlipTransitionRef.current;
+    if (existingTransition?.targetFlipped === targetFlipped) return false;
+
+    const transition: FlappyGravityFlipTransition = {
+      startedAt: nextTime,
+      targetFlipped,
+      until: nextTime + FLAPPY_GRAVITY_FLIP_TRANSITION_SECONDS,
+    };
+    gravityFlipTransitionRef.current = transition;
+    setManagedGravityFlipTransition(transition);
+    setManagedGravityFlipped(transition.targetFlipped);
+    current.started = false;
+    current.playerY = initialPlayerY;
+    current.playerVy = 0;
+    current.invincibleUntil = Math.max(current.invincibleUntil, nextTime + FLAPPY_GRAVITY_FLIP_INVINCIBLE_SECONDS);
+    current.respawnProgressStart = nextTime;
+    current.respawnProgressUntil = nextTime + FLAPPY_RESPAWN_CAMERA_SECONDS;
+    current.displayProgress = resolveFlappyDisplayProgress(current);
+    return true;
+  }, [initialPlayerY]);
+
   useEffect(() => {
     runtimeRef.current = initialRuntime;
     spectatorSceneTimeRef.current = initialRuntime.time;
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    gravityFlippedRef.current = false;
+    gravityFlipTransitionRef.current = null;
+    setManagedGravityFlipped(false);
+    setManagedGravityFlipTransition(null);
     remoteSmootherRef.current.reset();
     remoteVisualSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
@@ -589,11 +631,10 @@ export function FlappyPrototype({
     current.started = true;
     if (wasRespawnWaiting) current.invincibleUntil = Math.max(current.invincibleUntil, current.time + FLAPPY_RESPAWN_INVINCIBLE_SECONDS);
     current.playerTurns += 1;
-    const anomaly = isEndlessRun ? getEndlessFlappyAnomaly(current.passed, endlessRef.current?.debugDifficulty ?? 0) : null;
-    current.playerVy = reversedGravity || anomaly?.active ? 335 : -335;
+    current.playerVy = reversedGravity || gravityFlippedRef.current ? 335 : -335;
     syncFlappyView();
     syncFlappyRuntimeState(performance.now(), true);
-  }, [isEndlessRun, reversedGravity, syncFlappyRuntimeState, syncFlappyView]);
+  }, [reversedGravity, syncFlappyRuntimeState, syncFlappyView]);
 
   useEffect(() => {
     let frameId = 0;
@@ -698,6 +739,28 @@ export function FlappyPrototype({
         }
         return;
       }
+      const gravityFlipTransition = gravityFlipTransitionRef.current;
+      if (gravityFlipTransition) {
+        current.time += delta;
+        current.playerY = initialPlayerY;
+        current.playerVy = 0;
+        current.displayProgress = resolveFlappyDisplayProgress(current);
+        if (current.time >= gravityFlipTransition.until) {
+          gravityFlippedRef.current = gravityFlipTransition.targetFlipped;
+          gravityFlipTransitionRef.current = null;
+          setManagedGravityFlipTransition(null);
+          current.started = false;
+          current.playerY = initialPlayerY;
+          current.playerVy = 0;
+        }
+        updateDom(current, time);
+        if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || !gravityFlipTransitionRef.current) {
+          syncFlappyView(time);
+        }
+        syncFlappyRuntimeState(time, true);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       if (!current.started) {
         const isRespawnCameraMoving = current.respawnProgressUntil > current.time;
         current.time += delta;
@@ -713,6 +776,19 @@ export function FlappyPrototype({
 
       const nextTime = current.time + delta;
       const anomaly = isEndlessRun ? getEndlessFlappyAnomaly(current.passed, endlessRef.current?.debugDifficulty ?? 0) : null;
+      const targetManagedGravityFlipped = Boolean(isEndlessRun && anomaly?.targetFlipped);
+      if (
+        isEndlessRun
+        && targetManagedGravityFlipped !== gravityFlippedRef.current
+        && beginManagedGravityFlipTransition(current, nextTime, targetManagedGravityFlipped)
+      ) {
+        current.time = nextTime;
+        updateDom(current, time);
+        syncFlappyView(time);
+        syncFlappyRuntimeState(time, true);
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       const endlessProgress = Math.max(endlessRef.current?.score ?? 0, Math.floor(Math.max(0, current.progress) / 160));
       if (isEndlessRun) {
         extendEndlessFlappyGates(
@@ -729,7 +805,7 @@ export function FlappyPrototype({
         : level.params;
       const activeGapSize = numberParam(activeFlappyParams, "gapSize", gapSize);
       const activeSpeed = numberParam(activeFlappyParams, "speed", speed);
-      const activeReversedGravity = reversedGravity || anomaly?.active === true;
+      const activeReversedGravity = reversedGravity || gravityFlippedRef.current;
       const gravityDirection = activeReversedGravity ? -1 : 1;
       const gravityMagnitude = activeReversedGravity ? 850 : 900;
       const nextVy = current.playerVy + gravityDirection * gravityMagnitude * delta;
@@ -765,6 +841,7 @@ export function FlappyPrototype({
           if (dx * dx + dy * dy <= 24 * 24) {
             gate.collected = true;
             collected += 1;
+            endlessRef.current?.gainEnergy(1);
             eventChanged = true;
           }
         }
@@ -808,7 +885,7 @@ export function FlappyPrototype({
       current.playerVy = nextVy;
       current.passed = passed;
       current.collected = collected;
-      if (isEndlessRun) endlessRef.current?.setDistanceScore(Math.floor(Math.max(0, current.progress) / 160));
+      if (isEndlessRun) endlessRef.current?.setDistanceScore(Math.floor(Math.max(0, current.progress) / 160), false);
 
       if (isEndlessRun && status === "failed") {
         triggerScreenShake();
@@ -818,7 +895,7 @@ export function FlappyPrototype({
             nextProgress,
             playerX,
             reason,
-            recoveryY: endlessRecoveryY,
+            respawnY: initialPlayerY,
             reverseDirection,
             speed: activeSpeed,
             stageHeight,
@@ -927,15 +1004,15 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
+  }, [backgroundRefs, baseRevives, beginManagedGravityFlipTransition, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
-  const viewAnomaly = isEndlessRun ? getEndlessFlappyAnomaly(view.passed, endless?.debugDifficulty ?? 0) : null;
   const viewFlappyParams = isEndlessRun
     ? getEndlessFlappyRuntimeParams(level, Math.max(endless?.score ?? 0, view.passed), endless?.debugDifficulty ?? 0)
     : level.params;
   const viewGapSize = numberParam(viewFlappyParams, "gapSize", gapSize);
-  const activeViewReversedGravity = reversedGravity || viewAnomaly?.active === true;
+  const activeViewReversedGravity = reversedGravity || managedGravityFlipped;
+  const gravityInputLocked = Boolean(isEndlessRun && managedGravityFlipTransition);
   const playerScreenX = getFlappyPlayerScreenX({
     displayProgress: view.displayProgress,
     playerX,
@@ -973,18 +1050,23 @@ export function FlappyPrototype({
         {collectibleCount > 0 ? <span>收集 {view.collected}/{collectibleCount}</span> : null}
       </div>
       <div
-        className={`prototype-stage flappy-stage ${screenShakeClassName} ${reverseDirection ? "reverse" : ""} ${viewAnomaly?.warning ? "endless-anomaly-warning" : ""} ${viewAnomaly?.active ? "endless-gravity-anomaly" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage flappy-stage ${screenShakeClassName} ${reverseDirection ? "reverse" : ""} ${managedGravityFlipTransition ? "endless-anomaly-warning gravity-flip-managed" : ""} ${activeViewReversedGravity ? "endless-gravity-anomaly" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Flappy Bird 型小游戏"
         onPointerDown={(event) => {
           event.preventDefault();
+          if (gravityInputLocked) return;
           pulse();
         }}
       >
         <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
-        <div style={worldLayerStyle}>
+        {gravityInputLocked ? <div className="flappy-gravity-flip-banner" aria-hidden="true">重力翻转</div> : null}
+        <div
+          className={`flappy-world ${activeViewReversedGravity ? "gravity-flipped" : ""} ${managedGravityFlipTransition ? "gravity-flip-preparing" : ""}`}
+          style={worldLayerStyle}
+        >
           <div className="flappy-background" aria-hidden="true">
             {backgroundRefs.map((ref) => {
               const spacing = 82;
@@ -1018,6 +1100,16 @@ export function FlappyPrototype({
             const topHeight = centerY - viewGapSize / 2;
             const bottomY = centerY + viewGapSize / 2;
             const collectibleY = clamp(centerY + gate.collectibleOffset * viewGapSize, centerY - viewGapSize / 2 + 22, centerY + viewGapSize / 2 - 22);
+            const topGateTransform = transformPoint3d(screenX, topHeight - stageHeight);
+            const bottomGateTransform = transformPoint3d(screenX, bottomY);
+            const collectibleTransform = transformPoint3d(screenX + FLAPPY_GATE_WIDTH / 2 - 9, collectibleY - 9);
+            const topGateStyle = gate.moving
+              ? { height: `${stageHeight}px`, width: `${FLAPPY_GATE_WIDTH}px` }
+              : { height: `${stageHeight}px`, transform: topGateTransform, width: `${FLAPPY_GATE_WIDTH}px` };
+            const bottomGateStyle = gate.moving
+              ? { height: `${stageHeight}px`, width: `${FLAPPY_GATE_WIDTH}px` }
+              : { height: `${stageHeight}px`, transform: bottomGateTransform, width: `${FLAPPY_GATE_WIDTH}px` };
+            const collectibleStyle = gate.moving ? undefined : { transform: collectibleTransform };
             return (
               <div className={`flappy-gate-layer ${gate.moving ? "moving" : ""}`} key={gate.id}>
                 <div
@@ -1026,7 +1118,7 @@ export function FlappyPrototype({
                     if (node) gateTopRefs.current.set(gate.id, node);
                     else gateTopRefs.current.delete(gate.id);
                   }}
-                  style={{ height: `${stageHeight}px`, transform: transformPoint3d(screenX, topHeight - stageHeight), width: `${FLAPPY_GATE_WIDTH}px` }}
+                  style={topGateStyle}
                 />
                 <div
                   className="flappy-gate bottom"
@@ -1034,11 +1126,7 @@ export function FlappyPrototype({
                     if (node) gateBottomRefs.current.set(gate.id, node);
                     else gateBottomRefs.current.delete(gate.id);
                   }}
-                  style={{
-                    height: `${stageHeight}px`,
-                    transform: transformPoint3d(screenX, bottomY),
-                    width: `${FLAPPY_GATE_WIDTH}px`,
-                  }}
+                  style={bottomGateStyle}
                 />
                 {gate.collectible && !gate.collected ? (
                   <div
@@ -1047,7 +1135,7 @@ export function FlappyPrototype({
                       if (node) collectibleRefs.current.set(gate.id, node);
                       else collectibleRefs.current.delete(gate.id);
                     }}
-                    style={{ transform: transformPoint3d(screenX + FLAPPY_GATE_WIDTH / 2 - 9, collectibleY - 9) }}
+                    style={collectibleStyle}
                   />
                 ) : null}
               </div>

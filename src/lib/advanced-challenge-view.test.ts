@@ -14,6 +14,14 @@ import {
 } from "./advanced-challenge-view.ts";
 import { getAdvancedStageConfig } from "./advanced-challenges.ts";
 
+function cssRule(source: string, selector: string) {
+  const start = source.indexOf(selector);
+  assert.notEqual(start, -1, `missing CSS rule ${selector}`);
+  const end = source.indexOf("}", start);
+  assert.notEqual(end, -1, `unterminated CSS rule ${selector}`);
+  return source.slice(start, end + 1);
+}
+
 test("advanced lobby renders endless plus every standard level on the circular track", () => {
   const items = getAdvancedLobbyLevelItems({ currentLevel: 1, selectedLevel: 1 });
 
@@ -438,6 +446,9 @@ test("advanced lobby hero keeps the same frame height when endless title is sele
 test("advanced lobby visual structure removes text badges and keeps boundary levels in fixed columns", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const previousRule = cssRule(cssSource, ".advanced-lobby-level.previous");
+  const selectedRule = cssRule(cssSource, ".advanced-lobby-level.selected");
+  const nextRule = cssRule(cssSource, ".advanced-lobby-level.next");
 
   assert.doesNotMatch(screenSource, /item\.state === "locked" \? "锁"/);
   assert.doesNotMatch(screenSource, /"当前"/);
@@ -445,9 +456,9 @@ test("advanced lobby visual structure removes text badges and keeps boundary lev
   assert.doesNotMatch(screenSource, /左右拖动或点击切换/);
   assert.match(screenSource, /item\.state === "completed"[\s\S]*advanced-lobby-badge[\s\S]*✓/);
 
-  assert.doesNotMatch(cssSource, /\.advanced-lobby-level\.previous\s*{[\s\S]*grid-column:/);
-  assert.doesNotMatch(cssSource, /\.advanced-lobby-level\.selected\s*{[\s\S]*grid-column:/);
-  assert.doesNotMatch(cssSource, /\.advanced-lobby-level\.next\s*{[\s\S]*grid-column:/);
+  assert.doesNotMatch(previousRule, /grid-column:/);
+  assert.doesNotMatch(selectedRule, /grid-column:/);
+  assert.doesNotMatch(nextRule, /grid-column:/);
   assert.match(cssSource, /\.advanced-lobby-level\s*{[\s\S]*place-items:\s*center;/);
   assert.match(cssSource, /\.advanced-lobby-badge\s*{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16px;[\s\S]*bottom:\s*16px;/);
 });

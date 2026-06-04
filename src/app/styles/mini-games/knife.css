@@ -163,7 +163,7 @@
   position: absolute;
   z-index: 30;
   left: 50%;
-  top: 16px;
+  top: max(16px, calc(env(safe-area-inset-top) + 12px));
   min-width: 104px;
   padding: 8px 14px;
   border: 1px solid rgba(24, 24, 24, 0.1);

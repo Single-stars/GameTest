@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const moduleUrl = new URL("./game-viewport.ts", import.meta.url);
+const guardUrl = new URL("./game-viewport-guard.tsx", import.meta.url);
 
 test("game viewport resolver ignores collapsed mobile viewport readings", async () => {
   assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
@@ -88,6 +90,21 @@ test("game viewport lock accepts normal same-width height corrections", async ()
     ),
     true,
   );
+});
+
+test("game viewport guard keeps modal overlays locked to the game viewport", () => {
+  assert.equal(existsSync(guardUrl), true, guardUrl.pathname);
+  const source = readFileSync(guardUrl, "utf8");
+
+  for (const selector of [
+    ".restart-dialog-backdrop",
+    ".reward-overlay",
+    ".base-tutorial-overlay",
+    ".advanced-tutorial-overlay",
+    ".multiplayer-join-dialog-backdrop",
+  ]) {
+    assert.match(source, new RegExp(selector.replace(".", "\\.")));
+  }
 });
 
 test("mini game stage measurement ignores tiny transient rectangles", async () => {

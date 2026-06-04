@@ -32,6 +32,7 @@ import {
 import type { RoundId } from "@/lib/scoring";
 
 const ENDLESS_NATIVE_TARGET_LIMIT = 1_000_000;
+const ENDLESS_ENERGY_THRESHOLD = 10;
 
 export type EndlessRoundCompletion = {
   bonusActions: number;
@@ -143,10 +144,15 @@ function useEndlessRun({
   const startedAtRef = useRef(0);
   const completedRef = useRef(false);
   const coreActionsRef = useRef(0);
+  const distanceEnergyScoreRef = useRef(0);
+  const energyRef = useRef(0);
   const finishTimerRef = useRef<number | null>(null);
   const revivesRef = useRef(ENDLESS_STARTING_REVIVES);
+  const shieldChargesRef = useRef(0);
   const [coreActions, setCoreActions] = useState(0);
+  const [energy, setEnergy] = useState(0);
   const [revives, setRevives] = useState(ENDLESS_STARTING_REVIVES);
+  const [shieldCharges, setShieldCharges] = useState(0);
   const [debugDifficulty, setDebugDifficultyState] = useState(0);
   const [reportedDifficulty, setReportedDifficulty] = useState(0);
   const score = getEndlessScore({ coreActions });
@@ -181,9 +187,49 @@ function useEndlessRun({
     [onComplete, roundId],
   );
 
+  const gainEnergy = useCallback((amount = 1) => {
+    const safeAmount = Math.max(0, Math.floor(Number.isFinite(amount) ? amount : 1));
+    if (safeAmount <= 0) return;
+
+    let nextEnergy = energyRef.current + safeAmount;
+    let nextRevives = revivesRef.current;
+    let nextShieldCharges = shieldChargesRef.current;
+
+    while (nextEnergy >= ENDLESS_ENERGY_THRESHOLD) {
+      if (nextRevives < ENDLESS_STARTING_REVIVES) {
+        nextEnergy -= ENDLESS_ENERGY_THRESHOLD;
+        nextRevives += 1;
+      } else {
+        nextShieldCharges = 1;
+        nextEnergy = ENDLESS_ENERGY_THRESHOLD;
+        break;
+      }
+    }
+
+    energyRef.current = nextEnergy;
+    setEnergy(nextEnergy);
+
+    if (nextRevives !== revivesRef.current) {
+      revivesRef.current = nextRevives;
+      setRevives(nextRevives);
+    }
+
+    if (nextShieldCharges !== shieldChargesRef.current) {
+      shieldChargesRef.current = nextShieldCharges;
+      setShieldCharges(nextShieldCharges);
+    }
+  }, []);
+
   const loseLife = useCallback(
     (reason: string, finishDelayMs = 0) => {
       if (completedRef.current) return false;
+      if (shieldChargesRef.current > 0) {
+        shieldChargesRef.current = 0;
+        setShieldCharges(0);
+        energyRef.current = 0;
+        setEnergy(0);
+        return true;
+      }
       const nextRevives = Math.max(0, revivesRef.current - 1);
       revivesRef.current = nextRevives;
       setRevives(nextRevives);
@@ -206,15 +252,24 @@ function useEndlessRun({
     const safeAmount = Math.max(1, Math.floor(Number.isFinite(amount) ? amount : 1));
     coreActionsRef.current += safeAmount;
     setCoreActions(coreActionsRef.current);
-  }, []);
+    gainEnergy(safeAmount);
+  }, [gainEnergy]);
 
-  const setDistanceScore = useCallback((distanceScore: number) => {
+  const setDistanceScore = useCallback((distanceScore: number, gainEnergyFromDistance = true) => {
     const safeDistanceScore = Math.max(0, Math.floor(Number.isFinite(distanceScore) ? distanceScore : 0));
     const nextCoreActions = Math.max(coreActionsRef.current, safeDistanceScore);
     if (nextCoreActions === coreActionsRef.current) return;
     coreActionsRef.current = nextCoreActions;
     setCoreActions(nextCoreActions);
-  }, []);
+    if (!gainEnergyFromDistance) {
+      distanceEnergyScoreRef.current = Math.max(distanceEnergyScoreRef.current, nextCoreActions);
+      return;
+    }
+    const distanceEnergyGain = nextCoreActions - distanceEnergyScoreRef.current;
+    if (distanceEnergyGain <= 0) return;
+    distanceEnergyScoreRef.current = nextCoreActions;
+    gainEnergy(distanceEnergyGain);
+  }, [gainEnergy]);
 
   const setDebugDifficulty = useCallback((difficulty: number) => {
     setDebugDifficultyState(clamp(difficulty, 0, 1));
@@ -229,7 +284,9 @@ function useEndlessRun({
     addScore,
     coreActions,
     debugDifficulty,
+    energyPercent: shieldCharges > 0 ? 100 : Math.round((energy / ENDLESS_ENERGY_THRESHOLD) * 100),
     finish,
+    gainEnergy,
     loseLife,
     reportDifficulty,
     reportedDifficulty,
@@ -237,6 +294,7 @@ function useEndlessRun({
     score,
     setDebugDifficulty,
     setDistanceScore,
+    shieldCharges,
   };
 }
 
@@ -254,12 +312,17 @@ function EndlessHud({
   return (
     <>
       <div className="endless-hud">
-        <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}`}>
-          {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => (
-            <span className={`endless-heart ${index < api.revives ? "active" : "spent"}`} key={index}>
-              ❤
-            </span>
-          ))}
+        <div className={`endless-vitality ${api.shieldCharges > 0 ? "shielded" : ""}`}>
+          <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}`}>
+            {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => (
+              <span className={`endless-heart ${index < api.revives ? "active" : "spent"}`} key={index}>
+                ❤
+              </span>
+            ))}
+          </div>
+          <div className="endless-energy-meter" aria-label={`能量 ${api.energyPercent}%`}>
+            <span style={{ width: `${api.energyPercent}%` }} />
+          </div>
         </div>
         <div className="endless-score">
           <strong>{api.score}</strong>

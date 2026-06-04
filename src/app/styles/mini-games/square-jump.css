@@ -137,6 +137,19 @@
 .square-jump-base-platform.exiting {
   z-index: 4;
   opacity: 0.78;
+  transition: transform 220ms ease, opacity 220ms ease;
+  will-change: transform, opacity;
+  animation: square-jump-platform-exit 260ms ease both;
+}
+
+@keyframes square-jump-platform-exit {
+  from {
+    opacity: 0.78;
+  }
+
+  to {
+    opacity: 0.42;
+  }
 }
 
 .square-jump-base-platform-top,

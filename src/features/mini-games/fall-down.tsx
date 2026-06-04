@@ -299,6 +299,23 @@ function resolveFallDownLedgeCollision(platform: FallDownPlatform, platformX: nu
   return playerX;
 }
 
+function resolveFallDownLedgeShape({
+  baseShape,
+  kind,
+  stageWidth,
+  x,
+}: {
+  baseShape: FallDownPlatformShape;
+  kind: FallDownPlatformKind;
+  stageWidth: number;
+  x: number;
+}) {
+  if (baseShape === "flat") return baseShape;
+  if (kind !== "moving" && x < stageWidth * 0.34) return "l-left";
+  if (kind !== "moving" && x > stageWidth * 0.66) return "l-right";
+  return baseShape;
+}
+
 function makeFallDownPlatforms(level: MiniGameLevelConfig, runSeed: string, stageWidth: number): FallDownPlatform[] {
   const rand = createSeededRandom(`${level.levelId}:${runSeed}:fall-down-platforms`);
   const layersRequired = numberParam(level.params, "layersRequired", 12);
@@ -329,7 +346,13 @@ function makeFallDownPlatforms(level: MiniGameLevelConfig, runSeed: string, stag
     const horizontalStep = kind === "moving" ? 226 : kind === "danger" ? 210 : 196;
     const targetX = width / 2 + 14 + spreadTargetRatio * (stageWidth - width - 28);
     const x = index === 0 ? stageWidth / 2 : clamp(previousX + clamp(targetX - previousX, -horizontalStep, horizontalStep), width / 2 + 14, stageWidth - width / 2 - 14);
-    const shape = index > 0 && index < layersRequired && (ledgeBag.splice(Math.floor(rand() * ledgeBag.length), 1)[0] ?? false) ? (rand() < 0.5 ? "l-left" : "l-right") : "flat";
+    const baseShape = index > 0 && index < layersRequired && (ledgeBag.splice(Math.floor(rand() * ledgeBag.length), 1)[0] ?? false) ? (rand() < 0.5 ? "l-left" : "l-right") : "flat";
+    const shape = resolveFallDownLedgeShape({
+      baseShape,
+      kind,
+      stageWidth,
+      x,
+    });
     previousX = x;
     const moving = kind === "moving";
     const reverse = booleanParam(level.params, "reverseMoving") && index % 2 === 0 ? -1 : 1;

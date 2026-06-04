@@ -331,7 +331,7 @@ test("advanced braking mirrors base stop feedback for early release, crash, and 
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("early"/);
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("crashed"/);
   assert.match(advancedBrakingSource, /showAdvancedFeedback\("success"/);
-  assert.match(advancedBrakingSource, /advanced-braking lanes-\$\{lanes\} \$\{holding \? "holding" : ""\} \$\{advancedFeedback\}/);
+  assert.match(advancedBrakingSource, /advanced-braking lanes-\$\{activeLaneCount\} \$\{holding \? "holding" : ""\} \$\{advancedFeedback\}/);
   assert.match(advancedBrakingSource, /\{\.\.\.resolveAdvancedBrakingAvatarView\(holding, advancedFeedback\)\}/);
   assert.match(cssSource, /\.advanced-braking\.early::after/);
   assert.match(cssSource, /\.advanced-braking\.crashed::after/);
@@ -347,7 +347,9 @@ test("advanced braking rule-tale variants show the active rule in the in-round H
 
   assert.match(advancedBrakingSource, /getAdvancedBrakeRuleHint/);
   assert.match(advancedBrakingSource, /const ruleHint = getAdvancedBrakeRuleHint\(config\.level, config\.params\.dualRule\);/);
-  assert.match(advancedBrakingSource, /\{ruleHint \? <span>\{ruleHint\}<\/span> : null\}/);
+  assert.match(advancedBrakingSource, /const \[activeRuleHint, setActiveRuleHint\] = useState\(ruleHint\);/);
+  assert.match(advancedBrakingSource, /\{activeRuleHint \? <span>\{activeRuleHint\}<\/span> : null\}/);
+  assert.match(advancedBrakingSource, /advanced-brake-rule-backdrop-text/);
 });
 
 test("advanced completion header merges the round and challenge titles after settlement", () => {
@@ -509,6 +511,13 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(commonCss, /box-shadow:\s*var\(--shadow-soft\),\s*inset 0 0 0 1px var\(--difficulty-edge, transparent\);/);
   assert.match(waveBackdropSource, /export function DifficultyWaveBackdrop/);
   assert.match(waveBackdropSource, /requestAnimationFrame/);
+  assert.match(waveBackdropSource, /function refreshStyleCache\(\)/);
+  assert.match(waveBackdropSource, /function ensureAnimationLoop\(\)/);
+  assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-x", 0\)/);
+  assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-y", 0\)/);
+  assert.match(waveBackdropSource, /if \(waveOpacity <= 0\) \{/);
+  assert.match(waveBackdropSource, /styleObserver\?\.observe\(host/);
+  assert.doesNotMatch(waveBackdropSource, /const style = window\.getComputedStyle\(host\);[\s\S]{0,260}const parallaxX/);
   assert.match(waveBackdropSource, /Math\.sin/);
   assert.match(waveBackdropSource, /lineWidth = wave\.strokeWidth/);
   assert.match(waveBackdropSource, /lineCap = "round"/);
@@ -547,6 +556,9 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
     assert.match(source, /--difficulty-wave-parallax-y/);
     assert.doesNotMatch(source, /--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
   }
+  assert.match(nativeBrakingSource, /--difficulty-wave-parallax-x/);
+  assert.match(nativeBrakingSource, /--difficulty-wave-parallax-y/);
+  assert.doesNotMatch(nativeBrakingSource, /--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
   assert.match(flappySource, /function syncFlappyWaveParallax\([^)]*displayProgress: number,[^)]*playerY: number,[^)]*stageHeight: number,[^)]*reverseDirection: boolean/);
   assert.match(flappySource, /drift \* 0\.95/);
   assert.match(flappySource, /drift \* 0\.18/);
@@ -561,7 +573,7 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(fallDownSource, /-cameraY \* 0\.86/);
   assert.match(squareJumpSource, /camera\.cameraX \* 0\.9/);
   assert.match(squareJumpSource, /camera\.cameraY \* 0\.24/);
-  for (const source of [nativeAimSource, nativeReactionSource, nativeBrakingSource, knifeSource]) {
+  for (const source of [nativeAimSource, nativeReactionSource, knifeSource]) {
     assert.doesNotMatch(source, /--difficulty-wave-parallax-x|--difficulty-wave-parallax-y|--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
   }
   assert.match(reactionCss, /var\(--difficulty-stage-wash, transparent\)/);

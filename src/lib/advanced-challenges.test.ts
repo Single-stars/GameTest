@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -38,6 +39,18 @@ const EXPECTED_ADVANCED_STAGE_TITLES: Record<RoundId, string[]> = {
   braking: ["走到最后Ⅰ", "假危险Ⅰ", "规则怪谈Ⅰ", "走到最后Ⅱ", "假危险Ⅱ", "规则怪谈Ⅱ", "走到最后Ⅲ", "假危险Ⅲ", "规则怪谈Ⅲ", "最终试炼"],
   patience: ["倒计时Ⅰ", "变速转盘Ⅰ", "危险区Ⅰ", "倒计时Ⅱ", "变速转盘Ⅱ", "危险区Ⅱ", "倒计时Ⅲ", "变速转盘Ⅲ", "危险区Ⅲ", "最终试炼"],
 };
+
+function readSource(path: string) {
+  return readFileSync(new URL(path, import.meta.url), "utf8");
+}
+
+function cssRule(source: string, selector: string) {
+  const start = source.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `missing CSS rule ${selector}`);
+  const end = source.indexOf("}", start);
+  assert.notEqual(end, -1, `unterminated CSS rule ${selector}`);
+  return source.slice(start, end + 1);
+}
 
 function trial(roundId: RoundId, index: number, patch: Partial<TrialEvent> = {}): TrialEvent {
   return {
@@ -364,6 +377,68 @@ test("advanced braking exposes in-round rule hints for rule-tale variants", () =
   assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "规则：只有两个红色危险出现时是危险的");
   assert.equal(getAdvancedBrakeRuleHint(9, "fake-all"), "规则：所有危险都是假的");
   assert.equal(getAdvancedBrakeRuleHint(10, undefined), "规则：只有一个危险单独出现时是真危险");
+});
+
+test("advanced braking renders rule-tale hints as readable background text", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const cssSource = readSource("../app/styles/base-flow/advanced.css");
+  const advancedBrakingSource = brakingSource.slice(
+    brakingSource.indexOf("export function AdvancedBrakingRound"),
+    brakingSource.indexOf("const DINO_TRIAL_COUNT"),
+  );
+  const ruleText = cssRule(cssSource, ".advanced-brake-rule-backdrop-text");
+  const trackRenderSource = advancedBrakingSource.slice(
+    advancedBrakingSource.indexOf('className="advanced-brake-track"'),
+    advancedBrakingSource.indexOf("{Array.from({ length: lanes }"),
+  );
+
+  assert.match(advancedBrakingSource, /const \[activeRuleHint, setActiveRuleHint\] = useState/);
+  assert.match(advancedBrakingSource, /setActiveRuleHint\(getAdvancedBrakeRuleHint\(activeConfig\.level, activeConfig\.params\.dualRule\)\)/);
+  assert.match(trackRenderSource, /className="advanced-brake-rule-backdrop-text"/);
+  assert.match(ruleText, /position:\s*absolute;/);
+  assert.match(ruleText, /top:\s*clamp\(/);
+  assert.match(ruleText, /height:\s*clamp\(/);
+  assert.doesNotMatch(ruleText, /inset:\s*4px 8px 12px;/);
+  assert.match(ruleText, /pointer-events:\s*none;/);
+  assert.match(ruleText, /z-index:\s*0;/);
+  assert.match(ruleText, /text-shadow:/);
+});
+
+test("advanced braking endless lanes follow the active reused rule config without forcing rule dangers", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const advancedBrakingSource = brakingSource.slice(
+    brakingSource.indexOf("export function AdvancedBrakingRound"),
+    brakingSource.indexOf("const DINO_TRIAL_COUNT"),
+  );
+
+  assert.match(brakingSource, /function resolveAdvancedBrakingLaneCount/);
+  assert.match(advancedBrakingSource, /const \[activeLaneCount, setActiveLaneCount\] = useState/);
+  assert.match(advancedBrakingSource, /setActiveLaneCount\(resolveAdvancedBrakingLaneCount\(activeConfig\)\)/);
+  assert.doesNotMatch(advancedBrakingSource, /const lanes = endless \? \(endlessDifficulty >= 0\.48 \? 2 : 1\)/);
+  assert.match(advancedBrakingSource, /forceRuleDanger: endlessRuntime \? false : shouldForceAdvancedBrakeRuleDangerEvent/);
+  assert.doesNotMatch(advancedBrakingSource, /const activeEventCountTarget = endless \? Number\.MAX_SAFE_INTEGER : eventCountTarget;/);
+});
+
+test("advanced braking endless runner uses a lightweight background parallax instead of in-track scenery posts", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const cssSource = readSource("../app/styles/base-flow/advanced.css");
+  const trackRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-track");
+  const trackBeforeRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-track::before");
+  const laneRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-lane");
+
+  assert.match(brakingSource, /--advanced-brake-world-offset/);
+  assert.match(brakingSource, /--difficulty-wave-parallax-x/);
+  assert.match(brakingSource, /--difficulty-wave-parallax-y/);
+  assert.doesNotMatch(brakingSource, /setEndlessWorldOffset/);
+  assert.doesNotMatch(brakingSource, /advanced-brake-scenery-post/);
+  assert.doesNotMatch(brakingSource, /className="advanced-brake-scenery"/);
+  assert.match(trackRule, /--advanced-brake-world-offset/);
+  assert.match(trackBeforeRule, /position:\s*absolute;/);
+  assert.match(trackBeforeRule, /pointer-events:\s*none;/);
+  assert.match(trackBeforeRule, /background-position:[\s\S]*var\(--advanced-brake-world-offset/);
+  assert.doesNotMatch(trackBeforeRule, /repeating-linear-gradient\(\s*90deg/);
+  assert.doesNotMatch(laneRule, /linear-gradient\(90deg/);
+  assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post/);
 });
 
 test("advanced braking positions danger by reaction window and wins when block right edge reaches finish", () => {

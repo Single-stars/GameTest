@@ -24,6 +24,11 @@ const LOCKED_GAME_SURFACE_SELECTOR = [
   ".multiplayer-select-shell",
   ".multiplayer-level-room",
   ".multiplayer-game-shell",
+  ".multiplayer-join-dialog-backdrop",
+  ".restart-dialog-backdrop",
+  ".reward-overlay",
+  ".base-tutorial-overlay",
+  ".advanced-tutorial-overlay",
 ].join(", ");
 
 const SETTLED_MEASURE_DELAYS_MS = [60, 180, 420, 900];

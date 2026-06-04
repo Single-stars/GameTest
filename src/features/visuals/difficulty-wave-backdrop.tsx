@@ -16,16 +16,25 @@ function readNumberVar(style: CSSStyleDeclaration, name: string, fallback: numbe
   return Number.isFinite(value) ? value : fallback;
 }
 
+function readInlineNumberVar(host: HTMLElement, name: string, fallback: number) {
+  const value = Number(host.style.getPropertyValue(name).trim());
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export function DifficultyWaveBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const host = canvas?.parentElement;
-    if (!canvas || !host) return undefined;
+    const canvasOrNull = canvasRef.current;
+    if (!canvasOrNull) return undefined;
+    const canvas = canvasOrNull;
+    const hostOrNull = canvas.parentElement;
+    if (!hostOrNull) return undefined;
+    const host: HTMLElement = hostOrNull;
 
-    const context = canvas.getContext("2d", { alpha: true });
-    if (!context) return undefined;
+    const contextOrNull = canvas.getContext("2d", { alpha: true });
+    if (!contextOrNull) return undefined;
+    const context: CanvasRenderingContext2D = contextOrNull;
 
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let animationFrameId = 0;
@@ -35,6 +44,8 @@ export function DifficultyWaveBackdrop() {
     let lastFrameTime = 0;
     let easedParallaxX = 0;
     let easedParallaxY = 0;
+    let waveColor = "";
+    let waveOpacity = 0;
 
     const resize = () => {
       const rect = host.getBoundingClientRect();
@@ -45,22 +56,56 @@ export function DifficultyWaveBackdrop() {
       canvas.height = Math.round(height * dpr);
     };
 
-    const draw = (time: number) => {
+    function clearCanvas() {
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.clearRect(0, 0, width, height);
+    }
+
+    function ensureAnimationLoop() {
+      if (animationFrameId !== 0 || !waveColor || waveOpacity <= 0) return;
       animationFrameId = window.requestAnimationFrame(draw);
+    }
+
+    function refreshStyleCache() {
+      const style = window.getComputedStyle(host);
+      waveColor = style.getPropertyValue("--difficulty-wave-color").trim();
+      waveOpacity = clamp(readNumberVar(style, "--difficulty-wave-opacity", 0), 0, 0.42);
+
+      if (!waveColor) {
+        if (animationFrameId !== 0) {
+          window.cancelAnimationFrame(animationFrameId);
+          animationFrameId = 0;
+        }
+        clearCanvas();
+        return;
+      }
+
+      if (waveOpacity <= 0) {
+        if (animationFrameId !== 0) {
+          window.cancelAnimationFrame(animationFrameId);
+          animationFrameId = 0;
+        }
+        clearCanvas();
+        return;
+      }
+
+      ensureAnimationLoop();
+    }
+
+    const draw = (time: number) => {
+      animationFrameId = 0;
 
       if (width <= 1 || height <= 1) resize();
       const deltaSeconds = lastFrameTime === 0 ? 1 / 60 : Math.min(0.05, Math.max(0, (time - lastFrameTime) / 1000));
       lastFrameTime = time;
 
-      const style = window.getComputedStyle(host);
-      const waveColor = style.getPropertyValue("--difficulty-wave-color").trim();
-      const waveOpacity = clamp(readNumberVar(style, "--difficulty-wave-opacity", 0), 0, 0.42);
-      const parallaxX = readNumberVar(style, "--difficulty-wave-parallax-x", 0);
-      const parallaxY = readNumberVar(style, "--difficulty-wave-parallax-y", 0);
+      const parallaxX = readInlineNumberVar(host, "--difficulty-wave-parallax-x", 0);
+      const parallaxY = readInlineNumberVar(host, "--difficulty-wave-parallax-y", 0);
 
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);
       if (!waveColor || waveOpacity <= 0) return;
+      ensureAnimationLoop();
 
       const shortSide = Math.min(width, height);
       const strokeWidth = clamp(shortSide * 0.09, 48, 68);
@@ -136,14 +181,29 @@ export function DifficultyWaveBackdrop() {
     };
 
     resize();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      resize();
+      refreshStyleCache();
+    });
     observer?.observe(host);
+    const styleObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(refreshStyleCache);
+    styleObserver?.observe(host, {
+      attributeFilter: ["class", "style", "data-difficulty-tone"],
+      attributes: true,
+    });
+    if (host.parentElement) {
+      styleObserver?.observe(host.parentElement, {
+        attributeFilter: ["class", "style", "data-difficulty-tone"],
+        attributes: true,
+      });
+    }
     window.addEventListener("resize", resize);
-    animationFrameId = window.requestAnimationFrame(draw);
+    refreshStyleCache();
 
     return () => {
       if (animationFrameId !== 0) window.cancelAnimationFrame(animationFrameId);
       observer?.disconnect();
+      styleObserver?.disconnect();
       window.removeEventListener("resize", resize);
     };
   }, []);

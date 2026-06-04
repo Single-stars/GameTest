@@ -205,6 +205,15 @@
     min-height: calc(var(--game-viewport-height, 100svh) - 24px);
   }
 
+  .advanced-screen,
+  .luck-screen {
+    height: calc(var(--game-viewport-height, 100svh) - 24px);
+    max-height: calc(var(--game-viewport-height, 100svh) - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .result-screen {
     min-height: 0;
   }

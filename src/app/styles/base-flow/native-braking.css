@@ -64,6 +64,7 @@
   width: min(100%, 720px);
   display: grid;
   gap: 18px;
+  transition: gap 320ms ease;
 }
 
 .advanced-brake-lane {
@@ -72,6 +73,7 @@
   overflow: hidden;
   border-bottom: 4px solid rgba(24, 24, 24, 0.16);
   background: linear-gradient(180deg, transparent 0 72%, rgba(24, 24, 24, 0.04) 72% 100%);
+  transition: min-height 320ms ease, opacity 240ms ease;
 }
 
 .advanced-runner {
