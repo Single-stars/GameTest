@@ -28,6 +28,7 @@ export function MiniGameEmbeddedStage({
   onComplete,
   onRestart = () => undefined,
   runSeed,
+  shielded = false,
 }: {
   baseRevives?: number;
   endless?: EndlessMiniGameRuntime;
@@ -40,21 +41,22 @@ export function MiniGameEmbeddedStage({
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRestart?: () => void;
   runSeed: string;
+  shielded?: boolean;
 }) {
   const level = levelOverride ?? getMiniGameLevel(gameId, levelId);
   const stageKey = `${gameId}-${levelId}-${runSeed}`;
   const sharedUnlimitedRespawn = Boolean(endless) && mode !== "endless";
   if (gameId === "doodle") {
-    return <DoodleJumpPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
+    return <DoodleJumpPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} shielded={shielded} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "flappy") {
-    return <FlappyPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
+    return <FlappyPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} shielded={shielded} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "square-jump") {
-    return <SquareJumpPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
+    return <SquareJumpPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} shielded={shielded} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
   if (gameId === "fall-down") {
-    return <FallDownPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
+    return <FallDownPrototype key={stageKey} baseRevives={baseRevives} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} shielded={shielded} unlimitedRespawn={sharedUnlimitedRespawn} />;
   }
-  return <KnifeHitPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} unlimitedRespawn={sharedUnlimitedRespawn} />;
+  return <KnifeHitPrototype key={stageKey} endless={endless} level={level} mode={mode} onBackToSelect={onBackToSelect} onComplete={onComplete} onRestart={onRestart} runSeed={runSeed} shielded={shielded} unlimitedRespawn={sharedUnlimitedRespawn} />;
 }

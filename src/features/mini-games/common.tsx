@@ -50,7 +50,7 @@ export type EndlessMiniGameRuntime = {
   addScore: (amount?: number) => void;
   debugDifficulty: number;
   energyPercent: number;
-  gainEnergy: (amount?: number) => void;
+  gainEnergy: (amount?: number, feedbackText?: string) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;
   reportDifficulty: (difficulty: number) => void;
   revives: number;

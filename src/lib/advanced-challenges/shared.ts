@@ -39,7 +39,7 @@ const stageTitleBaseByRound: Record<RoundId, Record<1 | 2 | 3, string>> = {
   memory: {
     1: "移动通道",
     2: "道具收集",
-    3: "翻转空间",
+    3: "重力倒转",
   },
   braking: {
     1: "走到最后",

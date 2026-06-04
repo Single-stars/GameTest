@@ -1182,7 +1182,7 @@ test("avatar expression usage removes focused and maps gameplay focus to neutral
   assert.doesNotMatch(avatarRelatedSources, /action: "jump"|action: "fall"/);
   assert.match(avatarRelatedSources, /action: "move", expression: "neutral"/);
   assert.match(avatarRelatedSources, /action: "charge", expression: "neutral"/);
-  assert.match(avatarRelatedSources, /view\.feedback === "Good"\) return \{ action: "land", expression: "neutral" \};/);
+  assert.doesNotMatch(avatarRelatedSources, /view\.feedback === "Good"|current\.feedback = "Good"|prototype-feedback good/);
   assert.match(avatarRelatedSources, /view\.status === "passed"\) return \{ action: "celebrate", expression: "happy", effect: "sparkles" \};/);
   assert.match(avatarRelatedSources, /view\.state === "jumping"\) return \{ action: "idle", expression: "neutral" \};/);
   assert.match(avatarRelatedSources, /view\.state === "falling"\) return \{ action: "idle", expression: "scared" \};/);

@@ -54,7 +54,7 @@ import {
   getSquareJumpBasePlatformX,
   getSquareJumpBasePlayerXOnPlatform,
   getSquareJumpChargeAt,
-  resolveSquareJumpActiveGravity,
+  resolveSquareJumpGravityAfterLanding,
   resolveSquareJumpBaseFlyAwayLanding,
   sampleSquareJumpBaseAdvanceCamera,
   sampleSquareJumpBaseFlyAway,
@@ -69,6 +69,7 @@ import {
 } from "@/lib/mini-games";
 import { getEndlessMiniGameStageConfig } from "@/lib/endless-mode";
 
+const ENDLESS_SQUARE_CENTER_LANDING_RATIO = 0.1;
 const DEBUG_MINI_GAME_HITBOX = false;
 type SquareJumpBaseCamera = ReturnType<typeof fitSquareJumpBaseCamera>;
 type SquareGravityState = PlayerAvatarGravity & NonNullable<SquareJumpBasePlatform["gravity"]>;
@@ -168,6 +169,7 @@ type SquareJumpUnifiedRuntime = {
   chargeElapsedMs: number;
   state: SquareJumpUnifiedState;
   activeGravity: SquareGravityState;
+  gravityJumpsRemaining: number | null;
   currentIndex: number;
   nextIndex: number;
   platforms: SquareJumpBasePlatform[];
@@ -187,8 +189,6 @@ type SquareJumpUnifiedRuntime = {
   exitingVisualOffsetY: number;
   nextVisualOffsetY: number;
   lockedNextVisualOffsetY: number | null;
-  feedback: "Good" | "提醒" | "";
-  feedbackUntil: number;
   respawnUntil: number;
   timer: number | null;
   status: PrototypeStatus;
@@ -206,7 +206,6 @@ function resolveSquareJumpPlayerAvatarView(view: SquareJumpUnifiedRuntime): Play
   if (view.status === "passed") return { action: "celebrate", expression: "happy", effect: "sparkles" };
   if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };
   if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };
-  if (view.feedback === "Good") return { action: "land", expression: "neutral" };
   if (view.state === "jumping") return { action: "idle", expression: "neutral" };
   if (view.state === "falling") return { action: "idle", expression: "scared" };
   return { action: "idle", expression: "neutral" };
@@ -453,9 +452,8 @@ function createSquareJumpUnifiedRuntime(level: MiniGameLevelConfig, runSeed: str
     doubleJumpUsed: false,
     exitingPlatform: null,
     exitingVisualOffsetY: 0,
-    feedback: "",
-    feedbackUntil: 0,
     failures: 0,
+    gravityJumpsRemaining: null,
     jumpPlan: null,
     jumpStartedAt: 0,
     jumps: 0,
@@ -609,6 +607,7 @@ export function SquareJumpPrototype({
   logicStageSizeOverride,
   mode,
   runSeed,
+  shielded = false,
   onBackToSelect,
   onComplete,
   onRuntimeState,
@@ -630,6 +629,7 @@ export function SquareJumpPrototype({
   logicStageSizeOverride?: MiniGameStageSize;
   mode: MiniGameRunMode | "endless";
   runSeed: string;
+  shielded?: boolean;
   onBackToSelect: () => void;
   onComplete?: (outcome: MiniGameCompletion) => void;
   onRuntimeState?: (state: SquareJumpStateSnapshot) => void;
@@ -661,6 +661,7 @@ export function SquareJumpPrototype({
   const cyclingCharge = doubleJumpEnabled && booleanParam(level.params, "cyclingChargeOnDoubleJump");
   const flyAwayLandingCatchDepth = numberParam(level.params, "flyAwayLandingCatchDepth", PLAYER_SIZE * 1.25);
   const targetLandingPadding = numberParam(level.params, "targetLandingPadding", 12);
+  const gravityJumpLimit = numberParam(level.params, "gravityJumpLimit", 0);
   const isEndlessRun = Boolean(endless);
   const initialRuntime = useMemo(() => {
     const runtime = createSquareJumpUnifiedRuntime(level, runSeed, logicStageSize);
@@ -887,14 +888,25 @@ export function SquareJumpPrototype({
       const nextJumps = current.jumps + 1;
       const leavingPlatform = { ...current.currentPlatform };
       const landedPlatform = { ...current.nextPlatform };
-      current.feedback = "Good";
-      current.feedbackUntil = current.time + 0.55;
       current.jumps = nextJumps;
       current.playerY = landedPlatform.y - PLAYER_SIZE / 2;
       current.playerOffsetOnCurrent = current.playerX - getSquareJumpBasePlatformX(landedPlatform, current.time);
+      if (isEndlessRun) {
+        endlessRef.current?.gainEnergy(1);
+        if (Math.abs(current.playerOffsetOnCurrent) <= landedPlatform.width * ENDLESS_SQUARE_CENTER_LANDING_RATIO) {
+          endlessRef.current?.gainEnergy(1, "精准落地！");
+        }
+      }
       current.currentIndex = current.nextIndex;
       current.currentPlatform = landedPlatform;
-      current.activeGravity = resolveSquareJumpActiveGravity(current.activeGravity, landedPlatform.gravity);
+      const gravityState = resolveSquareJumpGravityAfterLanding({
+        currentGravity: current.activeGravity,
+        jumpLimit: gravityJumpLimit,
+        landedGravity: landedPlatform.gravity,
+        remainingJumps: current.gravityJumpsRemaining,
+      });
+      current.activeGravity = gravityState.gravity;
+      current.gravityJumpsRemaining = gravityState.remainingJumps;
       current.doubleJumpUsed = false;
       current.jumpPlan = null;
 
@@ -912,14 +924,14 @@ export function SquareJumpPrototype({
 
       const cameraStart = { ...current.camera };
       const futureIndex = current.nextIndex + 1;
-      const endlessDistanceScore = Math.floor(Math.max(0, current.currentIndex * 160) / 100);
-      if (isEndlessRun) endlessRef.current?.setDistanceScore(endlessDistanceScore);
+      const endlessLandingScore = current.currentIndex;
+      if (isEndlessRun) endlessRef.current?.setDistanceScore(endlessLandingScore, false);
       if (isEndlessRun) {
         ensureEndlessSquareJumpPlatforms(
           current,
           level,
           runSeed,
-          Math.max(endlessRef.current?.score ?? 0, endlessDistanceScore),
+          Math.max(endlessRef.current?.score ?? 0, endlessLandingScore),
           endlessRef.current?.debugDifficulty ?? 0,
           futureIndex,
         );
@@ -942,7 +954,7 @@ export function SquareJumpPrototype({
       current.state = "advancing";
       return false;
     },
-    [isEndlessRun, level, logicStageSize, requiredJumps, runSeed, stageHeight, syncView],
+    [gravityJumpLimit, isEndlessRun, level, logicStageSize, requiredJumps, runSeed, stageHeight, syncView],
   );
 
   const launchChargedJump = useCallback(() => {
@@ -1109,7 +1121,6 @@ export function SquareJumpPrototype({
 
       if (current.status === "playing") {
         current.time += delta;
-        if (current.feedback && current.time >= current.feedbackUntil) current.feedback = "";
         if (current.state === "idle" || current.state === "charging" || current.state === "advancing") {
           current.playerX = getSquareJumpBasePlayerXOnPlatform({
             offset: current.playerOffsetOnCurrent,
@@ -1392,7 +1403,7 @@ export function SquareJumpPrototype({
             );
           })}
           <div
-            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.feedback ? "landed" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
+            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
             ref={playerShellRef}
             style={{
               left: "0px",
@@ -1405,7 +1416,8 @@ export function SquareJumpPrototype({
             <PlayerAvatar
               {...resolveSquareJumpPlayerAvatarView(view)}
               charge={view.charge}
-              gravity={view.activeGravity}
+              effect={shielded ? "shield" : resolveSquareJumpPlayerAvatarView(view).effect}
+              gravity="normal"
               rotationTurns={view.playerTurns}
               rootRef={playerAvatarRef}
               customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
@@ -1480,7 +1492,6 @@ export function SquareJumpPrototype({
             aria-hidden="true"
           />
         ) : null}
-        {view.feedback ? <div className="prototype-feedback good">{view.feedback}</div> : null}
         {showOverlay ? <PrototypeEndOverlay status={view.status} reason={view.reason} onBackToSelect={onBackToSelect} onRestart={onRestart} /> : null}
       </div>
     </div>

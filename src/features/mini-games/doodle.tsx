@@ -65,6 +65,7 @@ import {
 
 const DOODLE_PLAYER_SPEED = 315;
 const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
+const ENDLESS_DOODLE_ENERGY_DISTANCE = 10;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -519,6 +520,7 @@ export function DoodleJumpPrototype({
   remoteState,
   spectateRemoteState = null,
   runSeed,
+  shielded = false,
   logicStageSizeOverride,
   unlimitedRespawn = false,
   coOpInputState = null,
@@ -543,6 +545,7 @@ export function DoodleJumpPrototype({
   remoteState?: DoodleRemoteState | null;
   spectateRemoteState?: SelfGameState | null;
   runSeed: string;
+  shielded?: boolean;
   logicStageSizeOverride?: MiniGameStageSize;
   unlimitedRespawn?: boolean;
   coOpInputState?: DoodleRemoteState | null;
@@ -617,6 +620,7 @@ export function DoodleJumpPrototype({
   const coOpPlayerSkin = resolveDoodleCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const endlessEnergyDistanceRef = useRef(0);
 
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
@@ -955,12 +959,14 @@ export function DoodleJumpPrototype({
           const crossed = previousY - PLAYER_SIZE / 2 >= platform.y && nextY - PLAYER_SIZE / 2 <= platform.y;
           const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
           if (crossed && insideX) {
+            const landedBelowScreenPlatform = isEndlessRun && platform.y < current.cameraY && platform.y >= current.cameraY - 80;
             nextY = platform.y + PLAYER_SIZE / 2;
             nextVy = getDoodleBounceVelocity({ risk: platform.risk, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
             if (!platform.risk && !platform.finish) current.lastSafePlatformId = platform.id;
             if (platform.risk) riskHit += 1;
+            if (landedBelowScreenPlatform) endlessRef.current?.gainEnergy(1, "无视野预判！");
             jumpTurnAvailable = true;
             eventChanged = true;
             break;
@@ -1033,7 +1039,16 @@ export function DoodleJumpPrototype({
       current.riskHit = riskHit;
       current.playerTurns = playerTurns;
       current.jumpTurnAvailable = jumpTurnAvailable;
-      if (isEndlessRun) endlessRef.current?.setDistanceScore(Math.floor(Math.max(0, current.playerY) / 100));
+      if (isEndlessRun) {
+        const endlessDistanceScore = Math.floor(Math.max(0, current.playerY) / 100);
+        endlessRef.current?.setDistanceScore(endlessDistanceScore, false);
+        const nextEnergyDistance = Math.floor(endlessDistanceScore / ENDLESS_DOODLE_ENERGY_DISTANCE);
+        const energyGain = nextEnergyDistance - endlessEnergyDistanceRef.current;
+        if (energyGain > 0) {
+          endlessEnergyDistanceRef.current = nextEnergyDistance;
+          endlessRef.current?.gainEnergy(energyGain);
+        }
+      }
 
       if (isEndlessRun && status === "failed") {
         triggerScreenShake();
@@ -1219,6 +1234,7 @@ export function DoodleJumpPrototype({
             <PlayerAvatar
               {...resolveDoodlePlayerAvatarView(view)}
               direction={view.playerDirection}
+              effect={shielded ? "shield" : resolveDoodlePlayerAvatarView(view).effect}
               gravity="normal"
               rotationTurns={view.playerTurns}
               customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}

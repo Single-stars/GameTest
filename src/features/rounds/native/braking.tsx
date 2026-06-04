@@ -58,6 +58,7 @@ type AdvancedBrakeHazard = {
 type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 
 const ENDLESS_BRAKE_RUNNER_LEFT_PERCENT = 16;
+const ENDLESS_BRAKING_FAST_REACTION_MS = 150;
 
 function resolveAdvancedBrakingLaneCount(config: AdvancedStageConfig) {
   const configuredLanes = getParamNumber(config, "lanes", 1);
@@ -76,7 +77,7 @@ function resolveAdvancedBrakingAvatarView(holding: boolean, feedback: AdvancedBr
   return { action: "idle", expression: "neutral" };
 }
 
-export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: RoundProps) {
+export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shielded = false }: RoundProps) {
 
   const config = advancedConfig!;
 
@@ -163,9 +164,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const syncEndlessWaveParallax = useCallback((distance: number) => {
     const panel = trackRef.current?.closest(".advanced-braking") as HTMLElement | null;
-    panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -12)}`);
-    panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 48) * 56)}`);
-    panel?.style.setProperty("--difficulty-wave-screen-shift-x", `${Math.round(distance * -42)}`);
+    panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -3.2)}`);
+    panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 90) * 18)}`);
   }, []);
 
   const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
@@ -348,6 +348,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
       );
 
+      endlessRef.current?.addScore(1);
       showAdvancedFeedback("success");
 
       clearHazardAfterSuccess();
@@ -571,7 +572,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
         if (activeEndless) {
           distanceDelta = (delta * activeSpeedPerSecond) / 1000;
           endlessDistanceRef.current = activeDistance + distanceDelta;
-          activeEndless.setDistanceScore(Math.floor(endlessDistanceRef.current));
+          activeEndless.reportDifficulty(getEndlessDifficulty({ maxRamp: 36 * 110, progress: endlessDistanceRef.current }));
           syncEndlessWaveParallax(endlessDistanceRef.current);
         }
 
@@ -838,6 +839,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
     }
 
     else {
+      if (activeEndless) {
+        activeEndless.addScore(1);
+        if (latency <= ENDLESS_BRAKING_FAST_REACTION_MS) activeEndless.gainEnergy(1, "快速反应！");
+      }
       showAdvancedFeedback("success");
       clearHazardAfterSuccess();
     }
@@ -846,7 +851,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
 
 
-  const showAdvancedBrakingMiniScore = !endless || Boolean(activeRuleHint);
+  const showAdvancedBrakingMiniScore = !endless;
 
   return (
 
@@ -896,6 +901,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
               <PlayerAvatar
                 {...resolveAdvancedBrakingAvatarView(holding, advancedFeedback)}
                 direction={holding ? "right" : "none"}
+                effect={shielded ? "shield" : resolveAdvancedBrakingAvatarView(holding, advancedFeedback).effect}
                 size={46}
                 visualScale={1.02}
               />

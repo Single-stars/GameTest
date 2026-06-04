@@ -35,7 +35,7 @@ const EXPECTED_ADVANCED_STAGE_TITLES: Record<RoundId, string[]> = {
   search: ["移动平台Ⅰ", "高能平台Ⅰ", "移动障碍Ⅰ", "移动平台Ⅱ", "高能平台Ⅱ", "移动障碍Ⅱ", "移动平台Ⅲ", "高能平台Ⅲ", "移动障碍Ⅲ", "最终试炼"],
   stroop: ["移动平台Ⅰ", "脆弱平台Ⅰ", "危险平台Ⅰ", "移动平台Ⅱ", "脆弱平台Ⅱ", "危险平台Ⅱ", "移动平台Ⅲ", "脆弱平台Ⅲ", "危险平台Ⅲ", "最终试炼"],
   rhythm: ["移动平台Ⅰ", "二段跳Ⅰ", "重力异常Ⅰ", "移动平台Ⅱ", "二段跳Ⅱ", "重力异常Ⅱ", "移动平台Ⅲ", "二段跳Ⅲ", "重力异常Ⅲ", "最终试炼"],
-  memory: ["移动通道Ⅰ", "道具收集Ⅰ", "翻转空间Ⅰ", "移动通道Ⅱ", "道具收集Ⅱ", "翻转空间Ⅱ", "移动通道Ⅲ", "道具收集Ⅲ", "翻转空间Ⅲ", "最终试炼"],
+  memory: ["移动通道Ⅰ", "道具收集Ⅰ", "重力倒转Ⅰ", "移动通道Ⅱ", "道具收集Ⅱ", "重力倒转Ⅱ", "移动通道Ⅲ", "道具收集Ⅲ", "重力倒转Ⅲ", "最终试炼"],
   braking: ["走到最后Ⅰ", "假危险Ⅰ", "规则怪谈Ⅰ", "走到最后Ⅱ", "假危险Ⅱ", "规则怪谈Ⅱ", "走到最后Ⅲ", "假危险Ⅲ", "规则怪谈Ⅲ", "最终试炼"],
   patience: ["倒计时Ⅰ", "变速转盘Ⅰ", "危险区Ⅰ", "倒计时Ⅱ", "变速转盘Ⅱ", "危险区Ⅱ", "倒计时Ⅲ", "变速转盘Ⅲ", "危险区Ⅲ", "最终试炼"],
 };
@@ -211,6 +211,12 @@ test("advanced config maps the replaced dimensions to the new mini-game advanced
   assert.equal(getAdvancedStageConfig("rhythm", 10).variant, "mini-square-jump-final");
   assert.equal(getAdvancedStageConfig("memory", 2).variant, "mini-flappy-collectible-path");
   assert.equal(getAdvancedStageConfig("memory", 3).variant, "mini-flappy-reverse-gravity");
+  for (const level of [3, 6, 9, 10]) {
+    const config = getAdvancedStageConfig("memory", level);
+    assert.equal(config.params.reversedGravity, true);
+    assert.equal(config.params.reverseDirection, false);
+    assert.doesNotMatch(config.passText, /从右往左|反向移动|翻转空间/);
+  }
   assert.equal(getAdvancedStageConfig("patience", 10).variant, "mini-knife-final");
   assert.equal(getAdvancedStageConfig("stroop", 1).params.roundCount, undefined);
   assert.equal(getAdvancedStageConfig("rhythm", 10).params.offsetThresholdMs, undefined);
@@ -430,18 +436,19 @@ test("advanced braking endless runner uses a lightweight background parallax ins
   assert.match(brakingSource, /syncEndlessWaveParallax/);
   assert.match(brakingSource, /--difficulty-wave-parallax-x/);
   assert.match(brakingSource, /--difficulty-wave-parallax-y/);
-  assert.match(brakingSource, /--difficulty-wave-screen-shift-x/);
-  assert.match(brakingSource, /distance \* -42/);
+  assert.doesNotMatch(brakingSource, /--difficulty-wave-screen-shift-x/);
+  assert.match(brakingSource, /distance \* -3\.2/);
   assert.doesNotMatch(brakingSource, /setEndlessWorldOffset/);
   assert.doesNotMatch(brakingSource, /--advanced-brake-world-offset/);
   assert.doesNotMatch(brakingSource, /advanced-brake-scenery-post/);
   assert.doesNotMatch(brakingSource, /className="advanced-brake-scenery"/);
   assert.doesNotMatch(trackRule, /background:\s*#fbf7ef/);
-  assert.match(cssSource, /\.advanced-braking\.endless-runner\s*{[\s\S]*--difficulty-wave-opacity:\s*0\.38;/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner\s*{[\s\S]*--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity,\s*0\.12\);/);
+  assert.doesNotMatch(cssSource, /--difficulty-wave-time-flow/);
   assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{/);
   assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::after\s*{/);
   assert.doesNotMatch(laneRule, /background:/);
-  assert.match(laneRule, /border-bottom:\s*0;/);
+  assert.match(laneRule, /border-bottom:\s*4px solid rgba\(24,\s*24,\s*24,\s*0\.16\);/);
   assert.doesNotMatch(laneRule, /linear-gradient\(90deg/);
   assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post/);
 });

@@ -44,9 +44,15 @@ export type EndlessRoundCompletion = {
 
 type EndlessRunApi = EndlessMiniGameRuntime & {
   coreActions: number;
+  energyPopups: EndlessEnergyPopup[];
   finish: (reason: string) => void;
   reportedDifficulty: number;
   setDebugDifficulty: (difficulty: number) => void;
+};
+
+type EndlessEnergyPopup = {
+  id: number;
+  text: string;
 };
 
 type EndlessSegment = {
@@ -144,11 +150,14 @@ function useEndlessRun({
   const coreActionsRef = useRef(0);
   const distanceEnergyScoreRef = useRef(0);
   const energyRef = useRef(0);
+  const energyPopupIdRef = useRef(0);
+  const energyPopupTimersRef = useRef<number[]>([]);
   const finishTimerRef = useRef<number | null>(null);
   const revivesRef = useRef(ENDLESS_STARTING_REVIVES);
   const shieldChargesRef = useRef(0);
   const [coreActions, setCoreActions] = useState(0);
   const [energy, setEnergy] = useState(0);
+  const [energyPopups, setEnergyPopups] = useState<EndlessEnergyPopup[]>([]);
   const [revives, setRevives] = useState(ENDLESS_STARTING_REVIVES);
   const [shieldCharges, setShieldCharges] = useState(0);
   const [debugDifficulty, setDebugDifficultyState] = useState(0);
@@ -185,9 +194,25 @@ function useEndlessRun({
     [onComplete, roundId],
   );
 
-  const gainEnergy = useCallback((amount = 1) => {
+  const showEnergyFeedback = useCallback((feedbackText?: string) => {
+    if (!feedbackText) return;
+    const popup = {
+      id: energyPopupIdRef.current + 1,
+      text: feedbackText,
+    };
+    energyPopupIdRef.current = popup.id;
+    setEnergyPopups((current) => [...current.slice(-2), popup]);
+    const timer = window.setTimeout(() => {
+      setEnergyPopups((current) => current.filter((item) => item.id !== popup.id));
+      energyPopupTimersRef.current = energyPopupTimersRef.current.filter((item) => item !== timer);
+    }, 900);
+    energyPopupTimersRef.current.push(timer);
+  }, []);
+
+  const gainEnergy = useCallback((amount = 1, feedbackText?: string) => {
     const safeAmount = Math.max(0, Math.floor(Number.isFinite(amount) ? amount : 1));
     if (safeAmount <= 0) return;
+    showEnergyFeedback(feedbackText);
 
     let nextEnergy = energyRef.current + safeAmount;
     let nextRevives = revivesRef.current;
@@ -216,7 +241,7 @@ function useEndlessRun({
       shieldChargesRef.current = nextShieldCharges;
       setShieldCharges(nextShieldCharges);
     }
-  }, []);
+  }, [showEnergyFeedback]);
 
   const loseLife = useCallback(
     (reason: string, finishDelayMs = 0) => {
@@ -243,6 +268,8 @@ function useEndlessRun({
   React.useEffect(() => {
     return () => {
       if (finishTimerRef.current !== null) window.clearTimeout(finishTimerRef.current);
+      for (const timer of energyPopupTimersRef.current) window.clearTimeout(timer);
+      energyPopupTimersRef.current = [];
     };
   }, []);
 
@@ -282,6 +309,7 @@ function useEndlessRun({
     addScore,
     coreActions,
     debugDifficulty,
+    energyPopups,
     energyPercent: shieldCharges > 0 ? 100 : Math.round((energy / ENDLESS_ENERGY_THRESHOLD) * 100),
     finish,
     gainEnergy,
@@ -308,31 +336,99 @@ function EndlessHud({
     0,
     ENDLESS_ENERGY_THRESHOLD,
   );
+  const previousRevivesRef = React.useRef(api.revives);
+  const previousEnergySegmentsRef = React.useRef(activeEnergySegments);
+  const previousScoreRef = React.useRef(api.score);
+  const [lifePulse, setLifePulse] = React.useState<{ tone: "gain" | "loss"; changedIndex: number } | null>(null);
+  const [energyPulse, setEnergyPulse] = React.useState<{ tone: "gain" | "loss"; from: number; to: number } | null>(null);
+  const [scorePulseId, setScorePulseId] = React.useState(0);
+  const lowLife = api.revives === 1;
+  const recordBreaking = api.score > bestScore;
+  const endlessHudClassName = [
+    "endless-hud",
+    api.shieldCharges > 0 ? "shielded" : "",
+    lowLife ? "low-life" : "",
+    lifePulse ? `life-${lifePulse.tone}` : "",
+    energyPulse ? `energy-${energyPulse.tone}` : "",
+    recordBreaking ? "new-record" : "",
+  ].filter(Boolean).join(" ");
+  const scoreReadoutClassName = `endless-score-readout ${recordBreaking ? "new-record" : ""}`;
+
+  React.useEffect(() => {
+    const previousRevives = previousRevivesRef.current;
+    if (api.revives === previousRevives) return;
+
+    const tone = api.revives > previousRevives ? "gain" : "loss";
+    const changedIndex = tone === "gain" ? api.revives - 1 : previousRevives - 1;
+    previousRevivesRef.current = api.revives;
+    setLifePulse({ tone, changedIndex: clamp(changedIndex, 0, ENDLESS_STARTING_REVIVES - 1) });
+
+    const timer = window.setTimeout(() => setLifePulse(null), 560);
+    return () => window.clearTimeout(timer);
+  }, [api.revives]);
+
+  React.useEffect(() => {
+    const previousEnergySegments = previousEnergySegmentsRef.current;
+    if (activeEnergySegments === previousEnergySegments) return;
+
+    const tone = activeEnergySegments > previousEnergySegments ? "gain" : "loss";
+    previousEnergySegmentsRef.current = activeEnergySegments;
+    setEnergyPulse({ tone, from: previousEnergySegments, to: activeEnergySegments });
+
+    const timer = window.setTimeout(() => setEnergyPulse(null), 520);
+    return () => window.clearTimeout(timer);
+  }, [activeEnergySegments]);
+
+  React.useEffect(() => {
+    if (api.score === previousScoreRef.current) return;
+    previousScoreRef.current = api.score;
+    setScorePulseId((current) => current + 1);
+  }, [api.score]);
 
   return (
     <div
-      className={`endless-hud ${api.shieldCharges > 0 ? "shielded" : ""}`}
-      aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}，能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}，分数 ${api.score}，最佳 ${bestScore}`}
+      className={endlessHudClassName}
+      aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}，能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}，分数 ${api.score}，最佳 ${bestScore}${recordBreaking ? "，新纪录" : ""}`}
     >
       <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}`}>
-        {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => (
-          <span className={`endless-heart-token ${index < api.revives ? "active" : "spent"}`} key={index}>
-            <span className="endless-heart" aria-hidden="true">❤</span>
-          </span>
-        ))}
+        {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => {
+          const active = index < api.revives;
+          const heartClassName = [
+            "endless-heart-token",
+            active ? "active" : "spent",
+            lifePulse?.changedIndex === index ? `heart-${lifePulse.tone}` : "",
+            lowLife && active ? "danger-heart" : "",
+          ].filter(Boolean).join(" ");
+
+          return (
+            <span className={heartClassName} key={index}>
+              <span className="endless-heart" aria-hidden="true">❤</span>
+            </span>
+          );
+        })}
       </div>
-      <div className="endless-energy-console">
+      <div className={`endless-energy-console ${energyPulse ? `energy-${energyPulse.tone}` : ""}`}>
         <div className="endless-energy-meter" aria-label={`能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}`}>
           <div className="endless-energy-segments" aria-hidden="true">
-            {Array.from({ length: ENDLESS_ENERGY_THRESHOLD }, (_, index) => (
-              <span className={`endless-energy-cell ${index < activeEnergySegments ? "active" : ""}`} key={index} />
-            ))}
+            {Array.from({ length: ENDLESS_ENERGY_THRESHOLD }, (_, index) => {
+              const pulseClass = energyPulse?.tone === "gain" && index >= energyPulse.from && index < energyPulse.to
+                ? "energy-cell-pop"
+                : energyPulse?.tone === "loss" && index >= energyPulse.to && index < energyPulse.from
+                  ? "energy-cell-drain"
+                  : "";
+              return (
+                <span className={`endless-energy-cell ${index < activeEnergySegments ? "active" : ""} ${pulseClass}`} key={index} />
+              );
+            })}
           </div>
         </div>
       </div>
-      <div className="endless-score-readout">
-        <strong>{api.score}</strong>
-        <span>最佳 {bestScore}</span>
+      <div className={scoreReadoutClassName}>
+        <strong className={scorePulseId > 0 ? "score-pop" : ""} key={`score-${scorePulseId}`}>
+          {api.score}
+        </strong>
+        <span className="endless-score-best">最佳 {bestScore}</span>
+        {recordBreaking ? <span className="endless-score-record-badge">新纪录</span> : null}
       </div>
     </div>
   );
@@ -342,28 +438,32 @@ function EndlessNativeRound({
   api,
   runSeed,
   segment,
+  shielded,
 }: {
   api: EndlessRunApi;
   runSeed: string;
   segment: EndlessSegment;
+  shielded: boolean;
 }) {
   const ignoreRoundCompletion = useCallback(() => undefined, []);
 
   if (segment.config.dimension === "reaction") {
-    return <AdvancedReactionRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} />;
+    return <AdvancedReactionRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} shielded={shielded} />;
   }
   if (segment.config.dimension === "aim") {
-    return <AdvancedAimRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} runSeed={runSeed} />;
+    return <AdvancedAimRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} runSeed={runSeed} shielded={shielded} />;
   }
-  return <AdvancedBrakingRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} />;
+  return <AdvancedBrakingRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} shielded={shielded} />;
 }
 
 function EndlessMiniGameRound({
   api,
   segment,
+  shielded,
 }: {
   api: EndlessRunApi;
   segment: EndlessSegment;
+  shielded: boolean;
 }) {
   const miniGameId = segment.config.params.miniGameId as MiniGameId | undefined;
   const miniLevel = segment.miniLevel;
@@ -382,6 +482,7 @@ function EndlessMiniGameRound({
       levelOverride={miniLevel}
       mode="endless"
       runSeed={runSeed}
+      shielded={shielded}
     />
   );
 }
@@ -390,15 +491,17 @@ function EndlessGameByRound({
   api,
   runSeed,
   segment,
+  shielded,
 }: {
   api: EndlessRunApi;
   runSeed: string;
   segment: EndlessSegment;
+  shielded: boolean;
 }) {
   if (segment.miniLevel) {
-    return <EndlessMiniGameRound api={api} segment={segment} />;
+    return <EndlessMiniGameRound api={api} segment={segment} shielded={shielded} />;
   }
-  return <EndlessNativeRound api={api} runSeed={runSeed} segment={segment} />;
+  return <EndlessNativeRound api={api} runSeed={runSeed} segment={segment} shielded={shielded} />;
 }
 
 export function EndlessRoundPlayer({
@@ -424,12 +527,19 @@ export function EndlessRoundPlayer({
 
   return (
     <div className="endless-shell" data-difficulty-tone={difficultyTone}>
-      <EndlessHud
-        api={api}
-        bestScore={bestScore}
-      />
       <div className="endless-game-host" data-source-level={difficultyState.sourceAdvancedLevel} data-difficulty-tone={difficultyTone}>
-        <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} />
+        <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} shielded={api.shieldCharges > 0} />
+        <EndlessHud
+          api={api}
+          bestScore={bestScore}
+        />
+        <div className="endless-energy-popups" aria-live="polite">
+          {api.energyPopups.map((popup) => (
+            <span className="endless-energy-popup" key={popup.id}>
+              {popup.text}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

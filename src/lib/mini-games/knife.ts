@@ -104,6 +104,40 @@ export function generateKnifeInitialAngles(level: MiniGameLevelConfig, runSeed: 
   return angles;
 }
 
+function getKnifeForbiddenZoneProximityDegrees(angle: number, zone: AngleArc) {
+  const normalizedAngle = normalizeDegrees(angle);
+  if (isAngleWithinArc(normalizedAngle, zone)) return 0;
+  return Math.min(
+    getShortestAngleDistance(normalizedAngle, zone.start),
+    getShortestAngleDistance(normalizedAngle, zone.end),
+  );
+}
+
+export function getKnifeHitDangerProximityDegrees({
+  collisionDegrees,
+  forbiddenZones,
+  impactAngle,
+  initialAngles,
+  insertedAngles,
+}: {
+  collisionDegrees: number;
+  forbiddenZones: AngleArc[];
+  impactAngle: number;
+  initialAngles: number[];
+  insertedAngles: number[];
+}) {
+  const normalizedImpact = normalizeDegrees(impactAngle);
+  const occupiedAngles = [...initialAngles, ...insertedAngles];
+  const occupiedMargins = occupiedAngles
+    .map((angle) => getShortestAngleDistance(angle, normalizedImpact) - collisionDegrees)
+    .filter((margin) => margin >= 0);
+  const forbiddenMargins = forbiddenZones
+    .map((zone) => getKnifeForbiddenZoneProximityDegrees(normalizedImpact, zone))
+    .filter((margin) => margin >= 0);
+  const margins = [...occupiedMargins, ...forbiddenMargins];
+  return margins.length > 0 ? Math.min(...margins) : null;
+}
+
 export function resolveKnifeFirstOwner(runSeed: string): KnifeOwner {
   return createSeededRandom(`${runSeed}:knife-first-owner`)() < 0.5 ? "host" : "guest";
 }

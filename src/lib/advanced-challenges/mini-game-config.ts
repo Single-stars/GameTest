@@ -12,7 +12,7 @@ const miniVariantSlug: Record<MiniGameId, Record<string, string>> = {
   flappy: {
     移动门: "moving-gate",
     收集路径道具: "collectible-path",
-    反重力反向: "reverse-gravity",
+    重力倒转: "reverse-gravity",
     综合最终关: "final",
   },
   knife: {
@@ -68,10 +68,10 @@ const miniAdvancedLevels: Record<MiniGameId, MiniAdvancedLevelInput[]> = {
     miniAdvancedLevel(4, "收集路径道具", "通过 8 门，收集 4/4", "必须收集 4 个接近安全中心线的道具。", { gateCount: 8, movingGateRatio: 0, collectibleCount: 4 }),
     miniAdvancedLevel(5, "收集路径道具", "通过 10 门，收集 6/6", "必须收集 6 个略微偏上或偏下的道具。", { gateCount: 10, movingGateRatio: 0, collectibleCount: 6 }),
     miniAdvancedLevel(6, "收集路径道具", "通过 12 门，收集 8/8", "必须收集 8 个更靠近缝隙边缘的道具。", { gateCount: 12, movingGateRatio: 0, collectibleCount: 8 }),
-    miniAdvancedLevel(7, "反重力反向", "通过 6 个门", "角色从右往左移动，不点击向上漂，点击向下压。", { gateCount: 6, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
-    miniAdvancedLevel(8, "反重力反向", "通过 8 个门", "反向移动速度中等，缝隙中等。", { gateCount: 8, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
-    miniAdvancedLevel(9, "反重力反向", "通过 10 个门", "反向速度较快，门位变化更明显。", { gateCount: 10, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: true }),
-    miniAdvancedLevel(10, "综合最终关", "通过 13 门，收集 7/7", "反向移动和反重力，移动门与必收集道具同时出现。", { gateCount: 13, movingGateRatio: 0.45, collectibleCount: 7, reversedGravity: true, reverseDirection: true }),
+    miniAdvancedLevel(7, "重力倒转", "通过 6 个门", "重力倒转：不点击向上漂，点击向下压。", { gateCount: 6, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: false }),
+    miniAdvancedLevel(8, "重力倒转", "通过 8 个门", "重力倒转，缝隙中等。", { gateCount: 8, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: false }),
+    miniAdvancedLevel(9, "重力倒转", "通过 10 个门", "重力倒转后门位变化更明显。", { gateCount: 10, movingGateRatio: 0, collectibleCount: 0, reversedGravity: true, reverseDirection: false }),
+    miniAdvancedLevel(10, "综合最终关", "通过 13 门，收集 7/7", "重力倒转，移动门与必收集道具同时出现。", { gateCount: 13, movingGateRatio: 0.45, collectibleCount: 7, reversedGravity: true, reverseDirection: false }),
   ],
   knife: [
     miniAdvancedLevel(1, "发射倒计时", "命中 8 发", "每发 2.5 秒倒计时，初始障碍 4 个。", { shotCount: 8, shotCountdown: 2.5, initialObstacleCount: 4 }),

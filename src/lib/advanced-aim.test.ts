@@ -93,3 +93,50 @@ test("advanced aim fails on the first distractor collision before a later target
   assert.equal(result.arrow.hitDistractorId, "decoy-1");
   assert.equal(result.arrow.hitTargetId, undefined);
 });
+
+test("advanced aim trajectory error treats a center-line hit as centered even when the entry frame touches the edge", () => {
+  const arrow = createAdvancedAimArrow({
+    id: "arrow-1",
+    from: { x: 120, y: 320 },
+    to: { x: 120, y: 40 },
+    createdAt: 1000,
+    speedPxPerMs: 1,
+  });
+
+  const result = resolveAdvancedAimArrowStep({
+    arrow,
+    deltaMs: 202,
+    targets: [target],
+    distractors: [],
+    tolerancePx: 0,
+  });
+
+  assert.equal(result.collision?.kind, "target");
+  assert.equal(result.collision.normalizedError, 1);
+  assert.equal(result.collision.trajectoryNormalizedError, 0);
+});
+
+test("advanced aim trajectory error can identify an eighty percent edge hit", () => {
+  const edgeTarget: AdvancedAimEntity = {
+    ...target,
+    radius: 20,
+  };
+  const arrow = createAdvancedAimArrow({
+    id: "arrow-1",
+    from: { x: 136, y: 320 },
+    to: { x: 136, y: 40 },
+    createdAt: 1000,
+    speedPxPerMs: 1,
+  });
+
+  const result = resolveAdvancedAimArrowStep({
+    arrow,
+    deltaMs: 260,
+    targets: [edgeTarget],
+    distractors: [],
+    tolerancePx: 0,
+  });
+
+  assert.equal(result.collision?.kind, "target");
+  assert.equal(result.collision.trajectoryNormalizedError, 0.8);
+});

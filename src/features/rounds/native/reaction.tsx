@@ -34,8 +34,9 @@ function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "
 }
 
 const REACTION_FEEDBACK_DELAY_MS = 620;
+const ENDLESS_REACTION_PREDICTION_MS = 100;
 
-export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: RoundProps) {
+export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shielded = false }: RoundProps) {
   const config = advancedConfig!;
   const endlessSignalConfig = endless ? getEndlessReactionConfig({ score: Math.max(endless.score, endless.debugDifficulty * 90) }) : null;
 
@@ -291,7 +292,9 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
     const ms = Math.round(responseAt - activeShownAtRef.current);
     clickedGreenIdsRef.current.add(cell.id);
     greenClicksRef.current += 1;
-    endlessRef.current?.addScore(1);
+    const endlessRuntime = endlessRef.current;
+    endlessRuntime?.addScore(1);
+    if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) endlessRuntime.gainEnergy(1, "顶级预判！");
     setFeedbackTone("good");
     trialsRef.current.push(
       trial("reaction", signalIndexRef.current, {
@@ -342,6 +345,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete }: R
           <span className="reaction-cell-avatar" aria-hidden="true">
             <PlayerAvatar
               {...reactionAvatarView(cell, feedbackTone)}
+              effect={shielded ? "shield" : reactionAvatarView(cell, feedbackTone).effect}
               size={120}
             />
           </span>

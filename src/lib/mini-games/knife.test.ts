@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -284,6 +285,17 @@ test("knife collision threshold is tight enough to match visual overlap", () => 
     }).kind,
     "hit",
   );
+});
+
+test("knife endless critical hits use a safe margin beyond danger edges", () => {
+  const logicSource = readFileSync(new URL("./knife.ts", import.meta.url), "utf8");
+  const runtimeSource = readMiniGameRuntimeSource();
+
+  assert.match(logicSource, /export function getKnifeHitDangerProximityDegrees/);
+  assert.match(logicSource, /getShortestAngleDistance\(angle, normalizedImpact\) - collisionDegrees/);
+  assert.match(runtimeSource, /ENDLESS_KNIFE_DANGER_MARGIN_DEGREES = 4/);
+  assert.match(runtimeSource, /getKnifeHitDangerProximityDegrees/);
+  assert.match(runtimeSource, /proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES[\s\S]*gainEnergy\(1, "极限飞刀！"\)/);
 });
 
 test("knife countdown renders a large background number below the wheel", () => {

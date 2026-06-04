@@ -463,6 +463,8 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   );
   const aimToneBlock = cssBlock(aimCss, "[data-difficulty-tone] .advanced-aim");
   const brakingToneBlock = cssBlock(brakingCss, "[data-difficulty-tone] .advanced-braking");
+  const squareLightGravityBlock = cssBlock(squareJumpCss, ".square-jump-stage.gravity-light");
+  const squareHeavyGravityBlock = cssBlock(squareJumpCss, ".square-jump-stage.gravity-heavy");
 
   assert.match(advancedScreenSource, /getAdvancedLevelTone/);
   assert.match(advancedScreenSource, /data-difficulty-tone=\{getAdvancedLevelTone\(challenge\.level\)\}/);
@@ -488,7 +490,7 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(commonCss, /--difficulty-wave-color: rgb\(222, 158, 48\);/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.doodle-stage/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.flappy-stage\.endless-gravity-anomaly/);
-  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-heavy/);
+  assert.doesNotMatch(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-(?:light|heavy)/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.fall-down-stage/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.knife-stage/);
   assert.match(neutralWaveStageBackgroundSource, /#fffdf8/);
@@ -511,12 +513,20 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage \.square-progress-background/);
   assert.doesNotMatch(difficultyMediaSuppressionSource, /gravity-light::before|gravity-heavy::before/);
   assert.match(commonCss, /background:\s*none;/);
-  assert.match(squareJumpCss, /\.square-jump-stage\.gravity-light\s*{[\s\S]*--difficulty-gravity-flow-y:\s*-150;/);
-  assert.match(squareJumpCss, /\.square-jump-stage\.gravity-heavy\s*{[\s\S]*--difficulty-gravity-flow-y:\s*170;/);
-  assert.match(squareJumpCss, /animation:\s*square-light-particles 1\.05s linear infinite;/);
-  assert.match(squareJumpCss, /animation:\s*square-heavy-particles 1\.05s linear infinite;/);
+  assert.match(squareLightGravityBlock, /--difficulty-gravity-flow-y:\s*-260;/);
+  assert.match(squareHeavyGravityBlock, /--difficulty-gravity-flow-y:\s*300;/);
+  assert.doesNotMatch(squareJumpCss, /\.square-jump-stage\.gravity-light::before|\.square-jump-stage\.gravity-heavy::before|square-light-particles|square-heavy-particles/);
+  assert.doesNotMatch(squareLightGravityBlock, /background:|--difficulty-wave-color|--difficulty-wave-opacity|#[0-9a-fA-F]{3,8}|rgba\(/);
+  assert.doesNotMatch(squareHeavyGravityBlock, /background:|--difficulty-wave-color|--difficulty-wave-opacity|#[0-9a-fA-F]{3,8}|rgba\(/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.gravity-light \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#8ee7da;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.gravity-heavy \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#5c5668;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.moving\.gravity-light \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#8ee7da;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.moving\.gravity-heavy \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#5c5668;/);
+  assert.match(squareJumpCss, /\.square-platform\.gravity-light \.square-platform-top\s*{[\s\S]*?background:\s*#b9ecdc;/);
+  assert.match(squareJumpCss, /\.square-platform\.gravity-heavy \.square-platform-top\s*{[\s\S]*?background:\s*#77706a;/);
   assert.match(flappyCss, /\.flappy-stage\.endless-gravity-anomaly\s*{[\s\S]*--difficulty-gravity-flow-y:\s*-130;/);
-  assert.match(flappyCss, /animation:\s*flappy-gravity-particles 1\.05s linear infinite;/);
+  assert.doesNotMatch(flappyCss, /\.flappy-stage\.endless-gravity-anomaly::before|flappy-gravity-particles/);
+  assert.doesNotMatch(flappyCss, /\.flappy-stage\.endless-gravity-anomaly\s*{[\s\S]*--difficulty-wave-color/);
   assert.doesNotMatch(commonCss, /--difficulty-motion-opacity|--difficulty-motion-x|--difficulty-motion-y/);
   assert.doesNotMatch(commonCss, /--difficulty-wave-mask|@keyframes difficulty-wave-drift|-webkit-mask-image|mask-image|mask-size|rotate\(-/);
   assert.doesNotMatch(commonCss, /--difficulty-particle-field|--difficulty-flow-field|difficulty-ambient-drift/);
@@ -526,12 +536,14 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /requestAnimationFrame/);
   assert.match(waveBackdropSource, /function refreshStyleCache\(\)/);
   assert.match(waveBackdropSource, /function ensureAnimationLoop\(\)/);
-  assert.match(waveBackdropSource, /readNumberVar\(style, "--difficulty-gravity-flow-y", 0\)/);
+  assert.match(waveBackdropSource, /const nextGravityFlowY = readNumberVar\(style, "--difficulty-gravity-flow-y", 0\)/);
   assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-x", 0\)/);
   assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-y", 0\)/);
   assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-screen-shift-x", 0\)/);
   assert.match(waveBackdropSource, /if \(waveOpacity <= 0\) \{/);
-  assert.match(waveBackdropSource, /styleObserver\?\.observe\(host/);
+  assert.match(waveBackdropSource, /let observedElement: HTMLElement \| null = host;/);
+  assert.match(waveBackdropSource, /while \(observedElement\) \{/);
+  assert.match(waveBackdropSource, /observedElement = observedElement\.parentElement;/);
   assert.match(waveBackdropSource, /attributeFilter: \["class", "data-difficulty-tone"\]/);
   assert.doesNotMatch(waveBackdropSource, /attributeFilter: \["class", "style", "data-difficulty-tone"\]/);
   assert.doesNotMatch(waveBackdropSource, /const style = window\.getComputedStyle\(host\);[\s\S]{0,260}const parallaxX/);
@@ -547,9 +559,61 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /easedParallaxX \+= softenParallax\(parallaxX - easedParallaxX, parallaxStepLimit\) \* parallaxBlend/);
   assert.match(waveBackdropSource, /easedParallaxY \+= softenParallax\(parallaxY - easedParallaxY, parallaxStepLimit\) \* parallaxBlend/);
   assert.match(waveBackdropSource, /easedScreenShiftX \+= \(screenShiftX - easedScreenShiftX\) \* screenShiftBlend/);
+  assert.match(waveBackdropSource, /let targetGravityFlowY = 0;/);
+  assert.match(waveBackdropSource, /let easedGravityFlowY = 0;/);
+  assert.match(waveBackdropSource, /let gravityFlowOffset = 0;/);
+  assert.match(waveBackdropSource, /type GravityParticle = \{/);
+  assert.match(waveBackdropSource, /color: string;/);
+  assert.match(waveBackdropSource, /phase: number;/);
+  assert.match(waveBackdropSource, /radius: number;/);
+  assert.match(waveBackdropSource, /vx: number;/);
+  assert.match(waveBackdropSource, /let gravityParticles: GravityParticle\[] = \[];/);
+  assert.match(waveBackdropSource, /let gravityParticleEmitAccumulator = 0;/);
+  assert.match(waveBackdropSource, /let gravityParticleSpawnCursor = 0;/);
+  assert.match(waveBackdropSource, /function spawnGravityParticles\(targetFlowY: number, count = 24\)/);
+  assert.match(waveBackdropSource, /if \(targetFlowY === 0 \|\| reducedMotionQuery\.matches\) return;/);
+  assert.match(waveBackdropSource, /const direction = targetFlowY < 0 \? -1 : 1;/);
+  assert.match(waveBackdropSource, /const particleColor = targetFlowY < 0 \? "rgb\(74, 178, 186\)" : "rgb\(94, 102, 112\)";/);
+  assert.match(waveBackdropSource, /const flowSpeed = Math\.abs\(targetFlowY\);/);
+  assert.match(waveBackdropSource, /const columns = 6;/);
+  assert.match(waveBackdropSource, /const rows = 4;/);
+  assert.match(waveBackdropSource, /const particleSlots = columns \* rows;/);
+  assert.match(waveBackdropSource, /const slotStride = Math\.max\(1, Math\.floor\(particleSlots \/ Math\.max\(1, count\)\)\);/);
+  assert.match(waveBackdropSource, /const slot = \(gravityParticleSpawnCursor \+ index \* slotStride\) % particleSlots;/);
+  assert.match(waveBackdropSource, /x: \(\(column \+ Math\.random\(\)\) \/ columns\) \* stageWidth,/);
+  assert.match(waveBackdropSource, /y: \(\(row \+ Math\.random\(\)\) \/ rows\) \* stageHeight,/);
+  assert.match(waveBackdropSource, /alpha: 0\.1 \+ Math\.random\(\) \* 0\.12,/);
+  assert.match(waveBackdropSource, /life: 1\.15 \+ Math\.random\(\) \* 0\.8,/);
+  assert.match(waveBackdropSource, /phase: Math\.random\(\) \* Math\.PI \* 2,/);
+  assert.match(waveBackdropSource, /radius: 1\.4 \+ Math\.random\(\) \* 2\.2,/);
+  assert.match(waveBackdropSource, /vx: \(Math\.random\(\) - 0\.5\) \* 16,/);
+  assert.match(waveBackdropSource, /vy: direction \* clamp\(flowSpeed \* \(0\.48 \+ Math\.random\(\) \* 0\.38\), 92, 220\),/);
+  assert.match(waveBackdropSource, /Math\.random\(\)/);
+  assert.match(waveBackdropSource, /gravityParticleSpawnCursor = \(gravityParticleSpawnCursor \+ 1\) % particleSlots;/);
+  assert.match(waveBackdropSource, /gravityParticles = gravityParticles\.slice\(-120\);/);
+  assert.match(waveBackdropSource, /function emitContinuousGravityParticles\(deltaSeconds: number, ambientTimeFlow: number\)/);
+  assert.match(waveBackdropSource, /if \(targetGravityFlowY === 0 \|\| reducedMotionQuery\.matches \|\| ambientTimeFlow <= 0\) \{/);
+  assert.match(waveBackdropSource, /gravityParticleEmitAccumulator \+= deltaSeconds \* Math\.min\(24, Math\.abs\(targetGravityFlowY\) \/ 14\) \* ambientTimeFlow;/);
+  assert.match(waveBackdropSource, /while \(gravityParticleEmitAccumulator >= 1\) \{/);
+  assert.match(waveBackdropSource, /spawnGravityParticles\(targetGravityFlowY, 4\);/);
+  assert.match(waveBackdropSource, /function drawGravityParticles\(deltaSeconds: number\)/);
+  assert.match(waveBackdropSource, /particle\.y \+= particle\.vy \* deltaSeconds;/);
+  assert.match(waveBackdropSource, /particle\.x \+= \(particle\.vx \+ Math\.sin\(particle\.phase \+ particle\.age \* 4\) \* 8\) \* deltaSeconds;/);
+  assert.match(waveBackdropSource, /context\.fillStyle = particle\.color;/);
+  assert.match(waveBackdropSource, /context\.arc\(particle\.x, particle\.y, particle\.radius \* \(1 - progress \* 0\.18\), 0, Math\.PI \* 2\);/);
+  assert.doesNotMatch(waveBackdropSource, /wobble|lineTo\(particle\.x|lineWidth: number|length: number/);
   assert.doesNotMatch(waveBackdropSource, /targetParallaxX|targetParallaxY|parallaxLimit = clamp\(Math\.max\(width, height\) \* 3\.2/);
-  assert.match(waveBackdropSource, /phaseDrift = reducedMotion \? 0 : seconds \* 0\.4/);
-  assert.match(waveBackdropSource, /groupDrift = reducedMotion \? 0 : seconds \* 22/);
+  assert.match(waveBackdropSource, /ambientTimeFlow = host\.classList\.contains\("advanced-braking"\) && host\.classList\.contains\("endless-runner"\) \? 0 : 1/);
+  assert.match(waveBackdropSource, /phaseDrift = reducedMotion \? 0 : seconds \* 0\.4 \* ambientTimeFlow/);
+  assert.match(waveBackdropSource, /groupDrift = reducedMotion \? 0 : seconds \* 22 \* ambientTimeFlow/);
+  assert.match(waveBackdropSource, /gravityFlowBlend = reducedMotion \? 1 : 1 - Math\.exp\(-deltaSeconds \* 3\.8\)/);
+  assert.match(waveBackdropSource, /easedGravityFlowY \+= \(targetGravityFlowY - easedGravityFlowY\) \* gravityFlowBlend/);
+  assert.match(waveBackdropSource, /gravityFlowOffset \+= easedGravityFlowY \* deltaSeconds \* ambientTimeFlow/);
+  assert.match(waveBackdropSource, /if \(nextGravityFlowY !== targetGravityFlowY\) \{/);
+  assert.match(waveBackdropSource, /gravityParticleEmitAccumulator = 0;/);
+  assert.match(waveBackdropSource, /spawnGravityParticles\(nextGravityFlowY\);/);
+  assert.match(waveBackdropSource, /emitContinuousGravityParticles\(deltaSeconds, ambientTimeFlow\);/);
+  assert.match(waveBackdropSource, /drawGravityParticles\(deltaSeconds\);/);
   assert.match(waveBackdropSource, /centerComfortFade = context\.createRadialGradient/);
   assert.match(waveBackdropSource, /globalCompositeOperation = "destination-in"/);
   assert.match(waveBackdropSource, /addColorStop\(0, "rgba\(0, 0, 0, 0\.38\)"\)/);
@@ -562,7 +626,8 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /parallaxY/);
   assert.match(waveBackdropSource, /parallaxAlong/);
   assert.match(waveBackdropSource, /parallaxAcross/);
-  assert.match(waveBackdropSource, /const gravityFlowDrift = reducedMotion \? 0 : seconds \* gravityFlowY;/);
+  assert.match(waveBackdropSource, /const gravityFlowDrift = reducedMotion \? 0 : gravityFlowOffset;/);
+  assert.doesNotMatch(waveBackdropSource, /seconds \* gravityFlowY/);
   assert.match(waveBackdropSource, /lineDrift = groupDrift \+ gravityFlowDrift \+ parallaxAlong \* 0\.82/);
   assert.match(waveBackdropSource, /screenShiftPhase = reducedMotion \? 0 : easedScreenShiftX/);
   assert.match(waveBackdropSource, /shapeDrift = parallaxAcross \* 0\.3 \+ screenShiftPhase/);
@@ -580,8 +645,8 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   }
   assert.match(nativeBrakingSource, /--difficulty-wave-parallax-x/);
   assert.match(nativeBrakingSource, /--difficulty-wave-parallax-y/);
-  assert.match(nativeBrakingSource, /--difficulty-wave-screen-shift-x/);
-  assert.match(nativeBrakingSource, /distance \* -42/);
+  assert.doesNotMatch(nativeBrakingSource, /--difficulty-wave-screen-shift-x/);
+  assert.match(nativeBrakingSource, /distance \* -3\.2/);
   assert.doesNotMatch(nativeBrakingSource, /--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
   assert.match(flappySource, /function syncFlappyWaveParallax\([^)]*displayProgress: number,[^)]*playerY: number,[^)]*stageHeight: number,[^)]*reverseDirection: boolean/);
   assert.match(flappySource, /drift \* 0\.95/);
@@ -607,6 +672,44 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(multiplayerCss, /\.multiplayer-game-shell\[data-difficulty-tone\]/);
   assert.match(multiplayerCss, /var\(--difficulty-shell-wash, transparent\)/);
   assert.doesNotMatch([advancedCss, reactionCss, multiplayerCss].join("\n"), /--difficulty-particle-field|--difficulty-flow-field|difficulty-ambient-drift/);
+});
+
+test("only endless braking freezes ambient wave drift so other stages keep their existing wave motion", () => {
+  const advancedCss = read(new URL("../app/styles/base-flow/advanced.css", import.meta.url));
+  const waveBackdropSource = read(new URL("../features/visuals/difficulty-wave-backdrop.tsx", import.meta.url));
+  const otherStyleSources = [
+    read(new URL("../app/styles/mini-games/common.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/doodle.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/fall-down.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/flappy.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/knife.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/multiplayer.css", import.meta.url)),
+    read(new URL("../app/styles/mini-games/square-jump.css", import.meta.url)),
+    read(new URL("../app/styles/base-flow/native-aim.css", import.meta.url)),
+    read(new URL("../app/styles/base-flow/native-braking.css", import.meta.url)),
+    read(new URL("../app/styles/base-flow/native-reaction.css", import.meta.url)),
+  ];
+  const runtimeSources = [
+    read(new URL("../features/rounds/native/aim.tsx", import.meta.url)),
+    read(new URL("../features/rounds/native/braking.tsx", import.meta.url)),
+    read(new URL("../features/rounds/native/reaction.tsx", import.meta.url)),
+    read(new URL("../features/mini-games/doodle.tsx", import.meta.url)),
+    read(new URL("../features/mini-games/fall-down.tsx", import.meta.url)),
+    read(new URL("../features/mini-games/flappy.tsx", import.meta.url)),
+    read(new URL("../features/mini-games/knife.tsx", import.meta.url)),
+    read(new URL("../features/mini-games/square-jump.tsx", import.meta.url)),
+  ];
+
+  assert.match(waveBackdropSource, /ambientTimeFlow = host\.classList\.contains\("advanced-braking"\) && host\.classList\.contains\("endless-runner"\) \? 0 : 1/);
+  assert.doesNotMatch(waveBackdropSource, /waveTimeFlow|--difficulty-wave-time-flow/);
+  assert.match(waveBackdropSource, /phaseDrift = reducedMotion \? 0 : seconds \* 0\.4 \* ambientTimeFlow/);
+  assert.match(waveBackdropSource, /groupDrift = reducedMotion \? 0 : seconds \* 22 \* ambientTimeFlow/);
+  for (const source of [advancedCss, ...otherStyleSources]) {
+    assert.doesNotMatch(source, /--difficulty-wave-time-flow\s*:/);
+  }
+  for (const source of runtimeSources) {
+    assert.doesNotMatch(source, /--difficulty-wave-time-flow/);
+  }
 });
 
 test("mini-game stages share a reusable screen shake hook and CSS feedback class", () => {

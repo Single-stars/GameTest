@@ -34,6 +34,7 @@ import {
 import {
   generateKnifeForbiddenZones,
   generateKnifeInitialAngles,
+  getKnifeHitDangerProximityDegrees,
   getKnifeShotGeometry,
   getLocalHitAngle,
   resolveKnifeFirstOwner,
@@ -54,6 +55,7 @@ const KNIFE_INSERT_RADIUS = 74;
 const KNIFE_BASE_WHEEL_TOP = 82;
 const KNIFE_BASE_LAUNCHER_BOTTOM = 92;
 const KNIFE_COLLISION_DEGREES = 6;
+const ENDLESS_KNIFE_DANGER_MARGIN_DEGREES = 4;
 const KNIFE_FLIGHT_MS = 95;
 const KNIFE_FEEDBACK_MS = 420;
 const KNIFE_FINISH_DELAY_MS = 650;
@@ -393,6 +395,7 @@ export function KnifeHitPrototype({
   level,
   mode,
   runSeed,
+  shielded = false,
   unlimitedRespawn = false,
   multiplayerRole,
   onBackToSelect,
@@ -406,6 +409,7 @@ export function KnifeHitPrototype({
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode | "endless";
   runSeed: string;
+  shielded?: boolean;
   unlimitedRespawn?: boolean;
   multiplayerRole?: "host" | "guest";
   onBackToSelect: () => void;
@@ -734,8 +738,18 @@ export function KnifeHitPrototype({
     }
 
     const nextShotIndex = current.shotIndex + 1;
+    const proximityDegrees = getKnifeHitDangerProximityDegrees({
+      collisionDegrees: KNIFE_COLLISION_DEGREES,
+      forbiddenZones: forbiddenArcs,
+      impactAngle: outcome.impactAngle,
+      initialAngles: current.initialAngles,
+      insertedAngles: [...current.insertedAngles, ...current.failedAngles],
+    });
     current.insertedAngles.push(outcome.impactAngle);
     endlessRef.current?.addScore(1);
+    if (isEndlessRun && proximityDegrees !== null && proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES) {
+      endlessRef.current?.gainEnergy(1, "极限飞刀！");
+    }
     current.flying = false;
     current.shotIndex = nextShotIndex;
     if (multiplayerRole) {
@@ -976,6 +990,7 @@ export function KnifeHitPrototype({
             <div className="knife-wheel-avatar" aria-hidden="true">
               <PlayerAvatar
                 {...resolveKnifeWheelAvatarView(view, feedbackTone)}
+                effect={shielded ? "shield" : resolveKnifeWheelAvatarView(view, feedbackTone).effect}
                 size={42}
                 visualScale={0.88}
               />

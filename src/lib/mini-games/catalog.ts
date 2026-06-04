@@ -292,39 +292,39 @@ const flappyLevels: MiniGameLevelConfig[] = [
     speed: 138,
     collectibleOffset: 0.36,
   }),
-  level("flappy", 7, "2-7", "重力反转 + 反向移动", "简单", "反重力反向", "6 门，角色从右往左移动，不点击向上漂，点击向下压。", "通过 6 个门", {
+  level("flappy", 7, "2-7", "重力倒转", "简单", "重力倒转", "6 门，重力倒转：不点击向上漂，点击向下压。", "通过 6 个门", {
     ...flappyBaseParams,
     gateCount: 6,
     reversedGravity: true,
-    reverseDirection: true,
+    reverseDirection: false,
     gapSize: 196,
     speed: 106,
   }),
-  level("flappy", 8, "2-8", "重力反转 + 反向移动", "普通", "反重力反向", "8 门，反向移动速度中等，缝隙中等。", "通过 8 个门", {
+  level("flappy", 8, "2-8", "重力倒转", "普通", "重力倒转", "8 门，重力倒转，缝隙中等。", "通过 8 个门", {
     ...flappyBaseParams,
     gateCount: 8,
     reversedGravity: true,
-    reverseDirection: true,
+    reverseDirection: false,
     gapSize: 172,
     speed: 122,
   }),
-  level("flappy", 9, "2-9", "重力反转 + 反向移动", "困难", "反重力反向", "10 门，少量移动门，反向速度较快。", "通过 10 个门", {
+  level("flappy", 9, "2-9", "重力倒转", "困难", "重力倒转", "10 门，少量移动门，重力倒转后门位变化更明显。", "通过 10 个门", {
     ...flappyBaseParams,
     gateCount: 10,
     movingGateRatio: 0,
     reversedGravity: true,
-    reverseDirection: true,
+    reverseDirection: false,
     gapSize: 154,
     speed: 136,
     movingGateSpeed: 1.2,
   }),
-  level("flappy", 10, "2-10", "最终关", "最终", "综合最终关", "反向移动和反重力，13 门，移动门与必收集道具同时出现。", "通过 13 门，收集 7/7", {
+  level("flappy", 10, "2-10", "最终关", "最终", "综合最终关", "重力倒转，13 门，移动门与必收集道具同时出现。", "通过 13 门，收集 7/7", {
     ...flappyBaseParams,
     gateCount: 13,
     movingGateRatio: 0.45,
     collectibleCount: 7,
     reversedGravity: true,
-    reverseDirection: true,
+    reverseDirection: false,
     gapSize: 162,
     speed: 132,
     movingGateSpeed: 1.35,

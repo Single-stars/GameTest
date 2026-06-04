@@ -70,8 +70,9 @@ type AdvancedAimArrowView = AdvancedAimArrow & {
   settledAt?: number;
 };
 
-const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS = 0.84;
+const ADVANCED_AIM_ARROW_SPEED_PX_PER_MS = 0.84;
 const ADVANCED_AIM_ARROW_TOLERANCE_PX = 8;
+const ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR = 0.8;
 const ADVANCED_AIM_ARROW_START_BOTTOM_PX = 38;
 function getAdvancedAimShooterPoint(rect: DOMRect) {
   return { x: rect.width / 2, y: rect.height - ADVANCED_AIM_ARROW_START_BOTTOM_PX };
@@ -420,6 +421,7 @@ export function AdvancedAimRound({
   onPracticeSuccess,
   onRuntimeState,
   runSeed,
+  shielded = false,
   tiebreakerRound = 0,
 }: RoundProps & {
   multiplayerPenaltyMode?: boolean;
@@ -891,9 +893,17 @@ export function AdvancedAimRound({
 
           const hitTarget = nextTargets.find((entity) => entity.id === result.collision?.entityId);
           if (hitTarget) {
-            hitCountRef.current += 1;
+            hitCountRef.current += 1;
             setHitCount(hitCountRef.current);
             endlessRuntime?.addScore(1);
+            const trajectoryNormalizedError = result.collision.trajectoryNormalizedError;
+            if (
+              endlessRuntime
+              && trajectoryNormalizedError >= ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR
+              && trajectoryNormalizedError <= 1
+            ) {
+              endlessRuntime.gainEnergy(1, "极限命中！");
+            }
             recordAimTrial({
               shownAt: hitTarget.spawnedAt,
               responseAt: frameNow,
@@ -910,6 +920,7 @@ export function AdvancedAimRound({
                 targetSpeed: Math.round(Math.hypot(hitTarget.vx, hitTarget.vy) * 1000),
                 shotErrorPx: result.collision.errorPx,
                 normalizedError: result.collision.normalizedError,
+                trajectoryNormalizedError,
               },
             });
             showAimFeedback("good");
@@ -1070,18 +1081,22 @@ export function AdvancedAimRound({
         : shooterFiring
           ? { action: "charge", expression: "neutral" }
           : { action: "idle", expression: "neutral" };
+  const showAdvancedAimMiniScore = !isEndless;
   return (
     <div className={`game-area advanced-aim ${config.variant} mode-${mode} feedback-${feedbackTone}`} ref={areaRef} onPointerDown={shoot}>
       <DifficultyWaveBackdrop />
-      <div className="mini-score advanced-aim-score">
-        <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
-        {!isEndless ? <span>命中 {hitCount}/{activeRequiredHits}</span> : null}
-        {activeTiebreakerRound > 0 ? <span>加赛第{activeTiebreakerRound}轮 · 追加 1 靶</span> : null}
-      </div>
+      {showAdvancedAimMiniScore ? (
+        <div className="mini-score advanced-aim-score">
+          <span>{unlimitedArrows ? `已发 ${firedCount}` : `剩余箭数 ${arrowsLeft}`}</span>
+          <span>命中 {hitCount}/{activeRequiredHits}</span>
+          {activeTiebreakerRound > 0 ? <span>加赛第{activeTiebreakerRound}轮 · 追加 1 靶</span> : null}
+        </div>
+      ) : null}
       <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""}`} aria-hidden="true">
         <PlayerAvatar
           {...shooterAvatarView}
           charge={shooterFiring ? 0.7 : 0}
+          effect={shielded ? "shield" : shooterAvatarView.effect}
           size={64}
         />
       </div>

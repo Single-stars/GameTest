@@ -71,7 +71,7 @@ export type EndlessJourneyConfig = EndlessSourceConfig & {
 export type EndlessFlappyConfig = {
   collectibleChance: number;
   gapSize: number;
-  gravityTransition: "smooth-rotate";
+  gravityTransition: "instant-feedback";
   movingGateChance: number;
   reverseSegmentChance: number;
   segmentWarningGates: number;
@@ -271,10 +271,10 @@ export function getEndlessFlappyConfig({ gateIndex }: { gateIndex: number }): En
   return {
     collectibleChance: chanceAfter(difficulty, 0.2, 0.55),
     gapSize: Math.round(lerp(190, 152, difficulty)),
-    gravityTransition: "smooth-rotate",
+    gravityTransition: "instant-feedback",
     movingGateChance: lerp(0.15, 0.75, difficulty),
     reverseSegmentChance: chanceAfter(difficulty, 0.55, 0.28),
-    segmentWarningGates: 2,
+    segmentWarningGates: 1,
     speed: lerp(116, 140, difficulty),
   };
 }
@@ -321,18 +321,18 @@ export function getEndlessMiniGameStageConfig({
   }
 
   if (miniGameId === "square-jump") {
-    const doubleJumpStretch = clamp((difficulty - 0.34) / 0.66, 0, 1);
     return {
       difficulty,
       sourceAdvancedLevel,
       params: {
-        cyclingChargeOnDoubleJump: true,
-        distanceMax: Math.round(lerp(218, 410, doubleJumpStretch)),
-        distanceMin: Math.round(lerp(142, 330, doubleJumpStretch)),
-        doubleJumpEnabled: true,
+        cyclingChargeOnDoubleJump: false,
+        distanceMax: Math.round(lerp(218, 220, difficulty)),
+        distanceMin: Math.round(lerp(142, 164, difficulty)),
+        doubleJumpEnabled: false,
         finalMix: difficulty >= 0.82,
         flyAwayLandingCatchDepth: 40,
         gravityChallenge: true,
+        gravityJumpLimit: 3,
         gravityPattern: difficulty < 0.5
           ? "normal"
           : difficulty < 0.72
@@ -347,8 +347,8 @@ export function getEndlessMiniGameStageConfig({
         powerDistanceMax: 220,
         powerDistanceMin: 34,
         reverseMoving: difficulty >= 0.68,
-        secondPowerDistanceMax: 180,
-        secondPowerDistanceMin: 30,
+        secondPowerDistanceMax: 0,
+        secondPowerDistanceMin: 0,
         targetLandingPadding: 9,
       },
     };
@@ -386,8 +386,8 @@ export function getEndlessMiniGameStageConfig({
       difficulty,
       sourceAdvancedLevel,
       params: {
-        collectibleCount: Math.max(1, Math.round(chanceAfter(difficulty, 0.12, 7))),
-        collectibleOffset: Number(lerp(0.18, 0.32, difficulty).toFixed(2)),
+        collectibleCount: Math.round(lerp(4, 14, difficulty)),
+        collectibleOffset: Number(lerp(0.14, 0.28, difficulty).toFixed(2)),
         gateCount: Math.round(lerp(8, 18, difficulty)),
         gapSize: flappy.gapSize,
         movingGateRatio: Number(flappy.movingGateChance.toFixed(2)),
@@ -422,10 +422,11 @@ export function getEndlessBrakingConfig({ distance }: { distance: number }): End
 export function getEndlessKnifeConfig({ wheelIndex }: { wheelIndex: number }): EndlessKnifeConfig {
   const safeWheelIndex = Math.max(0, Math.floor(Number.isFinite(wheelIndex) ? wheelIndex : 0));
   const difficulty = getEndlessDifficulty({ progress: safeWheelIndex, maxRamp: 12 });
+  const countdownEnabled = safeWheelIndex >= 2 && safeWheelIndex % 2 === 0;
   return {
-    countdownSeconds: safeWheelIndex < 2 ? null : Number(lerp(3, 2, difficulty).toFixed(2)),
+    countdownSeconds: countdownEnabled ? Number(lerp(3.2, 2.2, difficulty).toFixed(2)) : null,
     forbiddenZoneCount: safeWheelIndex < 4 ? 0 : Math.max(1, Math.floor(lerp(1, 3, difficulty))),
-    requiredHits: 10 + Math.floor(safeWheelIndex / 2),
+    requiredHits: Math.min(16, 10 + Math.floor(safeWheelIndex / 2)),
     rotationSpeed: Math.round(lerp(92, 166, difficulty)),
     sineRotationChance: chanceAfter(difficulty, 0.25, 0.8),
   };

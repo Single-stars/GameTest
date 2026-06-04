@@ -63,12 +63,12 @@ test("flappy rules only mention collectible advantage on collectible levels", ()
   ]);
   assert.deepEqual(rulesFor("flappy-7").countdownLines, [
     "先到终点获胜",
-    "翻转空间保持方向",
+    "重力倒转保持节奏",
   ]);
   assert.deepEqual(rulesFor("flappy-10").countdownLines, [
     "先到终点获胜",
     "收集道具获得优势",
-    "翻转空间保持方向",
+    "重力倒转保持节奏",
   ]);
 });
 
@@ -99,7 +99,7 @@ test("countdown exposes all visible rules at once instead of rotating one line p
   assert.deepEqual(rules.countdownLines, [
     "先到终点获胜",
     "收集道具获得优势",
-    "翻转空间保持方向",
+    "重力倒转保持节奏",
   ]);
 });
 

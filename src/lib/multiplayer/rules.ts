@@ -267,8 +267,8 @@ function squareJumpCountdownLines() {
 function flappyCountdownLines(level: MiniGameLevelConfig) {
   return compactLines([
     "先到终点获胜",
-    hasCollectibles(level) ? "收集道具获得优势" : hasReverseSpace(level) ? "翻转空间保持方向" : "撞到障碍会复活",
-    hasCollectibles(level) && hasReverseSpace(level) ? "翻转空间保持方向" : null,
+    hasCollectibles(level) ? "收集道具获得优势" : hasReverseSpace(level) ? "重力倒转保持节奏" : "撞到障碍会复活",
+    hasCollectibles(level) && hasReverseSpace(level) ? "重力倒转保持节奏" : null,
   ]);
 }
 

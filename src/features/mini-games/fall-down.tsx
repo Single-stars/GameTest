@@ -54,6 +54,8 @@ import {
   MULTIPLAYER_REMOTE_STALE_STOP_EXTRAPOLATION_MS,
   MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
+const ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5;
+const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 6;
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {
@@ -652,6 +654,7 @@ export function FallDownPrototype({
   remoteState,
   spectateRemoteState = null,
   runSeed,
+  shielded = false,
   unlimitedRespawn = false,
   coOpInputState = null,
   coOpInputStateSubscription = null,
@@ -674,6 +677,7 @@ export function FallDownPrototype({
   remoteState?: SelfGameState | null;
   spectateRemoteState?: SelfGameState | null;
   runSeed: string;
+  shielded?: boolean;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
   coOpInputStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
@@ -755,6 +759,7 @@ export function FallDownPrototype({
   const coOpPlayerSkin = resolveFallDownCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const endlessEnergyDistanceRef = useRef(0);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -1184,6 +1189,16 @@ export function FallDownPrototype({
           current.vy = clamp(current.vy + 980 * delta, -220, 520);
           current.playerX = clamp(current.playerX + current.inputDirection * fallDownPlayerSpeed * delta + platformCarryX, PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
           current.playerY += current.vy * delta;
+          if (isEndlessRun) {
+            const endlessDistanceScore = Math.floor(Math.max(0, current.playerY) / 100);
+            endlessRef.current?.setDistanceScore(endlessDistanceScore, false);
+            const nextEnergyDistance = Math.floor(endlessDistanceScore / ENDLESS_FALL_DOWN_ENERGY_DISTANCE);
+            const energyGain = nextEnergyDistance - endlessEnergyDistanceRef.current;
+            if (energyGain > 0) {
+              endlessEnergyDistanceRef.current = nextEnergyDistance;
+              endlessRef.current?.gainEnergy(energyGain);
+            }
+          }
 
           for (const platform of current.platforms) {
             const platformX = fallPlatformX(platform, current.time, stageWidth);
@@ -1214,16 +1229,15 @@ export function FallDownPrototype({
               continueAfterRecoverableFailure("踩到危险");
               return;
             }
+            const previousPlatform = platformById.get(current.currentPlatformId);
+            const fastDropDistance = previousPlatform ? Math.floor(Math.max(0, platformTop - previousPlatform.y) / 100) : 0;
             current.playerY = platformTop - PLAYER_SIZE / 2;
             current.vy = 0;
             current.currentPlatformId = platform.id;
-            const previousLayersReached = current.layersReached;
             current.layersReached = Math.max(current.layersReached, platform.id);
-            if (isEndlessRun && current.layersReached > previousLayersReached && platform.kind !== "finish") {
-              endlessRef.current?.setDistanceScore(Math.floor(Math.max(0, current.playerY) / 100));
-            }
             if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
+            if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) endlessRef.current?.gainEnergy(1, "极速下降！");
             eventChanged = true;
             if (platform.kind === "finish" && !isEndlessRun) {
               current.status = "passed";
@@ -1415,6 +1429,7 @@ export function FallDownPrototype({
           <PlayerAvatar
             {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
+            effect={shielded ? "shield" : resolveFallDownPlayerAvatarView(view).effect}
             customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
             customOutlineColor={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.outlineColor ?? null : null}
             skin={coOpPlayerSkin}

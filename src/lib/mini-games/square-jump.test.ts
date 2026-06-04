@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import * as miniGames from "./index.ts";
 import {
   createMiniGameRunSeed,
   createSquareJumpBaseAdvancePlan,
@@ -343,12 +344,7 @@ test("square jump maps its player visuals through the shared avatar without fail
       avatarStateSource.indexOf('if (view.time < view.respawnUntil) return { action: "idle", expression: "neutral", effect: "shield" };'),
     "charging must override respawn shield so revive does not replace the charge animation",
   );
-  assert.match(avatarStateSource, /if \(view\.feedback === "Good"\) return \{ action: "land", expression: "neutral" \};/);
-  assert.ok(
-    avatarStateSource.indexOf('if (view.state === "charging" || view.state === "airCharging") return { action: "charge", expression: "neutral" };') <
-      avatarStateSource.indexOf('if (view.feedback === "Good") return { action: "land", expression: "neutral" };'),
-    "charging must override the temporary land feedback so charge squash starts during camera advance",
-  );
+  assert.doesNotMatch(avatarStateSource, /Good|view\.feedback/);
   assert.match(avatarStateSource, /if \(view\.state === "jumping"\) return \{ action: "idle", expression: "neutral" \};/);
   assert.match(avatarStateSource, /if \(view\.state === "falling"\) return \{ action: "idle", expression: "scared" \};/);
   assert.match(avatarStateSource, /return \{ action: "idle", expression: "neutral" \};/);
@@ -358,15 +354,26 @@ test("square jump maps its player visuals through the shared avatar without fail
   assert.match(renderSource, /\{\.\.\.resolveSquareJumpPlayerAvatarView\(view\)\}/);
   assert.match(renderSource, /charge=\{view\.charge\}/);
   assert.match(renderSource, /rootRef=\{playerAvatarRef\}/);
-  assert.match(renderSource, /gravity=\{view\.activeGravity\}/);
+  assert.match(renderSource, /gravity="normal"/);
+  assert.doesNotMatch(renderSource, /gravity=\{view\.activeGravity\}/);
   assert.match(renderSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(renderSource, /visualScale=\{1\.18\}/);
   assert.doesNotMatch(renderSource, /prototype-player-box square-jump-base-player-visual/);
+  assert.doesNotMatch(componentSource, /current\.feedback = "Good"|prototype-feedback good/);
 });
 
-test("square jump platform visuals distinguish gravity, moving, and finish platforms", () => {
+test("square jump stage gravity only changes wave speed while platform gravity colors are preserved", () => {
   const componentSource = readMiniGameRuntimeSource();
   const globalCss = readAppCssSource();
+  const squareJumpCss = readFileSync(new URL("../../app/styles/mini-games/square-jump.css", import.meta.url), "utf8");
+  const lightStageRule = squareJumpCss.slice(
+    squareJumpCss.indexOf(".square-jump-stage.gravity-light {"),
+    squareJumpCss.indexOf("}", squareJumpCss.indexOf(".square-jump-stage.gravity-light {")) + 1,
+  );
+  const heavyStageRule = squareJumpCss.slice(
+    squareJumpCss.indexOf(".square-jump-stage.gravity-heavy {"),
+    squareJumpCss.indexOf("}", squareJumpCss.indexOf(".square-jump-stage.gravity-heavy {")) + 1,
+  );
 
   assert.match(componentSource, /squarePlatformMark\(platform\)/);
   assert.match(componentSource, /const platformMark = squarePlatformMark\(platform\)/);
@@ -374,20 +381,75 @@ test("square jump platform visuals distinguish gravity, moving, and finish platf
   assert.match(componentSource, /function squarePlatformMark\(platform: SquareJumpBasePlatform\): string \| null/);
   assert.doesNotMatch(componentSource, /if \(platform\.finish\) return "⚑"/);
   assert.doesNotMatch(componentSource, /if \(platform\.moving\) return "↔"/);
-  assert.match(globalCss, /\.square-jump-base-platform\.gravity-light \.square-jump-base-platform-top/);
-  assert.match(globalCss, /\.square-jump-base-platform\.moving\.gravity-light \.square-jump-base-platform-top/);
-  assert.match(globalCss, /\.square-jump-base-platform\.moving\.gravity-light \.square-jump-base-platform-body/);
-  assert.match(globalCss, /\.square-jump-base-platform\.gravity-heavy \.square-jump-base-platform-top/);
-  assert.match(globalCss, /\.square-jump-base-platform\.moving::before/);
-  assert.match(globalCss, /\.square-jump-base-platform\.finish::after/);
-  assert.match(globalCss, /\.square-jump-base-platform\.finish \.square-jump-base-platform-top/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.moving::before/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.finish::after/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.finish \.square-jump-base-platform-top/);
+  assert.match(squareJumpCss, /\.square-jump-stage\s*{[\s\S]*--square-stage-base:\s*#fffdf8;/);
+  assert.match(squareJumpCss, /\.square-jump-stage\s*{[\s\S]*linear-gradient\(180deg,\s*#fffdf8 0%,\s*#f7f2e9 100%\);/);
+  assert.match(lightStageRule, /--difficulty-gravity-flow-y:\s*-260;/);
+  assert.match(heavyStageRule, /--difficulty-gravity-flow-y:\s*300;/);
+  assert.doesNotMatch(lightStageRule, /background:|--difficulty-wave-opacity|--square-stage-base|--square-stage-wash|linear-gradient|radial-gradient|rgba\(|#[0-9a-fA-F]{3,8}/);
+  assert.doesNotMatch(heavyStageRule, /background:|--difficulty-wave-opacity|--square-stage-base|--square-stage-wash|linear-gradient|radial-gradient|rgba\(|#[0-9a-fA-F]{3,8}/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.gravity-light \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#8ee7da;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.gravity-heavy \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#5c5668;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.moving\.gravity-light \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#8ee7da;/);
+  assert.match(squareJumpCss, /\.square-jump-base-platform\.moving\.gravity-heavy \.square-jump-base-platform-top\s*{[\s\S]*?background:\s*#5c5668;/);
+  assert.ok(
+    squareJumpCss.indexOf(".square-jump-base-platform.moving.gravity-heavy .square-jump-base-platform-top") >
+      squareJumpCss.indexOf(".square-jump-base-platform.moving .square-jump-base-platform-top"),
+  );
+  assert.match(squareJumpCss, /\.square-platform\.gravity-light \.square-platform-top\s*{[\s\S]*?background:\s*#b9ecdc;/);
+  assert.match(squareJumpCss, /\.square-platform\.gravity-heavy \.square-platform-top\s*{[\s\S]*?background:\s*#77706a;/);
+  assert.doesNotMatch(squareJumpCss, /\.square-jump-stage\.gravity-light \.square-progress-background,\s*\.square-jump-stage\.gravity-heavy \.square-progress-background\s*{[\s\S]*opacity:\s*0;/);
+  assert.match(squareJumpCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\s*{[\s\S]*background:\s*var\(--square-stage-wash\),\s*var\(--square-stage-base\);/);
+  assert.doesNotMatch(globalCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-(?:light|heavy)/);
 });
 
-test("square jump active gravity persists across normal platforms", () => {
+test("square jump active gravity persists by default but can expire after a jump limit", () => {
+  const resolveGravityAfterLanding = (miniGames as typeof miniGames & {
+    resolveSquareJumpGravityAfterLanding?: (input: {
+      currentGravity: "normal" | "light" | "heavy";
+      jumpLimit: number;
+      landedGravity?: "normal" | "light" | "heavy";
+      remainingJumps: number | null;
+    }) => { gravity: "normal" | "light" | "heavy"; remainingJumps: number | null };
+  }).resolveSquareJumpGravityAfterLanding;
+
   assert.equal(resolveSquareJumpActiveGravity("heavy", "normal"), "heavy");
   assert.equal(resolveSquareJumpActiveGravity("light", undefined), "light");
   assert.equal(resolveSquareJumpActiveGravity("normal", "light"), "light");
   assert.equal(resolveSquareJumpActiveGravity("light", "heavy"), "heavy");
+  assert.equal(typeof resolveGravityAfterLanding, "function");
+
+  const lightStart = resolveGravityAfterLanding({
+    currentGravity: "normal",
+    jumpLimit: 3,
+    landedGravity: "light",
+    remainingJumps: null,
+  });
+  const lightAfterOne = resolveGravityAfterLanding({
+    currentGravity: lightStart.gravity,
+    jumpLimit: 3,
+    landedGravity: "normal",
+    remainingJumps: lightStart.remainingJumps,
+  });
+  const lightAfterTwo = resolveGravityAfterLanding({
+    currentGravity: lightAfterOne.gravity,
+    jumpLimit: 3,
+    landedGravity: undefined,
+    remainingJumps: lightAfterOne.remainingJumps,
+  });
+  const lightAfterThree = resolveGravityAfterLanding({
+    currentGravity: lightAfterTwo.gravity,
+    jumpLimit: 3,
+    landedGravity: "normal",
+    remainingJumps: lightAfterTwo.remainingJumps,
+  });
+
+  assert.deepEqual(lightStart, { gravity: "light", remainingJumps: 3 });
+  assert.deepEqual(lightAfterOne, { gravity: "light", remainingJumps: 2 });
+  assert.deepEqual(lightAfterTwo, { gravity: "light", remainingJumps: 1 });
+  assert.deepEqual(lightAfterThree, { gravity: "normal", remainingJumps: null });
 });
 
 test("square jump base precomputes landing by x instead of using physics collision", () => {
@@ -459,7 +521,7 @@ test("square jump runtime snaps every successful landing to the platform surface
   assert.match(componentSource, /current\.playerY = current\.currentPlatform\.y - PLAYER_SIZE \/ 2/);
   assert.match(componentSource, /current\.playerY = landedPlatform\.y - PLAYER_SIZE \/ 2/);
   assert.match(componentSource, /current\.playerY = current\.nextPlatform\.y - PLAYER_SIZE \/ 2/);
-  assert.match(componentSource, /current\.activeGravity = resolveSquareJumpActiveGravity\(current\.activeGravity, landedPlatform\.gravity\)/);
+  assert.match(componentSource, /resolveSquareJumpGravityAfterLanding\(\{/);
   assert.match(componentSource, /const gravity = view\.activeGravity/);
   assert.match(componentSource, /const gravity = runtime\.activeGravity/);
 });
@@ -702,6 +764,46 @@ test("square jump final remains reachable after inherited gravity changes", () =
       assert.ok(nextLeft <= maxLandingX, `${level.levelId} seed ${seedIndex} platform ${index} should be reachable with two jumps under ${activeGravity}`);
       activeGravity = resolveSquareJumpActiveGravity(activeGravity, nextPlatform.gravity);
     }
+  }
+});
+
+test("square jump low gravity generates longer reachable gaps across gravity challenge levels", () => {
+  const levels = getMiniGameLevels("square-jump" as MiniGameId).filter(
+    (level) => level.params.gravityChallenge === true && String(level.params.gravityPattern).includes("light"),
+  );
+
+  assert.ok(levels.length >= 3);
+
+  for (const level of levels) {
+    const maxDistance = Number(level.params.distanceMax);
+    const firstMax = Number(level.params.powerDistanceMax ?? level.params.maxJumpDistance);
+    const secondMax = level.params.doubleJumpEnabled === true ? Number(level.params.secondPowerDistanceMax ?? 0) : 0;
+    const targetPadding = Number(level.params.targetLandingPadding ?? 12);
+    const platforms = generateSquareJumpPlatformSequence(level, `low-gravity-gaps-${level.levelId}`, {
+      count: Number(level.params.jumpsRequired) + 1,
+      platformY: 435,
+      startX: 120,
+    });
+    let activeGravity: "normal" | "light" | "heavy" = "normal";
+    let lowGravityGapCount = 0;
+
+    for (let index = 0; index < platforms.length - 1; index += 1) {
+      const currentPlatform = platforms[index];
+      const nextPlatform = platforms[index + 1];
+      const distance = nextPlatform.x - currentPlatform.x;
+
+      if (activeGravity === "light") {
+        const farthestCenterDistance =
+          (firstMax + secondMax) * getSquareJumpGravityMultiplier("light") + nextPlatform.width / 2 + targetPadding - (nextPlatform.range ?? 0) - 4;
+        lowGravityGapCount += 1;
+        assert.ok(distance > maxDistance, `${level.levelId} platform ${index + 1} should generate past the normal max distance under low gravity`);
+        assert.ok(distance <= farthestCenterDistance + 0.000001, `${level.levelId} platform ${index + 1} should remain reachable under low gravity`);
+      }
+
+      activeGravity = resolveSquareJumpActiveGravity(activeGravity, nextPlatform.gravity);
+    }
+
+    assert.ok(lowGravityGapCount > 0, `${level.levelId} should include at least one low-gravity generated gap`);
   }
 });
 

@@ -97,8 +97,8 @@ function getMiniGameRuleItems(config: AdvancedStageConfig, miniGameId: MiniGameI
   if (miniGameId === "flappy") {
     if (variant.includes("moving-gate")) return ruleItems("部分障碍门会上下移动");
     if (variant.includes("collectible-path")) return ruleItems("必须收集路径道具");
-    if (variant.includes("reverse-gravity")) return ruleItems("重力和方向会反转");
-    if (variant.includes("final")) return ruleItems("部分障碍门会上下移动", "重力和方向会反转", "必须收集路径道具");
+    if (variant.includes("reverse-gravity")) return ruleItems("重力会倒转");
+    if (variant.includes("final")) return ruleItems("部分障碍门会上下移动", "重力会倒转", "必须收集路径道具");
   }
   if (miniGameId === "knife") {
     if (variant.includes("countdown")) return ruleItems("每发飞刀都有倒计时");

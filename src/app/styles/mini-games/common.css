@@ -119,8 +119,6 @@
 [data-difficulty-tone] .prototype-stage.flappy-stage.reverse,
 [data-difficulty-tone] .prototype-stage.flappy-stage.endless-gravity-anomaly,
 [data-difficulty-tone] .prototype-stage.square-jump-stage,
-[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-light,
-[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-heavy,
 [data-difficulty-tone] .prototype-stage.fall-down-stage,
 [data-difficulty-tone] .prototype-stage.knife-stage {
   --difficulty-wave-opacity: var(--difficulty-nonreaction-wave-opacity, 0.12);

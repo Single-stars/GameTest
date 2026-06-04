@@ -26,6 +26,8 @@ export type AdvancedAimCollision = {
   t: number;
   errorPx: number;
   normalizedError: number;
+  trajectoryErrorPx: number;
+  trajectoryNormalizedError: number;
   offsetFromEntity: Point2D;
 };
 
@@ -116,6 +118,7 @@ function findFirstCollision(
       const hitRadius = Math.max(1, entity.radius + tolerancePx);
       const visibleRadius = Math.max(1, entity.radius);
       const closest = closestPointOnSegment(oldTip, newTip, entity);
+      const trajectoryDistance = distanceFromPointToLine(oldTip, newTip, entity);
       if (closest.distance > hitRadius) return [];
       return [
         {
@@ -125,6 +128,8 @@ function findFirstCollision(
           t: closest.t,
           errorPx: Math.round(closest.distance),
           normalizedError: Number((closest.distance / visibleRadius).toFixed(2)),
+          trajectoryErrorPx: Math.round(trajectoryDistance),
+          trajectoryNormalizedError: Number((trajectoryDistance / visibleRadius).toFixed(2)),
           offsetFromEntity: {
             x: closest.point.x - entity.x,
             y: closest.point.y - entity.y,
@@ -154,4 +159,12 @@ function closestPointOnSegment(start: Point2D, end: Point2D, point: Point2D) {
   const distance = Math.hypot(closest.x - point.x, closest.y - point.y);
 
   return { point: closest, distance, t };
+}
+
+function distanceFromPointToLine(start: Point2D, end: Point2D, point: Point2D) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  return Math.abs(dy * point.x - dx * point.y + end.x * start.y - end.y * start.x) / length;
 }

@@ -8,6 +8,7 @@ export type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
   advancedConfig?: AdvancedStageConfig;
   endless?: EndlessMiniGameRuntime;
+  shielded?: boolean;
 };
 
 export const now = () => performance.now();

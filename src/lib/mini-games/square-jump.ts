@@ -85,6 +85,43 @@ export function resolveSquareJumpActiveGravity(
   return currentGravity;
 }
 
+export function resolveSquareJumpGravityAfterLanding({
+  currentGravity,
+  landedGravity,
+  remainingJumps,
+  jumpLimit,
+}: {
+  currentGravity: NonNullable<SquareJumpBasePlatform["gravity"]>;
+  landedGravity?: SquareJumpBasePlatform["gravity"];
+  remainingJumps: number | null;
+  jumpLimit: number;
+}) {
+  const normalizedJumpLimit = Number.isFinite(jumpLimit) ? Math.max(0, Math.floor(jumpLimit)) : 0;
+  if (normalizedJumpLimit <= 0) {
+    return {
+      gravity: resolveSquareJumpActiveGravity(currentGravity, landedGravity),
+      remainingJumps: null,
+    };
+  }
+
+  if (landedGravity === "light" || landedGravity === "heavy") {
+    return {
+      gravity: landedGravity,
+      remainingJumps: normalizedJumpLimit,
+    };
+  }
+
+  if (currentGravity === "normal") return { gravity: "normal" as const, remainingJumps: null };
+
+  const nextRemainingJumps = Math.max(0, (remainingJumps ?? normalizedJumpLimit) - 1);
+  if (nextRemainingJumps <= 0) return { gravity: "normal" as const, remainingJumps: null };
+
+  return {
+    gravity: currentGravity,
+    remainingJumps: nextRemainingJumps,
+  };
+}
+
 export function selectSquareJumpVisiblePlatforms(
   currentPlatform: SquareJumpBasePlatform,
   nextPlatform: SquareJumpBasePlatform,
@@ -383,7 +420,9 @@ export function generateSquareJumpPlatformSequence(
   const reverseMoving = booleanParam(level.params, "reverseMoving");
   const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
   const gravityChallenge = booleanParam(level.params, "gravityChallenge");
+  const gravityJumpLimit = numberParam(level.params, "gravityJumpLimit", 0);
   let activeGravity: NonNullable<SquareJumpBasePlatform["gravity"]> = "normal";
+  let activeGravityRemainingJumps: number | null = null;
 
   const platforms: SquareJumpBasePlatform[] = [
     {
@@ -413,8 +452,8 @@ export function generateSquareJumpPlatformSequence(
     let localMinDistance = minDistance;
     let localMaxDistance = maxDistance;
     if (gravityChallenge && activeGravity === "light") {
-      localMinDistance = Math.max(96, minDistance * 0.72);
-      localMaxDistance = Math.max(localMinDistance, minDistance * 0.98);
+      localMinDistance = Math.max(minDistance, maxDistance * 1.02);
+      localMaxDistance = Math.max(localMinDistance, maxDistance * 1.24);
     } else if (gravityChallenge && activeGravity === "heavy") {
       localMinDistance = Math.max(minDistance, maxDistance * 0.82);
       localMaxDistance = maxDistance;
@@ -438,7 +477,14 @@ export function generateSquareJumpPlatformSequence(
       x: current.x + distance,
       y: platformY,
     });
-    activeGravity = resolveSquareJumpActiveGravity(activeGravity, targetGravity);
+    const gravityState = resolveSquareJumpGravityAfterLanding({
+      currentGravity: activeGravity,
+      jumpLimit: gravityJumpLimit,
+      landedGravity: targetGravity,
+      remainingJumps: activeGravityRemainingJumps,
+    });
+    activeGravity = gravityState.gravity;
+    activeGravityRemainingJumps = gravityState.remainingJumps;
   }
 
   return platforms;
