@@ -131,6 +131,24 @@ test("flappy generated gates are seeded and encode initial placement", () => {
   );
 });
 
+test("flappy generated moving gates freeze their own speed and gap at spawn time", () => {
+  const movingLevel = {
+    ...getMiniGameLevel("flappy", "flappy-3"),
+    params: {
+      ...getMiniGameLevel("flappy", "flappy-3").params,
+      gapSize: 158,
+      movingGateRatio: 1,
+      movingGateSpeed: 2.45,
+    },
+  };
+  const layout = generateFlappyGateLayout(movingLevel, "moving-speed-freeze");
+
+  assert.ok(layout.gates.length > 0);
+  assert.equal(layout.gates.every((gate) => gate.moving), true);
+  assert.equal(layout.gates.every((gate) => gate.gapSize === 158), true);
+  assert.equal(layout.gates.every((gate) => gate.movingSpeed === 2.45), true);
+});
+
 test("flappy safe respawn backs up far enough before the blocking gate", () => {
   const resolveFlappySafeRespawnProgress = getSafeRespawnResolver();
   const gate = { distance: 250 };
@@ -409,8 +427,8 @@ test("flappy renders the finished local player in world space while spectating",
     flappyRuntimeSource.indexOf("const tick = (time: number)", flappyRuntimeSource.indexOf("const updateDom = (")),
   );
 
-  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, reverseDirection\);/);
-  assert.match(updateDomSource, /const localPlayerWorldX = playerX \+ getFlappySignedProgress\(current\.progress, reverseDirection\);/);
+  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, activeReverseDirection\);/);
+  assert.match(updateDomSource, /const localPlayerWorldX = activePlayerX \+ getFlappySignedProgress\(current\.progress, activeReverseDirection\);/);
   assert.match(updateDomSource, /const playerScreenX = spectatingRemote \? localPlayerWorldX - localCameraX : getFlappyPlayerScreenX\(\{/);
   assert.match(updateDomSource, /playerShellRef\.current\.style\.transform = transformPoint3d\(playerScreenX - PLAYER_SIZE \/ 2, current\.playerY - PLAYER_SIZE \/ 2\);/);
   assert.doesNotMatch(updateDomSource, /if \(!spectatingRemote\) \{[\s\S]{0,260}playerShellRef\.current\.style\.transform/);
@@ -433,6 +451,20 @@ test("flappy endless moving gates use RAF-only transforms to avoid jitter", () =
   assert.doesNotMatch(renderSource, /className="flappy-gate bottom"[\s\S]{0,260}style=\{\{[\s\S]{0,120}transform:/);
 });
 
+test("flappy endless moving gates reuse their generated motion params instead of live difficulty params", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const flappyConfigSource = readAppCssSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+
+  assert.match(componentSource, /function resolveFlappyGateGapSize\(gate: FlappyGate, fallbackGapSize: number\)/);
+  assert.match(componentSource, /const movingSpeed = gate\.movingSpeed \?\? fallbackMovingSpeed;/);
+  assert.match(flappyRuntimeSource, /const gateGapSize = resolveFlappyGateGapSize\(gate, activeGapSize\);/);
+  assert.match(flappyRuntimeSource, /const centerY = flappyGateCenterY\(gate, nextTime, activeMovingGateSpeed, stageHeight\);/);
+  assert.doesNotMatch(flappyRuntimeSource, /const centerY = flappyGateCenterY\(gate, nextTime, activeFlappyParams, stageHeight\);/);
+  assert.doesNotMatch(flappyRuntimeSource, /centerY \+ gate\.collectibleOffset \* activeGapSize/);
+  assert.match(flappyConfigSource, /\.flappy-world\s*{/);
+});
+
 test("flappy endless gravity flips lock input, show a prompt, and respawn on the start platform", () => {
   const componentSource = readMiniGameRuntimeSource();
   const cssSource = readAppCssSource();
@@ -450,9 +482,14 @@ test("flappy endless gravity flips lock input, show a prompt, and respawn on the
   assert.match(flappyRuntimeSource, /setManagedGravityFlipped\(transition\.targetFlipped\)/);
   assert.match(flappyRuntimeSource, /const gravityInputLocked = Boolean\(isEndlessRun && managedGravityFlipTransition\);/);
   assert.match(flappyRuntimeSource, /if \(gravityInputLocked\) return;/);
+  assert.match(flappyRuntimeSource, /const activeViewReverseDirection = reverseDirection \|\| viewManagedGravityFlipped;/);
+  assert.match(flappyRuntimeSource, /const activeViewPlayerX = getFlappyPlayerX\(stageWidth, activeViewReverseDirection\);/);
+  assert.match(flappyRuntimeSource, /const activeReverseDirection = reverseDirection \|\| resolveManagedFlappyFlipState/);
   assert.match(flappyRuntimeSource, /className=\{`flappy-world/);
   assert.match(flappyRuntimeSource, /flappy-gravity-flip-banner/);
-  assert.match(cssSource, /\.flappy-world\s*{[\s\S]*transition:\s*transform 680ms/);
-  assert.match(cssSource, /\.flappy-world\.gravity-flipped\s*{[\s\S]*--flappy-world-rotation:\s*180deg;/);
+  assert.match(componentSource, /const FLAPPY_GRAVITY_FLIP_TRANSITION_SECONDS = 1\.1;/);
+  assert.match(cssSource, /@keyframes flappy-managed-flip/);
+  assert.match(cssSource, /\.flappy-world\.gravity-flip-preparing\s*{[\s\S]*animation:\s*flappy-managed-flip 1100ms/);
+  assert.doesNotMatch(cssSource, /\.flappy-world\.gravity-flipped\s*{[\s\S]*--flappy-world-rotation:\s*180deg;/);
   assert.match(cssSource, /\.flappy-gravity-flip-banner/);
 });

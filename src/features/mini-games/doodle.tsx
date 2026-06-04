@@ -1146,16 +1146,16 @@ export function DoodleJumpPrototype({
     return () => window.clearTimeout(timer);
   }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
-  const showDoodleMiniScore = !isEndlessRun || Boolean(coOpRole);
+  const showDoodleMiniScore = !isEndlessRun;
 
   return (
     <div className="prototype-game-wrap">
       {showDoodleMiniScore ? (
-      <div className="mini-score">
-        {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
-        {!isEndlessRun ? <span className="mini-progress">进度 {Math.round(view.progressPercent)}%</span> : null}
-        {!isEndlessRun ? <>{riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}</> : null}
-      </div>
+        <div className="mini-score">
+          {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
+          <span className="mini-progress">进度 {Math.round(view.progressPercent)}%</span>
+          {riskTotal > 0 ? <span>高风险 {view.riskHit}/{riskTotal}</span> : null}
+        </div>
       ) : null}
       <div
         className={`prototype-stage doodle-stage ${screenShakeClassName} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}

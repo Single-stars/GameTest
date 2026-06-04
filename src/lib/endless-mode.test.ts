@@ -73,7 +73,7 @@ test("endless HUD has a pure energy meter that heals or grants one damage shield
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
-  const energyCss = sourceBetween(cssSource, ".endless-energy-meter {", ".endless-score {");
+  const energyCss = sourceBetween(cssSource, ".endless-energy-meter {", ".endless-score-readout {");
 
   assert.match(commonSource, /gainEnergy: \(amount\?: number\) => void/);
   assert.match(commonSource, /shieldCharges: number/);
@@ -87,16 +87,21 @@ test("endless HUD has a pure energy meter that heals or grants one damage shield
   assert.match(runtimeSource, /if \(shieldChargesRef\.current > 0\)/);
   assert.match(runtimeSource, /shieldChargesRef\.current = 0;/);
   assert.match(runtimeSource, /energyPercent: shieldCharges > 0 \? 100 : Math\.round/);
-  assert.match(runtimeSource, /className=\{`endless-vitality \$\{api\.shieldCharges > 0 \? "shielded" : ""\}`\}/);
+  assert.match(runtimeSource, /className=\{`endless-hud \$\{api\.shieldCharges > 0 \? "shielded" : ""\}`\}/);
+  assert.match(runtimeSource, /className="endless-hearts"/);
+  assert.match(runtimeSource, /endless-heart-token/);
   assert.match(runtimeSource, /className="endless-energy-meter"/);
-  assert.match(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
+  assert.match(runtimeSource, /className="endless-energy-segments"/);
+  assert.match(runtimeSource, /endless-energy-cell/);
+  assert.doesNotMatch(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
   assert.doesNotMatch(runtimeSource, /endless-shield/);
   assert.match(flappySource, /endlessRef\.current\?\.gainEnergy\(1\)/);
-  assert.match(cssSource, /\.endless-vitality\.shielded::after\s*{/);
+  assert.match(cssSource, /\.endless-hud\.shielded::after\s*{/);
   assert.match(cssSource, /animation:\s*endless-shield-pulse/);
-  assert.match(energyCss, /background:\s*rgba\(47,\s*155,\s*104,\s*0\.18\);/);
-  assert.match(energyCss, /\.endless-energy-meter span\s*{[\s\S]*background:\s*var\(--green\);/);
-  assert.doesNotMatch(energyCss, /linear-gradient/);
+  assert.match(energyCss, /\.endless-energy-segments\s*{/);
+  assert.match(energyCss, /grid-template-columns:\s*repeat\(10,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(energyCss, /\.endless-energy-cell\.active\s*{[\s\S]*linear-gradient\(180deg,\s*#a7fff0/);
+  assert.match(energyCss, /\.endless-hud\.shielded \.endless-energy-cell\.active\s*{[\s\S]*linear-gradient\(180deg,\s*#9cd8ff/);
 });
 
 test("endless difficulty ramps smoothly from progress and clamps only the difficulty value", () => {
@@ -301,26 +306,33 @@ test("distance-based endless rounds report distance score instead of action coun
 test("endless braking uses continuous scenery and hazards that approach the runner", () => {
   const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const trackRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-track");
+  const laneRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-lane");
 
   assert.match(brakingSource, /endlessDistanceRef/);
-  assert.match(brakingSource, /endlessWorldOffset/);
+  assert.doesNotMatch(brakingSource, /endlessWorldOffset/);
   assert.match(brakingSource, /ENDLESS_BRAKE_RUNNER_LEFT_PERCENT/);
   assert.match(brakingSource, /useState\(endless \? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0\)/);
   assert.match(brakingSource, /useRef\(endless \? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0\)/);
-  assert.match(brakingSource, /ENDLESS_BRAKE_SCENERY_LOOP_PX/);
-  assert.match(brakingSource, /syncEndlessWorldOffset/);
-  assert.match(brakingSource, /style\.setProperty\("--advanced-brake-world-offset"/);
+  assert.match(brakingSource, /syncEndlessWaveParallax/);
+  assert.match(brakingSource, /style\.setProperty\("--difficulty-wave-parallax-x"/);
+  assert.match(brakingSource, /style\.setProperty\("--difficulty-wave-screen-shift-x"/);
+  assert.match(brakingSource, /distance \* -42/);
+  assert.doesNotMatch(brakingSource, /ENDLESS_BRAKE_SCENERY_LOOP_PX/);
+  assert.doesNotMatch(brakingSource, /--advanced-brake-world-offset/);
   assert.doesNotMatch(brakingSource, /advanced-brake-scenery/);
   assert.match(brakingSource, /hazard\.x - distanceDelta/);
   assert.match(brakingSource, /setDistanceScore\(Math\.floor\(endlessDistanceRef\.current\)\)/);
   assert.doesNotMatch(brakingSource, /setEndlessWorldOffset/);
-  assert.match(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::after\s*{/);
   assert.doesNotMatch(cssSource, /\.advanced-brake-scenery\s*{/);
   assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post\s*{/);
-  assert.match(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{[\s\S]*linear-gradient\(180deg,\s*rgba\(47,\s*155,\s*104,\s*0\.08\)/);
-  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{[\s\S]*repeating-linear-gradient\(\s*90deg/);
+  assert.doesNotMatch(trackRule, /background:\s*#fbf7ef/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner\s*{[\s\S]*--difficulty-wave-opacity:\s*0\.38;/);
+  assert.doesNotMatch(laneRule, /background:/);
+  assert.match(laneRule, /border-bottom:\s*0;/);
   assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-lane\s*{[\s\S]*linear-gradient\(90deg/);
-  assert.match(cssSource, /background-position:[\s\S]*var\(--advanced-brake-world-offset/);
 });
 
 test("endless aim starts from early difficulty while preserving one-at-a-time spawn logic", () => {
@@ -358,7 +370,7 @@ test("endless aim starts from early difficulty while preserving one-at-a-time sp
   assert.match(aimSource, /activeTargetCountRef\.current = isEndless \? 1 :/);
 });
 
-test("advanced screen and app route endless mode through a real runtime with hearts and debug jumps", () => {
+test("advanced screen and app route endless mode through a real runtime with compact HUD", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
@@ -372,10 +384,14 @@ test("advanced screen and app route endless mode through a real runtime with hea
   assert.match(pageSource, /recordAdvancedEndlessScore/);
   assert.match(pageSource, /completeAdvancedEndlessRound/);
   assert.match(runtimeSource, /ENDLESS_STARTING_REVIVES/);
-  assert.match(runtimeSource, /endless-heart/);
+  assert.match(runtimeSource, /endless-hearts/);
+  assert.match(runtimeSource, /endless-heart-token/);
   assert.match(runtimeSource, /getEndlessRoundDifficultyState/);
-  assert.match(runtimeSource, /endless-difficulty/);
-  assert.match(runtimeSource, /getEndlessTestJumpOptions/);
+  assert.match(runtimeSource, /endless-energy-segments/);
+  assert.match(runtimeSource, /endless-energy-cell/);
+  assert.doesNotMatch(runtimeSource, /endless-difficulty/);
+  assert.doesNotMatch(runtimeSource, /getEndlessTestJumpOptions/);
+  assert.doesNotMatch(runtimeSource, /测试强度|无尽强度|强度 \{difficultyState\.label\}/);
   assert.match(runtimeSource, /AdvancedReactionRound/);
   assert.match(runtimeSource, /AdvancedAimRound/);
   assert.match(runtimeSource, /AdvancedBrakingRound/);
@@ -385,27 +401,47 @@ test("advanced screen and app route endless mode through a real runtime with hea
   assert.doesNotMatch(cssSource, /\.endless-stage\s*{/);
 });
 
-test("endless HUD exposes real difficulty without mixing debug jump controls into the main status row", () => {
+test("endless HUD removes strength controls and uses a ten-segment energy meter", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
   const hudSource = sourceBetween(runtimeSource, "function EndlessHud", "function EndlessNativeRound");
   const hudCss = sourceBetween(cssSource, ".endless-hud {", ".endless-game-host {");
 
-  assert.match(hudSource, /difficultyState\.label/);
-  assert.match(hudSource, /difficultyState\.sourceAdvancedLevel/);
-  assert.match(hudSource, /difficultyState\.progressToNext/);
-  assert.match(hudSource, /无尽强度/);
-  assert.match(hudSource, /强度 \{difficultyState\.label\}/);
-  assert.match(hudSource, /进阶 \{difficultyState\.sourceAdvancedLevel\}/);
-  assert.match(hudSource, /下一段/);
-  assert.match(hudSource, /强度封顶/);
-  assert.match(hudSource, /测试强度/);
-  assert.doesNotMatch(hudSource, /鏃犲敖|寮哄害|杩涢樁|涓嬩竴娈|娴嬭瘯|灏侀《/);
-  assert.match(runtimeSource, /className="endless-debug-panel"/);
-  assert.doesNotMatch(sourceBetween(hudSource, '<div className="endless-hud"', "</div>\n      {debugToolsVisible"), /endless-debug-jumps/);
-  assert.match(hudCss, /grid-template-columns:\s*auto minmax\(0, auto\) minmax\(120px, 1fr\)/);
-  assert.match(cssSource, /\.endless-debug-panel\s*\{/);
-  assert.match(cssSource, /\.endless-debug-panel summary\s*\{/);
+  assert.match(hudSource, /activeEnergySegments/);
+  assert.match(hudSource, /Array\.from\(\{ length: ENDLESS_ENERGY_THRESHOLD \}/);
+  assert.match(hudSource, /endless-energy-segments/);
+  assert.match(hudSource, /endless-energy-cell/);
+  assert.match(hudSource, /endless-score-readout/);
+  assert.match(hudSource, /index < activeEnergySegments/);
+  assert.doesNotMatch(hudSource, /difficultyState|endless-difficulty|无尽强度|强度 |进阶 |下一段|强度封顶|测试强度|endless-debug-jumps/);
+  assert.doesNotMatch(runtimeSource, /className="endless-debug-panel"/);
+  assert.match(hudCss, /grid-template-columns:\s*minmax\(118px,\s*auto\) minmax\(126px,\s*1fr\) minmax\(104px,\s*auto\)/);
+  assert.match(hudCss, /linear-gradient\(135deg,\s*rgba\(255,\s*253,\s*248,\s*0\.98\),\s*rgba\(246,\s*239,\s*226,\s*0\.97\)\)/);
+  assert.match(hudCss, /\.endless-hearts\s*\{/);
+  assert.match(hudCss, /grid-template-columns:\s*repeat\(3,\s*34px\);/);
+  assert.match(hudCss, /\.endless-heart-token\s*\{/);
+  assert.match(hudCss, /\.endless-score-readout\s*\{/);
+  assert.match(hudCss, /\.endless-energy-segments\s*\{/);
+  assert.match(hudCss, /grid-template-columns:\s*repeat\(10,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(hudCss, /\.endless-energy-cell\.active\s*\{/);
+  assert.doesNotMatch(hudCss, /\.endless-difficulty|\.endless-debug-panel|endless-difficulty-meter/);
+});
+
+test("endless mini-game stages remove the top-left mini score capsules", () => {
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
+  const fallDownSource = readFileSync(new URL("../features/mini-games/fall-down.tsx", import.meta.url), "utf8");
+  const knifeSource = readFileSync(new URL("../features/mini-games/knife.tsx", import.meta.url), "utf8");
+  const squareJumpSource = readFileSync(new URL("../features/mini-games/square-jump.tsx", import.meta.url), "utf8");
+
+  assert.match(doodleSource, /const showDoodleMiniScore = !isEndlessRun;/);
+  assert.match(flappySource, /const showFlappyMiniScore = !isEndlessRun;/);
+  assert.match(fallDownSource, /const showFallDownMiniScore = !isEndlessRun;/);
+  assert.match(knifeSource, /const showKnifeMiniScore = !isEndlessRun;/);
+  assert.match(squareJumpSource, /const showSquareJumpMiniScore = !isEndlessRun;/);
+  for (const source of [doodleSource, flappySource, fallDownSource, knifeSource, squareJumpSource]) {
+    assert.match(source, /show[A-Za-z]+MiniScore \? \(\s*<div className="mini-score">/);
+  }
 });
 
 test("endless play uses the same frame rhythm as base and advanced stages without covering the game", () => {
@@ -414,14 +450,13 @@ test("endless play uses the same frame rhythm as base and advanced stages withou
   const screenCss = sourceBetween(cssSource, ".endless-play-screen {", ".endless-shell {");
   const shellCss = sourceBetween(cssSource, ".endless-shell {", ".endless-hud {");
   const hudCss = cssRule(cssSource, ".endless-hud");
-  const debugCss = sourceBetween(cssSource, ".endless-debug-panel {\n  grid-column:", ".endless-debug-panel summary");
 
   assert.doesNotMatch(screenSource, /endless-progress-track/);
   assert.doesNotMatch(cssSource, /\.endless-progress-track/);
   assert.match(screenCss, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
   assert.match(shellCss, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
   assert.doesNotMatch(hudCss, /position:\s*absolute|inset:/);
-  assert.doesNotMatch(debugCss, /position:\s*absolute|top:\s*|right:/);
+  assert.doesNotMatch(cssSource, /\.endless-debug-panel/);
 });
 
 test("endless HUD can use gameplay-reported difficulty for mechanics that do not ramp by score", () => {
@@ -442,7 +477,7 @@ test("endless games do not show normal finite progress pills that conflict with 
 
   assert.match(doodleSource, /showDoodleMiniScore/);
   assert.doesNotMatch(doodleSource, /<span>进度 \{Math\.round\(view\.progressPercent\)\}%<\/span>/);
-  assert.match(doodleSource, /!\s*isEndlessRun[\s\S]{0,120}view\.progressPercent/);
+  assert.match(doodleSource, /showDoodleMiniScore \? \([\s\S]*view\.progressPercent/);
   assert.match(brakingSource, /showAdvancedBrakingMiniScore/);
   assert.match(brakingSource, /!\s*endless[\s\S]{0,120}progress \+ trackMetrics\.runnerWidthPercent/);
 });
@@ -476,12 +511,19 @@ test("endless revives continue the current route instead of reusing finite respa
   assert.match(fallSource, /activeFragileTime/);
 });
 
-test("endless hearts render without a blocking capsule", () => {
+test("endless hearts stay separate while matching the beige game HUD", () => {
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
-  const heartsRule = sourceBetween(cssSource, ".endless-hearts {", ".endless-heart {");
+  const hudRule = cssRule(cssSource, ".endless-hud");
+  const heartsRule = sourceBetween(cssSource, ".endless-hearts {", ".endless-heart-token {");
+  const tokenRule = sourceBetween(cssSource, ".endless-heart-token {", ".endless-heart-token.active {");
 
-  assert.doesNotMatch(heartsRule, /background:/);
-  assert.doesNotMatch(heartsRule, /border:/);
-  assert.doesNotMatch(heartsRule, /box-shadow:/);
-  assert.doesNotMatch(heartsRule, /backdrop-filter:/);
+  assert.match(cssSource, /\.endless-hearts\s*\{/);
+  assert.match(cssSource, /\.endless-heart-token\s*\{/);
+  assert.match(heartsRule, /grid-template-columns:\s*repeat\(3,\s*34px\);/);
+  assert.match(hudRule, /background:/);
+  assert.match(hudRule, /border-radius:\s*8px;/);
+  assert.match(hudRule, /rgba\(246,\s*239,\s*226,\s*0\.97\)/);
+  assert.match(tokenRule, /border-radius:\s*8px;/);
+  assert.match(tokenRule, /rgba\(222,\s*190,\s*138/);
+  assert.doesNotMatch(tokenRule, /backdrop-filter:/);
 });

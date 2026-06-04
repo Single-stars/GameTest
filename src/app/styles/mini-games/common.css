@@ -131,9 +131,7 @@
 }
 
 [data-difficulty-tone] .prototype-stage .flappy-background span,
-[data-difficulty-tone] .prototype-stage .square-progress-background,
-[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-light::before,
-[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-heavy::before {
+[data-difficulty-tone] .prototype-stage .square-progress-background {
   background: none;
   opacity: 0;
   animation: none;

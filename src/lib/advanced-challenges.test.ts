@@ -373,10 +373,10 @@ test("advanced braking rule-tale levels force the relevant true-danger event bef
 
 test("advanced braking exposes in-round rule hints for rule-tale variants", () => {
   assert.equal(getAdvancedBrakeRuleHint(1, undefined), null);
-  assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "规则：两个红色危险同时出现是安全的");
-  assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "规则：只有两个红色危险出现时是危险的");
-  assert.equal(getAdvancedBrakeRuleHint(9, "fake-all"), "规则：所有危险都是假的");
-  assert.equal(getAdvancedBrakeRuleHint(10, undefined), "规则：只有一个危险单独出现时是真危险");
+  assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "两个红色危险同时出现是安全的");
+  assert.equal(getAdvancedBrakeRuleHint(6, "double-red-stop"), "只有两个红色危险出现时是危险的");
+  assert.equal(getAdvancedBrakeRuleHint(9, "fake-all"), "所有危险都是假的");
+  assert.equal(getAdvancedBrakeRuleHint(10, undefined), "只有一个危险单独出现时是真危险");
 });
 
 test("advanced braking renders rule-tale hints as readable background text", () => {
@@ -397,8 +397,10 @@ test("advanced braking renders rule-tale hints as readable background text", () 
   assert.match(trackRenderSource, /className="advanced-brake-rule-backdrop-text"/);
   assert.match(ruleText, /position:\s*absolute;/);
   assert.match(ruleText, /top:\s*clamp\(/);
-  assert.match(ruleText, /height:\s*clamp\(/);
+  assert.match(ruleText, /white-space:\s*nowrap;/);
+  assert.match(ruleText, /font-size:\s*clamp\(/);
   assert.doesNotMatch(ruleText, /inset:\s*4px 8px 12px;/);
+  assert.doesNotMatch(ruleText, /规则：/);
   assert.match(ruleText, /pointer-events:\s*none;/);
   assert.match(ruleText, /z-index:\s*0;/);
   assert.match(ruleText, /text-shadow:/);
@@ -423,20 +425,23 @@ test("advanced braking endless runner uses a lightweight background parallax ins
   const brakingSource = readSource("../features/rounds/native/braking.tsx");
   const cssSource = readSource("../app/styles/base-flow/advanced.css");
   const trackRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-track");
-  const trackBeforeRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-track::before");
   const laneRule = cssRule(cssSource, ".advanced-braking.endless-runner .advanced-brake-lane");
 
-  assert.match(brakingSource, /--advanced-brake-world-offset/);
+  assert.match(brakingSource, /syncEndlessWaveParallax/);
   assert.match(brakingSource, /--difficulty-wave-parallax-x/);
   assert.match(brakingSource, /--difficulty-wave-parallax-y/);
+  assert.match(brakingSource, /--difficulty-wave-screen-shift-x/);
+  assert.match(brakingSource, /distance \* -42/);
   assert.doesNotMatch(brakingSource, /setEndlessWorldOffset/);
+  assert.doesNotMatch(brakingSource, /--advanced-brake-world-offset/);
   assert.doesNotMatch(brakingSource, /advanced-brake-scenery-post/);
   assert.doesNotMatch(brakingSource, /className="advanced-brake-scenery"/);
-  assert.match(trackRule, /--advanced-brake-world-offset/);
-  assert.match(trackBeforeRule, /position:\s*absolute;/);
-  assert.match(trackBeforeRule, /pointer-events:\s*none;/);
-  assert.match(trackBeforeRule, /background-position:[\s\S]*var\(--advanced-brake-world-offset/);
-  assert.doesNotMatch(trackBeforeRule, /repeating-linear-gradient\(\s*90deg/);
+  assert.doesNotMatch(trackRule, /background:\s*#fbf7ef/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner\s*{[\s\S]*--difficulty-wave-opacity:\s*0\.38;/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::after\s*{/);
+  assert.doesNotMatch(laneRule, /background:/);
+  assert.match(laneRule, /border-bottom:\s*0;/);
   assert.doesNotMatch(laneRule, /linear-gradient\(90deg/);
   assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post/);
 });

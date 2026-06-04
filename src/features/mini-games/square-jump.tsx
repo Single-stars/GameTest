@@ -1177,14 +1177,23 @@ export function SquareJumpPrototype({
           }
         } else if (current.state === "falling") {
           if (!current.jumpPlan) {
-            if (isEndlessRun && !(endlessRef.current?.loseLife("fall") ?? false)) {
-              triggerScreenShake();
-              current.reason = "掉下去了";
-              current.state = "failed";
-              current.status = "failed";
-              paintSquareFrame();
-              syncView(time);
-              return;
+            if (isEndlessRun) {
+              if (!(endlessRef.current?.loseLife("fall") ?? false)) {
+                triggerScreenShake();
+                current.reason = "掉下去了";
+                current.state = "failed";
+                current.status = "failed";
+                paintSquareFrame();
+                syncView(time);
+                return;
+              }
+              if (recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, true)) {
+                triggerScreenShake();
+                paintSquareFrame();
+                syncView(time);
+                if (current.status === "playing") frameId = requestAnimationFrame(tick);
+                return;
+              }
             }
             if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
@@ -1222,14 +1231,23 @@ export function SquareJumpPrototype({
           const screenX = stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale;
           const screenY = stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale;
           if (screenX > stageWidth + PLAYER_SIZE || screenX < -PLAYER_SIZE * 2 || screenY > stageHeight + PLAYER_SIZE) {
-            if (isEndlessRun && !(endlessRef.current?.loseLife("fall") ?? false)) {
-              triggerScreenShake();
-              current.reason = "掉下去了";
-              current.state = "failed";
-              current.status = "failed";
-              paintSquareFrame();
-              syncView(time);
-              return;
+            if (isEndlessRun) {
+              if (!(endlessRef.current?.loseLife("fall") ?? false)) {
+                triggerScreenShake();
+                current.reason = "掉下去了";
+                current.state = "failed";
+                current.status = "failed";
+                paintSquareFrame();
+                syncView(time);
+                return;
+              }
+              if (recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, true)) {
+                triggerScreenShake();
+                paintSquareFrame();
+                syncView(time);
+                if (current.status === "playing") frameId = requestAnimationFrame(tick);
+                return;
+              }
             }
             if (canRecoverSquareJumpMiss && recoverSquareJumpBaseMiss(current, "掉下去了", logicStageSize, unlimitedRespawn)) {
               triggerScreenShake();
@@ -1312,14 +1330,17 @@ export function SquareJumpPrototype({
   const tutorialPreviewPlan = level.levelId === "square-jump-base" && view.jumps < 3 && view.state === "charging" ? createSquareJumpPlan(level, view) : null;
   const isCharging = view.state === "charging" || view.state === "airCharging";
   const coOpTurnIsMine = canControlSquareJumpCoOpTurn(view, coOpRole);
+  const showSquareJumpMiniScore = !isEndlessRun;
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
-        {coOpRole ? <span className="mini-coop-hint">{coOpTurnIsMine ? "轮到你蓄力" : "等待对方蓄力"}</span> : null}
-        {!isEndlessRun ? <span>进度 {view.jumps}/{requiredJumps}</span> : null}
-        {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
-        {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
-      </div>
+      {showSquareJumpMiniScore ? (
+        <div className="mini-score">
+          {coOpRole ? <span className="mini-coop-hint">{coOpTurnIsMine ? "轮到你蓄力" : "等待对方蓄力"}</span> : null}
+          <span>进度 {view.jumps}/{requiredJumps}</span>
+          {showGravityStatus ? <span>重力 {squareGravityLabel(gravity)}</span> : null}
+          {view.timer !== null ? <span>倒计时 {Math.max(0, view.timer).toFixed(1)}s</span> : null}
+        </div>
+      ) : null}
       <div
         className={`prototype-stage square-jump-stage gravity-${gravity} ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
         ref={stageRef}

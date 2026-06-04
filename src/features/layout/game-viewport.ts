@@ -37,7 +37,9 @@ function maxFinite(values: Array<number | undefined>) {
 }
 
 export function resolveGameViewportSize(metrics: GameViewportMetrics): GameViewportSize | null {
-  const width = maxFinite([metrics.visualViewportWidth, metrics.innerWidth, metrics.clientWidth]);
+  const width = finitePositive(metrics.visualViewportWidth)
+    ? Math.round(metrics.visualViewportWidth)
+    : maxFinite([metrics.innerWidth, metrics.clientWidth]);
   const layoutHeight = maxFinite([metrics.innerHeight, metrics.clientHeight]);
   const visualHeight = finitePositive(metrics.visualViewportHeight) ? Math.round(metrics.visualViewportHeight) : 0;
   const height =

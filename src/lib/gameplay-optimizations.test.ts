@@ -436,6 +436,8 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   const multiplayerShellSource = read(new URL("../features/multiplayer/multiplayer-game-shell.tsx", import.meta.url));
   const advancedCss = read(new URL("../app/styles/base-flow/advanced.css", import.meta.url));
   const commonCss = read(new URL("../app/styles/mini-games/common.css", import.meta.url));
+  const flappyCss = read(new URL("../app/styles/mini-games/flappy.css", import.meta.url));
+  const squareJumpCss = read(new URL("../app/styles/mini-games/square-jump.css", import.meta.url));
   const waveBackdropSource = read(new URL("../features/visuals/difficulty-wave-backdrop.tsx", import.meta.url));
   const nativeAimSource = read(new URL("../features/rounds/native/aim.tsx", import.meta.url));
   const nativeReactionSource = read(new URL("../features/rounds/native/reaction.tsx", import.meta.url));
@@ -453,6 +455,11 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
     commonCss,
     "[data-difficulty-tone] .prototype-stage.doodle-stage,",
     "\n}\n\n[data-difficulty-tone] .prototype-stage .flappy-background span,",
+  );
+  const difficultyMediaSuppressionSource = sourceBetween(
+    commonCss,
+    "[data-difficulty-tone] .prototype-stage .flappy-background span,",
+    "\n}\n\n.difficulty-wave-backdrop",
   );
   const aimToneBlock = cssBlock(aimCss, "[data-difficulty-tone] .advanced-aim");
   const brakingToneBlock = cssBlock(brakingCss, "[data-difficulty-tone] .advanced-braking");
@@ -502,8 +509,14 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.doesNotMatch(reactionCss, /--difficulty-nonreaction-wave-opacity|--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage \.flappy-background span/);
   assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage \.square-progress-background/);
-  assert.match(commonCss, /\[data-difficulty-tone\] \.prototype-stage\.square-jump-stage\.gravity-light::before/);
+  assert.doesNotMatch(difficultyMediaSuppressionSource, /gravity-light::before|gravity-heavy::before/);
   assert.match(commonCss, /background:\s*none;/);
+  assert.match(squareJumpCss, /\.square-jump-stage\.gravity-light\s*{[\s\S]*--difficulty-gravity-flow-y:\s*-150;/);
+  assert.match(squareJumpCss, /\.square-jump-stage\.gravity-heavy\s*{[\s\S]*--difficulty-gravity-flow-y:\s*170;/);
+  assert.match(squareJumpCss, /animation:\s*square-light-particles 1\.05s linear infinite;/);
+  assert.match(squareJumpCss, /animation:\s*square-heavy-particles 1\.05s linear infinite;/);
+  assert.match(flappyCss, /\.flappy-stage\.endless-gravity-anomaly\s*{[\s\S]*--difficulty-gravity-flow-y:\s*-130;/);
+  assert.match(flappyCss, /animation:\s*flappy-gravity-particles 1\.05s linear infinite;/);
   assert.doesNotMatch(commonCss, /--difficulty-motion-opacity|--difficulty-motion-x|--difficulty-motion-y/);
   assert.doesNotMatch(commonCss, /--difficulty-wave-mask|@keyframes difficulty-wave-drift|-webkit-mask-image|mask-image|mask-size|rotate\(-/);
   assert.doesNotMatch(commonCss, /--difficulty-particle-field|--difficulty-flow-field|difficulty-ambient-drift/);
@@ -513,10 +526,14 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /requestAnimationFrame/);
   assert.match(waveBackdropSource, /function refreshStyleCache\(\)/);
   assert.match(waveBackdropSource, /function ensureAnimationLoop\(\)/);
+  assert.match(waveBackdropSource, /readNumberVar\(style, "--difficulty-gravity-flow-y", 0\)/);
   assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-x", 0\)/);
   assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-parallax-y", 0\)/);
+  assert.match(waveBackdropSource, /readInlineNumberVar\(host, "--difficulty-wave-screen-shift-x", 0\)/);
   assert.match(waveBackdropSource, /if \(waveOpacity <= 0\) \{/);
   assert.match(waveBackdropSource, /styleObserver\?\.observe\(host/);
+  assert.match(waveBackdropSource, /attributeFilter: \["class", "data-difficulty-tone"\]/);
+  assert.doesNotMatch(waveBackdropSource, /attributeFilter: \["class", "style", "data-difficulty-tone"\]/);
   assert.doesNotMatch(waveBackdropSource, /const style = window\.getComputedStyle\(host\);[\s\S]{0,260}const parallaxX/);
   assert.match(waveBackdropSource, /Math\.sin/);
   assert.match(waveBackdropSource, /lineWidth = wave\.strokeWidth/);
@@ -529,6 +546,7 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /parallaxStepLimit = clamp\(Math\.max\(width, height\) \* 0\.72, 320, 620\)/);
   assert.match(waveBackdropSource, /easedParallaxX \+= softenParallax\(parallaxX - easedParallaxX, parallaxStepLimit\) \* parallaxBlend/);
   assert.match(waveBackdropSource, /easedParallaxY \+= softenParallax\(parallaxY - easedParallaxY, parallaxStepLimit\) \* parallaxBlend/);
+  assert.match(waveBackdropSource, /easedScreenShiftX \+= \(screenShiftX - easedScreenShiftX\) \* screenShiftBlend/);
   assert.doesNotMatch(waveBackdropSource, /targetParallaxX|targetParallaxY|parallaxLimit = clamp\(Math\.max\(width, height\) \* 3\.2/);
   assert.match(waveBackdropSource, /phaseDrift = reducedMotion \? 0 : seconds \* 0\.4/);
   assert.match(waveBackdropSource, /groupDrift = reducedMotion \? 0 : seconds \* 22/);
@@ -538,12 +556,16 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(waveBackdropSource, /addColorStop\(1, "rgba\(0, 0, 0, 1\)"\)/);
   assert.match(waveBackdropSource, /--difficulty-wave-parallax-x/);
   assert.match(waveBackdropSource, /--difficulty-wave-parallax-y/);
+  assert.match(waveBackdropSource, /--difficulty-wave-screen-shift-x/);
+  assert.match(waveBackdropSource, /--difficulty-gravity-flow-y/);
   assert.match(waveBackdropSource, /parallaxX/);
   assert.match(waveBackdropSource, /parallaxY/);
   assert.match(waveBackdropSource, /parallaxAlong/);
   assert.match(waveBackdropSource, /parallaxAcross/);
-  assert.match(waveBackdropSource, /lineDrift = groupDrift \+ parallaxAlong \* 0\.82/);
-  assert.match(waveBackdropSource, /shapeDrift = parallaxAcross \* 0\.3/);
+  assert.match(waveBackdropSource, /const gravityFlowDrift = reducedMotion \? 0 : seconds \* gravityFlowY;/);
+  assert.match(waveBackdropSource, /lineDrift = groupDrift \+ gravityFlowDrift \+ parallaxAlong \* 0\.82/);
+  assert.match(waveBackdropSource, /screenShiftPhase = reducedMotion \? 0 : easedScreenShiftX/);
+  assert.match(waveBackdropSource, /shapeDrift = parallaxAcross \* 0\.3 \+ screenShiftPhase/);
   assert.doesNotMatch(waveBackdropSource, /% wave\.spacing|TARGET_FPS_INTERVAL_MS/);
   assert.match(nativeAimSource, /DifficultyWaveBackdrop/);
   assert.match(nativeAimSource, /<DifficultyWaveBackdrop \/>/);
@@ -558,6 +580,8 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   }
   assert.match(nativeBrakingSource, /--difficulty-wave-parallax-x/);
   assert.match(nativeBrakingSource, /--difficulty-wave-parallax-y/);
+  assert.match(nativeBrakingSource, /--difficulty-wave-screen-shift-x/);
+  assert.match(nativeBrakingSource, /distance \* -42/);
   assert.doesNotMatch(nativeBrakingSource, /--difficulty-motion-x|--difficulty-motion-y|--difficulty-motion-opacity/);
   assert.match(flappySource, /function syncFlappyWaveParallax\([^)]*displayProgress: number,[^)]*playerY: number,[^)]*stageHeight: number,[^)]*reverseDirection: boolean/);
   assert.match(flappySource, /drift \* 0\.95/);
@@ -676,7 +700,7 @@ test("flappy base respawn separates gameplay progress from smoothed display prog
   assert.match(flappySource, /gates: current\.gates,/);
   assert.match(flappySource, /current\.progress = respawnProgressEnd;/);
   assert.match(flappySource, /current\.displayProgress = resolveFlappyDisplayProgress\(current\);/);
-  assert.match(flappySource, /const drift = reverseDirection \? view\.displayProgress : -view\.displayProgress;/);
+  assert.match(flappySource, /const drift = activeViewReverseDirection \? view\.displayProgress : -view\.displayProgress;/);
   assert.doesNotMatch(flappySource, /const respawnProgressEnd = Math\.max\(0, nextProgress - 92\);/);
   assert.doesNotMatch(flappySource, /current\.progress = Math\.max\(0, nextProgress - 92\);/);
 });

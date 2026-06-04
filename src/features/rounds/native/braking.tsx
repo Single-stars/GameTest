@@ -58,7 +58,6 @@ type AdvancedBrakeHazard = {
 type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 
 const ENDLESS_BRAKE_RUNNER_LEFT_PERCENT = 16;
-const ENDLESS_BRAKE_SCENERY_LOOP_PX = 360;
 
 function resolveAdvancedBrakingLaneCount(config: AdvancedStageConfig) {
   const configuredLanes = getParamNumber(config, "lanes", 1);
@@ -129,7 +128,6 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
   const endlessDistanceRef = useRef(0);
-  const endlessWorldOffsetRef = useRef(0);
 
   const holdingRef = useRef(false);
 
@@ -163,13 +161,11 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
   const trackRef = useRef<HTMLDivElement | null>(null);
 
-  const syncEndlessWorldOffset = useCallback((distance: number) => {
-    const nextOffset = distance % ENDLESS_BRAKE_SCENERY_LOOP_PX;
-    endlessWorldOffsetRef.current = nextOffset;
-    trackRef.current?.style.setProperty("--advanced-brake-world-offset", `${nextOffset}px`);
+  const syncEndlessWaveParallax = useCallback((distance: number) => {
     const panel = trackRef.current?.closest(".advanced-braking") as HTMLElement | null;
-    panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -0.48)}`);
-    panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 140) * 8)}`);
+    panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -12)}`);
+    panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 48) * 56)}`);
+    panel?.style.setProperty("--difficulty-wave-screen-shift-x", `${Math.round(distance * -42)}`);
   }, []);
 
   const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
@@ -576,7 +572,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
           distanceDelta = (delta * activeSpeedPerSecond) / 1000;
           endlessDistanceRef.current = activeDistance + distanceDelta;
           activeEndless.setDistanceScore(Math.floor(endlessDistanceRef.current));
-          syncEndlessWorldOffset(endlessDistanceRef.current);
+          syncEndlessWaveParallax(endlessDistanceRef.current);
         }
 
         const finishLeft = Math.max(0, 100 - runnerWidthPercent);
@@ -701,7 +697,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete }: Ro
 
     startHazard,
 
-    syncEndlessWorldOffset,
+    syncEndlessWaveParallax,
 
     trackMetrics,
 

@@ -895,6 +895,18 @@ test("square jump base and multiplayer misses respawn on the current platform wi
   assert.match(componentSource, /mode === "base" \|\| unlimitedRespawn/);
 });
 
+test("square jump endless fall life loss immediately respawns instead of leaving the run stuck", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallingSource = componentSource.slice(
+    componentSource.indexOf('} else if (current.state === "falling")'),
+    componentSource.indexOf("const spectatorState", componentSource.indexOf('} else if (current.state === "falling")')),
+  );
+  const endlessRecoveries = fallingSource.match(/if \(isEndlessRun\) \{[\s\S]*?loseLife\("fall"\)[\s\S]*?recoverSquareJumpBaseMiss\(current, "[^"]+", logicStageSize, true\)[\s\S]*?requestAnimationFrame\(tick\)/g) ?? [];
+
+  assert.ok(endlessRecoveries.length >= 2, "both no-plan and out-of-screen endless falls should recover after losing a life");
+  assert.doesNotMatch(fallingSource, /isEndlessRun && !\(endlessRef\.current\?\.loseLife\("fall"\) \?\? false\)/);
+});
+
 test("square jump multiplayer shows same-map opponent and shared co-op charge controls", () => {
   const componentSource = readMiniGameRuntimeSource();
   const squareJumpSource = readFileSync(new URL("../../features/mini-games/square-jump.tsx", import.meta.url), "utf8");

@@ -40,6 +40,23 @@ test("game viewport resolver trusts normal visual viewport browser chrome correc
   );
 });
 
+test("game viewport resolver prefers the visible mobile width over the wider layout viewport", async () => {
+  assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
+  const { resolveGameViewportSize } = await import("./game-viewport.ts");
+
+  assert.deepEqual(
+    resolveGameViewportSize({
+      clientHeight: 844,
+      clientWidth: 430,
+      innerHeight: 844,
+      innerWidth: 430,
+      visualViewportHeight: 690,
+      visualViewportWidth: 390,
+    }),
+    { height: 690, width: 390 },
+  );
+});
+
 test("game viewport lock rejects address-bar height churn but accepts real corrections", async () => {
   assert.equal(existsSync(moduleUrl), true, moduleUrl.pathname);
   const { shouldCommitGameViewportSize } = await import("./game-viewport.ts");

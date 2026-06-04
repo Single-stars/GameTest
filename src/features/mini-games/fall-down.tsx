@@ -1320,12 +1320,15 @@ export function FallDownPrototype({
       }).params
     : level.params;
   const viewFragileTime = numberParam(viewFallDownParams, "fragileTime", fragileTime);
+  const showFallDownMiniScore = !isEndlessRun;
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
-        {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
-        {!isEndlessRun ? <span>进度 {view.layersReached}/{requiredLayers}</span> : null}
-      </div>
+      {showFallDownMiniScore ? (
+        <div className="mini-score">
+          {coOpRole ? <span className="mini-coop-hint">你负责{coOpRole === "left" ? "左" : "右"}</span> : null}
+          <span>进度 {view.layersReached}/{requiredLayers}</span>
+        </div>
+      ) : null}
       <div
         className={`prototype-stage fall-down-stage ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
         ref={stageRef}

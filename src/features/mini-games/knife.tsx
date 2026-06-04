@@ -933,14 +933,18 @@ export function KnifeHitPrototype({
     }, KNIFE_FINISH_DELAY_MS);
   }, [level.levelId, mode, multiplayerRole, onComplete, shotCount, view.status]);
 
+  const showKnifeMiniScore = !isEndlessRun;
+
   return (
     <div className="prototype-game-wrap">
-      <div className="mini-score">
-        <span>{view.overtime ? overtimeRoundLabel : `已发射 ${view.shotIndex}/${shotCount}`}</span>
-        {mode === "base" ? <span>命中 {view.insertedAngles.length}/{shotCount}</span> : null}
-        {multiplayerRole ? <span>{localTurn ? "你的回合" : "对方回合"}</span> : null}
-        {hasCountdown ? <span>倒计时 {(view.timer ?? 0).toFixed(1)}s</span> : null}
-      </div>
+      {showKnifeMiniScore ? (
+        <div className="mini-score">
+          <span>{view.overtime ? overtimeRoundLabel : `已发射 ${view.shotIndex}/${shotCount}`}</span>
+          {mode === "base" ? <span>命中 {view.insertedAngles.length}/{shotCount}</span> : null}
+          {multiplayerRole ? <span>{localTurn ? "你的回合" : "对方回合"}</span> : null}
+          {hasCountdown ? <span>倒计时 {(view.timer ?? 0).toFixed(1)}s</span> : null}
+        </div>
+      ) : null}
       <div
         className={`prototype-stage knife-stage feedback-${feedbackTone} ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}

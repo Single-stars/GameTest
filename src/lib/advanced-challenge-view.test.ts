@@ -443,6 +443,23 @@ test("advanced lobby hero keeps the same frame height when endless title is sele
   assert.match(cssSource, /\.advanced-hero\s*{[\s\S]*align-content:\s*center;/);
 });
 
+test("advanced endless lobby uses one concise rule line and a centered challenge button", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const endlessActionRule = cssRule(cssSource, ".advanced-lobby-actions.advanced-lobby-actions-endless");
+
+  assert.match(screenSource, /text:\s*"在体力耗尽前再往前一步"/);
+  assert.doesNotMatch(screenSource, /在体力耗尽前再往前一步\.\.\./);
+  assert.match(screenSource, /\{selectedIsEndless \? "∞" : "✓"\}/);
+  assert.doesNotMatch(screenSource, /完成动作得分|三次复活机会|难度平滑提升/);
+  assert.doesNotMatch(screenSource, /开始无尽/);
+  assert.match(screenSource, /<button className="primary-button"[\s\S]*>\s*开始挑战\s*<\/button>/);
+  assert.match(screenSource, /advanced-lobby-actions-endless/);
+  assert.match(endlessActionRule, /grid-template-columns:\s*minmax\(0,\s*min\(100%,\s*420px\)\);/);
+  assert.match(endlessActionRule, /justify-content:\s*center;/);
+}
+);
+
 test("advanced lobby visual structure removes text badges and keeps boundary levels in fixed columns", () => {
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");

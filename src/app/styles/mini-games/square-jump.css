@@ -19,6 +19,9 @@
 }
 
 .square-jump-stage.gravity-light {
+  --difficulty-gravity-flow-y: -150;
+  --difficulty-wave-color: rgb(27, 154, 170);
+  --difficulty-wave-opacity: 0.24;
   background:
     radial-gradient(circle at 68% 18%, rgba(27, 154, 170, 0.18), transparent 28%),
     linear-gradient(180deg, rgba(27, 154, 170, 0.16), rgba(255, 253, 248, 0.96)),
@@ -26,10 +29,23 @@
 }
 
 .square-jump-stage.gravity-heavy {
+  --difficulty-gravity-flow-y: 170;
+  --difficulty-wave-color: rgb(63, 61, 72);
+  --difficulty-wave-opacity: 0.25;
   background:
-    radial-gradient(circle at 38% 18%, rgba(123, 97, 255, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(88, 67, 126, 0.2), rgba(255, 253, 248, 0.92)),
+    radial-gradient(circle at 38% 18%, rgba(63, 61, 72, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(54, 51, 63, 0.22), rgba(255, 253, 248, 0.92)),
     var(--surface);
+}
+
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-light {
+  --difficulty-wave-color: rgb(27, 154, 170);
+  --difficulty-wave-opacity: 0.24;
+}
+
+[data-difficulty-tone] .prototype-stage.square-jump-stage.gravity-heavy {
+  --difficulty-wave-color: rgb(63, 61, 72);
+  --difficulty-wave-opacity: 0.25;
 }
 
 .square-jump-stage.gravity-light::before,
@@ -44,33 +60,33 @@
 
 .square-jump-stage.gravity-light::before {
   background:
-    radial-gradient(circle, rgba(27, 154, 170, 0.32) 0 3px, transparent 4px) 42px 410px / 88px 96px,
-    radial-gradient(circle, rgba(47, 128, 237, 0.2) 0 2px, transparent 3px) 18px 360px / 104px 118px;
-  animation: square-light-particles 1.8s linear infinite;
+    radial-gradient(circle, rgba(27, 154, 170, 0.42) 0 3px, transparent 4px) 42px 430px / 88px 96px,
+    radial-gradient(circle, rgba(94, 228, 199, 0.32) 0 2px, transparent 3px) 18px 392px / 104px 118px;
+  animation: square-light-particles 1.05s linear infinite;
 }
 
 .square-jump-stage.gravity-heavy::before {
   background:
-    radial-gradient(circle, rgba(88, 67, 126, 0.26) 0 3px, transparent 4px) 34px 100px / 92px 96px,
-    radial-gradient(circle, rgba(230, 83, 73, 0.16) 0 2px, transparent 3px) 74px 60px / 112px 120px;
-  animation: square-heavy-particles 1.4s linear infinite;
+    radial-gradient(circle, rgba(54, 51, 63, 0.34) 0 3px, transparent 4px) 34px -30px / 92px 96px,
+    radial-gradient(circle, rgba(24, 24, 24, 0.22) 0 2px, transparent 3px) 74px -58px / 112px 120px;
+  animation: square-heavy-particles 1.05s linear infinite;
 }
 
 @keyframes square-light-particles {
   from {
-    background-position: 42px 430px, 18px 386px;
+    background-position: 42px 460px, 18px 410px;
   }
   to {
-    background-position: 42px 250px, 18px 210px;
+    background-position: 42px 170px, 18px 112px;
   }
 }
 
 @keyframes square-heavy-particles {
   from {
-    background-position: 34px 80px, 74px 40px;
+    background-position: 34px -40px, 74px -72px;
   }
   to {
-    background-position: 34px 270px, 74px 260px;
+    background-position: 34px 340px, 74px 330px;
   }
 }
 

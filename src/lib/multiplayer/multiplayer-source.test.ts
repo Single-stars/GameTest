@@ -1022,7 +1022,10 @@ test("default multiplayer route reuses the level-select room with room controls"
   assert.match(roomBarRule, /box-shadow:\s*none;/);
   assert.match(modeHintRule, /color:\s*#26362f;/);
   assert.match(modeHintRule, /text-shadow:\s*none;/);
-  assert.match(statusRule, /bottom:\s*max\(34px, calc\(env\(safe-area-inset-bottom\) \+ 34px\)\);/);
+  assert.doesNotMatch(modeHintRule, /left:\s*50%;/);
+  assert.match(modeHintRule, /left:\s*max\(16px,\s*env\(safe-area-inset-left\)\);/);
+  assert.match(modeHintRule, /right:\s*max\(16px,\s*env\(safe-area-inset-right\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(72px, calc\(env\(safe-area-inset-bottom\) \+ 72px\)\);/);
   assert.match(dangerButtonRule, /border:\s*1px solid rgba\(122, 34, 34, 0\.34\);/);
   assert.doesNotMatch(pageSource, /联机挑战选关/);
   assert.doesNotMatch(pageSource, /const showEntry = snapshot\.status === "idle"/);
@@ -1116,10 +1119,14 @@ test("standalone multiplayer co-op unavailable hint is centered without a card",
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
   const hintRule = cssRule(cssSource, ".multiplayer-level-mode-hint");
 
-  assert.match(hintRule, /top:\s*40%;/);
+  assert.match(hintRule, /top:\s*34%;/);
+  assert.match(hintRule, /left:\s*max\(16px,\s*env\(safe-area-inset-left\)\);/);
+  assert.match(hintRule, /right:\s*max\(16px,\s*env\(safe-area-inset-right\)\);/);
+  assert.match(hintRule, /translate:\s*0 -50%;/);
   assert.match(hintRule, /background:\s*transparent;/);
   assert.doesNotMatch(hintRule, /border:/);
   assert.doesNotMatch(hintRule, /box-shadow:/);
+  assert.doesNotMatch(hintRule, /left:\s*50%;/);
 });
 
 test("fall-down multiplayer renders a remote player avatar from shared state", () => {
@@ -1833,7 +1840,7 @@ test("only movement games let successful players spectate the opponent with a sm
   assert.match(flappySource, /const spectatorSceneTimeRef = useRef\(0\)/);
   assert.match(flappySource, /if \(spectatingRemote\) spectatorSceneTimeRef\.current \+= delta;/);
   assert.match(flappySource, /playerShellRef\.current\.style\.display = ""/);
-  assert.match(flappySource, /const localPlayerWorldX = playerX \+ getFlappySignedProgress\(current\.progress, reverseDirection\);/);
+  assert.match(flappySource, /const localPlayerWorldX = activePlayerX \+ getFlappySignedProgress\(current\.progress, activeReverseDirection\);/);
   assert.match(flappySource, /const playerScreenX = spectatingRemote \? localPlayerWorldX - localCameraX : getFlappyPlayerScreenX\(\{/);
   assert.doesNotMatch(flappySource, /if \(!spectatingRemote\) \{[\s\S]{0,260}playerShellRef\.current\.style\.transform/);
   assert.doesNotMatch(flappySource, /playerShellRef\.current\.style\.display = spectatingRemote \? "none" : ""/);
@@ -1909,7 +1916,7 @@ test("Flappy multiplayer remote playback uses visual camera progress and RAF sam
   assert.match(runtimeStateSource, /x:\s*playerX \+ signedDisplayProgress/);
   assert.match(runtimeStateSource, /vx:\s*isActivelyScrolling \? \(reverseDirection \? -speed : speed\) : 0/);
   assert.match(updateDomSource, /const sampledRemote = remoteSmootherRef\.current\.sample\(frameTime\) \?\? \(spectatingRemote \? spectateRemoteStateRef\.current : null\);/);
-  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, reverseDirection\);/);
+  assert.match(updateDomSource, /const localCameraX = getFlappySignedProgress\(current\.displayProgress, activeReverseDirection\);/);
   assert.match(updateDomSource, /const visualRemote = remoteVisualSmootherRef\.current\.update\(sampledRemote, frameTime\);/);
   assert.match(updateDomSource, /const remoteScreenX = visualRemote\.x - localCameraX;/);
   assert.doesNotMatch(updateDomSource, /playerX \+ remoteCameraX - localCameraX/);

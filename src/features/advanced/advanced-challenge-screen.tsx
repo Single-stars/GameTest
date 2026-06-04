@@ -435,9 +435,7 @@ function AdvancedLevelSelectionPanel({
   const advancedRuleItems = getAdvancedChallengeRuleItems(activeConfig);
   const ruleItems = selectedIsEndless
     ? [
-        { icon: "target" as const, text: "完成动作得分" },
-        { icon: "ban" as const, text: "三次复活机会" },
-        { icon: "bolt" as const, text: "难度平滑提升" },
+        { icon: "target" as const, text: "在体力耗尽前再往前一步" },
       ]
     : advancedRuleItems;
   const lobbyTrackStyle = {
@@ -757,21 +755,21 @@ function AdvancedLevelSelectionPanel({
         <ul>
           {ruleItems.map((item) => (
             <li className="advanced-goal-item complete" key={`${item.icon}-${item.text}`}>
-              <span className="advanced-goal-box" aria-hidden="true">✓</span>
+              <span className="advanced-goal-box" aria-hidden="true">{selectedIsEndless ? "∞" : "✓"}</span>
               <span>{item.text}</span>
             </li>
           ))}
         </ul>
       </div>
 
-      <div className="advanced-lobby-actions">
+      <div className={`advanced-lobby-actions ${selectedIsEndless ? "advanced-lobby-actions-endless" : ""}`}>
         {selectedIsEndless ? null : (
           <button className="secondary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onRestartBaseRound(selectedLevel)}>
             重新挑战基础关
           </button>
         )}
         <button className="primary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onStartLevel(selectedLevel)}>
-          {selectedIsEndless ? "开始无尽" : "开始挑战"}
+          开始挑战
         </button>
       </div>
     </div>

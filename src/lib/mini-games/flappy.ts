@@ -13,6 +13,8 @@ export type GeneratedFlappyGate = {
   distance: number;
   baseCenterY: number;
   moving: boolean;
+  movingSpeed: number;
+  gapSize: number;
   phase: number;
   collectible: boolean;
   collectibleOffset: number;
@@ -138,6 +140,8 @@ export function generateFlappyGateLayout(
   const stageWidth = options.stageWidth ?? 360;
   const gateCount = numberParam(level.params, "gateCount", 6);
   const movingRatio = numberParam(level.params, "movingGateRatio", 0);
+  const movingSpeed = numberParam(level.params, "movingGateSpeed", 1);
+  const gapSize = numberParam(level.params, "gapSize", 180);
   const collectibleCount = numberParam(level.params, "collectibleCount", 0);
   const collectibleOffset = numberParam(level.params, "collectibleOffset", 0.18);
   const rand = createSeededRandom(`${level.levelId}:${runSeed}:flappy-gates`);
@@ -167,6 +171,8 @@ export function generateFlappyGateLayout(
       distance,
       baseCenterY: centerY,
       moving: rand() < movingRatio,
+      movingSpeed,
+      gapSize,
       phase: rand() * Math.PI * 2,
       collectible: collectibleIndexes.has(index),
       collectibleOffset: (rand() < 0.5 ? -1 : 1) * collectibleOffset * (0.62 + rand() * 0.38),

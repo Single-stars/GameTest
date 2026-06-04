@@ -15,12 +15,10 @@ import {
   ENDLESS_STARTING_REVIVES,
   getEndlessAimConfig,
   getEndlessRoundDifficultyState,
-  type EndlessDifficultyState,
   getEndlessKnifeConfig,
   getEndlessMiniGameStageConfig,
   getEndlessReusableStageConfig,
   getEndlessScore,
-  getEndlessTestJumpOptions,
 } from "@/lib/endless-mode";
 import {
   createMiniGameRunSeed,
@@ -301,70 +299,42 @@ function useEndlessRun({
 function EndlessHud({
   api,
   bestScore,
-  debugToolsVisible,
-  difficultyState,
 }: {
   api: EndlessRunApi;
   bestScore: number;
-  debugToolsVisible: boolean;
-  difficultyState: EndlessDifficultyState;
 }) {
+  const activeEnergySegments = clamp(
+    Math.round((api.energyPercent / 100) * ENDLESS_ENERGY_THRESHOLD),
+    0,
+    ENDLESS_ENERGY_THRESHOLD,
+  );
+
   return (
-    <>
-      <div className="endless-hud">
-        <div className={`endless-vitality ${api.shieldCharges > 0 ? "shielded" : ""}`}>
-          <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}`}>
-            {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => (
-              <span className={`endless-heart ${index < api.revives ? "active" : "spent"}`} key={index}>
-                ❤
-              </span>
+    <div
+      className={`endless-hud ${api.shieldCharges > 0 ? "shielded" : ""}`}
+      aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}，能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}，分数 ${api.score}，最佳 ${bestScore}`}
+    >
+      <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}`}>
+        {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => (
+          <span className={`endless-heart-token ${index < api.revives ? "active" : "spent"}`} key={index}>
+            <span className="endless-heart" aria-hidden="true">❤</span>
+          </span>
+        ))}
+      </div>
+      <div className="endless-energy-console">
+        <div className="endless-energy-meter" aria-label={`能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}`}>
+          <div className="endless-energy-segments" aria-hidden="true">
+            {Array.from({ length: ENDLESS_ENERGY_THRESHOLD }, (_, index) => (
+              <span className={`endless-energy-cell ${index < activeEnergySegments ? "active" : ""}`} key={index} />
             ))}
           </div>
-          <div className="endless-energy-meter" aria-label={`能量 ${api.energyPercent}%`}>
-            <span style={{ width: `${api.energyPercent}%` }} />
-          </div>
-        </div>
-        <div className="endless-score">
-          <strong>{api.score}</strong>
-          <span>最佳 {bestScore}</span>
-        </div>
-        <div
-          className="endless-difficulty"
-          aria-label={`无尽强度 ${difficultyState.label}，复用进阶 ${difficultyState.sourceAdvancedLevel}`}
-        >
-          <div className="endless-difficulty-row">
-            <span>强度 {difficultyState.label}</span>
-            <span>进阶 {difficultyState.sourceAdvancedLevel}</span>
-          </div>
-          <div className="endless-difficulty-meter" aria-hidden="true">
-            <span style={{ width: `${difficultyState.progressToNext}%` }} />
-          </div>
-          <span className="endless-difficulty-next">
-            {difficultyState.nextLabel ? `下一段 ${difficultyState.nextLabel}` : "强度封顶"}
-          </span>
         </div>
       </div>
-      {debugToolsVisible ? (
-        <details className="endless-debug-panel" onPointerDown={(event) => event.stopPropagation()}>
-          <summary>测试强度</summary>
-          <div className="endless-debug-jumps" aria-label="无尽难度测试跳转">
-            {getEndlessTestJumpOptions().map((option) => (
-              <button
-                className={api.debugDifficulty === option.difficulty ? "active" : ""}
-                key={option.difficulty}
-                type="button"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  api.setDebugDifficulty(option.difficulty);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </details>
-      ) : null}
-    </>
+      <div className="endless-score-readout">
+        <strong>{api.score}</strong>
+        <span>最佳 {bestScore}</span>
+      </div>
+    </div>
   );
 }
 
@@ -433,7 +403,6 @@ function EndlessGameByRound({
 
 export function EndlessRoundPlayer({
   bestScore,
-  debugToolsVisible,
   onComplete,
   roundId,
 }: {
@@ -458,8 +427,6 @@ export function EndlessRoundPlayer({
       <EndlessHud
         api={api}
         bestScore={bestScore}
-        debugToolsVisible={debugToolsVisible}
-        difficultyState={difficultyState}
       />
       <div className="endless-game-host" data-source-level={difficultyState.sourceAdvancedLevel} data-difficulty-tone={difficultyTone}>
         <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} />

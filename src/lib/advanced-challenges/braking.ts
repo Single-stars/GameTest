@@ -22,10 +22,10 @@ export function getAdvancedBrakeCorrectAction(level: number, event: AdvancedBrak
 }
 
 export function getAdvancedBrakeRuleHint(level: number, dualRule?: unknown) {
-  if (level === 10) return "规则：只有一个危险单独出现时是真危险";
-  if (level === 9) return "规则：所有危险都是假的";
-  if (dualRule === "single-red-stop") return "规则：两个红色危险同时出现是安全的";
-  if (dualRule === "double-red-stop") return "规则：只有两个红色危险出现时是危险的";
+  if (level === 10) return "只有一个危险单独出现时是真危险";
+  if (level === 9) return "所有危险都是假的";
+  if (dualRule === "single-red-stop") return "两个红色危险同时出现是安全的";
+  if (dualRule === "double-red-stop") return "只有两个红色危险出现时是危险的";
   return null;
 }
 
