@@ -140,6 +140,7 @@ export function MiniGameBaseRound({
   const handleComplete = useCallback(
     (outcome: MiniGameCompletion) => {
       const score = miniGameBaseScore(outcome);
+      const completionDelayMs = MINI_GAME_COMPLETION_DELAY_MS;
       if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
       const timer = window.setTimeout(() => {
         completionTimerRef.current = null;
@@ -152,7 +153,7 @@ export function MiniGameBaseRound({
             value: miniGameValue(`mini-${gameId}-base`, outcome, score),
           }),
         ]);
-      }, MINI_GAME_COMPLETION_DELAY_MS);
+      }, completionDelayMs);
       completionTimerRef.current = timer;
     },
     [gameId, onComplete, round],
@@ -185,6 +186,7 @@ export function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advanced
   const handleComplete = useCallback(
     (outcome: MiniGameCompletion) => {
       const passed = outcome.status === "passed";
+      const completionDelayMs = outcome.gameId === "knife" && passed ? 0 : MINI_GAME_COMPLETION_DELAY_MS;
       if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
       const timer = window.setTimeout(() => {
         completionTimerRef.current = null;
@@ -197,7 +199,7 @@ export function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advanced
             value: miniGameValue("mini-game", outcome, passed ? 100 : 0),
           }),
         ]);
-      }, MINI_GAME_COMPLETION_DELAY_MS);
+      }, completionDelayMs);
       completionTimerRef.current = timer;
     },
     [config.dimension, onComplete],

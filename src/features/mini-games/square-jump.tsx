@@ -714,6 +714,10 @@ export function SquareJumpPrototype({
   const coOpPlayerSkin = resolveSquareJumpCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const squareJumpDoubleJumpEnabled = useCallback(
+    () => doubleJumpEnabled || endlessRef.current?.getActiveSkill()?.kind === "double-jump",
+    [doubleJumpEnabled],
+  );
 
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
@@ -894,7 +898,7 @@ export function SquareJumpPrototype({
       if (isEndlessRun) {
         endlessRef.current?.gainEnergy(1);
         if (Math.abs(current.playerOffsetOnCurrent) <= landedPlatform.width * ENDLESS_SQUARE_CENTER_LANDING_RATIO) {
-          endlessRef.current?.gainEnergy(1, "精准落地！");
+          endlessRef.current?.awardSpecialBonus("精准落地！");
         }
       }
       current.currentIndex = current.nextIndex;
@@ -981,14 +985,14 @@ export function SquareJumpPrototype({
         current.timer = null;
       }
       const canGroundCharge = current.state === "idle" || current.state === "advancing";
-      const canAirCharge = doubleJumpEnabled && (current.state === "jumping" || current.state === "falling") && current.jumpPlan !== null && !current.doubleJumpUsed;
+      const canAirCharge = squareJumpDoubleJumpEnabled() && (current.state === "jumping" || current.state === "falling") && current.jumpPlan !== null && !current.doubleJumpUsed;
       if (!canGroundCharge && !canAirCharge) return;
       current.charge = 0;
       current.chargeElapsedMs = 0;
       current.state = canAirCharge ? "airCharging" : "charging";
       syncView();
     },
-    [doubleJumpEnabled, syncView],
+    [squareJumpDoubleJumpEnabled, syncView],
   );
 
   const releaseSharedChargeIfIdle = useCallback(() => {
@@ -1164,7 +1168,7 @@ export function SquareJumpPrototype({
             current.playerY = current.jumpPlan.jumpEndY;
 
             if (shouldSquareJumpDeferLandingResolution({
-              doubleJumpEnabled,
+              doubleJumpEnabled: squareJumpDoubleJumpEnabled(),
               doubleJumpUsed: current.doubleJumpUsed,
               result: current.jumpPlan.result,
             })) {
@@ -1220,7 +1224,7 @@ export function SquareJumpPrototype({
           const point = sampleSquareJumpBaseFlyAway(current.jumpPlan, jumpProgress);
           current.playerX = point.x;
           current.playerY = point.y;
-          const flyAwayLanding = (!doubleJumpEnabled || current.doubleJumpUsed) ? resolveSquareJumpBaseFlyAwayLanding({
+          const flyAwayLanding = (!squareJumpDoubleJumpEnabled() || current.doubleJumpUsed) ? resolveSquareJumpBaseFlyAwayLanding({
             catchDepth: flyAwayLandingCatchDepth,
             plan: current.jumpPlan,
             progress: jumpProgress,
@@ -1299,7 +1303,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
+  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, squareJumpDoubleJumpEnabled, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;

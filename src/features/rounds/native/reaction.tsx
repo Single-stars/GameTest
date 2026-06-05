@@ -293,8 +293,16 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
     clickedGreenIdsRef.current.add(cell.id);
     greenClicksRef.current += 1;
     const endlessRuntime = endlessRef.current;
-    endlessRuntime?.addScore(1);
-    if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) endlessRuntime.gainEnergy(1, "顶级预判！");
+    const greenLightSkillActive = endlessRuntime?.getActiveSkill()?.kind === "green-light";
+    if (endlessRuntime) endlessRuntime.addScore(greenLightSkillActive ? 2 : 1);
+    if (endlessRuntime && greenLightSkillActive) {
+      endlessRuntime.updateActiveSkill((skill) => {
+        if (skill.kind !== "green-light") return skill;
+        const charges = Math.max(0, (skill.charges ?? 1) - 1);
+        return charges > 0 ? { ...skill, charges } : null;
+      });
+    }
+    if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) endlessRuntime.awardSpecialBonus("顶级预判！");
     setFeedbackTone("good");
     trialsRef.current.push(
       trial("reaction", signalIndexRef.current, {

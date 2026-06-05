@@ -436,21 +436,25 @@ test("advanced braking endless runner uses a lightweight background parallax ins
   assert.match(brakingSource, /syncEndlessWaveParallax/);
   assert.match(brakingSource, /--difficulty-wave-parallax-x/);
   assert.match(brakingSource, /--difficulty-wave-parallax-y/);
+  assert.match(brakingSource, /--advanced-brake-ground-offset/);
   assert.doesNotMatch(brakingSource, /--difficulty-wave-screen-shift-x/);
   assert.match(brakingSource, /distance \* -3\.2/);
+  assert.match(brakingSource, /const groundOffsetPx = trackRef\.current \? \(distance \* -trackRef\.current\.clientWidth\) \/ 100 : 0;/);
+  assert.match(brakingSource, /\$\{groundOffsetPx\}px/);
+  assert.doesNotMatch(brakingSource, /distance \* -28/);
   assert.doesNotMatch(brakingSource, /setEndlessWorldOffset/);
-  assert.doesNotMatch(brakingSource, /--advanced-brake-world-offset/);
   assert.doesNotMatch(brakingSource, /advanced-brake-scenery-post/);
   assert.doesNotMatch(brakingSource, /className="advanced-brake-scenery"/);
   assert.doesNotMatch(trackRule, /background:\s*#fbf7ef/);
   assert.match(cssSource, /\.advanced-braking\.endless-runner\s*{[\s\S]*--difficulty-wave-opacity:\s*var\(--difficulty-nonreaction-wave-opacity,\s*0\.12\);/);
   assert.doesNotMatch(cssSource, /--difficulty-wave-time-flow/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-lane::after\s*{/);
+  assert.match(cssSource, /height:\s*4px;/);
+  assert.match(cssSource, /background-position:\s*var\(--advanced-brake-ground-offset,\s*0px\) 0;/);
   assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::before\s*{/);
-  assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track::after\s*{/);
-  assert.doesNotMatch(laneRule, /background:/);
+  assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post/);
   assert.match(laneRule, /border-bottom:\s*4px solid rgba\(24,\s*24,\s*24,\s*0\.16\);/);
   assert.doesNotMatch(laneRule, /linear-gradient\(90deg/);
-  assert.doesNotMatch(cssSource, /\.advanced-brake-scenery-post/);
 });
 
 test("advanced braking positions danger by reaction window and wins when block right edge reaches finish", () => {

@@ -116,6 +116,14 @@ test("fall down base camera moves at constant speed and only top pressure fails 
     status: "failed",
     reason: "too-slow",
   });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 254, cameraY: 220, stageHeight: 640, squareSize: 32, topFailLine: 34 }), {
+    status: "failed",
+    reason: "too-slow",
+  });
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 255, cameraY: 220, stageHeight: 640, squareSize: 32, topFailLine: 34 }), {
+    status: "playing",
+    reason: "",
+  });
   assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 900, cameraY: 220, stageHeight: 640, squareSize: 32 }), {
     status: "playing",
     reason: "",
@@ -144,7 +152,14 @@ test("fall down base camera moves at constant speed and only top pressure fails 
     status: "failed",
     reason: "too-deep",
   });
-  assert.match(fallDownSource, /bottomFailLine: stageHeight - PLAYER_SIZE \/ 2/);
+  assert.deepEqual(resolveFallDownCameraBounds({ playerWorldY: 810, cameraY: 220, stageHeight: 640, squareSize: 32, bottomFailLine: 590 }), {
+    status: "failed",
+    reason: "too-deep",
+  });
+  assert.match(componentSource, /const FALL_DOWN_DANGER_ZIGZAG_SIZE = 18;/);
+  assert.match(componentSource, /const FALL_DOWN_DANGER_GRACE = 6;/);
+  assert.match(fallDownSource, /topFailLine: FALL_DOWN_DANGER_ZIGZAG_SIZE \+ PLAYER_SIZE \/ 2 - FALL_DOWN_DANGER_GRACE/);
+  assert.match(fallDownSource, /bottomFailLine: stageHeight - FALL_DOWN_DANGER_ZIGZAG_SIZE - PLAYER_SIZE \/ 2 \+ FALL_DOWN_DANGER_GRACE/);
   assert.doesNotMatch(fallDownSource, /fall-danger-line/);
   assert.doesNotMatch(globalCss, /\.fall-danger-line/);
 });
@@ -325,6 +340,38 @@ test("fall down base and multiplayer failures respawn on the last safe platform 
   assert.match(fallDownSource, /platform\.kind !== "danger" && platform\.kind !== "finish" && platform\.kind !== "fragile"/);
   assert.doesNotMatch(fallDownSource, /respawnPlatform\.broken = false;/);
   assert.doesNotMatch(fallDownSource, /respawnPlatform\.steppedAt = null;/);
+});
+
+test("fall down endless recoveries reuse smooth respawn camera instead of snapping", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
+  const endlessRecoverySource = fallDownSource.slice(
+    fallDownSource.indexOf("function recoverEndlessFallDownFailure"),
+    fallDownSource.indexOf("function carryFallDownMovingPlatformDuringRespawn"),
+  );
+
+  assert.match(endlessRecoverySource, /current\.started = false;/);
+  assert.match(endlessRecoverySource, /const respawnCameraY = Math\.min\(current\.cameraY, current\.playerY - stageSize\.height \* 0\.5\);/);
+  assert.match(endlessRecoverySource, /current\.respawnCameraStartY = current\.cameraY;/);
+  assert.match(endlessRecoverySource, /current\.respawnCameraEndY = respawnCameraY;/);
+  assert.match(endlessRecoverySource, /current\.respawnCameraStartedAt = current\.time;/);
+  assert.match(endlessRecoverySource, /current\.respawnCameraUntil = current\.time \+ 0\.38;/);
+  assert.match(endlessRecoverySource, /current\.cameraY = smoothFallDownRespawnCamera/);
+  assert.doesNotMatch(endlessRecoverySource, /visibleTop|visibleBottom|Math\.max\(0,\s*current\.playerY - stageSize\.height \* 0\.46\)/);
+});
+
+test("fall down alone shows clean red danger zigzags on both screen edges", () => {
+  const cssSource = readAppCssSource();
+  const fallDownDangerCss = cssSource.slice(
+    cssSource.indexOf(".prototype-stage.fall-down-stage::before"),
+    cssSource.indexOf(".doodle-player-shell"),
+  );
+
+  assert.match(cssSource, /\.prototype-stage\.fall-down-stage::before,\s*\.prototype-stage\.fall-down-stage::after/);
+  assert.doesNotMatch(cssSource, /\.prototype-stage\.doodle-stage::before|\.prototype-stage\.doodle-stage::after/);
+  assert.match(fallDownDangerCss, /--fall-down-danger-zigzag/);
+  assert.match(fallDownDangerCss, /rgba\(230,\s*83,\s*73,\s*0\.92\)/);
+  assert.doesNotMatch(fallDownDangerCss, /repeating-linear-gradient/);
 });
 
 test("fall down platform layout varies by run seed", () => {

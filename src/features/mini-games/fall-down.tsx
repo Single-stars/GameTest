@@ -55,7 +55,9 @@ import {
   MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 const ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5;
-const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 6;
+const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 4;
+const FALL_DOWN_DANGER_ZIGZAG_SIZE = 18;
+const FALL_DOWN_DANGER_GRACE = 6;
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
 type FallDownPlatformShape = "flat" | "l-left" | "l-right";
 type FallDownPlatform = {
@@ -441,28 +443,25 @@ function recoverEndlessFallDownFailure(current: FallDownRuntime, reason: string,
   current.failures += 1;
   current.reason = reason;
   current.status = "playing";
-  current.started = true;
+  current.started = false;
   current.inputDirection = 0;
   current.vx = 0;
-  current.vy = Math.min(current.vy, 120);
-  current.respawnCameraUntil = 0;
+  current.vy = 0;
   current.respawnUntil = current.time + 1.1;
 
-  if (reason === "太慢了" || reason === "掉太深") {
-    restoreFallDownFragilePlatformsForRespawn(current.platforms);
-    const respawnPlatform = resolveFallDownLastSafePlatform(current);
-    current.currentPlatformId = respawnPlatform.id;
-    current.lastSafePlatformId = respawnPlatform.id;
-    current.playerX = fallPlatformX(respawnPlatform, current.time, stageSize.width);
-    current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
-    const visibleTop = current.cameraY + PLAYER_SIZE;
-    const visibleBottom = current.cameraY + stageSize.height - PLAYER_SIZE * 1.8;
-    if (current.playerY < visibleTop || current.playerY > visibleBottom) {
-      current.cameraY = Math.max(0, current.playerY - stageSize.height * 0.46);
-    }
-  }
-
-  current.pressureWorldY = current.cameraY - PLAYER_SIZE;
+  restoreFallDownFragilePlatformsForRespawn(current.platforms);
+  const respawnPlatform = resolveFallDownLastSafePlatform(current);
+  current.currentPlatformId = respawnPlatform.id;
+  current.lastSafePlatformId = respawnPlatform.id;
+  current.playerX = fallPlatformX(respawnPlatform, current.time, stageSize.width);
+  current.playerY = respawnPlatform.y - PLAYER_SIZE / 2;
+  const respawnCameraY = Math.min(current.cameraY, current.playerY - stageSize.height * 0.5);
+  current.respawnCameraStartY = current.cameraY;
+  current.respawnCameraEndY = respawnCameraY;
+  current.respawnCameraStartedAt = current.time;
+  current.respawnCameraUntil = current.time + 0.38;
+  current.cameraY = smoothFallDownRespawnCamera(current.respawnCameraStartY, current.respawnCameraEndY, 0);
+  current.pressureWorldY = current.respawnCameraStartY - PLAYER_SIZE;
 }
 
 function carryFallDownMovingPlatformDuringRespawn(current: FallDownRuntime, previousTime: number, stageWidth: number) {
@@ -755,6 +754,7 @@ export function FallDownPrototype({
   const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FallDownRuntime>(() => makeFallDownView(initialRuntime));
+  const viewStatus = view.status;
   const remotePlayerSkin = resolveFallDownRemoteSkin(remotePlayer);
   const coOpPlayerSkin = resolveFallDownCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
@@ -1060,7 +1060,7 @@ export function FallDownPrototype({
       if (applyFallDownAuthoritativeState(current, sampledAuthoritativeState, requiredLayers)) {
         paintFallDownFrame(current);
         syncRuntimeState(time);
-        if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== view.status) {
+        if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS || current.status !== viewStatus) {
           syncView(time);
         }
         frameId = requestAnimationFrame(tick);
@@ -1154,6 +1154,7 @@ export function FallDownPrototype({
             : level.params;
           const activeTopPressureSpeed = numberParam(activeFallDownParams, "topPressureSpeed", topPressureSpeed);
           const activeFragileTime = numberParam(activeFallDownParams, "fragileTime", fragileTime);
+          const endlessFallActive = endlessRef.current?.getActiveSkill()?.kind === "endless-fall";
           let platformCarryX = 0;
           const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
           const carriedPlatform = platformById.get(current.currentPlatformId);
@@ -1189,6 +1190,11 @@ export function FallDownPrototype({
           current.vy = clamp(current.vy + 980 * delta, -220, 520);
           current.playerX = clamp(current.playerX + current.inputDirection * fallDownPlayerSpeed * delta + platformCarryX, PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
           current.playerY += current.vy * delta;
+          if (endlessFallActive && current.time >= current.respawnCameraUntil) {
+            const endlessFallCameraY = current.playerY - stageHeight * 0.5;
+            current.cameraY = endlessFallCameraY;
+            current.pressureWorldY = current.cameraY - PLAYER_SIZE;
+          }
           if (isEndlessRun) {
             const endlessDistanceScore = Math.floor(Math.max(0, current.playerY) / 100);
             endlessRef.current?.setDistanceScore(endlessDistanceScore, false);
@@ -1237,7 +1243,7 @@ export function FallDownPrototype({
             current.layersReached = Math.max(current.layersReached, platform.id);
             if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
-            if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) endlessRef.current?.gainEnergy(1, "极速下降！");
+            if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) endlessRef.current?.awardSpecialBonus("极速下降！");
             eventChanged = true;
             if (platform.kind === "finish" && !isEndlessRun) {
               current.status = "passed";
@@ -1270,16 +1276,19 @@ export function FallDownPrototype({
             }
           }
 
-          const bounds = resolveFallDownCameraBounds({
-            bottomFailLine: stageHeight - PLAYER_SIZE / 2,
-            cameraY: current.cameraY,
-            playerWorldY: current.playerY,
-            squareSize: PLAYER_SIZE,
-            stageHeight,
-          });
-          if (bounds.status === "failed") {
-            continueAfterRecoverableFailure(bounds.reason === "too-slow" ? "太慢了" : "掉太深");
-            return;
+          if (!endlessFallActive) {
+            const bounds = resolveFallDownCameraBounds({
+              bottomFailLine: stageHeight - FALL_DOWN_DANGER_ZIGZAG_SIZE - PLAYER_SIZE / 2 + FALL_DOWN_DANGER_GRACE,
+              cameraY: current.cameraY,
+              playerWorldY: current.playerY,
+              squareSize: PLAYER_SIZE,
+              stageHeight,
+              topFailLine: FALL_DOWN_DANGER_ZIGZAG_SIZE + PLAYER_SIZE / 2 - FALL_DOWN_DANGER_GRACE,
+            });
+            if (bounds.status === "failed") {
+              continueAfterRecoverableFailure(bounds.reason === "too-slow" ? "太慢了" : "掉太深");
+              return;
+            }
           }
         }
       }
@@ -1298,11 +1307,34 @@ export function FallDownPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [authoritativeStateSubscription, coOpRole, fail, fallDownPlayerSpeed, fragileTime, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredLayers, resumeFallDownInput, runSeed, stageHeight, stageWidth, syncRuntimeState, syncView, topPressureSpeed, updateFallDownDom, view.status]);
+  }, [
+    authoritativeStateSubscription,
+    coOpRole,
+    fail,
+    fallDownPlayerSpeed,
+    fragileTime,
+    isEndlessRun,
+    level,
+    logicStageSize,
+    mode,
+    perfEnabled,
+    recordDebugFrame,
+    recordPerfFrame,
+    requiredLayers,
+    resumeFallDownInput,
+    runSeed,
+    stageHeight,
+    stageWidth,
+    syncRuntimeState,
+    syncView,
+    topPressureSpeed,
+    updateFallDownDom,
+    viewStatus,
+  ]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;
-    const completedStatus = view.status;
+    const completedStatus = viewStatus;
     if (completedStatus === "playing") return;
     completedRef.current = true;
     const latest = runtimeRef.current;
@@ -1323,7 +1355,7 @@ export function FallDownPrototype({
       });
     }, mode === "prototype" ? MINI_GAME_COMPLETION_DELAY_MS : 0);
     return () => window.clearTimeout(timer);
-  }, [level.levelId, mode, onComplete, requiredLayers, view.status]);
+  }, [level.levelId, mode, onComplete, requiredLayers, viewStatus]);
 
   const showOverlay = mode === "prototype";
   const viewFallDownParams = isEndlessRun

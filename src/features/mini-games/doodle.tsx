@@ -65,7 +65,7 @@ import {
 
 const DOODLE_PLAYER_SPEED = 315;
 const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
-const ENDLESS_DOODLE_ENERGY_DISTANCE = 10;
+const ENDLESS_DOODLE_ENERGY_DISTANCE = 5;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
@@ -960,13 +960,14 @@ export function DoodleJumpPrototype({
           const insideX = Math.abs(nextX - platformX) <= platform.width / 2 + PLAYER_SIZE / 2;
           if (crossed && insideX) {
             const landedBelowScreenPlatform = isEndlessRun && platform.y < current.cameraY && platform.y >= current.cameraY - 80;
+            const powerReleaseActive = endlessRef.current?.getActiveSkill()?.kind === "power-release";
             nextY = platform.y + PLAYER_SIZE / 2;
-            nextVy = getDoodleBounceVelocity({ risk: platform.risk, riskJumpMultiplier });
+            nextVy = getDoodleBounceVelocity({ risk: platform.risk || powerReleaseActive, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
             if (!platform.risk && !platform.finish) current.lastSafePlatformId = platform.id;
             if (platform.risk) riskHit += 1;
-            if (landedBelowScreenPlatform) endlessRef.current?.gainEnergy(1, "无视野预判！");
+            if (landedBelowScreenPlatform) endlessRef.current?.awardSpecialBonus("无视野预判！");
             jumpTurnAvailable = true;
             eventChanged = true;
             break;

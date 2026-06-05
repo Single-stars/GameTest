@@ -267,7 +267,7 @@ export function getEndlessJourneyConfig({ roundId, score }: { roundId: RoundId; 
 }
 
 export function getEndlessFlappyConfig({ gateIndex }: { gateIndex: number }): EndlessFlappyConfig {
-  const difficulty = getEndlessDifficulty({ progress: gateIndex, maxRamp: 90 });
+  const difficulty = getEndlessDifficulty({ progress: gateIndex, maxRamp: 140 });
   return {
     collectibleChance: chanceAfter(difficulty, 0.2, 0.55),
     gapSize: Math.round(lerp(190, 152, difficulty)),
@@ -288,8 +288,9 @@ export function getEndlessMiniGameStageConfig({
   miniGameId: MiniGameId | string;
   progress: number;
 }): EndlessMiniGameStageConfig {
+  const maxRamp = miniGameId === "flappy" ? 140 : 90;
   const difficulty = Math.max(
-    getEndlessDifficulty({ progress, maxRamp: 90 }),
+    getEndlessDifficulty({ progress, maxRamp }),
     clamp(debugDifficulty, 0, 1),
   );
   const sourceAdvancedLevel = getEndlessAdvancedSourceLevel({ difficulty });
@@ -333,11 +334,13 @@ export function getEndlessMiniGameStageConfig({
         flyAwayLandingCatchDepth: 40,
         gravityChallenge: true,
         gravityJumpLimit: 3,
+        gravityPlatformMaxCount: difficulty < 0.5 ? 0 : Math.max(1, Math.round(lerp(1, 3, (difficulty - 0.5) / 0.5))),
+        gravityPlatformMinSpacing: difficulty < 0.72 ? 4 : 3,
         gravityPattern: difficulty < 0.5
           ? "normal"
           : difficulty < 0.72
-            ? "normal|light|normal|light"
-            : "normal|light|heavy|normal|light|normal",
+            ? "normal|normal|light|normal|normal|normal"
+            : "normal|normal|light|normal|normal|heavy|normal|normal",
         jumpsRequired: Math.round(lerp(8, 14, difficulty)),
         movingPlatformCount: Math.round(lerp(1, 9, difficulty)),
         movingRange: Math.round(lerp(24, 64, difficulty)),
@@ -391,7 +394,7 @@ export function getEndlessMiniGameStageConfig({
         gateCount: Math.round(lerp(8, 18, difficulty)),
         gapSize: flappy.gapSize,
         movingGateRatio: Number(flappy.movingGateChance.toFixed(2)),
-        movingGateSpeed: Number(lerp(1.15, 3.15, difficulty).toFixed(2)),
+        movingGateSpeed: Number(lerp(1.25, 4, difficulty).toFixed(2)),
         reverseDirection: false,
         reversedGravity: false,
         speed: Number(flappy.speed.toFixed(2)),

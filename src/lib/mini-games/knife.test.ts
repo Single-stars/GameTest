@@ -295,7 +295,7 @@ test("knife endless critical hits use a safe margin beyond danger edges", () => 
   assert.match(logicSource, /getShortestAngleDistance\(angle, normalizedImpact\) - collisionDegrees/);
   assert.match(runtimeSource, /ENDLESS_KNIFE_DANGER_MARGIN_DEGREES = 4/);
   assert.match(runtimeSource, /getKnifeHitDangerProximityDegrees/);
-  assert.match(runtimeSource, /proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES[\s\S]*gainEnergy\(1, "极限飞刀！"\)/);
+  assert.match(runtimeSource, /proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES[\s\S]*awardSpecialBonus\(/);
 });
 
 test("knife countdown renders a large background number below the wheel", () => {
@@ -327,4 +327,30 @@ test("knife multiplayer renders turn and overtime prompts without smoothing remo
   assert.match(cssSource, /\.knife-turn-ghost/);
   assert.match(cssSource, /\.knife-overtime-banner/);
   assert.match(cssSource, /\.knife-overtime-banner\s*{[\s\S]*top:\s*max\(16px,\s*calc\(env\(safe-area-inset-top\) \+ 12px\)\);/);
+});
+
+test("knife endless waits for feedback and slides wheels before advancing", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+
+  assert.match(runtimeSource, /const KNIFE_ENDLESS_WHEEL_ADVANCE_DELAY_MS = KNIFE_FINISH_DELAY_MS;/);
+  assert.match(runtimeSource, /const KNIFE_ENDLESS_WHEEL_SLIDE_MS = 420;/);
+  assert.match(runtimeSource, /type EndlessKnifeWheelTransition/);
+  assert.match(runtimeSource, /endlessWheelTransitionActiveRef\.current = true;/);
+  assert.match(runtimeSource, /phase: "sliding"/);
+  assert.match(runtimeSource, /KNIFE_ENDLESS_WHEEL_ADVANCE_DELAY_MS/);
+  assert.match(runtimeSource, /runtimeRef\.current = pending\.runtime;/);
+  assert.match(runtimeSource, /setEndlessWheelIndex\(pending\.wheelIndex\);/);
+  assert.match(runtimeSource, /KNIFE_ENDLESS_WHEEL_SLIDE_MS/);
+  assert.match(runtimeSource, /if \(endlessWheelTransitionActiveRef\.current\) return;/);
+  assert.match(runtimeSource, /knife-wheel-panel/);
+  assert.match(runtimeSource, /endlessWheelTransition\.phase === "sliding"/);
+
+  assert.match(cssSource, /\.knife-wheel-panel/);
+  assert.match(cssSource, /\.knife-wheel-panel\.exiting/);
+  assert.match(cssSource, /\.knife-wheel-panel\.entering/);
+  assert.match(cssSource, /@keyframes knife-wheel-slide-out/);
+  assert.match(cssSource, /@keyframes knife-wheel-slide-in/);
+  assert.match(cssSource, /translateX\(-120vw\)/);
+  assert.match(cssSource, /translateX\(120vw\)/);
 });

@@ -4,6 +4,31 @@
     var(--surface);
 }
 
+.prototype-stage.fall-down-stage::before,
+.prototype-stage.fall-down-stage::after {
+  --fall-down-danger-zigzag: rgba(230, 83, 73, 0.92);
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 18;
+  height: 18px;
+  pointer-events: none;
+  opacity: 0.78;
+  background:
+    linear-gradient(135deg, var(--fall-down-danger-zigzag) 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(225deg, var(--fall-down-danger-zigzag) 25%, transparent 25%) 0 0 / 18px 18px;
+}
+
+.prototype-stage.fall-down-stage::before {
+  top: 0;
+}
+
+.prototype-stage.fall-down-stage::after {
+  bottom: 0;
+  transform: scaleY(-1);
+}
+
 .doodle-player-shell,
 .doodle-remote-player-shell,
 .doodle-world-layer,

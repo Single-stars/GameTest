@@ -40,7 +40,29 @@
   top: var(--knife-wheel-top, 82px);
   width: 190px;
   height: 190px;
+  overflow: visible;
   transform: translateX(-50%);
+}
+
+.knife-wheel-panel {
+  position: absolute;
+  inset: 0;
+  transform: translateX(0);
+  will-change: transform;
+}
+
+.knife-wheel-panel.current {
+  z-index: 1;
+}
+
+.knife-wheel-panel.exiting {
+  z-index: 1;
+  animation: knife-wheel-slide-out 420ms cubic-bezier(0.22, 0.82, 0.28, 1) both;
+}
+
+.knife-wheel-panel.entering {
+  z-index: 2;
+  animation: knife-wheel-slide-in 420ms cubic-bezier(0.22, 0.82, 0.28, 1) both;
 }
 
 .knife-wheel {
@@ -80,6 +102,26 @@
   fill: rgba(230, 83, 73, 0.62);
   stroke: rgba(140, 40, 34, 0.28);
   stroke-width: 1px;
+}
+
+@keyframes knife-wheel-slide-out {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-120vw);
+  }
+}
+
+@keyframes knife-wheel-slide-in {
+  from {
+    transform: translateX(120vw);
+  }
+
+  to {
+    transform: translateX(0);
+  }
 }
 
 .knife-arrow {

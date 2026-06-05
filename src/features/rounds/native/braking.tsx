@@ -59,6 +59,7 @@ type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 
 const ENDLESS_BRAKE_RUNNER_LEFT_PERCENT = 16;
 const ENDLESS_BRAKING_FAST_REACTION_MS = 150;
+const ENDLESS_BIG_LUCK_SPEED_MULTIPLIER = 2;
 
 function resolveAdvancedBrakingLaneCount(config: AdvancedStageConfig) {
   const configuredLanes = getParamNumber(config, "lanes", 1);
@@ -164,8 +165,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   const syncEndlessWaveParallax = useCallback((distance: number) => {
     const panel = trackRef.current?.closest(".advanced-braking") as HTMLElement | null;
+    const groundOffsetPx = trackRef.current ? (distance * -trackRef.current.clientWidth) / 100 : 0;
     panel?.style.setProperty("--difficulty-wave-parallax-x", `${Math.round(distance * -3.2)}`);
     panel?.style.setProperty("--difficulty-wave-parallax-y", `${Math.round(Math.sin(distance / 90) * 18)}`);
+    panel?.style.setProperty("--advanced-brake-ground-offset", `${groundOffsetPx}px`);
   }, []);
 
   const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
@@ -316,6 +319,32 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   }, [resetEventTimer]);
 
+  const getBigLuckSkill = useCallback(
+    () => {
+      const activeSkill = endlessRef.current?.getActiveSkill();
+      return activeSkill?.kind === "big-luck" ? activeSkill : null;
+    },
+    [],
+  );
+
+  const consumeBigLuckObstacleBreak = useCallback(() => {
+    const activeEndless = endlessRef.current;
+    const activeSkill = activeEndless?.getActiveSkill();
+    if (!activeEndless || activeSkill?.kind !== "big-luck" || (activeSkill.breakCharges ?? 0) <= 0) return false;
+    activeEndless.updateActiveSkill((skill) => {
+      if (skill.kind !== "big-luck") return skill;
+      return { ...skill, breakCharges: Math.max(0, (skill.breakCharges ?? 1) - 1) };
+    });
+    activeEndless.addScore(1);
+    showAdvancedFeedback("success");
+    hazardRef.current = null;
+    setHazard(null);
+    hazardShownAtRef.current = null;
+    hazardIndexRef.current += 1;
+    resetEventTimer();
+    return true;
+  }, [resetEventTimer, showAdvancedFeedback]);
+
 
 
   const recordHoldSuccess = useCallback(
@@ -378,7 +407,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     const activeBrake = endlessRuntime ? getEndlessBrakingConfig({ distance: endlessDistance }) : null;
     const activeAllowGray = endlessRuntime ? activeDifficulty >= 0.22 : allowGray;
     const activeReactionWindowMs = activeBrake?.reactionWindowMs ?? reactionWindowMs;
-    const activeSpeedPerSecond = activeBrake?.roadSpeed ?? speedPerSecond;
+    const activeSpeedPerSecond = (activeBrake?.roadSpeed ?? speedPerSecond) * (getBigLuckSkill() ? ENDLESS_BIG_LUCK_SPEED_MULTIPLIER : 1);
 
     const options = getAdvancedBrakeEventOptions(activeConfig.level, {
 
@@ -464,6 +493,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
         if (!hazardRef.current || hazardRef.current.correctAction !== "release") return;
 
+        if (consumeBigLuckObstacleBreak()) return;
+
         showAdvancedFeedback("crashed", true);
         const activeEndless = endlessRef.current;
         if (activeEndless) {
@@ -528,10 +559,13 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     clearTimers,
     config,
 
+    consumeBigLuckObstacleBreak,
+
     eventDurationMs,
 
     finish,
 
+    getBigLuckSkill,
     grayHoldMs,
 
     reactionWindowMs,
@@ -565,7 +599,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
         const activeEndless = endlessRef.current;
         const activeDistance = activeEndless ? Math.max(endlessDistanceRef.current, activeEndless.score) : 0;
         const activeBrake = activeEndless ? getEndlessBrakingConfig({ distance: activeDistance }) : null;
-        const activeSpeedPerSecond = activeBrake?.roadSpeed ?? speedPerSecond;
+        const activeSpeedPerSecond = (activeBrake?.roadSpeed ?? speedPerSecond) * (getBigLuckSkill() ? ENDLESS_BIG_LUCK_SPEED_MULTIPLIER : 1);
         const activeReactionWindowMs = activeBrake?.reactionWindowMs ?? reactionWindowMs;
         let distanceDelta = 0;
 
@@ -690,6 +724,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
     finishSafeDistance,
 
+    getBigLuckSkill,
+
     reactionWindowMs,
 
     showAdvancedFeedback,
@@ -737,6 +773,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     if (releaseOutcome.outcome === "failure") {
 
       clearTimers();
+
+      if (consumeBigLuckObstacleBreak()) return;
 
       showAdvancedFeedback("early", true);
       const activeEndless = endlessRef.current;
@@ -822,6 +860,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     );
 
     if (!correct) {
+      if (consumeBigLuckObstacleBreak()) return;
       showAdvancedFeedback("crashed", true);
       if (activeEndless) {
         const canContinue = activeEndless.loseLife("collision");
@@ -841,7 +880,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     else {
       if (activeEndless) {
         activeEndless.addScore(1);
-        if (latency <= ENDLESS_BRAKING_FAST_REACTION_MS) activeEndless.gainEnergy(1, "快速反应！");
+        if (latency <= ENDLESS_BRAKING_FAST_REACTION_MS) activeEndless.awardSpecialBonus("快速反应！");
       }
       showAdvancedFeedback("success");
       clearHazardAfterSuccess();

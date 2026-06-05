@@ -1140,6 +1140,23 @@
     endless-record-badge-breathe 1.7s ease-in-out 700ms infinite;
 }
 
+.endless-bonus-score-pop {
+  justify-self: end;
+  min-height: 18px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #fff7d1;
+  color: #7c3f00;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  transform-origin: right center;
+  animation: endless-bonus-score-roll 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @keyframes endless-heart-strip-squish {
   0% {
     transform: translateX(0) scale(1);
@@ -1155,6 +1172,28 @@
 
   100% {
     transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes endless-bonus-score-roll {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+
+  18% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
   }
 }
 
@@ -1434,6 +1473,66 @@
   isolation: isolate;
 }
 
+.endless-game-host.skill-active::after {
+  content: "";
+  position: absolute;
+  z-index: 22;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 3px rgba(20, 184, 166, 0.72),
+    inset 0 0 28px rgba(20, 184, 166, 0.34),
+    inset 0 0 52px rgba(47, 128, 237, 0.18);
+  animation: endless-skill-edge-pulse 900ms ease-in-out infinite;
+}
+
+.endless-game-host.skill-ending::after {
+  animation: endless-skill-ending-flash 220ms ease-in-out infinite;
+}
+
+.endless-skill-button {
+  position: fixed;
+  z-index: 28;
+  right: max(8px, env(safe-area-inset-right));
+  top: 50%;
+  width: 52px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(20, 184, 166, 0.46);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: rgba(255, 253, 248, 0.94);
+  color: #0f766e;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(24, 24, 24, 0.16);
+  transform: translateY(-50%);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.endless-skill-button:not(:disabled) {
+  background: #14b8a6;
+  color: #fffdf8;
+}
+
+.endless-skill-button.active {
+  background: #2f80ed;
+  border-color: rgba(47, 128, 237, 0.62);
+  color: #fffdf8;
+}
+
+.endless-skill-button.ending {
+  animation: endless-skill-ending-flash 220ms ease-in-out infinite;
+}
+
+.endless-skill-button:disabled {
+  opacity: 0.44;
+}
+
 .endless-energy-popups {
   position: absolute;
   z-index: 24;
@@ -1486,6 +1585,28 @@
   }
 }
 
+@keyframes endless-skill-edge-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes endless-skill-ending-flash {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .endless-game-host > :not(.endless-hud) {
   grid-area: 1 / 1;
   min-width: 0;
@@ -1518,6 +1639,23 @@
 
 .advanced-braking.endless-runner {
   --difficulty-wave-opacity: var(--difficulty-nonreaction-wave-opacity, 0.12);
+}
+
+.advanced-braking.endless-runner .advanced-brake-lane::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: auto 0 0;
+  height: 4px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(24, 24, 24, 0.2) 0 2%,
+      transparent 2% 8%
+    );
+  background-position: var(--advanced-brake-ground-offset, 0px) 0;
+  opacity: 0.58;
 }
 
 .advanced-braking.endless-runner .advanced-brake-lane {

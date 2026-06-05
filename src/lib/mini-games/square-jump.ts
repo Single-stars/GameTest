@@ -21,6 +21,8 @@ export type SquareJumpBasePlatform = {
   width: number;
 };
 
+type SquareJumpPlatformGravity = NonNullable<SquareJumpBasePlatform["gravity"]>;
+
 export type SquareJumpBaseLandingResult = "stay" | "advance" | "fall";
 
 export type SquareJumpBaseJumpPlan = {
@@ -71,7 +73,7 @@ export function getSquareJumpChargeAt({
   return phase <= 1 ? phase : 2 - phase;
 }
 
-export function getSquareJumpGravityMultiplier(gravity: NonNullable<SquareJumpBasePlatform["gravity"]>) {
+export function getSquareJumpGravityMultiplier(gravity: SquareJumpPlatformGravity) {
   if (gravity === "light") return 1.55;
   if (gravity === "heavy") return 0.58;
   return 1;
@@ -379,11 +381,56 @@ function getSquareJumpPlatformWidth(level: MiniGameLevelConfig, index: number, r
   return minWidth + rand() * (maxWidth - minWidth);
 }
 
-function getSquareJumpPlatformGravity(level: MiniGameLevelConfig, index: number): NonNullable<SquareJumpBasePlatform["gravity"]> {
-  const pattern = stringParam(level.params, "gravityPattern", "normal")
+function getSquareJumpGravityPattern(level: MiniGameLevelConfig): SquareJumpPlatformGravity[] {
+  return stringParam(level.params, "gravityPattern", "normal")
     .split("|")
-    .filter((item): item is NonNullable<SquareJumpBasePlatform["gravity"]> => item === "normal" || item === "light" || item === "heavy");
-  return pattern[index % Math.max(1, pattern.length)] ?? "normal";
+    .filter((item): item is SquareJumpPlatformGravity => item === "normal" || item === "light" || item === "heavy");
+}
+
+function getStaggeredSquareJumpGravity(
+  pattern: SquareJumpPlatformGravity[],
+  targetGravity: SquareJumpPlatformGravity,
+  previousGravity: SquareJumpPlatformGravity,
+) {
+  if (targetGravity !== previousGravity) return targetGravity;
+  return pattern.find((gravity) => gravity !== previousGravity) ?? targetGravity;
+}
+
+function getSquareJumpPlatformGravity({
+  gravityPlatformCount,
+  index,
+  lastGravityPlatformIndex,
+  level,
+  platformIndex,
+  previousGravity,
+}: {
+  gravityPlatformCount: number;
+  index: number;
+  lastGravityPlatformIndex: number;
+  level: MiniGameLevelConfig;
+  platformIndex: number;
+  previousGravity: SquareJumpPlatformGravity;
+}): SquareJumpPlatformGravity {
+  const pattern = getSquareJumpGravityPattern(level);
+  const gravityChallenge = booleanParam(level.params, "gravityChallenge");
+  const rawGravityPlatformMaxCount = Number(level.params.gravityPlatformMaxCount);
+  const rawGravityPlatformMinSpacing = Number(level.params.gravityPlatformMinSpacing);
+  const hasGravityDensityLimit = Number.isFinite(rawGravityPlatformMaxCount) || Number.isFinite(rawGravityPlatformMinSpacing);
+  const gravityPlatformMaxCount = Number.isFinite(rawGravityPlatformMaxCount) ? Math.max(0, Math.floor(rawGravityPlatformMaxCount)) : Number.POSITIVE_INFINITY;
+  const gravityPlatformMinSpacing = Number.isFinite(rawGravityPlatformMinSpacing) ? Math.max(1, Math.floor(rawGravityPlatformMinSpacing)) : 1;
+  let targetGravity = pattern[index % Math.max(1, pattern.length)] ?? "normal";
+
+  if (hasGravityDensityLimit && targetGravity !== "normal") {
+    const tooManyGravityPlatforms = gravityPlatformCount >= gravityPlatformMaxCount;
+    const tooCloseToLastGravityPlatform = platformIndex - lastGravityPlatformIndex < gravityPlatformMinSpacing;
+    if (tooManyGravityPlatforms || tooCloseToLastGravityPlatform) targetGravity = "normal";
+  }
+
+  if (gravityChallenge && !hasGravityDensityLimit) {
+    return getStaggeredSquareJumpGravity(pattern, targetGravity, previousGravity);
+  }
+
+  return targetGravity;
 }
 
 function isGeneratedSquareJumpPlatformMoving(level: MiniGameLevelConfig, targetIndex: number) {
@@ -421,8 +468,10 @@ export function generateSquareJumpPlatformSequence(
   const doubleJumpEnabled = booleanParam(level.params, "doubleJumpEnabled");
   const gravityChallenge = booleanParam(level.params, "gravityChallenge");
   const gravityJumpLimit = numberParam(level.params, "gravityJumpLimit", 0);
-  let activeGravity: NonNullable<SquareJumpBasePlatform["gravity"]> = "normal";
+  let activeGravity: SquareJumpPlatformGravity = "normal";
   let activeGravityRemainingJumps: number | null = null;
+  let gravityPlatformCount = 0;
+  let lastGravityPlatformIndex = Number.NEGATIVE_INFINITY;
 
   const platforms: SquareJumpBasePlatform[] = [
     {
@@ -462,7 +511,18 @@ export function generateSquareJumpPlatformSequence(
     const reachableMaxDistance = Math.max(reachableMinDistance, Math.min(localMaxDistance, farthestCenterDistance));
     const randomDistance = localMinDistance + rand() * Math.max(0, localMaxDistance - localMinDistance);
     const distance = clamp(randomDistance, reachableMinDistance, reachableMaxDistance);
-    const targetGravity = getSquareJumpPlatformGravity(level, Math.max(0, index - 1));
+    const targetGravity = getSquareJumpPlatformGravity({
+      gravityPlatformCount,
+      index: Math.max(0, index - 1),
+      lastGravityPlatformIndex,
+      level,
+      platformIndex: index,
+      previousGravity: current.gravity ?? "normal",
+    });
+    if (targetGravity !== "normal") {
+      gravityPlatformCount += 1;
+      lastGravityPlatformIndex = index;
+    }
 
     platforms.push({
       finish: index === numberParam(level.params, "jumpsRequired", 5),

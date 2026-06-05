@@ -63,7 +63,10 @@ const FLAPPY_RESPAWN_CAMERA_SECONDS = 0.45;
 const FLAPPY_RESPAWN_FORWARD_TRAVEL_BUFFER_SECONDS = 0.28;
 const FLAPPY_GRAVITY_CHANGE_BLEND_SECONDS = 0.34;
 const FLAPPY_GRAVITY_CHANGE_INVINCIBLE_SECONDS = 1.2;
-const FLAPPY_GRAVITY_CHANGE_VELOCITY_DAMPING = 0.68;
+const FLAPPY_SUPER_DASH_SPEED_MULTIPLIER = 2.2;
+const FLAPPY_SUPER_DASH_GRAVITY_MULTIPLIER = 0.38;
+const FLAPPY_SUPER_DASH_PULSE_VELOCITY = 115;
+const FLAPPY_SUPER_DASH_PULSE_BLEND = 0.42;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate & { gravityTriggered?: boolean };
 
@@ -496,6 +499,13 @@ export function FlappyPrototype({
   shielded?: boolean;
   unlimitedRespawn?: boolean;
 }) {
+  type FlappyGravityFlipTransition = {
+    playerY: number;
+    startedAt: number;
+    targetFlipped: boolean;
+    until: number;
+  };
+
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
   const stageWidth = logicStageSize.width;
@@ -560,13 +570,14 @@ export function FlappyPrototype({
   const spectateRemoteStateRef = useRef<SelfGameState | null>(spectateRemoteState);
   const endlessRef = useRef(endless);
   const gravityChangeBlendRef = useRef<FlappyGravityChangeBlend | null>(null);
+  const gravityFlipTransitionRef = useRef<FlappyGravityFlipTransition | null>(null);
   const gravityFlippedRef = useRef(false);
-  const gravityFlipFeedbackTimerRef = useRef<number | null>(null);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
   const [managedGravityFlipped, setManagedGravityFlipped] = useState(false);
-  const [gravityFlipFeedbackActive, setGravityFlipFeedbackActive] = useState(false);
+  const [gravityFlipTransitionActive, setGravityFlipTransitionActive] = useState(false);
+  const [gravityFlipAwaitingJump, setGravityFlipAwaitingJump] = useState(false);
   const remotePlayerSkin = resolveFlappyRemoteSkin(remotePlayer);
 
   const syncFlappyView = useCallback(
@@ -618,29 +629,30 @@ export function FlappyPrototype({
   }, [collectibleCount, gateCount, isEndlessRun, level, reverseDirection, speed, stageWidth]);
 
   const applyEndlessGravityChange = useCallback((current: FlappyFrame, nextTime: number, targetFlipped: boolean) => {
+    if (gravityFlipTransitionRef.current) return false;
     if (gravityFlippedRef.current === targetFlipped) return false;
 
     const currentTargetDirection = reversedGravity || gravityFlippedRef.current ? -1 : 1;
     const currentGravityDirection = resolveFlappyGravityDirection(currentTargetDirection, gravityChangeBlendRef.current, nextTime);
     const nextTargetDirection = reversedGravity || targetFlipped ? -1 : 1;
-    gravityFlippedRef.current = targetFlipped;
+    gravityFlipTransitionRef.current = {
+      playerY: current.playerY,
+      startedAt: nextTime,
+      targetFlipped,
+      until: nextTime + FLAPPY_GRAVITY_CHANGE_BLEND_SECONDS,
+    };
     gravityChangeBlendRef.current = {
       fromDirection: currentGravityDirection,
       startedAt: nextTime,
       targetDirection: nextTargetDirection,
       until: nextTime + FLAPPY_GRAVITY_CHANGE_BLEND_SECONDS,
     };
+    current.started = false;
+    current.playerVy = 0;
+    endlessRef.current?.showFeedback("重力翻转！");
     setManagedGravityFlipped(targetFlipped);
-    setGravityFlipFeedbackActive(true);
-    if (gravityFlipFeedbackTimerRef.current !== null) {
-      window.clearTimeout(gravityFlipFeedbackTimerRef.current);
-    }
-    gravityFlipFeedbackTimerRef.current = window.setTimeout(() => {
-      gravityFlipFeedbackTimerRef.current = null;
-      setGravityFlipFeedbackActive(false);
-    }, 180);
-    current.playerVy *= FLAPPY_GRAVITY_CHANGE_VELOCITY_DAMPING;
-    current.invincibleUntil = Math.max(current.invincibleUntil, nextTime + FLAPPY_GRAVITY_CHANGE_INVINCIBLE_SECONDS);
+    setGravityFlipTransitionActive(true);
+    setGravityFlipAwaitingJump(true);
     current.displayProgress = current.progress;
     return true;
   }, [reversedGravity]);
@@ -651,26 +663,14 @@ export function FlappyPrototype({
   }, [applyEndlessGravityChange]);
 
   useEffect(() => {
-    return () => {
-      if (gravityFlipFeedbackTimerRef.current !== null) {
-        window.clearTimeout(gravityFlipFeedbackTimerRef.current);
-        gravityFlipFeedbackTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     runtimeRef.current = initialRuntime;
     spectatorSceneTimeRef.current = initialRuntime.time;
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
     gravityChangeBlendRef.current = null;
+    gravityFlipTransitionRef.current = null;
     gravityFlippedRef.current = false;
-    if (gravityFlipFeedbackTimerRef.current !== null) {
-      window.clearTimeout(gravityFlipFeedbackTimerRef.current);
-      gravityFlipFeedbackTimerRef.current = null;
-    }
     remoteSmootherRef.current.reset();
     remoteVisualSmootherRef.current.reset();
     if (remotePlayerShellRef.current) {
@@ -678,7 +678,8 @@ export function FlappyPrototype({
     }
     const timer = window.setTimeout(() => {
       setManagedGravityFlipped(false);
-      setGravityFlipFeedbackActive(false);
+      setGravityFlipTransitionActive(false);
+      setGravityFlipAwaitingJump(false);
       setView(makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -711,12 +712,20 @@ export function FlappyPrototype({
   const pulse = useCallback(() => {
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
+    if (gravityFlipTransitionRef.current) return;
     const wasRespawnWaiting = !current.started && current.invincibleUntil > 0;
     current.started = true;
+    setGravityFlipAwaitingJump(false);
     if (wasRespawnWaiting) current.invincibleUntil = Math.max(current.invincibleUntil, current.time + FLAPPY_RESPAWN_INVINCIBLE_SECONDS);
     current.playerTurns += 1;
     const activeReversedGravity = reversedGravity || gravityFlippedRef.current;
-    current.playerVy = activeReversedGravity ? 335 : -335;
+    const superDashActive = endlessRef.current?.getActiveSkill()?.kind === "super-dash";
+    if (superDashActive) {
+      const dashPulse = activeReversedGravity ? FLAPPY_SUPER_DASH_PULSE_VELOCITY : -FLAPPY_SUPER_DASH_PULSE_VELOCITY;
+      current.playerVy = current.playerVy * FLAPPY_SUPER_DASH_PULSE_BLEND + dashPulse;
+    } else {
+      current.playerVy = activeReversedGravity ? 335 : -335;
+    }
     syncFlappyView();
     syncFlappyRuntimeState(performance.now(), true);
   }, [reversedGravity, syncFlappyRuntimeState, syncFlappyView]);
@@ -845,6 +854,27 @@ export function FlappyPrototype({
         const isRespawnCameraMoving = current.respawnProgressUntil > current.time;
         current.time += delta;
         current.displayProgress = resolveFlappyDisplayProgress(current);
+        const activeGravityFlipTransition = gravityFlipTransitionRef.current;
+        if (activeGravityFlipTransition) {
+          const nextTime = current.time;
+          current.playerY = activeGravityFlipTransition.playerY;
+          current.playerVy = 0;
+          if (nextTime >= activeGravityFlipTransition.until) {
+            gravityFlippedRef.current = activeGravityFlipTransition.targetFlipped;
+            gravityFlipTransitionRef.current = null;
+            gravityChangeBlendRef.current = null;
+            current.invincibleUntil = Math.max(current.invincibleUntil, nextTime + FLAPPY_GRAVITY_CHANGE_INVINCIBLE_SECONDS);
+            setManagedGravityFlipped(activeGravityFlipTransition.targetFlipped);
+            setGravityFlipTransitionActive(false);
+          }
+          updateDom(current, time);
+          if (nextTime >= activeGravityFlipTransition.until || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
+            syncFlappyView(time);
+          }
+          syncFlappyRuntimeState(time);
+          frameId = requestAnimationFrame(tick);
+          return;
+        }
         updateDom(current, time);
         if (isRespawnCameraMoving || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
           syncFlappyView(time);
@@ -871,7 +901,11 @@ export function FlappyPrototype({
         : level.params;
       const activeGapSize = numberParam(activeFlappyParams, "gapSize", gapSize);
       const activeMovingGateSpeed = numberParam(activeFlappyParams, "movingGateSpeed", 1);
-      const activeSpeed = numberParam(activeFlappyParams, "speed", speed);
+      const activeEndlessSkill = endlessRef.current?.getActiveSkill();
+      const superDashSkill = activeEndlessSkill?.kind === "super-dash" ? activeEndlessSkill : null;
+      const superDashActive = Boolean(superDashSkill);
+      const superDashInvincible = Boolean(superDashSkill && (superDashSkill.invincibleCharges ?? 0) > 0);
+      const activeSpeed = numberParam(activeFlappyParams, "speed", speed) * (superDashActive ? FLAPPY_SUPER_DASH_SPEED_MULTIPLIER : 1);
       const activeReverseDirection = reverseDirection;
       const activePlayerX = getFlappyPlayerX(stageWidth, activeReverseDirection);
       const targetReversedGravity = reversedGravity || gravityFlippedRef.current;
@@ -879,7 +913,7 @@ export function FlappyPrototype({
       const targetGravityDirection = targetReversedGravity ? -1 : 1;
       const gravityDirection = resolveFlappyGravityDirection(targetGravityDirection, gravityChangeBlendRef.current, nextTime);
       if (gravityChangeBlendRef.current && nextTime >= gravityChangeBlendRef.current.until) gravityChangeBlendRef.current = null;
-      const gravityMagnitude = gravityDirection < 0 ? 850 : 900;
+      const gravityMagnitude = (gravityDirection < 0 ? 850 : 900) * (superDashActive ? FLAPPY_SUPER_DASH_GRAVITY_MULTIPLIER : 1);
       const nextVy = current.playerVy + gravityDirection * gravityMagnitude * delta;
       const nextY = current.playerY + nextVy * delta;
       const nextProgress = current.progress + activeSpeed * delta;
@@ -910,6 +944,12 @@ export function FlappyPrototype({
         if (!gate.passed && gatePassed) {
           gate.passed = true;
           passed += 1;
+          if (superDashInvincible) {
+            endlessRef.current?.updateActiveSkill((skill) => {
+              if (skill.kind !== "super-dash") return skill;
+              return { ...skill, invincibleCharges: Math.max(0, (skill.invincibleCharges ?? 1) - 1) };
+            });
+          }
           eventChanged = true;
         }
 
@@ -921,13 +961,13 @@ export function FlappyPrototype({
           if (dx * dx + dy * dy <= 24 * 24) {
             gate.collected = true;
             collected += 1;
-            endlessRef.current?.gainEnergy(1, "道具收集！");
+            endlessRef.current?.awardSpecialBonus("道具收集！");
             eventChanged = true;
           }
         }
 
         const overlapsX = activePlayerX + PLAYER_SIZE / 2 > screenX && activePlayerX - PLAYER_SIZE / 2 < screenX + FLAPPY_GATE_WIDTH;
-        if (overlapsX && nextTime >= current.invincibleUntil) {
+        if (overlapsX && nextTime >= current.invincibleUntil && !superDashInvincible) {
           const blockedY = nextY - PLAYER_SIZE / 2 < centerY - gateGapSize / 2 || nextY + PLAYER_SIZE / 2 > centerY + gateGapSize / 2;
           if (blockedY) {
             status = "failed";
@@ -936,7 +976,7 @@ export function FlappyPrototype({
         }
       }
 
-      if ((nextY < PLAYER_SIZE / 2 || nextY > stageHeight - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil) {
+      if ((nextY < PLAYER_SIZE / 2 || nextY > stageHeight - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil && !superDashInvincible) {
         status = "failed";
         reason = "飞出边界";
       }
@@ -1132,7 +1172,7 @@ export function FlappyPrototype({
         </div>
       ) : null}
       <div
-        className={`prototype-stage flappy-stage ${screenShakeClassName} ${gravityFlipFeedbackActive ? "gravity-flip-feedback" : ""} ${activeViewReverseDirection ? "reverse" : ""} ${activeViewReversedGravity ? "endless-gravity-anomaly" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage flappy-stage ${screenShakeClassName} ${gravityFlipTransitionActive ? "gravity-flip-preparing" : ""} ${activeViewReverseDirection ? "reverse" : ""} ${activeViewReversedGravity ? "endless-gravity-anomaly" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Flappy Bird 型小游戏"
@@ -1167,7 +1207,7 @@ export function FlappyPrototype({
             })}
           </div>
           <div
-            className={`flappy-start-platform ${view.started ? "started" : ""}`}
+            className={`flappy-start-platform ${view.started || gravityFlipAwaitingJump ? "started" : ""}`}
             style={{ transform: transformPoint3d(activeViewPlayerX - 50, startPlatformY) }}
           />
           {view.visibleGates.map((gate) => {
@@ -1223,10 +1263,7 @@ export function FlappyPrototype({
                     }}
                     style={markerStyle}
                   >
-                    <span className="flappy-anomaly-sine-line line-a" />
-                    <span className="flappy-anomaly-sine-line line-b" />
-                    <span className="flappy-anomaly-sine-line line-c" />
-                    <span className="flappy-anomaly-sine-line line-d" />
+                    <span className="flappy-anomaly-sine-line" />
                   </div>
                 ) : null}
                 {gate.collectible && !gate.collected ? (

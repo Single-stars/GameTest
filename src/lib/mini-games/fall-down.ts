@@ -25,10 +25,10 @@ export function resolveFallDownCameraBounds({
   topFailLine?: number;
 }) {
   const screenY = playerWorldY - cameraY;
-  if (screenY < (topFailLine ?? -squareSize)) {
+  if (screenY <= (topFailLine ?? -squareSize)) {
     return { status: "failed" as const, reason: "too-slow" };
   }
-  if (bottomFailLine !== undefined && screenY > bottomFailLine) {
+  if (bottomFailLine !== undefined && screenY >= bottomFailLine) {
     return { status: "failed" as const, reason: "too-deep" };
   }
   return { status: "playing" as const, reason: "" };

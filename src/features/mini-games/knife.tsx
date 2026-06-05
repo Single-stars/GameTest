@@ -59,6 +59,9 @@ const ENDLESS_KNIFE_DANGER_MARGIN_DEGREES = 4;
 const KNIFE_FLIGHT_MS = 95;
 const KNIFE_FEEDBACK_MS = 420;
 const KNIFE_FINISH_DELAY_MS = 650;
+const KNIFE_ENDLESS_WHEEL_ADVANCE_DELAY_MS = KNIFE_FINISH_DELAY_MS;
+const KNIFE_ENDLESS_WHEEL_SLIDE_MS = 420;
+const KNIFE_FOCUS_TIME_SCALE = 0.25;
 const KNIFE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 type KnifeFeedbackTone = "idle" | "good" | "bad";
 type KnifeForbiddenZone = {
@@ -97,6 +100,17 @@ type KnifeFrame = {
 type KnifeViewFrame = KnifeFrame & {
   launcherVisible: boolean;
 };
+
+type PendingEndlessKnifeWheel = {
+  forbiddenZones: KnifeForbiddenZone[];
+  runtime: KnifeFrame;
+  view: KnifeViewFrame;
+  wheelIndex: number;
+};
+
+type EndlessKnifeWheelTransition =
+  | { phase: "idle"; pending: null }
+  | { phase: "waiting" | "sliding"; pending: PendingEndlessKnifeWheel };
 
 export type KnifeRuntimeState = {
   angle?: number;
@@ -449,6 +463,8 @@ export function KnifeHitPrototype({
   const launcherReadyTimeoutRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
   const finishDelayTimeoutRef = useRef<number | null>(null);
+  const endlessWheelAdvanceDelayTimeoutRef = useRef<number | null>(null);
+  const endlessWheelSlideTimeoutRef = useRef<number | null>(null);
   const overtimeBannerTimeoutRef = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement | null>(null);
   const initialRuntime = useMemo(() => createKnifeRuntime(initialAngles, hasCountdown, countdown), [countdown, hasCountdown, initialAngles]);
@@ -464,7 +480,9 @@ export function KnifeHitPrototype({
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
   const [overtimeBannerVisible, setOvertimeBannerVisible] = useState(false);
+  const [endlessWheelTransition, setEndlessWheelTransition] = useState<EndlessKnifeWheelTransition>({ phase: "idle", pending: null });
   const [view, setView] = useState<KnifeViewFrame>(() => makeKnifeView(initialRuntime, true));
+  const endlessWheelTransitionActiveRef = useRef(false);
 
   const syncKnifeView = useCallback(() => {
     setView(makeKnifeView(runtimeRef.current, launcherVisibleRef.current));
@@ -517,7 +535,10 @@ export function KnifeHitPrototype({
     return () => {
       if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
       if (finishDelayTimeoutRef.current !== null) window.clearTimeout(finishDelayTimeoutRef.current);
+      if (endlessWheelAdvanceDelayTimeoutRef.current !== null) window.clearTimeout(endlessWheelAdvanceDelayTimeoutRef.current);
+      if (endlessWheelSlideTimeoutRef.current !== null) window.clearTimeout(endlessWheelSlideTimeoutRef.current);
       if (overtimeBannerTimeoutRef.current !== null) window.clearTimeout(overtimeBannerTimeoutRef.current);
+      endlessWheelTransitionActiveRef.current = false;
     };
   }, []);
 
@@ -562,6 +583,7 @@ export function KnifeHitPrototype({
   );
 
   const advanceEndlessKnifeWheel = useCallback(() => {
+    if (endlessWheelTransitionActiveRef.current) return;
     const nextWheelIndex = endlessWheelIndex + 1;
     const nextEffectiveWheelIndex = getEndlessKnifeEffectiveWheelIndex({
       debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
@@ -573,14 +595,40 @@ export function KnifeHitPrototype({
     const nextCountdown = numberParam(nextLevel.params, "shotCountdown", 0);
     const nextHasCountdown = typeof nextLevel.params.shotCountdown === "number";
     const nextRuntime = createKnifeRuntime(nextInitialAngles, nextHasCountdown, nextCountdown);
-    setEndlessWheelIndex(nextWheelIndex);
-    runtimeRef.current = nextRuntime;
-    launcherVisibleRef.current = true;
-    completedRef.current = false;
-    setFeedbackTone("idle");
-    setView(makeKnifeView(nextRuntime, true));
+    const pending: PendingEndlessKnifeWheel = {
+      forbiddenZones: nextForbiddenArcs.map((zone, index) => ({ id: index, localStart: zone.start, localEnd: zone.end })),
+      runtime: nextRuntime,
+      view: makeKnifeView(nextRuntime, true),
+      wheelIndex: nextWheelIndex,
+    };
+    const current = runtimeRef.current;
+    endlessWheelTransitionActiveRef.current = true;
+    current.flying = false;
+    current.timer = null;
+    launcherVisibleRef.current = false;
+    setEndlessWheelTransition({ phase: "waiting", pending });
+    syncKnifeView();
     syncKnifeRuntimeState(performance.now(), true);
-  }, [endlessWheelIndex, level, runSeed, syncKnifeRuntimeState]);
+
+    if (endlessWheelAdvanceDelayTimeoutRef.current !== null) window.clearTimeout(endlessWheelAdvanceDelayTimeoutRef.current);
+    if (endlessWheelSlideTimeoutRef.current !== null) window.clearTimeout(endlessWheelSlideTimeoutRef.current);
+    endlessWheelAdvanceDelayTimeoutRef.current = window.setTimeout(() => {
+      endlessWheelAdvanceDelayTimeoutRef.current = null;
+      setEndlessWheelTransition({ phase: "sliding", pending });
+      endlessWheelSlideTimeoutRef.current = window.setTimeout(() => {
+        endlessWheelSlideTimeoutRef.current = null;
+        runtimeRef.current = pending.runtime;
+        setEndlessWheelIndex(pending.wheelIndex);
+        launcherVisibleRef.current = true;
+        completedRef.current = false;
+        endlessWheelTransitionActiveRef.current = false;
+        setFeedbackTone("idle");
+        setView(pending.view);
+        setEndlessWheelTransition({ phase: "idle", pending: null });
+        syncKnifeRuntimeState(performance.now(), true);
+      }, KNIFE_ENDLESS_WHEEL_SLIDE_MS);
+    }, KNIFE_ENDLESS_WHEEL_ADVANCE_DELAY_MS);
+  }, [endlessWheelIndex, level, runSeed, syncKnifeRuntimeState, syncKnifeView]);
 
   const applyRemoteKnifeState = useCallback((nextRemoteState: SelfGameState) => {
     if (!multiplayerRole) return;
@@ -619,6 +667,7 @@ export function KnifeHitPrototype({
   }, [applyRemoteKnifeState, multiplayerRole, remoteState, remoteStateSubscription]);
 
   const resolveShot = useCallback(() => {
+    if (endlessWheelTransitionActiveRef.current) return;
     const current = runtimeRef.current;
     if (current.status !== "playing") return;
     const impactAngle = getLocalHitAngle(knifeGeometry.fireAngle, current.rotation);
@@ -748,7 +797,7 @@ export function KnifeHitPrototype({
     current.insertedAngles.push(outcome.impactAngle);
     endlessRef.current?.addScore(1);
     if (isEndlessRun && proximityDegrees !== null && proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES) {
-      endlessRef.current?.gainEnergy(1, "极限飞刀！");
+      endlessRef.current?.awardSpecialBonus("极限飞刀！");
     }
     current.flying = false;
     current.shotIndex = nextShotIndex;
@@ -795,6 +844,7 @@ export function KnifeHitPrototype({
   }, [advanceEndlessKnifeWheel, continueEndlessKnifeAfterFailure, countdown, forbiddenArcs, hasCountdown, isEndlessRun, knifeFirstOwner, knifeGeometry.fireAngle, mode, multiplayerRole, scheduleLauncherReady, shotCount, showKnifeFeedback, showOvertimeBanner, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const launch = useCallback(() => {
+    if (endlessWheelTransitionActiveRef.current) return;
     const current = runtimeRef.current;
     if (current.status !== "playing" || current.flying) return;
     if (multiplayerRole && !isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner)) return;
@@ -826,15 +876,17 @@ export function KnifeHitPrototype({
         return;
       }
 
+      const knifeFocusTimeScale = endlessRef.current?.getActiveSkill()?.kind === "knife-focus" ? KNIFE_FOCUS_TIME_SCALE : 1;
+      const skillDelta = delta * knifeFocusTimeScale;
       const rotationSpeed = sineRotationEnabled ? getSineAngularVelocity(current.time, phaseDuration, sweepPerPhase) : baseRotationSpeed;
-      const nextTime = current.time + delta;
+      const nextTime = current.time + skillDelta;
       current.time = nextTime;
-      current.rotation = normalizeDegrees(current.rotation + rotationSpeed * delta);
+      current.rotation = normalizeDegrees(current.rotation + rotationSpeed * skillDelta);
       if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
 
       let shouldSync = false;
       if (current.timer !== null && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner))) {
-        current.timer -= delta;
+        current.timer -= skillDelta;
         if (current.timer <= 0) {
           showKnifeFeedback("bad");
           if (multiplayerRole) {
@@ -902,11 +954,11 @@ export function KnifeHitPrototype({
     };
   }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
-  const remaining = view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);
+  const isEndlessWheelTransitioning = endlessWheelTransition.phase !== "idle";
+  const remaining = isEndlessWheelTransitioning ? 0 : view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);
   const localTurn = multiplayerRole ? isKnifeLocalTurn(view, multiplayerRole, knifeFirstOwner) : true;
   const overtimeRoundLabel = formatKnifeOvertimeRoundLabel(view.shotIndex, shotCount);
-  const wheelRotation = `rotate(${view.rotation}deg)`;
-  const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible);
+  const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible) && !isEndlessWheelTransitioning;
   const showOverlay = mode === "prototype";
   const stageStyle = {
     "--knife-flight-distance": `${knifeGeometry.flightDistance}px`,
@@ -948,6 +1000,46 @@ export function KnifeHitPrototype({
   }, [level.levelId, mode, multiplayerRole, onComplete, shotCount, view.status]);
 
   const showKnifeMiniScore = !isEndlessRun;
+  const currentWheelPanelClass = endlessWheelTransition.phase === "sliding" ? "exiting" : "current";
+  const renderKnifeWheelPanel = (
+    wheelView: KnifeViewFrame,
+    wheelForbiddenZones: KnifeForbiddenZone[],
+    panelClassName: string,
+    attachWheelRef = false,
+  ) => {
+    const panelFeedbackTone = panelClassName === "entering" ? "idle" : feedbackTone;
+    const avatarView = resolveKnifeWheelAvatarView(wheelView, panelFeedbackTone);
+
+    return (
+      <div className={`knife-wheel-panel ${panelClassName}`} aria-hidden={panelClassName === "current" ? undefined : true}>
+        <div className="knife-wheel" ref={attachWheelRef ? wheelRef : undefined} style={{ transform: `rotate(${wheelView.rotation}deg)` }}>
+          <svg className="knife-wheel-svg" viewBox={`0 0 ${KNIFE_WHEEL_SIZE} ${KNIFE_WHEEL_SIZE}`} aria-hidden="true">
+            <circle cx={KNIFE_WHEEL_SIZE / 2} cy={KNIFE_WHEEL_SIZE / 2} r={KNIFE_WHEEL_SIZE / 2 - 3} />
+            {wheelForbiddenZones.map((zone) => (
+              <path d={knifeSectorPath(zone)} key={zone.id} />
+            ))}
+          </svg>
+          <div className="knife-wheel-avatar" aria-hidden="true">
+            <PlayerAvatar
+              {...avatarView}
+              effect={shielded ? "shield" : avatarView.effect}
+              size={42}
+              visualScale={0.88}
+            />
+          </div>
+          {wheelView.initialAngles.map((angle) => (
+            <span className="knife-arrow knife-stuck initial" key={`initial-${angle}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
+          ))}
+          {wheelView.insertedAngles.map((angle, index) => (
+            <span className="knife-arrow knife-stuck" key={`${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
+          ))}
+          {wheelView.failedAngles.map((angle, index) => (
+            <span className="knife-arrow knife-stuck failed" key={`failed-${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="prototype-game-wrap">
@@ -960,7 +1052,7 @@ export function KnifeHitPrototype({
         </div>
       ) : null}
       <div
-        className={`prototype-stage knife-stage feedback-${feedbackTone} ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage knife-stage feedback-${feedbackTone} ${view.flying ? "firing" : ""} ${remaining === 1 ? "final-shot-ready" : ""} ${isEndlessWheelTransitioning ? "wheel-transitioning" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="button"
         style={stageStyle}
@@ -980,33 +1072,12 @@ export function KnifeHitPrototype({
         <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
         <div className="knife-wheel-wrap">
-          <div className="knife-wheel" ref={wheelRef} style={{ transform: wheelRotation }}>
-            <svg className="knife-wheel-svg" viewBox={`0 0 ${KNIFE_WHEEL_SIZE} ${KNIFE_WHEEL_SIZE}`} aria-hidden="true">
-              <circle cx={KNIFE_WHEEL_SIZE / 2} cy={KNIFE_WHEEL_SIZE / 2} r={KNIFE_WHEEL_SIZE / 2 - 3} />
-              {forbiddenZones.map((zone) => (
-                <path d={knifeSectorPath(zone)} key={zone.id} />
-              ))}
-            </svg>
-            <div className="knife-wheel-avatar" aria-hidden="true">
-              <PlayerAvatar
-                {...resolveKnifeWheelAvatarView(view, feedbackTone)}
-                effect={shielded ? "shield" : resolveKnifeWheelAvatarView(view, feedbackTone).effect}
-                size={42}
-                visualScale={0.88}
-              />
-            </div>
-            {view.initialAngles.map((angle) => (
-              <span className="knife-arrow knife-stuck initial" key={`initial-${angle}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
-            ))}
-            {view.insertedAngles.map((angle, index) => (
-              <span className="knife-arrow knife-stuck" key={`${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
-            ))}
-            {view.failedAngles.map((angle, index) => (
-              <span className="knife-arrow knife-stuck failed" key={`failed-${angle}-${index}`} style={{ transform: `rotate(${angle}deg) translateX(${KNIFE_INSERT_RADIUS}px)` }} />
-            ))}
-          </div>
+          {renderKnifeWheelPanel(view, forbiddenZones, currentWheelPanelClass, true)}
+          {endlessWheelTransition.phase === "sliding" && endlessWheelTransition.pending
+            ? renderKnifeWheelPanel(endlessWheelTransition.pending.view, endlessWheelTransition.pending.forbiddenZones, "entering")
+            : null}
         </div>
-        {hasCountdown ? <div className="knife-countdown-ghost" aria-hidden="true">{Math.ceil(Math.max(0, view.timer ?? 0))}</div> : null}
+        {hasCountdown && !isEndlessWheelTransitioning ? <div className="knife-countdown-ghost" aria-hidden="true">{Math.ceil(Math.max(0, view.timer ?? 0))}</div> : null}
         {multiplayerRole ? <div className="knife-turn-ghost" aria-hidden="true">{localTurn ? "你的回合" : "对方回合"}</div> : null}
         {overtimeBannerVisible ? <div className="knife-overtime-banner" role="status">{overtimeRoundLabel}</div> : null}
         {showLauncher ? <div className={`knife-arrow knife-launcher ${view.flying ? "flying" : ""}`} /> : null}

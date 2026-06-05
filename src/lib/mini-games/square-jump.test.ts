@@ -28,6 +28,7 @@ import {
   sampleSquareJumpBaseRiseIn,
   type MiniGameId,
 } from "./index.ts";
+import { getEndlessMiniGameStageConfig } from "../endless-mode.ts";
 import {
   SQUARE_JUMP_LEVEL_IDS,
   FALL_DOWN_LEVEL_IDS,
@@ -450,6 +451,58 @@ test("square jump active gravity persists by default but can expire after a jump
   assert.deepEqual(lightAfterOne, { gravity: "light", remainingJumps: 2 });
   assert.deepEqual(lightAfterTwo, { gravity: "light", remainingJumps: 1 });
   assert.deepEqual(lightAfterThree, { gravity: "normal", remainingJumps: null });
+});
+
+test("square jump gravity platforms are staggered in advanced and rare in endless", () => {
+  const gravityLevels = getMiniGameLevels("square-jump" as MiniGameId).filter((level) => level.params.gravityChallenge === true);
+
+  for (const level of gravityLevels) {
+    const platforms = generateSquareJumpPlatformSequence(level, `gravity-stagger-${level.levelId}`, {
+      count: Number(level.params.jumpsRequired) + 1,
+      platformY: 435,
+      startX: 120,
+    });
+
+    for (let index = 2; index < platforms.length; index += 1) {
+      assert.notEqual(
+        platforms[index].gravity,
+        platforms[index - 1].gravity,
+        `${level.levelId} should not place consecutive ${platforms[index].gravity} gravity platforms`,
+      );
+    }
+  }
+
+  const base = getMiniGameLevel("square-jump" as MiniGameId, "square-jump-base");
+  const endlessConfig = getEndlessMiniGameStageConfig({ miniGameId: "square-jump", progress: 90 });
+  const endlessLevel = {
+    ...base,
+    levelId: "square-jump-endless-density-test",
+    params: {
+      ...base.params,
+      ...endlessConfig.params,
+    },
+  };
+  const maxGravityPlatforms = Number(endlessLevel.params.gravityPlatformMaxCount);
+  const minGravitySpacing = Number(endlessLevel.params.gravityPlatformMinSpacing);
+  const platforms = generateSquareJumpPlatformSequence(endlessLevel, "endless-gravity-density", {
+    count: Number(endlessLevel.params.jumpsRequired) + 1,
+    platformY: 435,
+    startX: 120,
+  });
+  const gravityPlatformIndexes = platforms
+    .map((platform, index) => ({ gravity: platform.gravity, index }))
+    .filter((platform) => platform.index > 0 && platform.gravity !== "normal");
+
+  assert.equal(Number.isFinite(maxGravityPlatforms), true);
+  assert.equal(Number.isFinite(minGravitySpacing), true);
+  assert.equal(gravityPlatformIndexes.length <= maxGravityPlatforms, true);
+  for (let index = 1; index < gravityPlatformIndexes.length; index += 1) {
+    assert.equal(
+      gravityPlatformIndexes[index].index - gravityPlatformIndexes[index - 1].index >= minGravitySpacing,
+      true,
+      "endless gravity platforms should have breathing room",
+    );
+  }
 });
 
 test("square jump base precomputes landing by x instead of using physics collision", () => {
@@ -900,7 +953,9 @@ test("square jump runtime supports double jump hover charging and 90 degree turn
   assert.match(componentSource, /doubleJumpUsed/);
   assert.match(componentSource, /getSquareJumpChargeAt\(\{[\s\S]*cycling:\s*current\.state === "airCharging" && cyclingCharge/);
   assert.doesNotMatch(componentSource, /showLandingPreview/);
-  assert.match(componentSource, /const canAirCharge = doubleJumpEnabled && \(current\.state === "jumping" \|\| current\.state === "falling"\)/);
+  assert.match(componentSource, /const squareJumpDoubleJumpEnabled = useCallback\(/);
+  assert.match(componentSource, /doubleJumpEnabled \|\| endlessRef\.current\?\.getActiveSkill\(\)\?\.kind === "double-jump"/);
+  assert.match(componentSource, /const canAirCharge = squareJumpDoubleJumpEnabled\(\) && \(current\.state === "jumping" \|\| current\.state === "falling"\)/);
   assert.match(componentSource, /current\.playerTurns \+= 1/);
   assert.match(componentSource, /rotationTurns=\{view\.playerTurns\}/);
   assert.match(componentSource, /sampleSquareJumpBaseFlyAway/);

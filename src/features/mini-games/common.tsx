@@ -46,10 +46,39 @@ const MINI_GAME_FRAME_BUDGET_MS = 1000 / 60;
 
 export type PrototypeStatus = "playing" | "passed" | "failed";
 export type MiniGameRunMode = "prototype" | "base" | "advanced";
+export type EndlessSkillKind =
+  | "power-release"
+  | "endless-fall"
+  | "double-jump"
+  | "super-dash"
+  | "full-fire"
+  | "big-luck"
+  | "green-light"
+  | "knife-focus";
+export type EndlessSpecialBonusLabel =
+  | "顶级预判！"
+  | "极限命中！"
+  | "无视野预判！"
+  | "极速下降！"
+  | "精准落地！"
+  | "道具收集！"
+  | "快速反应！"
+  | "极限飞刀！";
+export type EndlessActiveSkill = {
+  breakCharges?: number;
+  charges?: number;
+  invincibleCharges?: number;
+  kind: EndlessSkillKind;
+  startedAt: number;
+  until?: number;
+};
 export type EndlessMiniGameRuntime = {
   addScore: (amount?: number) => void;
+  awardSpecialBonus: (label: EndlessSpecialBonusLabel) => void;
+  canUseSkill: boolean;
   debugDifficulty: number;
   energyPercent: number;
+  getActiveSkill: () => EndlessActiveSkill | null;
   gainEnergy: (amount?: number, feedbackText?: string) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;
   reportDifficulty: (difficulty: number) => void;
@@ -57,6 +86,11 @@ export type EndlessMiniGameRuntime = {
   score: number;
   setDistanceScore: (distanceScore: number, gainEnergyFromDistance?: boolean) => void;
   shieldCharges: number;
+  showFeedback: (text: string) => void;
+  skillActive: boolean;
+  skillEnding: boolean;
+  updateActiveSkill: (updater: (skill: EndlessActiveSkill) => EndlessActiveSkill | null) => EndlessActiveSkill | null;
+  useSkill: () => boolean;
 };
 export type MiniGameCompletion = {
   gameId: MiniGameId;

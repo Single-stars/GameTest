@@ -190,6 +190,12 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(rewardCss, /\.reward-endless-card/);
   assert.match(rewardCss, /\.reward-endless-card\s*{[^}]*background:\s*transparent;/);
   assert.match(rewardCss, /\.reward-endless-switch/);
+  assert.match(rewardCss, /@keyframes reward-endless-unlock-drop/);
+  assert.match(rewardCss, /@keyframes reward-endless-title-reveal/);
+  assert.match(rewardCss, /\.reward-endless-unlock-label\s*{[\s\S]*animation:\s*reward-endless-unlock-drop/);
+  assert.match(rewardCss, /\.reward-endless-card \.reward-rank-new\s*{[\s\S]*animation:\s*reward-endless-title-reveal/);
+  assert.match(rewardCss, /\.reward-endless-card\.is-settled \.reward-endless-unlock-label,\s*\.reward-endless-card\.is-settled \.reward-rank-new\s*{[\s\S]*animation-fill-mode:\s*both;/);
+  assert.doesNotMatch(rewardCss, /\.reward-endless-card\.is-settled \.reward-endless-unlock-label,\s*\.reward-endless-card\.is-settled \.reward-rank-new\s*{[\s\S]*animation:\s*none;/);
   assert.match(rewardCss, /\.reward-endless-subtitle/);
   assert.doesNotMatch(rewardCss, /\.reward-endless-symbol/);
   assert.doesNotMatch(rewardCss, /\.reward-endless-copy/);
@@ -211,6 +217,14 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
   assert.match(luckSource, /<span>幸运币<\/span>/);
   assert.match(luckSource, /消耗 1 枚幸运币/);
   assert.match(resultSource, /幸运币/);
+});
+
+test("advanced knife clears skip the shared mini-game completion delay", () => {
+  const miniGameRoundsSource = readSource("../features/game-flow/mini-game-rounds.tsx");
+
+  assert.match(miniGameRoundsSource, /const completionDelayMs = outcome\.gameId === "knife" && passed \? 0 : MINI_GAME_COMPLETION_DELAY_MS;/);
+  assert.match(miniGameRoundsSource, /}, completionDelayMs\);/);
+  assert.doesNotMatch(miniGameRoundsSource, /}, MINI_GAME_COMPLETION_DELAY_MS\);/);
 });
 
 test("donation flow uses feed choices with personal collection-code guidance", () => {

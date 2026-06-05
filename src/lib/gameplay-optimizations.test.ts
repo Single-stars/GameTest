@@ -815,7 +815,7 @@ test("flappy base respawns onto the middle safe platform and waits for the next 
   assert.match(flappySource, /current\.started = false;/);
   assert.match(flappySource, /current\.playerY = initialPlayerY;/);
   assert.match(flappySource, /current\.playerVy = 0;/);
-  assert.match(flappySource, /className=\{`flappy-start-platform \$\{view\.started \? "started" : ""\}`\}/);
+  assert.match(flappySource, /className=\{`flappy-start-platform \$\{view\.started \|\| gravityFlipAwaitingJump \? "started" : ""\}`\}/);
 });
 
 test("flappy gate painting avoids repeated linear gate lookups in the animation frame", () => {
@@ -849,7 +849,9 @@ test("knife has a wheel-mounted avatar, stage feedback, and advanced failure imp
   assert.match(knifeSource, /current\.failedAngles\.push\(outcome\.impactAngle\);[\s\S]*?current\.failedAngle = outcome\.impactAngle;[\s\S]*?current\.status = "failed";/);
   assert.match(knifeSource, /className=\{`prototype-stage knife-stage[\s\S]*feedback-\$\{feedbackTone\}/);
   assert.match(knifeSource, /className="knife-wheel-avatar"/);
-  assert.match(knifeSource, /<PlayerAvatar[\s\S]*\{\.\.\.resolveKnifeWheelAvatarView\(view, feedbackTone\)\}/);
+  assert.match(knifeSource, /const panelFeedbackTone = panelClassName === "entering" \? "idle" : feedbackTone;/);
+  assert.match(knifeSource, /const avatarView = resolveKnifeWheelAvatarView\(wheelView, panelFeedbackTone\);/);
+  assert.match(knifeSource, /<PlayerAvatar[\s\S]*\{\.\.\.avatarView\}/);
   assert.match(knifeSource, /size=\{42\}/);
   assert.doesNotMatch(knifeSource, /className="knife-launcher-avatar"/);
   assert.doesNotMatch(knifeSource, /resolveKnifeLauncherAvatarState/);

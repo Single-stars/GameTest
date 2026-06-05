@@ -717,6 +717,8 @@ export function AdvancedAimRound({
 
       let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
       const endlessRuntime = endlessRef.current;
+      const activeEndlessSkill = endlessRuntime?.getActiveSkill();
+      const shotPenaltyBlocked = activeEndlessSkill?.kind === "full-fire";
       const spawnConfig = endlessRuntime ? getEndlessAimSpawnConfig(config, endlessRuntime.score, endlessRuntime.debugDifficulty) : config;
       const activeSpawnMode = getAdvancedAimMode(spawnConfig);
       const activeSpawnIntervalMs = getParamNumber(spawnConfig, "spawnIntervalMs", spawnIntervalMs);
@@ -766,7 +768,7 @@ export function AdvancedAimRound({
         if (endlessRuntime) {
           nextTargets = nextTargets.map((entity) => (entity.id === flyOutTarget.id ? { ...entity, active: false } : entity));
           showAimFeedback("bad");
-          if (!endlessRuntime.loseLife("fly_out")) {
+          if (!shotPenaltyBlocked && !endlessRuntime.loseLife("fly_out")) {
             finishedRef.current = true;
             return;
           }
@@ -835,7 +837,7 @@ export function AdvancedAimRound({
               missCountRef.current += 1;
               if (endlessRuntime) {
                 showAimFeedback("bad");
-                if (!endlessRuntime.loseLife("miss")) {
+                if (!shotPenaltyBlocked && !endlessRuntime.loseLife("miss")) {
                   finishedRef.current = true;
                 }
                 syncAimRuntimeState(frameNow, "playing", true);
@@ -879,7 +881,7 @@ export function AdvancedAimRound({
               );
             }
             if (endlessRuntime) {
-              if (!endlessRuntime.loseLife("decoy")) {
+              if (!shotPenaltyBlocked && !endlessRuntime.loseLife("decoy")) {
                 finishedRef.current = true;
               }
               syncAimRuntimeState(frameNow, "playing", true);
@@ -902,7 +904,7 @@ export function AdvancedAimRound({
               && trajectoryNormalizedError >= ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR
               && trajectoryNormalizedError <= 1
             ) {
-              endlessRuntime.gainEnergy(1, "极限命中！");
+              endlessRuntime.awardSpecialBonus("极限命中！");
             }
             recordAimTrial({
               shownAt: hitTarget.spawnedAt,

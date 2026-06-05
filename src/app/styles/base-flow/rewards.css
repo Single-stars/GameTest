@@ -200,8 +200,8 @@ button.reward-overlay-card {
 
 .reward-endless-unlock-label {
   opacity: 0;
-  transform: translateY(8px);
-  animation: reward-overlay-fade-in 420ms 120ms ease-out both;
+  transform: translateY(-42px) scale(1.08);
+  animation: reward-endless-unlock-drop 560ms 80ms cubic-bezier(0.16, 1.08, 0.28, 1) both;
 }
 
 .reward-endless-card .reward-rank-old {
@@ -210,8 +210,8 @@ button.reward-overlay-card {
 
 .reward-endless-card .reward-rank-new {
   opacity: 0;
-  transform: translateY(10px);
-  animation: reward-overlay-fade-in 520ms 220ms ease-out both;
+  transform: translateY(14px) scale(0.98);
+  animation: reward-endless-title-reveal 980ms 560ms ease-out both;
 }
 
 .reward-endless-subtitle {
@@ -227,7 +227,39 @@ button.reward-overlay-card {
 .reward-endless-card.is-settled .reward-rank-new {
   opacity: 1;
   transform: translateY(0);
-  animation: none;
+  animation-fill-mode: both;
+}
+
+@keyframes reward-endless-unlock-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-58px) scale(1.1);
+  }
+
+  64% {
+    opacity: 1;
+    transform: translateY(6px) scale(1.02);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes reward-endless-title-reveal {
+  0%,
+  34% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+    filter: blur(2px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
 }
 
 @keyframes reward-overlay-fade-in {
