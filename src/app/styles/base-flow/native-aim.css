@@ -45,6 +45,56 @@
   will-change: transform;
 }
 
+.advanced-aim-incoming-warning {
+  position: absolute;
+  z-index: 5;
+  left: var(--aim-warning-x, 50%);
+  top: var(--aim-warning-y, 50%);
+  width: 34px;
+  height: 34px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 8px 12px rgba(230, 83, 73, 0.3));
+}
+
+.advanced-aim-incoming-warning.side-left {
+  left: 18px;
+}
+
+.advanced-aim-incoming-warning.side-right {
+  left: calc(100% - 18px);
+}
+
+.advanced-aim-incoming-warning.side-top {
+  top: 18px;
+}
+
+.advanced-aim-incoming-warning.side-bottom {
+  top: calc(100% - 18px);
+}
+
+.advanced-aim-incoming-warning::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(230, 83, 73, 0.9);
+  clip-path: polygon(50% 100%, 8% 18%, 50% 34%, 92% 18%);
+  animation: advanced-aim-incoming-warning 620ms ease-in-out infinite;
+}
+
+.advanced-aim-incoming-warning.side-left::after {
+  transform: rotate(90deg);
+}
+
+.advanced-aim-incoming-warning.side-right::after {
+  transform: rotate(-90deg);
+}
+
+.advanced-aim-incoming-warning.side-top::after {
+  transform: rotate(180deg);
+}
+
 .advanced-aim::after {
   content: "";
   position: absolute;
@@ -167,5 +217,16 @@
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes advanced-aim-incoming-warning {
+  0%,
+  100% {
+    opacity: 0.56;
+  }
+
+  50% {
+    opacity: 1;
   }
 }

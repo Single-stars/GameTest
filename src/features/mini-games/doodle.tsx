@@ -12,6 +12,7 @@ import {
 import {
   PlayerAvatar,
   type PlayerAvatarDirection,
+  type PlayerAvatarEffect,
   type PlayerAvatarSkin,
   type PlayerAvatarView,
 } from "@/features/player-avatar/player-avatar";
@@ -80,6 +81,7 @@ type DoodleFrame = {
   platforms: DoodlePlatform[];
   hazards: DoodleHazard[];
   riskHit: number;
+  highEnergyStreak: number;
   playerTurns: number;
   playerDirection: PlayerAvatarDirection;
   jumpTurnAvailable: boolean;
@@ -273,6 +275,7 @@ function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>, stageWid
     platforms: world.platforms.map((platform) => ({ ...platform, used: false })),
     hazards: world.hazards,
     riskHit: 0,
+    highEnergyStreak: 0,
     playerTurns: 0,
     playerDirection: "none",
     jumpTurnAvailable: false,
@@ -309,6 +312,7 @@ function syncDoodleRespawnPlayerWithPlatform(frame: DoodleFrame, time: number, s
 
 function recoverEndlessDoodleFailure(current: DoodleFrame, reason: string, time: number, stageWidth: number) {
   current.failures += 1;
+  current.highEnergyStreak = 0;
   current.status = "playing";
   current.reason = reason;
   current.started = true;
@@ -528,6 +532,7 @@ export function DoodleJumpPrototype({
   coOpRole = null,
   coOpSkinId = null,
   coOpCustomAvatar = null,
+  avatarEffect = "none",
   authoritativeStateSubscription = null,
   onBackToSelect,
   onBaseReviveUsed,
@@ -535,6 +540,7 @@ export function DoodleJumpPrototype({
   onRestart,
 }: {
   autoStart?: boolean;
+  avatarEffect?: PlayerAvatarEffect;
   baseRevives?: number;
   endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
@@ -936,6 +942,7 @@ export function DoodleJumpPrototype({
       let nextVy = current.playerVy - DOODLE_GRAVITY * delta;
       let nextY = current.playerY + nextVy * delta;
       let riskHit = current.riskHit;
+      let highEnergyStreak = current.highEnergyStreak;
       let playerTurns = current.playerTurns;
       let jumpTurnAvailable = current.jumpTurnAvailable;
       let eventChanged = false;
@@ -961,12 +968,17 @@ export function DoodleJumpPrototype({
           if (crossed && insideX) {
             const landedBelowScreenPlatform = isEndlessRun && platform.y < current.cameraY && platform.y >= current.cameraY - 80;
             const powerReleaseActive = endlessRef.current?.getActiveSkill()?.kind === "power-release";
+            const highEnergyJump = platform.risk || powerReleaseActive;
             nextY = platform.y + PLAYER_SIZE / 2;
-            nextVy = getDoodleBounceVelocity({ risk: platform.risk || powerReleaseActive, riskJumpMultiplier });
+            nextVy = getDoodleBounceVelocity({ risk: highEnergyJump, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
             if (!platform.risk && !platform.finish) current.lastSafePlatformId = platform.id;
             if (platform.risk) riskHit += 1;
+            highEnergyStreak = highEnergyJump ? highEnergyStreak + 1 : 0;
+            if (isEndlessRun && highEnergyStreak >= 3) {
+              endlessRef.current?.awardSpecialBonus({ label: `彻底疯狂${highEnergyStreak}！`, amount: 1 });
+            }
             if (landedBelowScreenPlatform) endlessRef.current?.awardSpecialBonus("无视野预判！");
             jumpTurnAvailable = true;
             eventChanged = true;
@@ -1038,6 +1050,7 @@ export function DoodleJumpPrototype({
       current.playerVy = nextVy;
       current.cameraY = cameraY;
       current.riskHit = riskHit;
+      current.highEnergyStreak = highEnergyStreak;
       current.playerTurns = playerTurns;
       current.jumpTurnAvailable = jumpTurnAvailable;
       if (isEndlessRun) {
@@ -1235,7 +1248,7 @@ export function DoodleJumpPrototype({
             <PlayerAvatar
               {...resolveDoodlePlayerAvatarView(view)}
               direction={view.playerDirection}
-              effect={shielded ? "shield" : resolveDoodlePlayerAvatarView(view).effect}
+              effect={shielded ? "shield" : avatarEffect !== "none" ? avatarEffect : resolveDoodlePlayerAvatarView(view).effect}
               gravity="normal"
               rotationTurns={view.playerTurns}
               customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}

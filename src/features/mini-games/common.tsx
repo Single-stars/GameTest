@@ -64,6 +64,10 @@ export type EndlessSpecialBonusLabel =
   | "道具收集！"
   | "快速反应！"
   | "极限飞刀！";
+export type EndlessSpecialBonus = {
+  amount?: number;
+  label: string;
+};
 export type EndlessActiveSkill = {
   breakCharges?: number;
   charges?: number;
@@ -74,8 +78,10 @@ export type EndlessActiveSkill = {
 };
 export type EndlessMiniGameRuntime = {
   addScore: (amount?: number) => void;
-  awardSpecialBonus: (label: EndlessSpecialBonusLabel) => void;
+  awardSpecialBonus: (bonus: EndlessSpecialBonusLabel | EndlessSpecialBonus) => void;
+  canHeal: boolean;
   canUseSkill: boolean;
+  debugEnergyLocked: boolean;
   debugDifficulty: number;
   energyPercent: number;
   getActiveSkill: () => EndlessActiveSkill | null;
@@ -89,7 +95,9 @@ export type EndlessMiniGameRuntime = {
   showFeedback: (text: string) => void;
   skillActive: boolean;
   skillEnding: boolean;
+  toggleDebugEnergyLock: () => void;
   updateActiveSkill: (updater: (skill: EndlessActiveSkill) => EndlessActiveSkill | null) => EndlessActiveSkill | null;
+  useHeal: () => boolean;
   useSkill: () => boolean;
 };
 export type MiniGameCompletion = {

@@ -951,10 +951,12 @@ test("square jump runtime supports double jump hover charging and 90 degree turn
   assert.match(componentSource, /<SquareJumpPrototype[\s\S]*runSeed=\{runSeed\}/);
   assert.match(componentSource, /"airCharging"/);
   assert.match(componentSource, /doubleJumpUsed/);
-  assert.match(componentSource, /getSquareJumpChargeAt\(\{[\s\S]*cycling:\s*current\.state === "airCharging" && cyclingCharge/);
+  assert.match(componentSource, /const squareJumpDoubleJumpUsesCyclingCharge = useCallback\(/);
+  assert.match(componentSource, /getSquareJumpChargeAt\(\{[\s\S]*cycling:\s*current\.state === "airCharging" && squareJumpDoubleJumpUsesCyclingCharge\(\)/);
   assert.doesNotMatch(componentSource, /showLandingPreview/);
   assert.match(componentSource, /const squareJumpDoubleJumpEnabled = useCallback\(/);
   assert.match(componentSource, /doubleJumpEnabled \|\| endlessRef\.current\?\.getActiveSkill\(\)\?\.kind === "double-jump"/);
+  assert.match(componentSource, /cyclingCharge \|\| endlessRef\.current\?\.getActiveSkill\(\)\?\.kind === "double-jump"/);
   assert.match(componentSource, /const canAirCharge = squareJumpDoubleJumpEnabled\(\) && \(current\.state === "jumping" \|\| current\.state === "falling"\)/);
   assert.match(componentSource, /current\.playerTurns \+= 1/);
   assert.match(componentSource, /rotationTurns=\{view\.playerTurns\}/);

@@ -514,6 +514,8 @@ test("advanced aim keeps target and arrow UI styles active", () => {
   assert.match(cssBlock(styles, ".advanced-aim-target"), /box-shadow:/);
   assert.match(cssBlock(styles, ".advanced-aim-target::after"), /background:\s*#ffffff;/);
   assert.match(cssBlock(styles, ".advanced-aim-target.decoy"), /border-style:\s*dashed;/);
+  assert.match(cssBlock(styles, ".advanced-aim-incoming-warning"), /position:\s*absolute;/);
+  assert.match(cssBlock(styles, ".advanced-aim-incoming-warning::after"), /animation:\s*advanced-aim-incoming-warning/);
   assert.match(cssBlock(styles, ".advanced-arrow-shot"), /transform-origin:\s*50% 0;/);
   assert.match(cssBlock(styles, ".advanced-arrow-shot.hit"), /background:\s*var\(--green\);/);
 });

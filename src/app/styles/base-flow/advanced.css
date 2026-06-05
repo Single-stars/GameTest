@@ -1157,6 +1157,17 @@
   animation: endless-bonus-score-roll 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.endless-bonus-score-pop.major {
+  outline: 2px solid rgba(255, 188, 64, 0.75);
+  outline-offset: 1px;
+  padding: 0 8px;
+  background: #ffe86b;
+  color: #5a2d00;
+  font-size: 14px;
+  filter: drop-shadow(0 8px 14px rgba(245, 158, 11, 0.28));
+  animation: endless-bonus-score-major 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @keyframes endless-heart-strip-squish {
   0% {
     transform: translateX(0) scale(1);
@@ -1194,6 +1205,32 @@
   100% {
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
+  }
+}
+
+@keyframes endless-bonus-score-major {
+  0% {
+    opacity: 0;
+    transform: translateY(7px) scale(0.84) rotate(-2deg);
+  }
+
+  14% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.32) rotate(2deg);
+  }
+
+  32% {
+    transform: translateY(0) scale(1.12) rotate(-1deg);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(1.18) rotate(1deg);
   }
 }
 
@@ -1486,51 +1523,103 @@
   animation: endless-skill-edge-pulse 900ms ease-in-out infinite;
 }
 
+.endless-game-host.skill-active::before {
+  content: "";
+  position: absolute;
+  z-index: 21;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 16px, rgba(20, 184, 166, 0.2) 16px 18px, transparent 18px 46px),
+    repeating-linear-gradient(0deg, transparent 0 22px, rgba(47, 128, 237, 0.16) 22px 24px, transparent 24px 58px);
+  opacity: 0.46;
+  mix-blend-mode: screen;
+  animation: endless-skill-speed-lines 520ms linear infinite;
+}
+
 .endless-game-host.skill-ending::after {
   animation: endless-skill-ending-flash 220ms ease-in-out infinite;
 }
 
-.endless-skill-button {
+.endless-action-rail {
   position: fixed;
   z-index: 28;
   right: max(8px, env(safe-area-inset-right));
   top: 50%;
+  display: grid;
+  gap: 8px;
+  transform: translate3d(0, -50%, 0);
+  pointer-events: none;
+}
+
+.endless-skill-button,
+.endless-heal-button,
+.endless-debug-energy-button {
   width: 52px;
-  height: 68px;
+  height: 52px;
   display: grid;
   place-items: center;
-  border: 2px solid rgba(20, 184, 166, 0.46);
-  border-right: 0;
+  border: 0;
   border-radius: 12px 0 0 12px;
-  background: rgba(255, 253, 248, 0.94);
-  color: #0f766e;
+  color: #fffdf8;
   font: inherit;
   font-size: 18px;
   font-weight: 950;
   line-height: 1;
   box-shadow: 0 10px 24px rgba(24, 24, 24, 0.16);
-  transform: translateY(-50%);
   pointer-events: auto;
   touch-action: manipulation;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.2, 0.86, 0.24, 1);
 }
 
-.endless-skill-button:not(:disabled) {
+.endless-action-button.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(calc(100% + 16px), 0, 0);
+}
+
+.endless-skill-button {
+  height: 68px;
   background: #14b8a6;
-  color: #fffdf8;
+  color: #ffffff;
+  pointer-events: auto;
+  font-size: 26px;
 }
 
-.endless-skill-button.active {
+.endless-skill-icon {
+  width: 32px;
+  height: 32px;
+  display: block;
+  background: currentColor;
+  mask: url("/icons/endless-skill-lightning.svg") center / contain no-repeat;
+  -webkit-mask: url("/icons/endless-skill-lightning.svg") center / contain no-repeat;
+}
+
+.endless-heal-button {
+  background: #e84d5b;
+  pointer-events: auto;
+  font-size: 24px;
+}
+
+.endless-debug-energy-button {
   background: #2f80ed;
-  border-color: rgba(47, 128, 237, 0.62);
-  color: #fffdf8;
+}
+
+.endless-debug-energy-button {
+  height: 40px;
+  font-size: 13px;
+}
+
+.endless-debug-energy-button.active,
+.endless-skill-button.active {
+  box-shadow: 0 10px 24px rgba(47, 128, 237, 0.28), inset 0 0 0 2px rgba(255, 253, 248, 0.22);
 }
 
 .endless-skill-button.ending {
   animation: endless-skill-ending-flash 220ms ease-in-out infinite;
-}
-
-.endless-skill-button:disabled {
-  opacity: 0.44;
 }
 
 .endless-energy-popups {
@@ -1593,6 +1682,16 @@
 
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes endless-skill-speed-lines {
+  from {
+    background-position: 0 0, 0 0;
+  }
+
+  to {
+    background-position: 64px 0, 0 72px;
   }
 }
 
@@ -1683,11 +1782,87 @@
   opacity: 0.88;
 }
 
-.advanced-brake-track > .advanced-brake-lane {
-  z-index: 1;
+.advanced-braking.rule-zone-active .advanced-brake-rule-backdrop-text {
+  opacity: 0.94;
+  animation: advanced-brake-rule-text-drift 1400ms ease-in-out infinite alternate;
 }
 
-.advanced-braking.dual-lane-warning .advanced-brake-track {
-  outline: 2px solid rgba(245, 189, 84, 0.72);
-  outline-offset: -4px;
+.advanced-brake-rule-portal {
+  position: absolute;
+  z-index: 4;
+  bottom: clamp(10px, 2.5vw, 18px);
+  width: clamp(42px, 8vw, 58px);
+  aspect-ratio: 1;
+  translate: -50% 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 253, 248, 0.92) 0 12%, transparent 27%),
+    conic-gradient(from 12deg, rgba(122, 34, 34, 0.12), rgba(245, 189, 84, 0.62), rgba(53, 28, 93, 0.32), rgba(122, 34, 34, 0.12));
+  box-shadow:
+    0 0 0 1px rgba(255, 253, 248, 0.78),
+    0 0 24px rgba(122, 34, 34, 0.22);
+  filter: saturate(1.08);
+  animation:
+    advanced-brake-rule-portal-spin 980ms linear infinite,
+    advanced-brake-rule-portal-pulse 720ms ease-in-out infinite alternate;
+}
+
+.advanced-brake-rule-portal::before,
+.advanced-brake-rule-portal::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.advanced-brake-rule-portal::before {
+  border: 3px solid rgba(255, 253, 248, 0.66);
+  border-left-color: rgba(122, 34, 34, 0.26);
+  border-bottom-color: rgba(53, 28, 93, 0.22);
+}
+
+.advanced-brake-rule-portal::after {
+  inset: 15px;
+  background: rgba(53, 28, 93, 0.22);
+  box-shadow: 0 0 18px rgba(245, 189, 84, 0.38);
+}
+
+.advanced-brake-rule-portal[data-target="normal"] {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 253, 248, 0.9) 0 12%, transparent 29%),
+    conic-gradient(from 210deg, rgba(53, 28, 93, 0.12), rgba(122, 34, 34, 0.44), rgba(245, 189, 84, 0.38), rgba(53, 28, 93, 0.12));
+}
+
+@keyframes advanced-brake-rule-portal-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes advanced-brake-rule-portal-pulse {
+  from {
+    scale: 0.94;
+    opacity: 0.72;
+  }
+
+  to {
+    scale: 1.05;
+    opacity: 0.94;
+  }
+}
+
+@keyframes advanced-brake-rule-text-drift {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(3px);
+  }
+}
+
+.advanced-brake-track > .advanced-brake-lane {
+  z-index: 1;
 }

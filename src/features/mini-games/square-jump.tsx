@@ -718,6 +718,10 @@ export function SquareJumpPrototype({
     () => doubleJumpEnabled || endlessRef.current?.getActiveSkill()?.kind === "double-jump",
     [doubleJumpEnabled],
   );
+  const squareJumpDoubleJumpUsesCyclingCharge = useCallback(
+    () => cyclingCharge || endlessRef.current?.getActiveSkill()?.kind === "double-jump",
+    [cyclingCharge],
+  );
 
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
@@ -1135,7 +1139,7 @@ export function SquareJumpPrototype({
         if (current.state === "charging" || current.state === "airCharging") {
           current.chargeElapsedMs += delta * 1000;
           current.charge = getSquareJumpChargeAt({
-            cycling: current.state === "airCharging" && cyclingCharge,
+            cycling: current.state === "airCharging" && squareJumpDoubleJumpUsesCyclingCharge(),
             elapsedMs: current.chargeElapsedMs,
             maxHoldMs: SQUARE_BASE_MAX_HOLD_MS,
           });
@@ -1303,7 +1307,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, cyclingCharge, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, squareJumpDoubleJumpEnabled, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
+  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, squareJumpDoubleJumpEnabled, squareJumpDoubleJumpUsesCyclingCharge, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;

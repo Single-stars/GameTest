@@ -420,8 +420,10 @@ test("advanced braking endless lanes follow the active reused rule config withou
   );
 
   assert.match(brakingSource, /function resolveAdvancedBrakingLaneCount/);
+  assert.match(brakingSource, /function getAdvancedBrakingRuleZoneConfig/);
+  assert.match(brakingSource, /function isAdvancedBrakingRuleZoneActive/);
   assert.match(advancedBrakingSource, /const \[activeLaneCount, setActiveLaneCount\] = useState/);
-  assert.match(advancedBrakingSource, /setActiveLaneCount\(resolveAdvancedBrakingLaneCount\(activeConfig\)\)/);
+  assert.match(advancedBrakingSource, /setActiveLaneCount\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\) \? resolveAdvancedBrakingLaneCount\(ruleZoneConfig\) : resolveAdvancedBrakingLaneCount\(config\)\)/);
   assert.doesNotMatch(advancedBrakingSource, /const lanes = endless \? \(endlessDifficulty >= 0\.48 \? 2 : 1\)/);
   assert.match(advancedBrakingSource, /forceRuleDanger: endlessRuntime \? false : shouldForceAdvancedBrakeRuleDangerEvent/);
   assert.doesNotMatch(advancedBrakingSource, /const activeEventCountTarget = endless \? Number\.MAX_SAFE_INTEGER : eventCountTarget;/);

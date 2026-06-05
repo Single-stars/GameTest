@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -33,6 +34,7 @@ import {
 
 type AdvancedAimMode = "track" | "incoming" | "decoy" | "boss";
 type AdvancedAimRoute = "circle" | "ellipse" | "figure-eight" | "diagonal" | "horizontal" | "incoming";
+type AdvancedAimIncomingSide = "left" | "right" | "top" | "bottom";
 
 type AdvancedAimBounds = {
   minX: number;
@@ -51,7 +53,8 @@ type AdvancedAimMovingEntity = {
   size: number;
   active: boolean;
   spawnedAt: number;
-  entered: boolean;
+  entered: boolean;
+  incomingSide: AdvancedAimIncomingSide | null;
   vx: number;
   vy: number;
   baseX: number;
@@ -63,7 +66,8 @@ type AdvancedAimMovingEntity = {
 };
 
 type AdvancedAimArrowView = AdvancedAimArrow & {
-  angleDeg: number;
+  angleDeg: number;
+  penaltyBlocked: boolean;
   pointerType: PointerKind;
   launchedAt: number;
   status: "flying" | "hit" | "miss" | "blocked";
@@ -194,6 +198,7 @@ function makeAdvancedAimMovingEntity({
 
   if (route === "incoming") {
     const side = Math.floor(aimRand(random, 0, 4));
+    const incomingSide: AdvancedAimIncomingSide = side === 0 ? "left" : side === 1 ? "right" : side === 2 ? "top" : "bottom";
     const start =
       side === 0
         ? { x: -size, y: aimRand(random, bounds.minY, bounds.maxY) }
@@ -229,7 +234,8 @@ function makeAdvancedAimMovingEntity({
       size,
       active: true,
       spawnedAt,
-      entered: false,
+      entered: false,
+      incomingSide,
       vx: (dx / distance) * speed,
       vy: (dy / distance) * speed,
       baseX: start.x,
@@ -255,7 +261,8 @@ function makeAdvancedAimMovingEntity({
     size,
     active: true,
     spawnedAt,
-    entered: true,
+    entered: true,
+    incomingSide: null,
     vx,
     vy,
     baseX,
@@ -310,10 +317,17 @@ function moveAdvancedAimEntity(
     }
   }
 
-  return { ...entity, x, y, vx, vy, entered };
-}
-
-function advancedAimEntityLeftField(entity: AdvancedAimMovingEntity, rect: DOMRect) {
+  return { ...entity, x, y, vx, vy, entered };
+}
+
+function advancedAimIncomingWarningStyle(entity: AdvancedAimMovingEntity): CSSProperties {
+  return {
+    "--aim-warning-x": `${Math.round(entity.x)}px`,
+    "--aim-warning-y": `${Math.round(entity.y)}px`,
+  } as CSSProperties;
+}
+
+function advancedAimEntityLeftField(entity: AdvancedAimMovingEntity, rect: DOMRect) {
   const margin = entity.size / 2 + 8;
   return (
     entity.entered &&
@@ -396,7 +410,7 @@ function paintAdvancedAimArrowElements(arrows: AdvancedAimArrowView[], elements:
 }
 
 function getEndlessAimSpawnConfig(config: AdvancedStageConfig, score: number, debugDifficulty: number): AdvancedStageConfig {
-  const aim = getEndlessAimConfig({ hitCount: Math.max(score, debugDifficulty * 80) });
+  const aim = getEndlessAimConfig({ hitCount: Math.max(score, debugDifficulty * 150) });
   return {
     ...config,
     level: aim.sourceAdvancedLevel,
@@ -837,7 +851,7 @@ export function AdvancedAimRound({
               missCountRef.current += 1;
               if (endlessRuntime) {
                 showAimFeedback("bad");
-                if (!shotPenaltyBlocked && !endlessRuntime.loseLife("miss")) {
+                if (!arrow.penaltyBlocked && !endlessRuntime.loseLife("miss")) {
                   finishedRef.current = true;
                 }
                 syncAimRuntimeState(frameNow, "playing", true);
@@ -881,7 +895,7 @@ export function AdvancedAimRound({
               );
             }
             if (endlessRuntime) {
-              if (!shotPenaltyBlocked && !endlessRuntime.loseLife("decoy")) {
+              if (!arrow.penaltyBlocked && !endlessRuntime.loseLife("decoy")) {
                 finishedRef.current = true;
               }
               syncAimRuntimeState(frameNow, "playing", true);
@@ -1044,6 +1058,7 @@ export function AdvancedAimRound({
     rectRef.current = rect;
     const shotAt = now();
     const pointerType = pointerKind(event.pointerType);
+    const shotPenaltyBlocked = endlessRef.current?.getActiveSkill()?.kind === "full-fire";
     const shotX = clamp(event.clientX - rect.left, 18, rect.width - 18);
     const shotY = clamp(event.clientY - rect.top, 18, rect.height - 18);
     const from = getAdvancedAimShooterPoint(rect);
@@ -1057,7 +1072,8 @@ export function AdvancedAimRound({
     });
     const nextArrow: AdvancedAimArrowView = {
       ...baseArrow,
-      angleDeg: arrowAngleDeg(baseArrow),
+      angleDeg: arrowAngleDeg(baseArrow),
+      penaltyBlocked: shotPenaltyBlocked,
       pointerType,
       launchedAt: shotAt,
       status: "flying",
@@ -1104,8 +1120,18 @@ export function AdvancedAimRound({
       </div>
 
       {targets
-        .filter((target) => target.active)
-        .map((target) => (
+        .filter((target) => target.active && target.route === "incoming" && !target.entered && target.incomingSide)
+        .map((target) => (
+          <span
+            aria-hidden="true"
+            className={`advanced-aim-incoming-warning side-${target.incomingSide}`}
+            key={`${target.id}-warning`}
+            style={advancedAimIncomingWarningStyle(target)}
+          />
+        ))}
+      {targets
+        .filter((target) => target.active)
+        .map((target) => (
           <span
             className="advanced-aim-target"
             key={target.id}

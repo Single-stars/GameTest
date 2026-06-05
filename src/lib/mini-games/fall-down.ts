@@ -10,6 +10,10 @@ export function advanceFallDownCamera({
   return cameraY + speed * delta;
 }
 
+export function getEndlessFallDownFastDropBonus(fastDropDistance: number) {
+  return Math.max(0, Math.floor(Number.isFinite(fastDropDistance) ? fastDropDistance : 0) - 4);
+}
+
 export function resolveFallDownCameraBounds({
   bottomFailLine,
   cameraY,

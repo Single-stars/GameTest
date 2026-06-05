@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
+import { PlayerAvatar, type PlayerAvatarDirection, type PlayerAvatarEffect, type PlayerAvatarView } from "@/features/player-avatar/player-avatar";
 import { resolvePlayerAvatarSkin, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
 import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import { RemoteInterpolator } from "@/features/multiplayer/remote-interpolator";
@@ -42,6 +42,7 @@ import {
   constrainFallDownRecoveryRuns,
   createSeededRandom,
   expireFallDownFragilePlatform,
+  getEndlessFallDownFastDropBonus,
   resolveFallDownCameraBounds,
   restoreFallDownFragilePlatformsForRespawn,
   type MiniGameLevelConfig,
@@ -55,7 +56,7 @@ import {
   MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 const ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5;
-const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 4;
+const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 5;
 const FALL_DOWN_DANGER_ZIGZAG_SIZE = 18;
 const FALL_DOWN_DANGER_GRACE = 6;
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
@@ -387,6 +388,11 @@ function smoothFallDownRespawnCamera(startY: number, endY: number, progress: num
   return startY + (endY - startY) * eased;
 }
 
+function smoothEndlessFallDownCamera(currentY: number, targetY: number, delta: number) {
+  const blend = 1 - Math.exp(-Math.max(0, delta) * 10);
+  return currentY + (targetY - currentY) * blend;
+}
+
 function resolveFallDownLastSafePlatform(current: FallDownRuntime) {
   return current.platforms.find((platform) => platform.id === current.lastSafePlatformId && platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile" && !platform.broken) ?? current.platforms[0];
 }
@@ -653,6 +659,7 @@ export function FallDownPrototype({
   remoteState,
   spectateRemoteState = null,
   runSeed,
+  avatarEffect = "none",
   shielded = false,
   unlimitedRespawn = false,
   coOpInputState = null,
@@ -662,6 +669,7 @@ export function FallDownPrototype({
   coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
 }: {
+  avatarEffect?: PlayerAvatarEffect;
   baseRevives?: number;
   endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
@@ -1192,7 +1200,7 @@ export function FallDownPrototype({
           current.playerY += current.vy * delta;
           if (endlessFallActive && current.time >= current.respawnCameraUntil) {
             const endlessFallCameraY = current.playerY - stageHeight * 0.5;
-            current.cameraY = endlessFallCameraY;
+            current.cameraY = smoothEndlessFallDownCamera(current.cameraY, endlessFallCameraY, delta);
             current.pressureWorldY = current.cameraY - PLAYER_SIZE;
           }
           if (isEndlessRun) {
@@ -1243,7 +1251,10 @@ export function FallDownPrototype({
             current.layersReached = Math.max(current.layersReached, platform.id);
             if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
-            if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) endlessRef.current?.awardSpecialBonus("极速下降！");
+            if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) {
+              const fastDropBonus = getEndlessFallDownFastDropBonus(fastDropDistance);
+              if (fastDropBonus > 0) endlessRef.current?.awardSpecialBonus({ label: `极速下降${fastDropDistance}！`, amount: fastDropBonus });
+            }
             eventChanged = true;
             if (platform.kind === "finish" && !isEndlessRun) {
               current.status = "passed";
@@ -1461,7 +1472,7 @@ export function FallDownPrototype({
           <PlayerAvatar
             {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}
-            effect={shielded ? "shield" : resolveFallDownPlayerAvatarView(view).effect}
+            effect={shielded ? "shield" : avatarEffect !== "none" ? avatarEffect : resolveFallDownPlayerAvatarView(view).effect}
             customImageUrl={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.imageDataUrl : null}
             customOutlineColor={coOpPlayerSkin === "custom" ? coOpCustomAvatar?.outlineColor ?? null : null}
             skin={coOpPlayerSkin}

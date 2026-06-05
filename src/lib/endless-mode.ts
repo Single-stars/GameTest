@@ -5,7 +5,7 @@ import type { RoundId } from "./scoring.ts";
 
 export const ENDLESS_MODE_LEVEL = 0;
 export const ENDLESS_STARTING_REVIVES = 3;
-export const ENDLESS_REACTION_THRESHOLD_MS = 400;
+export const ENDLESS_REACTION_THRESHOLD_MS = 500;
 export const ENDLESS_SUPPORTED_ROUND_IDS = [
   "reaction",
   "aim",
@@ -126,6 +126,10 @@ function chanceAfter(difficulty: number, start: number, max: number) {
   return clamp(((difficulty - start) / Math.max(0.001, 1 - start)) * max, 0, max);
 }
 
+const ENDLESS_AIM_OPENING_REPEAT = 3;
+const ENDLESS_AIM_OPENING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+const ENDLESS_AIM_MIXED_LEVELS = [1, 4, 2, 3, 5, 4, 6, 2, 3, 5, 6, 4] as const;
+
 export function getEndlessAdvancedSourceLevel({ difficulty }: { difficulty: number }) {
   return Math.max(1, Math.min(10, 1 + Math.round(clamp(difficulty, 0, 1) * 9)));
 }
@@ -204,7 +208,7 @@ export function getEndlessRoundDifficultyState({
   roundId: RoundId;
   score: number;
 }) {
-  const maxRamp = roundId === "aim" ? 80 : roundId === "braking" ? 36 * 110 : 90;
+  const maxRamp = roundId === "aim" ? 150 : roundId === "braking" ? 36 * 110 : 90;
   const difficulty = Math.max(
     getEndlessDifficulty({ maxRamp, progress: score }),
     clamp(debugDifficulty, 0, 1),
@@ -226,30 +230,48 @@ export function getEndlessReactionConfig({ score }: { score: number }): EndlessR
 }
 
 export function getEndlessAimConfig({ hitCount }: { hitCount: number }): EndlessAimConfig {
-  const difficulty = getEndlessDifficulty({ progress: hitCount, maxRamp: 80 });
-  const source = getEndlessReusableStageConfig({ difficulty, roundId: "aim" });
+  const safeHitCount = Math.max(0, Math.floor(Number.isFinite(hitCount) ? hitCount : 0));
+  const openingIndex = Math.floor(safeHitCount / ENDLESS_AIM_OPENING_REPEAT);
+  const openingSourceLevel = ENDLESS_AIM_OPENING_LEVELS[openingIndex];
+  const postOpeningHitCount = Math.max(0, safeHitCount - ENDLESS_AIM_OPENING_LEVELS.length * ENDLESS_AIM_OPENING_REPEAT);
+  const difficulty = getEndlessDifficulty({ progress: postOpeningHitCount, maxRamp: 132 });
+  const sourceAdvancedLevel = openingSourceLevel
+    ?? (difficulty >= 1
+      ? 10
+      : ENDLESS_AIM_MIXED_LEVELS[postOpeningHitCount % ENDLESS_AIM_MIXED_LEVELS.length]);
+  const source = {
+    difficulty,
+    sourceAdvancedLevel,
+    sourceConfig: getAdvancedStageConfig("aim", sourceAdvancedLevel),
+  };
   const sourceSize = Number(source.sourceConfig.params.targetSize);
-  const sourceSpeedMultiplier = Number(source.sourceConfig.params.targetSpeedMultiplier);
-  const decoyCount = difficulty < 0.26 ? 0 : difficulty < 0.52 ? 1 : difficulty < 0.78 ? 2 : 3;
-  const aimMode = difficulty < 0.26 ? "track" : difficulty < 0.48 ? "decoy" : difficulty < 0.72 ? "incoming" : "boss";
-  const route = aimMode === "track"
-    ? "circle"
-    : aimMode === "decoy"
-      ? "diagonal"
-      : aimMode === "incoming"
-        ? "incoming"
-        : "mixed";
+  const sourceAimMode = String(source.sourceConfig.params.aimMode);
+  const aimMode: EndlessAimConfig["aimMode"] = sourceAimMode === "incoming" || sourceAimMode === "decoy" || sourceAimMode === "boss"
+    ? sourceAimMode
+    : "track";
+  const sourceRoute = String(source.sourceConfig.params.route);
+  const route: EndlessAimConfig["route"] = aimMode === "boss"
+    ? "mixed"
+    : sourceRoute === "ellipse" || sourceRoute === "figure-eight" || sourceRoute === "diagonal" || sourceRoute === "incoming" || sourceRoute === "mixed"
+      ? sourceRoute
+      : "circle";
+  const sourceSpawnIntervalMs = Number(source.sourceConfig.params.spawnIntervalMs);
+  const sourceDecoyCount = Number(source.sourceConfig.params.decoyCount);
+  const decoyCount = aimMode === "boss"
+    ? 3
+    : Math.min(2, Math.max(0, Number.isFinite(sourceDecoyCount) ? sourceDecoyCount : 0));
+  const incomingWeight = aimMode === "incoming" ? 1 : aimMode === "boss" ? 0.7 : 0;
   return {
     ...source,
     aimMode,
-    decoyChance: chanceAfter(difficulty, 0.32, 0.42),
+    decoyChance: aimMode === "boss" ? 0.28 : decoyCount > 0 ? 0.18 + decoyCount * 0.04 : 0,
     decoyCount,
     failOnFlyOut: aimMode === "incoming" || aimMode === "boss",
-    incomingChance: chanceAfter(difficulty, 0.44, 0.54),
+    incomingChance: Number(Math.min(0.34, incomingWeight * lerp(0.18, 0.34, difficulty)).toFixed(2)),
     route,
-    spawnIntervalMs: Math.round(lerp(980, 460, difficulty)),
-    targetSize: Math.round(lerp(Number.isFinite(sourceSize) ? sourceSize : 58, 34, difficulty)),
-    targetSpeedMultiplier: lerp(Number.isFinite(sourceSpeedMultiplier) ? sourceSpeedMultiplier : 1.1, 2.45, difficulty),
+    spawnIntervalMs: Number.isFinite(sourceSpawnIntervalMs) ? Math.max(760, sourceSpawnIntervalMs) : Math.round(lerp(980, 760, difficulty)),
+    targetSize: Math.round(lerp(Number.isFinite(sourceSize) ? sourceSize : 58, aimMode === "boss" ? 46 : 48, difficulty)),
+    targetSpeedMultiplier: Number(lerp(0.92, aimMode === "boss" ? 1.22 : 1.14, difficulty).toFixed(3)),
   };
 }
 
@@ -326,7 +348,7 @@ export function getEndlessMiniGameStageConfig({
       difficulty,
       sourceAdvancedLevel,
       params: {
-        cyclingChargeOnDoubleJump: false,
+        cyclingChargeOnDoubleJump: true,
         distanceMax: Math.round(lerp(218, 220, difficulty)),
         distanceMin: Math.round(lerp(142, 164, difficulty)),
         doubleJumpEnabled: false,
@@ -350,8 +372,8 @@ export function getEndlessMiniGameStageConfig({
         powerDistanceMax: 220,
         powerDistanceMin: 34,
         reverseMoving: difficulty >= 0.68,
-        secondPowerDistanceMax: 0,
-        secondPowerDistanceMin: 0,
+        secondPowerDistanceMax: 180,
+        secondPowerDistanceMin: 30,
         targetLandingPadding: 9,
       },
     };
@@ -385,13 +407,14 @@ export function getEndlessMiniGameStageConfig({
 
   if (miniGameId === "flappy") {
     const flappy = getEndlessFlappyConfig({ gateIndex: Math.round(difficulty * 90) });
+    const gateCount = Math.round(lerp(8, 18, difficulty));
     return {
       difficulty,
       sourceAdvancedLevel,
       params: {
-        collectibleCount: Math.round(lerp(4, 14, difficulty)),
+        collectibleCount: difficulty >= 1 ? gateCount : Math.round(lerp(4, 14, difficulty)),
         collectibleOffset: Number(lerp(0.14, 0.28, difficulty).toFixed(2)),
-        gateCount: Math.round(lerp(8, 18, difficulty)),
+        gateCount,
         gapSize: flappy.gapSize,
         movingGateRatio: Number(flappy.movingGateChance.toFixed(2)),
         movingGateSpeed: Number(lerp(1.25, 4, difficulty).toFixed(2)),

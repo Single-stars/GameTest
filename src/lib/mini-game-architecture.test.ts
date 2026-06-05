@@ -921,7 +921,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
 
   assert.match(componentSource, /export type PlayerAvatarAction =/);
   assert.match(componentSource, /export type PlayerAvatarExpression =/);
-  assert.match(componentSource, /export type PlayerAvatarEffect = "none" \| "shield" \| "sparkles" \| "question";/);
+  assert.match(componentSource, /export type PlayerAvatarEffect = "none" \| "shield" \| "sparkles" \| "question" \| "wind";/);
   assert.match(componentSource, /export type PlayerAvatarGravity = "normal" \| "light" \| "heavy";/);
   assert.match(skinSource, /export type PlayerAvatarSkin =/);
   assert.match(componentSource, /export type PlayerAvatarView =/);
@@ -934,7 +934,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /PLAYER_AVATAR_FACELESS_SKINS/);
   assert.match(componentSource, /export const PLAYER_AVATAR_ACTIONS = \["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"\]/);
   assert.match(componentSource, /export const PLAYER_AVATAR_EXPRESSIONS = \["neutral", "happy", "sleepy", "scared", "hurt"\]/);
-  assert.match(componentSource, /export const PLAYER_AVATAR_EFFECTS = \["none", "shield", "sparkles", "question"\]/);
+  assert.match(componentSource, /export const PLAYER_AVATAR_EFFECTS = \["none", "shield", "sparkles", "question", "wind"\]/);
   assert.match(componentSource, /skin === "signal"[\s\S]*styles\.signalGlyph[\s\S]*styles\.signalDot/);
   assert.match(componentSource, /skin === "target"[\s\S]*styles\.targetGlyph[\s\S]*styles\.targetRing/);
   assert.match(componentSource, /skin === "blade"[\s\S]*styles\.bladeGlyph[\s\S]*styles\.bladeSlash/);
@@ -1080,6 +1080,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /M18 25 L28 32 L18 39/);
   assert.match(componentSource, /M46 25 L36 32 L46 39/);
   assert.match(componentSource, /<span className=\{styles\.questionMark\} \/>/);
+  assert.match(componentSource, /<span className=\{styles\.wind\} \/>/);
   assert.match(componentSource, /shouldRenderExpression \? <span className=\{styles\.face\}>/);
   assert.match(componentSource, /viewBox="0 0 64 64"/);
   assert.doesNotMatch(componentSource, /mouth/i);
@@ -1114,6 +1115,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.eye/);
   assert.match(cssSource, /\.sparkles/);
   assert.match(cssSource, /\.questionMark/);
+  assert.match(cssSource, /\.wind/);
   assert.doesNotMatch(cssSource, /warningMark/);
   assert.doesNotMatch(cssSource, /speedLines/);
   assert.match(cssSource, /\[data-action="idle"\]/);
@@ -1137,6 +1139,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\[data-action="wonder"\]\s+\.motion\s*\{[\s\S]*transform-origin:\s*12% 88%;[\s\S]*animation:\s*playerAvatarWonder 1[0-9]{3}ms ease-in-out infinite;/);
   assert.match(cssSource, /@keyframes playerAvatarWonder/);
   assert.match(cssSource, /\[data-effect="question"\]\s+\.questionMark\s*\{[\s\S]*opacity:\s*1;[\s\S]*animation:\s*playerAvatarQuestion/);
+  assert.match(cssSource, /\[data-effect="wind"\]\s+\.wind\s*\{[\s\S]*opacity:\s*1;[\s\S]*animation:\s*playerAvatarWindGrid/);
   assert.match(cssSource, /@keyframes playerAvatarQuestion/);
   assert.match(cssSource, /\[data-expression="happy"\]/);
   assert.match(cssSource, /@keyframes playerAvatarExpressionSwap/);

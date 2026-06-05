@@ -365,3 +365,16 @@ test("doodle unlimited respawn race mode ignores missed risk platforms", () => {
   assert.match(doodleSource, /if \(riskHit >= riskTotal \|\| unlimitedRespawn\) \{/);
   assert.match(doodleSource, /reason = unlimitedRespawn \? "站上最高终点平台" : `站上最高终点平台，必踩平台 \$\{riskHit\}\/\$\{riskTotal\}`/);
 });
+test("endless doodle awards extra score after three consecutive high-energy jumps", () => {
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+
+  assert.match(doodleSource, /highEnergyStreak: number;/);
+  assert.match(doodleSource, /let highEnergyStreak = current\.highEnergyStreak;/);
+  assert.match(doodleSource, /const highEnergyJump = platform\.risk \|\| powerReleaseActive;/);
+  assert.match(doodleSource, /highEnergyStreak = highEnergyJump \? highEnergyStreak \+ 1 : 0;/);
+  assert.match(doodleSource, /if \(isEndlessRun && highEnergyStreak >= 3\) \{/);
+  assert.match(doodleSource, /endlessRef\.current\?\.awardSpecialBonus\(\{ label: `彻底疯狂\$\{highEnergyStreak\}！`, amount: 1 \}\);/);
+  assert.doesNotMatch(doodleSource, /endlessRef\.current\?\.showFeedback\(`彻底疯狂\$\{highEnergyStreak\}`\);/);
+  assert.match(doodleSource, /current\.highEnergyStreak = highEnergyStreak;/);
+  assert.match(doodleSource, /current\.highEnergyStreak = 0;/);
+});

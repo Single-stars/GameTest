@@ -815,14 +815,15 @@ test("flappy base respawns onto the middle safe platform and waits for the next 
   assert.match(flappySource, /current\.started = false;/);
   assert.match(flappySource, /current\.playerY = initialPlayerY;/);
   assert.match(flappySource, /current\.playerVy = 0;/);
-  assert.match(flappySource, /className=\{`flappy-start-platform \$\{view\.started \|\| gravityFlipAwaitingJump \? "started" : ""\}`\}/);
+  assert.match(flappySource, /className=\{`flappy-start-platform \$\{view\.started \? "started" : ""\}`\}/);
+  assert.doesNotMatch(flappySource, /gravityFlipAwaitingJump/);
 });
 
 test("flappy gate painting avoids repeated linear gate lookups in the animation frame", () => {
   const flappySource = read(new URL("../features/mini-games/flappy.tsx", import.meta.url));
   const updateDomSource = sourceBetween(
     flappySource,
-    "const updateDom = (current: FlappyFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time) => {",
+    "const updateDom = (current: FlappyFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time, deltaSeconds = 0) => {",
     "const tick = (time: number) => {",
   );
 

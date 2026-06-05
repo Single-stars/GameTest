@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import * as endlessMode from "./endless-mode.ts";
@@ -26,11 +26,12 @@ import { createDefaultAdvancedProgress, recordAdvancedChallengeResult } from "./
 import { getMiniGameLevel } from "./mini-games/index.ts";
 
 function sourceBetween(source: string, start: string, end: string) {
-  const startIndex = source.indexOf(start);
+  const normalizedSource = source.replace(/\r\n/g, "\n");
+  const startIndex = normalizedSource.indexOf(start);
   assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
-  const endIndex = source.indexOf(end, startIndex + start.length);
+  const endIndex = normalizedSource.indexOf(end, startIndex + start.length);
   assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
-  return source.slice(startIndex, endIndex);
+  return normalizedSource.slice(startIndex, endIndex);
 }
 
 function cssRule(source: string, selector: string) {
@@ -67,20 +68,28 @@ test("endless scoring stays intentionally simple", () => {
   assert.equal(getEndlessScore({ coreActions: 0, bonusActions: 0 }), 0);
   assert.equal(getEndlessScore({ coreActions: 12, bonusActions: 3 }), 15);
   assert.equal(getEndlessScore({ coreActions: 12, bonusActions: 3, failures: 99 }), 15);
+  assert.equal(endlessMode.ENDLESS_REACTION_THRESHOLD_MS, 500);
+  assert.equal(endlessMode.getEndlessReactionConfig({ score: 0 }).thresholdMs, 500);
 });
 
-test("endless HUD has a pure energy meter that heals or grants one damage shield", () => {
+test("endless HUD uses manual heal, skill, and debug energy controls instead of automatic recovery", () => {
   const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const skillIconUrl = new URL("../../public/icons/endless-skill-lightning.svg", import.meta.url);
+  const skillIconSource = existsSync(skillIconUrl) ? readFileSync(skillIconUrl, "utf8") : "";
   const energyCss = sourceBetween(cssSource, ".endless-energy-meter {", ".endless-score-readout {");
 
   assert.match(commonSource, /gainEnergy: \(amount\?: number, feedbackText\?: string\) => void/);
   assert.match(commonSource, /canUseSkill: boolean/);
+  assert.match(commonSource, /canHeal: boolean/);
+  assert.match(commonSource, /debugEnergyLocked: boolean/);
   assert.match(commonSource, /skillActive: boolean/);
   assert.match(commonSource, /skillEnding: boolean/);
   assert.match(commonSource, /useSkill: \(\) => boolean/);
+  assert.match(commonSource, /useHeal: \(\) => boolean/);
+  assert.match(commonSource, /toggleDebugEnergyLock: \(\) => void/);
   assert.match(commonSource, /showFeedback: \(text: string\) => void/);
   assert.match(commonSource, /shieldCharges: number/);
   assert.match(runtimeSource, /const ENDLESS_ENERGY_THRESHOLD = 10;/);
@@ -89,36 +98,63 @@ test("endless HUD has a pure energy meter that heals or grants one damage shield
   assert.match(runtimeSource, /energyRef/);
   assert.match(runtimeSource, /activeSkillRef/);
   assert.match(runtimeSource, /shieldChargesRef/);
+  assert.match(runtimeSource, /debugEnergyLockedRef/);
   assert.match(runtimeSource, /gainEnergy/);
-  assert.match(runtimeSource, /if \(nextRevives < ENDLESS_STARTING_REVIVES\)/);
-  assert.match(runtimeSource, /nextShieldCharges = 1;/);
-  assert.match(runtimeSource, /nextEnergy = ENDLESS_ENERGY_THRESHOLD;/);
-  assert.match(runtimeSource, /if \(shieldChargesRef\.current > 0\)/);
-  assert.match(runtimeSource, /shieldChargesRef\.current = 0;/);
+  assert.match(runtimeSource, /Math\.min\(ENDLESS_ENERGY_THRESHOLD, energyRef\.current \+ safeAmount\)/);
+  assert.doesNotMatch(runtimeSource, /while \(nextEnergy >= ENDLESS_ENERGY_THRESHOLD\)/);
+  assert.doesNotMatch(runtimeSource, /if \(nextRevives < ENDLESS_STARTING_REVIVES\)/);
+  assert.doesNotMatch(runtimeSource, /nextShieldCharges = 1;/);
+  assert.match(runtimeSource, /const useHeal = useCallback/);
+  assert.match(runtimeSource, /revivesRef\.current >= ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /energyRef\.current < ENDLESS_SKILL_COST/);
+  assert.match(runtimeSource, /revivesRef\.current \+ 1/);
+  assert.match(runtimeSource, /const toggleDebugEnergyLock = useCallback/);
+  assert.match(runtimeSource, /debugEnergyLockedRef\.current = nextLocked/);
+  assert.match(runtimeSource, /if \(nextLocked\) \{[\s\S]*energyRef\.current = ENDLESS_ENERGY_THRESHOLD/);
   assert.match(runtimeSource, /energyPercent: Math\.round\(\(energy \/ ENDLESS_ENERGY_THRESHOLD\) \* 100\)/);
   assert.doesNotMatch(runtimeSource, /energyPercent: shieldCharges > 0 \? 100 : Math\.round/);
-  assert.match(runtimeSource, /if \(nextEnergy < ENDLESS_ENERGY_THRESHOLD && shieldChargesRef\.current > 0\) \{/);
-  assert.match(runtimeSource, /shieldChargesRef\.current = 0;[\s\S]*setShieldCharges\(0\);/);
+  assert.doesNotMatch(runtimeSource, /if \(nextEnergy < ENDLESS_ENERGY_THRESHOLD && shieldChargesRef\.current > 0\) \{/);
   assert.match(runtimeSource, /canUseSkill: energy >= ENDLESS_SKILL_COST && !activeSkill/);
+  assert.match(runtimeSource, /canHeal: energy >= ENDLESS_SKILL_COST && revives < ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /debugEnergyLocked/);
   assert.match(runtimeSource, /energyRef\.current < ENDLESS_SKILL_COST/);
   assert.match(runtimeSource, /energyRef\.current - ENDLESS_SKILL_COST/);
   assert.match(runtimeSource, /useSkill/);
+  assert.match(runtimeSource, /useHeal/);
   assert.match(runtimeSource, /skillActive/);
   assert.match(runtimeSource, /skillEnding/);
+  assert.match(runtimeSource, /const skillActionReady = api\.energyPercent >= 100 && !api\.skillActive && !api\.skillEnding;/);
+  assert.doesNotMatch(runtimeSource, /const skillActionReady = api\.energyPercent >= 100 \|\| api\.skillActive \|\| api\.skillEnding/);
   assert.match(runtimeSource, /showFeedback: showEnergyFeedback/);
   assert.match(runtimeSource, /const endlessHudClassName = \[/);
-  assert.match(runtimeSource, /api\.shieldCharges > 0 \? "shielded" : ""/);
+  assert.doesNotMatch(runtimeSource, /api\.shieldCharges > 0 \? "shielded" : ""/);
   assert.match(runtimeSource, /className="endless-hearts"/);
   assert.match(runtimeSource, /endless-heart-token/);
   assert.match(runtimeSource, /className="endless-energy-meter"/);
   assert.match(runtimeSource, /className="endless-energy-segments"/);
   assert.match(runtimeSource, /endless-energy-cell/);
+  assert.match(runtimeSource, /endless-action-rail/);
+  assert.match(runtimeSource, /endless-heal-button/);
+  assert.match(runtimeSource, /endless-debug-energy-button/);
+  assert.match(runtimeSource, /endless-heal-button[\s\S]*aria-hidden="true">\{"\\u2764\\uFE0E"\}<\/span>[\s\S]*endless-skill-button[\s\S]*<span className="endless-skill-icon" aria-hidden="true" \/>[\s\S]*endless-debug-energy-button[\s\S]*aria-hidden="true">10<\/span>/);
+  assert.equal(existsSync(skillIconUrl), true);
+  assert.match(skillIconSource, /<svg[\s\S]*<\/svg>/);
+  assert.doesNotMatch(runtimeSource, /endless-debug-energy-control/);
+  assert.doesNotMatch(runtimeSource, /\{debugToolsVisible \? \(/);
   assert.doesNotMatch(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
   assert.doesNotMatch(runtimeSource, /endless-shield/);
   assert.match(flappySource, /endlessRef\.current\?\.awardSpecialBonus\(/);
   assert.match(energyCss, /\.endless-energy-segments\s*{/);
   assert.match(energyCss, /grid-template-columns:\s*repeat\(10,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(energyCss, /\.endless-energy-cell\.active\s*{/);
+  assert.match(cssSource, /\.endless-action-rail\s*{/);
+  assert.doesNotMatch(cssSource, /\.endless-action-rail\.ready\s*{/);
+  assert.match(cssSource, /\.endless-heal-button\s*{/);
+  assert.match(cssSource, /\.endless-skill-icon\s*{/);
+  assert.match(cssSource, /mask:\s*url\("\/icons\/endless-skill-lightning\.svg"\) center \/ contain no-repeat;/);
+  assert.match(cssSource, /background:\s*currentColor;/);
+  assert.doesNotMatch(cssSource, /\.endless-debug-energy-control\s*{/);
+  assert.match(cssSource, /\.endless-debug-energy-button\s*{/);
   assert.doesNotMatch(energyCss, /linear-gradient|endless-shield-pulse|\.endless-hud\.shielded/);
 });
 
@@ -140,16 +176,25 @@ test("endless energy bonuses surface per-mode popup feedback and shield the play
   );
 
   assert.match(commonSource, /gainEnergy: \(amount\?: number, feedbackText\?: string\) => void/);
-  assert.match(commonSource, /awardSpecialBonus: \(label: EndlessSpecialBonusLabel\) => void/);
+  assert.match(commonSource, /export type EndlessSpecialBonus = \{/);
+  assert.match(commonSource, /label: string/);
+  assert.match(commonSource, /amount\?: number/);
+  assert.match(commonSource, /awardSpecialBonus: \(bonus: EndlessSpecialBonusLabel \| EndlessSpecialBonus\) => void/);
   assert.match(runtimeSource, /energyPopups/);
   assert.match(runtimeSource, /bonusPopup/);
   assert.match(runtimeSource, /showEnergyFeedback/);
   assert.match(runtimeSource, /showBonusFeedback/);
   assert.match(runtimeSource, /className="endless-energy-popup"/);
-  assert.match(runtimeSource, /className="endless-bonus-score-pop"/);
-  assert.match(runtimeSource, /shielded=\{api\.shieldCharges > 0 && api\.energyPercent === 100\}/);
+  assert.match(runtimeSource, /className=\{`endless-bonus-score-pop \$\{api\.bonusPopup\.amount > 10 \? "major" : ""\}`\}/);
+  assert.match(runtimeSource, /label: typeof bonus === "string" \? bonus : bonus\.label/);
+  assert.match(runtimeSource, /amount: typeof bonus === "string" \? ENDLESS_SPECIAL_BONUS_SCORE : Math\.max\(1, Math\.floor\(bonus\.amount \?\? ENDLESS_SPECIAL_BONUS_SCORE\)\)/);
+  assert.match(runtimeSource, /const avatarEffect = getEndlessAvatarEffect\(api\.getActiveSkill\(\)\);/);
+  assert.match(runtimeSource, /shielded=\{avatarEffect === "shield"\}/);
+  assert.match(runtimeSource, /avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\}/);
   assert.match(cssSource, /\.endless-energy-popup\s*{/);
   assert.match(cssSource, /\.endless-bonus-score-pop\s*{/);
+  assert.match(cssSource, /\.endless-bonus-score-pop\.major\s*{/);
+  assert.match(cssSource, /@keyframes endless-bonus-score-major/);
 
   assert.match(reactionSource, /ENDLESS_REACTION_PREDICTION_MS = 100/);
   assert.match(reactionSource, /ms <= ENDLESS_REACTION_PREDICTION_MS[\s\S]*awardSpecialBonus\(/);
@@ -157,9 +202,11 @@ test("endless energy bonuses surface per-mode popup feedback and shield the play
   assert.match(aimSource, /trajectoryNormalizedError >= ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR[\s\S]*trajectoryNormalizedError <= 1[\s\S]*awardSpecialBonus\(/);
   assert.match(doodleSource, /ENDLESS_DOODLE_ENERGY_DISTANCE = 5/);
   assert.match(doodleSource, /awardSpecialBonus\(/);
+  assert.match(doodleSource, /awardSpecialBonus\(\{ label: `彻底疯狂\$\{highEnergyStreak\}！`, amount: 1 \}\)/);
+  assert.doesNotMatch(doodleSource, /showFeedback\(`彻底疯狂\$\{highEnergyStreak\}`\)/);
   assert.match(fallSource, /ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5/);
-  assert.match(fallSource, /ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 4/);
-  assert.match(fallSource, /fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE[\s\S]*awardSpecialBonus\(/);
+  assert.match(fallSource, /ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 5/);
+  assert.match(fallSource, /const fastDropBonus = getEndlessFallDownFastDropBonus\(fastDropDistance\);[\s\S]*fastDropBonus > 0[\s\S]*awardSpecialBonus\(\{ label: `极速下降\$\{fastDropDistance\}！`, amount: fastDropBonus \}\)/);
   assert.match(squareSource, /ENDLESS_SQUARE_CENTER_LANDING_RATIO = 0\.1;/);
   assert.match(squareAdvanceSource, /if \(isEndlessRun\) \{[\s\S]*endlessRef\.current\?\.gainEnergy\(1\);[\s\S]*ENDLESS_SQUARE_CENTER_LANDING_RATIO[\s\S]*endlessRef\.current\?\.awardSpecialBonus\(/);
   assert.doesNotMatch(squareAdvanceSource, /current\.feedback = "Good"|prototype-feedback good|view\.feedback/);
@@ -227,7 +274,8 @@ test("endless difficulty state gives players readable strength and next-step pro
 });
 
 test("endless round difficulty state uses the same ramp as each live endless runtime", () => {
-  assert.equal(getEndlessRoundDifficultyState({ debugDifficulty: 0, roundId: "aim", score: 80 }).label, "封顶");
+  assert.notEqual(getEndlessRoundDifficultyState({ debugDifficulty: 0, roundId: "aim", score: 80 }).label, "封顶");
+  assert.equal(getEndlessRoundDifficultyState({ debugDifficulty: 0, roundId: "aim", score: 150 }).label, "封顶");
   assert.equal(getEndlessRoundDifficultyState({ debugDifficulty: 0, roundId: "braking", score: 36 * 110 }).label, "封顶");
   assert.equal(getEndlessRoundDifficultyState({ debugDifficulty: 0.75, roundId: "reaction", score: 0 }).label, "高压");
   assert.equal(getEndlessRoundDifficultyState({ debugDifficulty: 0, reportedDifficulty: 1, roundId: "patience", score: 0 }).label, "封顶");
@@ -298,9 +346,14 @@ test("endless helpers cover all eight dimensions and reuse advanced level progre
 
   const aimEarly = getEndlessAimConfig({ hitCount: 0 });
   const aimLate = getEndlessAimConfig({ hitCount: 80 });
+  const aimFinal = getEndlessAimConfig({ hitCount: 150 });
   assert.equal(aimEarly.sourceAdvancedLevel, 1);
-  assert.equal(aimLate.sourceAdvancedLevel, 10);
-  assert.equal(aimLate.decoyChance > aimEarly.decoyChance, true);
+  assert.equal(aimLate.sourceAdvancedLevel <= 6, true);
+  assert.equal(aimLate.aimMode !== "boss", true);
+  assert.equal(aimFinal.sourceAdvancedLevel, 10);
+  assert.equal(aimFinal.aimMode, "boss");
+  assert.equal(aimFinal.decoyCount, 3);
+  assert.equal(aimFinal.decoyChance > aimEarly.decoyChance, true);
   assert.equal(aimLate.incomingChance > aimEarly.incomingChance, true);
 });
 
@@ -336,6 +389,7 @@ test("endless route mini-games generate future content from current progress", (
   const fallLate = getEndlessMiniGameStageConfig({ miniGameId: "fall-down", progress: 90 });
   const flappyEarly = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 0 });
   const flappyLate = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 90 });
+  const flappyGold = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 });
 
   assert.equal(doodleEarly.sourceAdvancedLevel, 1);
   assert.equal(doodleLate.sourceAdvancedLevel, 10);
@@ -345,8 +399,12 @@ test("endless route mini-games generate future content from current progress", (
   assert.equal(squareLate.sourceAdvancedLevel, 10);
   assert.equal(squareEarly.params.doubleJumpEnabled, false);
   assert.equal(squareLate.params.doubleJumpEnabled, false);
-  assert.equal(squareLate.params.cyclingChargeOnDoubleJump, false);
-  assert.equal(Number(squareLate.params.secondPowerDistanceMax ?? 0), 0);
+  assert.equal(squareEarly.params.cyclingChargeOnDoubleJump, true);
+  assert.equal(squareLate.params.cyclingChargeOnDoubleJump, true);
+  assert.equal(squareEarly.params.secondPowerDistanceMin, 30);
+  assert.equal(squareEarly.params.secondPowerDistanceMax, 180);
+  assert.equal(squareLate.params.secondPowerDistanceMin, 30);
+  assert.equal(squareLate.params.secondPowerDistanceMax, 180);
   assert.equal(squareLate.params.gravityJumpLimit, 3);
   assert.equal(Number(squareLate.params.gravityPlatformMaxCount) <= 3, true);
   assert.equal(Number(squareLate.params.gravityPlatformMinSpacing) >= 3, true);
@@ -373,7 +431,8 @@ test("endless route mini-games generate future content from current progress", (
   assert.equal(getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 }).sourceAdvancedLevel, 10);
   assert.equal(Number(flappyLate.params.movingGateRatio) > Number(flappyEarly.params.movingGateRatio), true);
   assert.equal(Number(flappyEarly.params.collectibleCount) >= 4, true);
-  assert.equal(Number(getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 }).params.collectibleCount) >= 14, true);
+  assert.equal(Number(flappyGold.params.collectibleCount) >= 14, true);
+  assert.equal(flappyGold.params.collectibleCount, flappyGold.params.gateCount);
   assert.equal(Number(flappyLate.params.movingGateSpeed) >= 3, true);
   assert.equal(Number(flappyLate.params.gapSize) < Number(flappyEarly.params.gapSize), true);
 });
@@ -413,6 +472,8 @@ test("endless route rounds decouple score distance from requested energy milesto
 
   for (const source of [doodleSource, squareSource, fallSource]) {
     assert.match(source, /setDistanceScore/);
+  }
+  for (const source of [squareSource, fallSource]) {
     assert.doesNotMatch(source, /addScore\(1\)/);
   }
 
@@ -473,23 +534,88 @@ test("endless braking uses continuous scenery and hazards that approach the runn
   assert.doesNotMatch(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-lane\s*{[\s\S]*linear-gradient\(90deg/);
 });
 
+test("endless braking enters and exits rule-tale lanes through road portals instead of flashing lanes", () => {
+  const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const startHazardSource = sourceBetween(brakingSource, "const startHazard = useCallback(() => {", "const activeHoldSuccessMs = resolveAdvancedBrakingReactionWindowMs");
+  const portalReachedSource = sourceBetween(brakingSource, "function hasAdvancedBrakingRulePortalReachedRunner", "function resolveAdvancedBrakingEventDelayMs");
+  const portalTransitionSource = sourceBetween(brakingSource, "if (hasAdvancedBrakingRulePortalReachedRunner({", "if (activeEndless && hazardRef.current && distanceDelta > 0)");
+  const initialLaneSource = sourceBetween(brakingSource, "const initialLaneCount", "const eventCountMin");
+
+  assert.match(brakingSource, /type AdvancedBrakingRuleZoneState = "normal" \| "entering" \| "active" \| "exiting";/);
+  assert.match(brakingSource, /type AdvancedBrakingRulePortal = \{[\s\S]*x: number;[\s\S]*targetState: AdvancedBrakingRuleZoneState;[\s\S]*\};/);
+  assert.match(brakingSource, /const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 64;/);
+  assert.match(brakingSource, /const ENDLESS_BRAKING_RULE_ZONE_DISTANCE = 520;/);
+  assert.match(brakingSource, /function getAdvancedBrakingRuleZoneConfig\(/);
+  assert.match(brakingSource, /function shouldAdvancedBrakingUseRuleZone\(/);
+  assert.match(portalReachedSource, /portal\.x <= runnerLeftPercent \+ runnerWidthPercent/);
+  assert.match(brakingSource, /const \[brakingRuleZoneState, setBrakingRuleZoneState\] = useState<AdvancedBrakingRuleZoneState>\("normal"\);/);
+  assert.match(brakingSource, /const \[rulePortal, setRulePortal\] = useState<AdvancedBrakingRulePortal \| null>\(null\);/);
+  assert.match(brakingSource, /const initialLaneCount = resolveAdvancedBrakingLaneCount\(config\);/);
+  assert.doesNotMatch(initialLaneSource, /getEndlessReusableStageConfig/);
+  assert.match(brakingSource, /ruleZoneSkillRef\.current = activeEndless\.getActiveSkill\(\);/);
+  assert.match(brakingSource, /setBrakingRuleZoneState\(nextRuleZoneState\);/);
+  assert.match(brakingSource, /const nextPortal: AdvancedBrakingRulePortal = \{ x: ENDLESS_BRAKING_RULE_PORTAL_DISTANCE, targetState: "active" \};/);
+  assert.match(brakingSource, /const nextPortal: AdvancedBrakingRulePortal = \{ x: ENDLESS_BRAKING_RULE_PORTAL_DISTANCE, targetState: "normal" \};/);
+  assert.match(brakingSource, /setActiveLaneCount\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\) \? resolveAdvancedBrakingLaneCount\(ruleZoneConfig\) : resolveAdvancedBrakingLaneCount\(config\)\);/);
+  assert.match(brakingSource, /const ruleZoneVisualActive = isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\);/);
+  assert.match(brakingSource, /const showAdvancedBrakingRuleBackdrop = \(!endless \|\| ruleZoneVisualActive\) && activeRuleHint;/);
+  assert.match(brakingSource, /className="advanced-brake-rule-portal"/);
+  assert.match(brakingSource, /data-target=\{rulePortal\.targetState\}/);
+  assert.match(brakingSource, /style=\{\{ left: `\$\{rulePortal\.x\}%` \}\}/);
+  assert.match(brakingSource, /const activeConfig = getAdvancedBrakingRuleZoneConfig\(\{[\s\S]*brakingRuleZoneState: brakingRuleZoneStateRef\.current,[\s\S]*config,[\s\S]*endlessDifficulty: activeDifficulty,/);
+  assert.doesNotMatch(startHazardSource, /setActiveLaneCount\(resolveAdvancedBrakingLaneCount\(activeConfig\)\);/);
+  assert.doesNotMatch(startHazardSource, /setActiveRuleHint\(getAdvancedBrakeRuleHint\(activeConfig\.level, activeConfig\.params\.dualRule\)\);/);
+  assert.doesNotMatch(brakingSource, /dualLaneWarning|setDualLaneWarning/);
+  assert.doesNotMatch(portalTransitionSource, /updateActiveSkill/);
+  assert.match(cssSource, /\.advanced-brake-rule-portal\s*{/);
+  assert.match(cssSource, /@keyframes advanced-brake-rule-portal-spin/);
+  assert.match(cssSource, /\.advanced-braking\.rule-zone-active \.advanced-brake-rule-backdrop-text\s*{/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.dual-lane-warning \.advanced-brake-track\s*{[\s\S]*outline:/);
+});
+
 test("endless aim starts from early difficulty while preserving one-at-a-time spawn logic", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const aimSource = readFileSync(new URL("../features/rounds/native/aim.tsx", import.meta.url), "utf8");
-  const early = getEndlessAimConfig({ hitCount: 0 });
-  const middle = getEndlessAimConfig({ hitCount: 42 });
-  const late = getEndlessAimConfig({ hitCount: 80 });
+  const avatarCssSource = readFileSync(new URL("../features/player-avatar/player-avatar.module.css", import.meta.url), "utf8");
+  const openingSequence = [0, 3, 6, 9, 12, 15].map((hitCount) => getEndlessAimConfig({ hitCount }));
+  const early = openingSequence[0];
+  const middle = getEndlessAimConfig({ hitCount: 60 });
+  const late = getEndlessAimConfig({ hitCount: 150 });
+  const windRule = cssRule(avatarCssSource, ".wind");
+  const windBeforeRule = cssRule(avatarCssSource, ".wind::before");
 
   assert.equal(early.aimMode, "track");
   assert.equal(early.route, "circle");
   assert.equal(early.decoyCount, 0);
   assert.equal(early.failOnFlyOut, false);
   assert.equal(early.incomingChance, 0);
-  assert.equal(middle.decoyCount > early.decoyCount, true);
-  assert.equal(middle.targetSpeedMultiplier > early.targetSpeedMultiplier, true);
+  assert.deepEqual(
+    openingSequence.map((config) => config.sourceAdvancedLevel),
+    [1, 2, 3, 4, 5, 6],
+  );
+  assert.deepEqual(
+    openingSequence.map((config) => config.aimMode),
+    ["track", "incoming", "decoy", "track", "incoming", "decoy"],
+  );
+  assert.deepEqual(
+    openingSequence.map((config) => config.route),
+    ["circle", "incoming", "diagonal", "ellipse", "incoming", "diagonal"],
+  );
+  assert.deepEqual(
+    openingSequence.map((config) => config.decoyCount),
+    [0, 0, 1, 0, 0, 2],
+  );
+  assert.equal(openingSequence[1].incomingChance <= 0.22, true);
+  assert.equal(openingSequence[4].incomingChance <= 0.3, true);
+  assert.equal(middle.decoyCount <= 2, true);
+  assert.equal(middle.targetSpeedMultiplier <= 1.16, true);
   assert.equal(late.aimMode, "boss");
   assert.equal(late.route, "mixed");
   assert.equal(late.failOnFlyOut, true);
+  assert.equal(late.decoyCount, 3);
+  assert.equal(late.incomingChance <= 0.34, true);
+  assert.equal(late.targetSpeedMultiplier <= 1.24, true);
 
   assert.doesNotMatch(runtimeSource, /difficulty:\s*roundId === "aim" \? 1 : 0/);
   assert.match(runtimeSource, /getEndlessReusableStageConfig\(\{\s*difficulty:\s*0,\s*roundId\s*}\)/);
@@ -504,8 +630,16 @@ test("endless aim starts from early difficulty while preserving one-at-a-time sp
   assert.match(aimSource, /const initialTargetCount = isEndless \? 1 : targetCount;/);
   assert.match(aimSource, /const activeSpawnMode = getAdvancedAimMode\(spawnConfig\);/);
   assert.match(aimSource, /mode: activeSpawnMode/);
+  assert.match(aimSource, /type AdvancedAimIncomingSide = "left" \| "right" \| "top" \| "bottom";/);
+  assert.match(aimSource, /incomingSide: AdvancedAimIncomingSide \| null;/);
+  assert.match(aimSource, /className=\{`advanced-aim-incoming-warning side-\$\{target\.incomingSide\}`\}/);
   assert.match(aimSource, /nextTargets\.filter\(\(entity\) => entity\.kind === "target" && entity\.active\)\.length < maxActiveEndlessTargets/);
   assert.match(aimSource, /activeTargetCountRef\.current = isEndless \? 1 :/);
+  assert.match(windRule, /background-image:[\s\S]*repeating-linear-gradient/);
+  assert.match(windRule, /mix-blend-mode:\s*screen;/);
+  assert.match(windBeforeRule, /linear-gradient\(90deg/);
+  assert.doesNotMatch(windBeforeRule, /border-top/);
+  assert.match(avatarCssSource, /@keyframes playerAvatarWindGrid/);
 });
 
 test("advanced screen and app route endless mode through a real runtime with compact HUD", () => {
@@ -547,10 +681,17 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   const shellSource = sourceBetween(runtimeSource, "<div className=\"endless-shell\"", "</div>\n  );");
 
   assert.match(hudSource, /activeEnergySegments/);
+  assert.match(hudSource, /skillActionReady/);
+  assert.match(hudSource, /endless-action-rail/);
+  assert.match(hudSource, /endless-heal-button/);
   assert.match(hudSource, /endless-skill-button/);
+  assert.match(hudSource, /endless-debug-energy-button/);
   assert.match(hudSource, /api\.skillEnding \? "ending" : ""/);
   assert.match(hudSource, /disabled=\{!api\.canUseSkill\}/);
+  assert.match(hudSource, /disabled=\{!api\.canHeal\}/);
   assert.match(hudSource, /api\.useSkill\(\)/);
+  assert.match(hudSource, /api\.useHeal\(\)/);
+  assert.match(hudSource, /api\.toggleDebugEnergyLock\(\)/);
   assert.match(hudSource, /onClick=\{handleSkillClick\}/);
   assert.match(hudSource, /`Use skill for \$\{ENDLESS_SKILL_COST\} energy`/);
   assert.match(hudSource, /Array\.from\(\{ length: ENDLESS_ENERGY_THRESHOLD \}/);
@@ -561,7 +702,8 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.doesNotMatch(hudSource, /difficultyState|endless-difficulty|无尽强度|强度 |进阶 |下一段|强度封顶|测试强度|endless-debug-jumps/);
   assert.doesNotMatch(runtimeSource, /className="endless-debug-panel"/);
   assert.match(shellSource, /<div className=\{`endless-game-host \$\{api\.skillActive \? "skill-active" : ""\} \$\{api\.skillEnding \? "skill-ending" : ""\}`\}/);
-  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{api\.shieldCharges > 0 && api\.energyPercent === 100\} \/>/);
+  assert.match(runtimeSource, /const avatarEffect = getEndlessAvatarEffect\(api\.getActiveSkill\(\)\);/);
+  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{avatarEffect === "shield"\} avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\} \/>/);
   assert.doesNotMatch(shellSource, /<EndlessHud[\s\S]*<div className="endless-game-host"/);
   assert.match(hudCss, /position:\s*absolute;/);
   assert.match(hudCss, /top:\s*clamp\(/);
@@ -582,10 +724,15 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.match(hudCss, /\.endless-energy-cell\.active\s*\{/);
   assert.doesNotMatch(hudCss, /\.endless-difficulty|\.endless-debug-panel|endless-difficulty-meter|linear-gradient|backdrop-filter:\s*blur|box-shadow:(?!\s*none)|border:(?!\s*0)/);
   assert.match(cssSource, /\.endless-skill-button\s*{/);
-  assert.match(cssSource, /\.endless-skill-button\s*{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(cssSource, /\.endless-action-button\.hidden\s*{[\s\S]*transform:\s*translate3d\(calc\(100% \+ 16px\), 0, 0\);/);
+  assert.match(cssSource, /\.endless-heal-button\s*{[\s\S]*background:\s*#e84d5b;/);
+  assert.match(cssSource, /\.endless-skill-button\s*{[\s\S]*background:\s*#14b8a6;[\s\S]*color:\s*#ffffff;/);
+  assert.match(cssSource, /\.endless-debug-energy-button\s*{[\s\S]*background:\s*#2f80ed;/);
   assert.match(cssSource, /\.endless-game-host\.skill-active::after\s*{/);
+  assert.match(cssSource, /\.endless-game-host\.skill-active::before\s*{/);
   assert.match(cssSource, /\.endless-game-host\.skill-ending::after\s*{/);
   assert.match(cssSource, /\.endless-skill-button\.ending\s*{/);
+  assert.match(cssSource, /@keyframes endless-skill-speed-lines/);
   assert.match(cssSource, /@keyframes endless-skill-ending-flash/);
   const skillEndingFlashCss = sourceBetween(cssSource, "@keyframes endless-skill-ending-flash {", ".endless-game-host > :not(.endless-hud) {");
   assert.match(skillEndingFlashCss, /opacity:\s*0\.[0-9]+;/);
@@ -604,7 +751,7 @@ test("endless skills are typed by round, block energy gain, and surface rolling 
   }
   assert.match(commonSource, /getActiveSkill: \(\) => EndlessActiveSkill \| null/);
   assert.match(commonSource, /updateActiveSkill: \(updater: \(skill: EndlessActiveSkill\) => EndlessActiveSkill \| null\) => EndlessActiveSkill \| null/);
-  assert.match(commonSource, /awardSpecialBonus: \(label: EndlessSpecialBonusLabel\) => void/);
+  assert.match(commonSource, /awardSpecialBonus: \(bonus: EndlessSpecialBonusLabel \| EndlessSpecialBonus\) => void/);
 
   assert.match(runtimeSource, /const ENDLESS_SPECIAL_BONUS_SCORE = 2;/);
   assert.match(runtimeSource, /function createEndlessSkillForRound/);
@@ -620,10 +767,13 @@ test("endless skills are typed by round, block energy gain, and surface rolling 
   assert.match(runtimeSource, /bonusActionsRef/);
   assert.match(runtimeSource, /setBonusActions/);
   assert.match(runtimeSource, /awardSpecialBonus/);
-  assert.match(runtimeSource, /amount: ENDLESS_SPECIAL_BONUS_SCORE/);
+  assert.match(runtimeSource, /const resolvedBonus = \{/);
+  assert.match(runtimeSource, /label: typeof bonus === "string" \? bonus : bonus\.label/);
+  assert.match(runtimeSource, /amount: typeof bonus === "string" \? ENDLESS_SPECIAL_BONUS_SCORE : Math\.max\(1, Math\.floor\(bonus\.amount \?\? ENDLESS_SPECIAL_BONUS_SCORE\)\)/);
   assert.match(runtimeSource, /score: getEndlessScore\(\{ bonusActions, coreActions \}\)/);
-  assert.match(runtimeSource, /className="endless-bonus-score-pop"/);
+  assert.match(runtimeSource, /className=\{`endless-bonus-score-pop \$\{api\.bonusPopup\.amount > 10 \? "major" : ""\}`\}/);
   assert.match(cssSource, /\.endless-bonus-score-pop\s*{/);
+  assert.match(cssSource, /\.endless-bonus-score-pop\.major\s*{/);
   assert.match(cssSource, /@keyframes endless-bonus-score-roll/);
 });
 
@@ -639,24 +789,76 @@ test("endless skill effects are consumed by every endless round implementation",
 
   assert.match(doodleSource, /getActiveSkill\(\)\?\.kind === "power-release"/);
   assert.match(fallSource, /getActiveSkill\(\)\?\.kind === "endless-fall"/);
+  assert.match(fallSource, /function smoothEndlessFallDownCamera/);
   assert.match(fallSource, /const endlessFallCameraY = current\.playerY - stageHeight \* 0\.5;/);
+  assert.match(fallSource, /current\.cameraY = smoothEndlessFallDownCamera\(current\.cameraY, endlessFallCameraY, delta\);/);
+  assert.doesNotMatch(fallSource, /current\.cameraY = endlessFallCameraY;/);
   assert.match(squareSource, /getActiveSkill\(\)\?\.kind === "double-jump"/);
+  assert.match(squareSource, /squareJumpDoubleJumpUsesCyclingCharge/);
+  assert.match(squareSource, /current\.state === "airCharging" && squareJumpDoubleJumpUsesCyclingCharge\(\)/);
   assert.match(flappySource, /const FLAPPY_SUPER_DASH_SPEED_MULTIPLIER = 2\.2;/);
+  assert.match(flappySource, /const FLAPPY_SUPER_DASH_GRAVITY_MULTIPLIER = 0\.72;/);
+  assert.match(flappySource, /const FLAPPY_SUPER_DASH_PULSE_VELOCITY = 205;/);
+  assert.match(flappySource, /const FLAPPY_SUPER_DASH_PULSE_BLEND = 0\.24;/);
+  assert.match(flappySource, /const FLAPPY_GRAVITY_CHANGE_INVINCIBLE_SECONDS = 1;/);
+  assert.match(flappySource, /const FLAPPY_SPEED_TRAIL_LENGTH = 118;/);
   assert.match(flappySource, /getActiveSkill\(\)\?\.kind === "super-dash"/);
+  assert.match(flappySource, /flappy-speed-trail/);
+  assert.match(flappySource, /className="flappy-speed-trail-flow"/);
+  assert.match(flappySource, /function smoothFlappySpeedTrailVisual\(/);
+  assert.match(flappySource, /const speedTrailAngleDeg = Math\.atan2\(current\.playerVy, speedTrailScreenVx\) \* \(180 \/ Math\.PI\);/);
+  assert.match(flappySource, /flappySpeedTrailNode\.style\.setProperty\("--flappy-speed-trail-angle", `\$\{smoothedTrail\.angleDeg\}deg`\);/);
+  assert.doesNotMatch(flappySource, /FLAPPY_SPEED_TRAIL_PIECES|recordFlappySpeedTrailPoint/);
+  assert.match(flappySource, /clampFlappySuperDashY/);
   assert.match(flappySource, /invincibleCharges/);
   assert.match(flappySource, /current\.playerVy \* FLAPPY_SUPER_DASH_PULSE_BLEND/);
   assert.match(aimSource, /activeEndlessSkill\?\.kind === "full-fire"/);
   assert.match(aimSource, /const activeEndlessSkill = endlessRuntime\?\.getActiveSkill\(\);/);
-  assert.match(aimSource, /const shotPenaltyBlocked = activeEndlessSkill\?\.kind === "full-fire";/);
+  assert.match(aimSource, /penaltyBlocked: boolean;/);
+  assert.match(aimSource, /const shotPenaltyBlocked = endlessRef\.current\?\.getActiveSkill\(\)\?\.kind === "full-fire";/);
+  assert.match(aimSource, /penaltyBlocked: shotPenaltyBlocked/);
+  assert.match(aimSource, /if \(!arrow\.penaltyBlocked && !endlessRuntime\.loseLife\("miss"\)\)/);
+  assert.match(aimSource, /if \(!arrow\.penaltyBlocked && !endlessRuntime\.loseLife\("decoy"\)\)/);
   assert.match(brakingSource, /const activeSkill = endlessRef\.current\?\.getActiveSkill\(\);/);
   assert.match(brakingSource, /activeSkill\?\.kind === "big-luck"/);
   assert.match(brakingSource, /const ENDLESS_BIG_LUCK_SPEED_MULTIPLIER = 2;/);
+  assert.match(brakingSource, /const ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER = 1\.8;/);
+  assert.match(brakingSource, /function getAdvancedBrakingSpeedMultiplier\(/);
+  assert.match(brakingSource, /function resolveAdvancedBrakingReactionWindowMs\(/);
+  assert.match(brakingSource, /function hasAdvancedBrakingHazardReachedRunner\(/);
+  assert.match(brakingSource, /function endBigLuckSkillOnRelease\(/);
+  assert.match(brakingSource, /function resolveAdvancedBrakingEventDelayMs\(/);
+  assert.match(brakingSource, /getEndlessBrakingConfig\(\{ distance \}\)\.obstacleIntervalMs/);
+  assert.match(brakingSource, /const endlessRuntime = endlessRef\.current;[\s\S]*resolveAdvancedBrakingEventDelayMs\(\{[\s\S]*endless: endlessRuntime,[\s\S]*distance: endlessRuntime \? Math\.max\(endlessRuntime\.score, endlessDistanceRef\.current\) : 0,/);
+  assert.match(brakingSource, /const activeSpeedMultiplier = getAdvancedBrakingSpeedMultiplier\(endlessRuntime\?\.getActiveSkill\(\)\);/);
+  assert.match(brakingSource, /const activeReactionWindowMs = resolveAdvancedBrakingReactionWindowMs\(baseReactionWindowMs, activeSpeedMultiplier\);/);
+  assert.match(brakingSource, /const activeHoldSuccessMs = resolveAdvancedBrakingReactionWindowMs\([\s\S]*nextHazard\.top === "gray" \|\| nextHazard\.bottom === "gray" \? grayHoldMs : eventDurationMs,[\s\S]*activeSpeedMultiplier,/);
+  assert.match(brakingSource, /if \(hasAdvancedBrakingHazardReachedRunner\(\{[\s\S]*hazard: movedHazard,[\s\S]*runnerLeftPercent: next,[\s\S]*runnerWidthPercent,/);
+  assert.match(brakingSource, /endBigLuckSkillOnRelease\(activeEndless\);/);
+  assert.match(brakingSource, /delta \* \(getBigLuckSkill\(\) \? ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER : 1\)/);
+  assert.match(brakingSource, /const showAdvancedBrakingRuleBackdrop = \(!endless \|\| ruleZoneVisualActive\) && activeRuleHint;/);
+  assert.match(brakingSource, /\{showAdvancedBrakingRuleBackdrop \? <div className="advanced-brake-rule-backdrop-text">\{activeRuleHint\}<\/div> : null\}/);
+  assert.match(brakingSource, /forceAdvancedBrakingStopAfterFailure/);
+  assert.match(brakingSource, /holdingRef\.current = false;\s*setHolding\(false\);/);
+  const brakingCollisionTimerSource = sourceBetween(brakingSource, 'if (nextHazard.correctAction === "release") {', "holdSuccessTimerRef.current = window.setTimeout");
+  const brakingReleaseFailureSource = sourceBetween(brakingSource, 'if (releaseOutcome.outcome === "failure") {', "if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);");
+  const brakingLateReleaseFailureSource = sourceBetween(brakingSource, "if (!correct) {", "else finish();");
+  assert.match(brakingCollisionTimerSource, /if \(consumeBigLuckObstacleBreak\(\)\) return;/);
+  assert.doesNotMatch(brakingReleaseFailureSource, /consumeBigLuckObstacleBreak/);
+  assert.doesNotMatch(brakingLateReleaseFailureSource, /consumeBigLuckObstacleBreak/);
   assert.match(brakingSource, /breakCharges/);
   assert.match(reactionSource, /getActiveSkill\(\)\?\.kind === "green-light"/);
+  assert.match(reactionSource, /ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS = 100/);
+  assert.match(reactionSource, /ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS = 500/);
+  assert.match(reactionSource, /ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS = 0/);
+  assert.match(reactionSource, /randomDelayMs: greenLightSkillActive \? rand\(ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS, ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS\) : rand\(420, 900\)/);
+  assert.match(reactionSource, /minIntervalMs: greenLightSkillActive \? ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS : REACTION_MIN_SIGNAL_INTERVAL_MS/);
   assert.match(reactionSource, /endlessRuntime\.addScore\(greenLightSkillActive \? 2 : 1\)/);
+  assert.doesNotMatch(reactionSource, /const charges = Math\.max\(0, \(skill\.charges \?\? 1\) - 1\)/);
   assert.match(knifeSource, /getActiveSkill\(\)\?\.kind === "knife-focus"/);
   assert.match(knifeSource, /const KNIFE_FOCUS_TIME_SCALE = 0\.25;/);
   assert.match(knifeSource, /const skillDelta = delta \* knifeFocusTimeScale;/);
+  assert.match(knifeSource, /current\.failures === 0[\s\S]*awardSpecialBonus\(\{ label: "完美击破！", amount: 5 \}\)/);
 
   for (const source of [reactionSource, aimSource, brakingSource, doodleSource, fallSource, squareSource, flappySource, knifeSource]) {
     assert.match(source, /awardSpecialBonus/);

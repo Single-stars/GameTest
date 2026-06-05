@@ -46,6 +46,7 @@
 .shadow,
 .sparkles,
 .shield,
+.wind,
 .questionMark,
 .motion,
 .rotator,
@@ -78,6 +79,7 @@
 
 .sparkles,
 .shield,
+.wind,
 .questionMark {
   opacity: 0;
   pointer-events: none;
@@ -444,6 +446,43 @@
   transform: scale(0.92);
 }
 
+.wind {
+  z-index: 3;
+  inset: -7%;
+  overflow: hidden;
+  border-radius: 24%;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(45, 212, 191, 0.34) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.2) 0 1px, transparent 1px 8px);
+  background-size: 38px 100%, 100% 28px;
+  background-position: 0 0, 0 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(20, 184, 166, 0.14));
+}
+
+.wind::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 0 18%, rgba(153, 246, 228, 0.42) 34%, transparent 54%),
+    linear-gradient(120deg, transparent 0 42%, rgba(34, 211, 238, 0.24) 48%, transparent 62%);
+  transform: translateX(-42%);
+  will-change: transform, opacity;
+}
+
+.wind::after {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border-radius: 22%;
+  background:
+    radial-gradient(circle at 20% 24%, rgba(153, 246, 228, 0.24) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 70%, rgba(20, 184, 166, 0.22) 0 2px, transparent 3px);
+  opacity: 0.68;
+}
+
 .questionMark {
   z-index: 4;
   right: -20%;
@@ -543,6 +582,15 @@
 .root[data-effect="question"] .questionMark {
   opacity: 1;
   animation: playerAvatarQuestion 1100ms ease-in-out infinite;
+}
+
+.root[data-effect="wind"] .wind {
+  opacity: 1;
+  animation: playerAvatarWindGrid 480ms linear infinite;
+}
+
+.root[data-effect="wind"] .wind::before {
+  animation: playerAvatarWindSweep 520ms linear infinite;
 }
 
 .root[data-expression="happy"] .expressionSvg {
@@ -1126,6 +1174,38 @@
   }
 }
 
+@keyframes playerAvatarWindGrid {
+  0% {
+    background-position: 0 0, 0 0;
+    opacity: 0.72;
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  100% {
+    background-position: -38px 0, 0 -28px;
+    opacity: 0.78;
+  }
+}
+
+@keyframes playerAvatarWindSweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-48%);
+  }
+
+  24% {
+    opacity: 0.86;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(52%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .root .motion,
   .root .eye,
@@ -1133,6 +1213,7 @@
   .root .skinSvg,
   .root .rotator,
   .root .shield,
+  .root .wind,
   .root .questionMark,
   .root .starfallMeteor {
     animation: none !important;

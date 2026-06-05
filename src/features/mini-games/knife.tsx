@@ -820,6 +820,9 @@ export function KnifeHitPrototype({
     }
     if (isEndlessRun && current.insertedAngles.length >= shotCount) {
       showKnifeFeedback("good");
+      if (current.failures === 0) {
+        endlessRef.current?.awardSpecialBonus({ label: "完美击破！", amount: 5 });
+      }
       launcherVisibleRef.current = false;
       advanceEndlessKnifeWheel();
       return;

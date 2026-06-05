@@ -12,6 +12,7 @@ import {
   resolveFallDownCameraBounds,
   type MiniGameId,
 } from "./index.ts";
+import * as miniGames from "./index.ts";
 import {
   readMiniGameRuntimeSource,
   readAppCssSource,
@@ -162,6 +163,16 @@ test("fall down base camera moves at constant speed and only top pressure fails 
   assert.match(fallDownSource, /bottomFailLine: stageHeight - FALL_DOWN_DANGER_ZIGZAG_SIZE - PLAYER_SIZE \/ 2 \+ FALL_DOWN_DANGER_GRACE/);
   assert.doesNotMatch(fallDownSource, /fall-danger-line/);
   assert.doesNotMatch(globalCss, /\.fall-danger-line/);
+});
+
+test("endless fall down fast-drop bonus scales without a cap after five layers", () => {
+  assert.equal(typeof miniGames.getEndlessFallDownFastDropBonus, "function");
+  const getEndlessFallDownFastDropBonus = miniGames.getEndlessFallDownFastDropBonus as (fastDropDistance: number) => number;
+  assert.equal(getEndlessFallDownFastDropBonus(4), 0);
+  assert.equal(getEndlessFallDownFastDropBonus(5), 1);
+  assert.equal(getEndlessFallDownFastDropBonus(6), 2);
+  assert.equal(getEndlessFallDownFastDropBonus(7), 3);
+  assert.equal(getEndlessFallDownFastDropBonus(18), 14);
 });
 
 test("fall down fragile platforms expire without directly failing the player", () => {

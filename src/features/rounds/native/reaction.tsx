@@ -35,6 +35,9 @@ function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "
 
 const REACTION_FEEDBACK_DELAY_MS = 620;
 const ENDLESS_REACTION_PREDICTION_MS = 100;
+const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS = 100;
+const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS = 500;
+const ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS = 0;
 
 export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shielded = false }: RoundProps) {
   const config = advancedConfig!;
@@ -105,11 +108,12 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
     resetCells();
     activeGreenIdsRef.current = new Set();
     clickedGreenIdsRef.current = new Set();
+    const greenLightSkillActive = endlessRef.current?.getActiveSkill()?.kind === "green-light";
     const delay = getReactionSignalDelayMs({
       lastShownAtMs: lastSignalShownAtRef.current,
-      minIntervalMs: REACTION_MIN_SIGNAL_INTERVAL_MS,
+      minIntervalMs: greenLightSkillActive ? ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS : REACTION_MIN_SIGNAL_INTERVAL_MS,
       nowMs: now(),
-      randomDelayMs: rand(420, 900),
+      randomDelayMs: greenLightSkillActive ? rand(ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS, ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS) : rand(420, 900),
     });
     timersRef.current.push(
       window.setTimeout(() => {
@@ -295,13 +299,6 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
     const endlessRuntime = endlessRef.current;
     const greenLightSkillActive = endlessRuntime?.getActiveSkill()?.kind === "green-light";
     if (endlessRuntime) endlessRuntime.addScore(greenLightSkillActive ? 2 : 1);
-    if (endlessRuntime && greenLightSkillActive) {
-      endlessRuntime.updateActiveSkill((skill) => {
-        if (skill.kind !== "green-light") return skill;
-        const charges = Math.max(0, (skill.charges ?? 1) - 1);
-        return charges > 0 ? { ...skill, charges } : null;
-      });
-    }
     if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) endlessRuntime.awardSpecialBonus("顶级预判！");
     setFeedbackTone("good");
     trialsRef.current.push(

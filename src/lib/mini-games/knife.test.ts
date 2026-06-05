@@ -354,3 +354,12 @@ test("knife endless waits for feedback and slides wheels before advancing", () =
   assert.match(cssSource, /translateX\(-120vw\)/);
   assert.match(cssSource, /translateX\(120vw\)/);
 });
+
+test("knife endless awards a perfect break bonus for no-damage wheel clears", () => {
+  const runtimeSource = readMiniGameRuntimeSource();
+
+  assert.match(runtimeSource, /if \(isEndlessRun && current\.insertedAngles\.length >= shotCount\) \{/);
+  assert.match(runtimeSource, /if \(current\.failures === 0\) \{/);
+  assert.match(runtimeSource, /endlessRef\.current\?\.awardSpecialBonus\(\{ label: "完美击破！", amount: 5 \}\);/);
+  assert.match(runtimeSource, /advanceEndlessKnifeWheel\(\);/);
+});

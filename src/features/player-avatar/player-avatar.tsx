@@ -39,7 +39,7 @@ export type PlayerAvatarExpression =
   | "scared"
   | "hurt";
 
-export type PlayerAvatarEffect = "none" | "shield" | "sparkles" | "question";
+export type PlayerAvatarEffect = "none" | "shield" | "sparkles" | "question" | "wind";
 export type PlayerAvatarGravity = "normal" | "light" | "heavy";
 export type PlayerAvatarSize = "sm" | "md" | "lg" | number;
 export type PlayerAvatarDirection = "left" | "right" | "none";
@@ -51,7 +51,7 @@ export type PlayerAvatarView = {
 };
 export const PLAYER_AVATAR_ACTIONS = ["idle", "move", "charge", "land", "hit", "celebrate", "sleep", "wonder"] as const satisfies readonly PlayerAvatarAction[];
 export const PLAYER_AVATAR_EXPRESSIONS = ["neutral", "happy", "sleepy", "scared", "hurt"] as const satisfies readonly PlayerAvatarExpression[];
-export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question"] as const satisfies readonly PlayerAvatarEffect[];
+export const PLAYER_AVATAR_EFFECTS = ["none", "shield", "sparkles", "question", "wind"] as const satisfies readonly PlayerAvatarEffect[];
 
 const PlayerAvatarSkinContext = createContext<PlayerAvatarSkin>("cyan");
 const PlayerAvatarCustomImageContext = createContext<string | null>(null);
@@ -352,6 +352,7 @@ export function PlayerAvatar(props: PlayerAvatarProps) {
         <span className={styles.sparkles} />
         <span className={styles.shield} />
         <span className={styles.questionMark} />
+        <span className={styles.wind} />
         <span className={styles.motion}>
           <span className={styles.rotator}>
             <span className={styles.body}>
