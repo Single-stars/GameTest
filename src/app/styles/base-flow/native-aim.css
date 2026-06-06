@@ -83,6 +83,14 @@
   animation: advanced-aim-incoming-warning 620ms ease-in-out infinite;
 }
 
+.advanced-aim-incoming-warning.energy {
+  filter: drop-shadow(0 8px 12px rgba(22, 163, 184, 0.34));
+}
+
+.advanced-aim-incoming-warning.energy::after {
+  background: linear-gradient(145deg, #2dd4bf, #16a3b8);
+}
+
 .advanced-aim-incoming-warning.side-left::after {
   transform: rotate(90deg);
 }
@@ -133,6 +141,25 @@
   border-style: dashed;
   background: #918a7e;
   box-shadow: 0 0 0 8px rgba(24, 24, 24, 0.08);
+}
+
+.advanced-aim-target.energy {
+  border-color: rgba(255, 255, 255, 0.78);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.9) 0 18%, transparent 19%),
+    linear-gradient(145deg, #2dd4bf, #16a3b8);
+  box-shadow:
+    0 0 0 8px rgba(45, 212, 191, 0.14),
+    0 0 24px rgba(22, 163, 184, 0.42);
+}
+
+.advanced-aim-target.energy::after {
+  width: 44%;
+  height: 56%;
+  border-radius: 0;
+  background: #fff8d7;
+  clip-path: polygon(55% 0, 18% 48%, 46% 48%, 34% 100%, 82% 36%, 52% 36%);
+  filter: drop-shadow(0 2px 4px rgba(16, 92, 104, 0.32));
 }
 
 .advanced-aim-shooter {

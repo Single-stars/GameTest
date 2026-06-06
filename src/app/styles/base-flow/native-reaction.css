@@ -130,6 +130,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.advanced-reaction-grid.lane-transitioning {
+  box-shadow:
+    var(--shadow),
+    inset 0 0 0 2px rgba(47, 128, 237, 0.24),
+    inset 0 0 36px rgba(47, 128, 237, 0.08);
+}
+
 .advanced-reaction-cell {
   min-width: 0;
   min-height: 0;

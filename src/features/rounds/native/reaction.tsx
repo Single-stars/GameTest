@@ -35,6 +35,7 @@ function reactionAvatarView(cell: AdvancedReactionCell, feedbackTone: "idle" | "
 
 const REACTION_FEEDBACK_DELAY_MS = 620;
 const ENDLESS_REACTION_PREDICTION_MS = 100;
+const ENDLESS_REACTION_LANE_CHANGE_BUFFER_MS = 1000;
 const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS = 100;
 const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS = 500;
 const ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS = 0;
@@ -43,8 +44,11 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   const config = advancedConfig!;
   const endlessSignalConfig = endless ? getEndlessReactionConfig({ score: Math.max(endless.score, endless.debugDifficulty * 90) }) : null;
 
-  const lanes = endlessSignalConfig?.lanes ?? getParamNumber(config, "lanes", 1);
-  const isBoss = config.variant === "reaction-grid-boss";
+  const targetLaneCount = endlessSignalConfig?.lanes ?? getParamNumber(config, "lanes", 1);
+  const [activeLaneCount, setActiveLaneCount] = useState(targetLaneCount);
+  const [laneTransitioning, setLaneTransitioning] = useState(false);
+  const lanes = activeLaneCount;
+  const isBoss = config.variant === "reaction-grid-boss";
   const totalSignals = getParamNumber(config, "signalCount", getParamNumber(config, "requiredGreenClicks", 5));
   const requiredGreenClicks = getParamNumber(config, "requiredGreenClicks", 1);
   const [cells, setCells] = useState<AdvancedReactionCell[]>(() =>
@@ -60,6 +64,9 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   const lastSignalShownAtRef = useRef(0);
 
   const timersRef = useRef<number[]>([]);
+  const laneChangeTimerRef = useRef<number | null>(null);
+  const laneTransitioningRef = useRef(false);
+  const restartSignalAfterLaneChangeRef = useRef(false);
   const completionTimerRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
   const endlessRef = useRef(endless);
@@ -68,6 +75,11 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   useEffect(() => {
     endlessRef.current = endless;
   }, [endless]);
+
+  const setLaneTransitionState = useCallback((nextTransitioning: boolean) => {
+    laneTransitioningRef.current = nextTransitioning;
+    setLaneTransitioning(nextTransitioning);
+  }, []);
 
   const clearTimers = useCallback(() => {
     for (const timer of timersRef.current) window.clearTimeout(timer);
@@ -103,7 +115,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   }, [lanes]);
 
   const startSignal = useCallback(() => {
-    if (finishedRef.current) return;
+    if (finishedRef.current || laneTransitioningRef.current) return;
     clearTimers();
     resetCells();
     activeGreenIdsRef.current = new Set();
@@ -230,7 +242,48 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
     );
   }, [clearTimers, config.variant, endlessSignalConfig?.thresholdMs, finish, finishAfterFeedback, isBoss, lanes, requiredGreenClicks, resetCells, totalSignals]);
 
-  useEffect(() => {
+  useEffect(() => {
+    if (targetLaneCount === activeLaneCount) {
+      if (laneChangeTimerRef.current !== null) window.clearTimeout(laneChangeTimerRef.current);
+      laneChangeTimerRef.current = null;
+      if (restartSignalAfterLaneChangeRef.current) {
+        restartSignalAfterLaneChangeRef.current = false;
+        startSignal();
+      }
+      return;
+    }
+
+    if (laneChangeTimerRef.current !== null) window.clearTimeout(laneChangeTimerRef.current);
+    laneChangeTimerRef.current = null;
+    restartSignalAfterLaneChangeRef.current = false;
+    clearTimers();
+    activeGreenIdsRef.current = new Set();
+    clickedGreenIdsRef.current = new Set();
+    laneTransitioningRef.current = true;
+    laneChangeTimerRef.current = window.setTimeout(() => {
+      setCells(Array.from({ length: activeLaneCount }, (_, id) => ({ id, color: "idle" })));
+      setFeedbackTone("idle");
+      setLaneTransitionState(true);
+      laneChangeTimerRef.current = window.setTimeout(() => {
+        laneChangeTimerRef.current = null;
+        activeGreenIdsRef.current = new Set();
+        clickedGreenIdsRef.current = new Set();
+        laneTransitioningRef.current = false;
+        restartSignalAfterLaneChangeRef.current = true;
+        setActiveLaneCount(targetLaneCount);
+        setCells(Array.from({ length: targetLaneCount }, (_, id) => ({ id, color: "idle" })));
+        setFeedbackTone("idle");
+        setLaneTransitioning(false);
+      }, ENDLESS_REACTION_LANE_CHANGE_BUFFER_MS);
+    }, 0);
+
+    return () => {
+      if (laneChangeTimerRef.current !== null) window.clearTimeout(laneChangeTimerRef.current);
+      laneChangeTimerRef.current = null;
+    };
+  }, [activeLaneCount, clearTimers, setLaneTransitionState, startSignal, targetLaneCount]);
+
+  useEffect(() => {
     if (!endlessRef.current && !isBoss) {
       const colors = Array.from({ length: totalSignals }, () => (Math.random() > 0.42 ? "green" : "red") as "green" | "red");
       if (!colors.includes("green")) colors[Math.floor(rand(0, colors.length))] = "green";
@@ -241,6 +294,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   }, [clearTimers, isBoss, startSignal, totalSignals]);
 
   const clickCell = (event: ReactPointerEvent<HTMLButtonElement>, cell: AdvancedReactionCell) => {
+    if (laneTransitioningRef.current) return;
     if (finishedRef.current || cell.color === "idle" || cell.clicked) {
       setFeedbackTone("early");
       const endlessRuntime = endlessRef.current;
@@ -337,7 +391,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   };
 
   return (
-    <div className={`advanced-reaction-grid cells-${lanes} ${feedbackTone}`}>
+    <div className={`advanced-reaction-grid cells-${lanes} ${laneTransitioning ? "lane-transitioning" : ""} ${feedbackTone}`}>
       <DifficultyWaveBackdrop />
       {cells.map((cell) => (
         <button

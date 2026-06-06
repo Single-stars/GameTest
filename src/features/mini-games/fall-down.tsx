@@ -57,6 +57,7 @@ import {
 } from "@/lib/multiplayer/protocol";
 const ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5;
 const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 5;
+const ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND = 1 / 60;
 const FALL_DOWN_DANGER_ZIGZAG_SIZE = 18;
 const FALL_DOWN_DANGER_GRACE = 6;
 type FallDownPlatformKind = "normal" | "moving" | "fragile" | "danger" | "finish";
@@ -83,6 +84,12 @@ type FallDownFallingHazard = {
   size: number;
   speed: number;
 };
+type FallDownEnergyPickup = {
+  id: number;
+  x: number;
+  y: number;
+  collected: boolean;
+};
 type FallDownRuntime = {
   started: boolean;
   time: number;
@@ -106,6 +113,7 @@ type FallDownRuntime = {
   reason: string;
   platforms: FallDownPlatform[];
   fallingHazards: FallDownFallingHazard[];
+  energyPickups: FallDownEnergyPickup[];
 };
 
 const FALL_DOWN_LEDGE_WIDTH = 14;
@@ -535,6 +543,7 @@ function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stag
     reason: "",
     platforms,
     fallingHazards: makeFallDownFallingHazards(level, runSeed, stageSize),
+    energyPickups: [],
   };
 }
 
@@ -609,6 +618,7 @@ function makeFallDownView(runtime: FallDownRuntime): FallDownRuntime {
     ...runtime,
     platforms: resolveFallDownSpectatorPlatforms(runtime),
     fallingHazards: runtime.fallingHazards.map((hazard) => ({ ...hazard })),
+    energyPickups: runtime.energyPickups.filter((pickup) => !pickup.collected).map((pickup) => ({ ...pickup })),
   };
 }
 
@@ -752,6 +762,8 @@ export function FallDownPrototype({
   const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
+  const fallEnergyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const energyPickupIdRef = useRef(0);
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
   const fallDownPointerIdRef = useRef<number | null>(null);
   const lastUiSyncRef = useRef(0);
@@ -803,6 +815,7 @@ export function FallDownPrototype({
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    energyPickupIdRef.current = 0;
     remoteSmootherRef.current.reset();
     remoteVisualSmootherRef.current.reset();
     authoritativeSmootherRef.current.reset();
@@ -855,6 +868,7 @@ export function FallDownPrototype({
       syncFallDownWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, stageWidth);
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
+      const energyPickupById = new Map(current.energyPickups.map((pickup) => [pickup.id, pickup]));
       const activeFallDownParams = isEndlessRun
         ? getEndlessMiniGameStageConfig({
             debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
@@ -897,6 +911,21 @@ export function FallDownPrototype({
         }
         node.style.display = "";
         node.style.transform = `${transformPoint3d(hazardX - hazard.size / 2, hazardY - hazard.size / 2)} rotate(45deg)`;
+      }
+
+      for (const [id, node] of fallEnergyPickupRefs.current) {
+        const pickup = energyPickupById.get(id);
+        if (!pickup || pickup.collected) {
+          node.style.display = "none";
+          continue;
+        }
+        const screenY = pickup.y - current.cameraY;
+        if (screenY < -80 || screenY > stageHeight + 80) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
+        node.style.transform = transformPoint3d(pickup.x - 16, screenY - 16);
       }
 
       if (playerShellRef.current) {
@@ -1214,7 +1243,36 @@ export function FallDownPrototype({
             }
           }
 
+          if (isEndlessRun && Math.random() < delta * ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND) {
+            current.energyPickups.push({
+              id: energyPickupIdRef.current,
+              x: clamp(44 + Math.random() * (stageWidth - 88), 36, stageWidth - 36),
+              y: current.cameraY + stageHeight * (0.68 + Math.random() * 0.82),
+              collected: false,
+            });
+            energyPickupIdRef.current += 1;
+          }
+
+          if (isEndlessRun && current.energyPickups.length > 0) {
+            for (const pickup of current.energyPickups) {
+              if (pickup.collected) continue;
+              const dx = current.playerX - pickup.x;
+              const dy = current.playerY - pickup.y;
+              if (dx * dx + dy * dy <= 30 * 30) {
+                pickup.collected = true;
+                endlessRef.current?.fillEnergy();
+                eventChanged = true;
+              }
+            }
+            current.energyPickups = current.energyPickups.filter((pickup) => {
+              if (pickup.collected) return false;
+              const screenY = pickup.y - current.cameraY;
+              return screenY >= -stageHeight * 0.45 && screenY <= stageHeight * 1.45;
+            });
+          }
+
           for (const platform of current.platforms) {
+            if (platform.id !== current.currentPlatformId) continue;
             const platformX = fallPlatformX(platform, current.time, stageWidth);
             current.playerX = clamp(resolveFallDownLedgeCollision(platform, platformX, current.playerX, previousPlayerX, current.playerY), PLAYER_SIZE / 2 + 4, stageWidth - PLAYER_SIZE / 2 - 4);
           }
@@ -1465,6 +1523,22 @@ export function FallDownPrototype({
                 width: `${hazard.size}px`,
                 zIndex: 9,
               }}
+            />
+          );
+        })}
+        {view.energyPickups.map((pickup) => {
+          const screenY = pickup.y - view.cameraY;
+          if (screenY < -80 || screenY > stageHeight + 80) return null;
+          return (
+            <div
+              aria-hidden="true"
+              className="fall-energy-pickup"
+              key={pickup.id}
+              ref={(node) => {
+                if (node) fallEnergyPickupRefs.current.set(pickup.id, node);
+                else fallEnergyPickupRefs.current.delete(pickup.id);
+              }}
+              style={{ transform: transformPoint3d(pickup.x - 16, screenY - 16) }}
             />
           );
         })}

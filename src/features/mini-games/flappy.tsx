@@ -70,8 +70,16 @@ const FLAPPY_SUPER_DASH_PULSE_BLEND = 0.24;
 const FLAPPY_SPEED_TRAIL_LENGTH = 118;
 const FLAPPY_SPEED_TRAIL_POSITION_SMOOTHING = 22;
 const FLAPPY_SPEED_TRAIL_ANGLE_SMOOTHING = 14;
+const ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND = 1 / 60;
 const DEBUG_MINI_GAME_HITBOX = false;
 type FlappyGate = GeneratedFlappyGate & { gravityTriggered?: boolean };
+
+type FlappyEnergyPickup = {
+  id: number;
+  x: number;
+  y: number;
+  collected: boolean;
+};
 
 type FlappySpeedTrailVisual = {
   angleDeg: number;
@@ -96,6 +104,7 @@ type FlappyFrame = {
   playerY: number;
   playerVy: number;
   gates: FlappyGate[];
+  energyPickups: FlappyEnergyPickup[];
   passed: number;
   collected: number;
   playerTurns: number;
@@ -120,6 +129,7 @@ type FlappyViewFrame = {
   status: PrototypeStatus;
   time: number;
   visibleGates: FlappyGate[];
+  visibleEnergyPickups: FlappyEnergyPickup[];
 };
 
 type FlappyGravityChangeBlend = {
@@ -257,6 +267,7 @@ function createFlappyRuntime(gates: FlappyGate[], initialPlayerY: number): Flapp
     playerY: initialPlayerY,
     playerVy: 0,
     gates: gates.map((gate) => ({ ...gate })),
+    energyPickups: [],
     passed: 0,
     collected: 0,
     playerTurns: 0,
@@ -386,6 +397,7 @@ function makeFlappyView(frame: FlappyFrame, reverseDirection: boolean, buffer: n
     status: frame.status,
     time: frame.time,
     visibleGates: resolveFlappySpectatorGates(frame, reverseDirection, buffer, stageWidth),
+    visibleEnergyPickups: selectVisibleFlappyEnergyPickups(frame, reverseDirection, buffer, stageWidth),
   };
 }
 
@@ -399,6 +411,15 @@ function resolveFlappySpectatorGates(frame: FlappyFrame, reverseDirection: boole
       stageWidth,
     }),
   }.visibleGates;
+}
+
+function selectVisibleFlappyEnergyPickups(frame: FlappyFrame, reverseDirection: boolean, buffer: number, stageWidth: number) {
+  const cameraX = getFlappySignedProgress(frame.displayProgress, reverseDirection);
+  return frame.energyPickups.filter((pickup) => {
+    if (pickup.collected) return false;
+    const screenX = pickup.x - cameraX;
+    return screenX >= -buffer && screenX <= stageWidth + buffer;
+  });
 }
 
 function formatFlappyCollectibleMissReason(collected: number, collectibleCount: number) {
@@ -491,13 +512,42 @@ function extendEndlessFlappyGates(
     current.gates.push({
       ...gate,
       collected: false,
+      collectible: gate.collectible,
       distance: gate.distance + offsetDistance,
       id: nextGateId,
       passed: false,
     });
     nextGateId += 1;
   }
+  const pruneBeforeDistance = Math.max(0, current.progress - stageSize.width * 1.8);
+  current.gates = current.gates.filter((gate) => !gate.passed || gate.distance >= pruneBeforeDistance);
   return true;
+}
+
+function pickEndlessFlappyEnergyPickupPosition(
+  gates: FlappyGate[],
+  progress: number,
+  reverseDirection: boolean,
+  stageWidth: number,
+  stageHeight: number,
+) {
+  const gatePairs = gates
+    .filter((gate) => !gate.passed && gate.distance >= Math.max(0, progress - stageWidth * 0.35))
+    .sort((left, right) => left.distance - right.distance);
+
+  for (let index = 0; index < gatePairs.length - 1; index += 1) {
+    const gateBefore = gatePairs[index];
+    const gateAfter = gatePairs[index + 1];
+    const gateGapDistance = gateAfter.distance - gateBefore.distance;
+    if (gateGapDistance < FLAPPY_GATE_WIDTH + 72) continue;
+    const pickupDistance = gateBefore.distance + gateGapDistance * (0.36 + Math.random() * 0.28);
+    return {
+      x: reverseDirection ? -pickupDistance : stageWidth + pickupDistance,
+      y: clamp(72 + Math.random() * (stageHeight - 144), 56, stageHeight - 56),
+    };
+  }
+
+  return null;
 }
 
 export function FlappyPrototype({
@@ -588,6 +638,8 @@ export function FlappyPrototype({
   const gateBottomRefs = useRef(new Map<number, HTMLDivElement>());
   const gateMarkerRefs = useRef(new Map<number, HTMLDivElement>());
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
+  const energyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const energyPickupIdRef = useRef(0);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const flappySpeedTrailRef = useRef<HTMLSpanElement | null>(null);
   const flappySpeedTrailVisualRef = useRef<FlappySpeedTrailVisual | null>(null);
@@ -699,6 +751,7 @@ export function FlappyPrototype({
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    energyPickupIdRef.current = 0;
     gravityChangeBlendRef.current = null;
     gravityFlippedRef.current = false;
     flappySpeedTrailVisualRef.current = null;
@@ -828,6 +881,17 @@ export function FlappyPrototype({
             collectibleNode.style.transform = transformPoint3d(screenX + FLAPPY_GATE_WIDTH / 2 - 9, collectibleY - 9);
           }
         }
+      }
+
+      const activeCameraX = getFlappySignedProgress(renderProgress, activeReverseDirection);
+      for (const [id, pickupNode] of energyPickupRefs.current) {
+        const pickup = current.energyPickups.find((item) => item.id === id);
+        if (!pickup || pickup.collected) {
+          pickupNode.style.display = "none";
+          continue;
+        }
+        pickupNode.style.display = "";
+        pickupNode.style.transform = transformPoint3d(pickup.x - activeCameraX - 16, pickup.y - 16);
       }
 
       const localCameraX = getFlappySignedProgress(current.displayProgress, activeReverseDirection);
@@ -1011,6 +1075,39 @@ export function FlappyPrototype({
             reason = "撞到障碍";
           }
         }
+      }
+
+      if (isEndlessRun && Math.random() < delta * ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND) {
+        const pickupPosition = pickEndlessFlappyEnergyPickupPosition(current.gates, nextProgress, activeReverseDirection, stageWidth, stageHeight);
+        if (pickupPosition) {
+          current.energyPickups.push({
+            id: energyPickupIdRef.current,
+            x: pickupPosition.x,
+            y: pickupPosition.y,
+            collected: false,
+          });
+          energyPickupIdRef.current += 1;
+        }
+      }
+
+      if (isEndlessRun && current.energyPickups.length > 0) {
+        const cameraX = getFlappySignedProgress(nextProgress, activeReverseDirection);
+        const playerWorldX = activePlayerX + cameraX;
+        for (const pickup of current.energyPickups) {
+          if (pickup.collected) continue;
+          const dx = playerWorldX - pickup.x;
+          const dy = nextY - pickup.y;
+          if (dx * dx + dy * dy <= 30 * 30) {
+            pickup.collected = true;
+            endlessRef.current?.fillEnergy();
+            eventChanged = true;
+          }
+        }
+        current.energyPickups = current.energyPickups.filter((pickup) => {
+          if (pickup.collected) return false;
+          const screenX = pickup.x - cameraX;
+          return screenX >= -stageWidth * 0.55 && screenX <= stageWidth * 1.65;
+        });
       }
 
       if ((nextY < PLAYER_SIZE / 2 || nextY > stageHeight - PLAYER_SIZE / 2) && nextTime >= current.invincibleUntil && !superDashInvincible) {
@@ -1229,7 +1326,7 @@ export function FlappyPrototype({
         </div>
       ) : null}
       <div
-        className={`prototype-stage flappy-stage ${screenShakeClassName} ${gravityFlipTransitionActive ? "gravity-flip-preparing" : ""} ${activeViewReverseDirection ? "reverse" : ""} ${activeViewReversedGravity ? "endless-gravity-anomaly" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage flappy-stage ${screenShakeClassName} ${gravityFlipTransitionActive ? "gravity-flip-preparing" : ""} ${activeViewReverseDirection ? "reverse" : ""} ${activeViewReversedGravity ? "endless-gravity-anomaly" : ""} ${isEndlessRun ? "endless-readable" : ""} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Flappy Bird 型小游戏"
@@ -1339,6 +1436,20 @@ export function FlappyPrototype({
                   />
                 ) : null}
               </div>
+            );
+          })}
+          {view.visibleEnergyPickups.map((pickup) => {
+            const pickupScreenX = pickup.x - getFlappySignedProgress(view.displayProgress, activeViewReverseDirection);
+            return (
+              <div
+                className="flappy-energy-pickup"
+                key={pickup.id}
+                ref={(node) => {
+                  if (node) energyPickupRefs.current.set(pickup.id, node);
+                  else energyPickupRefs.current.delete(pickup.id);
+                }}
+                style={{ transform: transformPoint3d(pickupScreenX - 16, pickup.y - 16) }}
+              />
             );
           })}
           <div

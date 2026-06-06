@@ -399,7 +399,7 @@ test("advanced braking renders rule-tale hints as readable background text", () 
   );
 
   assert.match(advancedBrakingSource, /const \[activeRuleHint, setActiveRuleHint\] = useState/);
-  assert.match(advancedBrakingSource, /setActiveRuleHint\(getAdvancedBrakeRuleHint\(activeConfig\.level, activeConfig\.params\.dualRule\)\)/);
+  assert.match(advancedBrakingSource, /const nextRuleHint = endless/);
   assert.match(trackRenderSource, /className="advanced-brake-rule-backdrop-text"/);
   assert.match(ruleText, /position:\s*absolute;/);
   assert.match(ruleText, /top:\s*clamp\(/);
@@ -423,10 +423,121 @@ test("advanced braking endless lanes follow the active reused rule config withou
   assert.match(brakingSource, /function getAdvancedBrakingRuleZoneConfig/);
   assert.match(brakingSource, /function isAdvancedBrakingRuleZoneActive/);
   assert.match(advancedBrakingSource, /const \[activeLaneCount, setActiveLaneCount\] = useState/);
-  assert.match(advancedBrakingSource, /setActiveLaneCount\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\) \? resolveAdvancedBrakingLaneCount\(ruleZoneConfig\) : resolveAdvancedBrakingLaneCount\(config\)\)/);
+  assert.match(advancedBrakingSource, /setActiveLaneCount\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\) \? Math\.max\(2, resolveAdvancedBrakingLaneCount\(ruleZoneConfig\)\) : resolveAdvancedBrakingLaneCount\(config\)\)/);
   assert.doesNotMatch(advancedBrakingSource, /const lanes = endless \? \(endlessDifficulty >= 0\.48 \? 2 : 1\)/);
-  assert.match(advancedBrakingSource, /forceRuleDanger: endlessRuntime \? false : shouldForceAdvancedBrakeRuleDangerEvent/);
+  assert.match(advancedBrakingSource, /forceRuleDanger: endlessRuntime \? isAdvancedBrakingRuleZoneActive\(brakingRuleZoneStateRef\.current\) : shouldForceAdvancedBrakeRuleDangerEvent/);
   assert.doesNotMatch(advancedBrakingSource, /const activeEventCountTarget = endless \? Number\.MAX_SAFE_INTEGER : eventCountTarget;/);
+});
+
+test("endless braking rule portals are the only rule space and keep the beige stage under dark waves", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const cssSource = readSource("../app/styles/base-flow/advanced.css");
+
+  assert.match(brakingSource, /ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 118/);
+  assert.match(brakingSource, /resetAdvancedBrakingHold/);
+  assert.match(brakingSource, /resetAdvancedBrakingInput/);
+  assert.match(brakingSource, /pickEndlessBrakingRuleHint/);
+  assert.match(brakingSource, /ruleZoneHintRef/);
+  assert.match(brakingSource, /setActiveLaneCount\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\) \? Math\.max\(2, resolveAdvancedBrakingLaneCount\(ruleZoneConfig\)\)/);
+  assert.match(brakingSource, /if \(nextRuleZoneState === "active"\)[\s\S]*resetAdvancedBrakingInput\(\);/);
+  assert.match(brakingSource, /if \(nextRuleZoneState === "normal"\)[\s\S]*resetAdvancedBrakingInput\(\);/);
+  assert.match(brakingSource, /forceRuleDanger: endlessRuntime \? isAdvancedBrakingRuleZoneActive\(brakingRuleZoneStateRef\.current\) : shouldForceAdvancedBrakeRuleDangerEvent/);
+  assert.doesNotMatch(brakingSource, /setActiveRuleHint\(isAdvancedBrakingRuleZoneActive\(brakingRuleZoneState\)[\s\S]*: getAdvancedBrakeRuleHint/);
+  assert.match(cssSource, /\.advanced-braking\.rule-zone-active/);
+  assert.doesNotMatch(cssSource, /\.advanced-braking\.rule-zone-active\s*\{[\s\S]*background:\s*#050505/);
+  assert.match(cssSource, /\.advanced-braking\.rule-zone-active\s*\{[\s\S]*--difficulty-wave-color:\s*rgba\(5,\s*5,\s*5/);
+});
+
+test("endless braking rule tales are rule objects with fake-danger predicates and impact animations", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const cssSource = readSource("../app/styles/base-flow/advanced.css");
+  const bumpedKeyframes = cssSource.slice(cssSource.indexOf("@keyframes advanced-brake-hazard-bumped"));
+
+  assert.match(brakingSource, /type EndlessBrakingRuleTaleKind/);
+  assert.match(brakingSource, /ENDLESS_BRAKING_RULE_TALES/);
+  assert.match(brakingSource, /kind: "fake-only"/);
+  assert.match(brakingSource, /kind: "top-fake-only"/);
+  assert.match(brakingSource, /kind: "bottom-fake-only"/);
+  assert.match(brakingSource, /function resolveEndlessBrakingRuleTaleAction/);
+  assert.match(brakingSource, /function getEndlessBrakingRuleTaleReleaseCaseCount/);
+  assert.match(brakingSource, /every\(\(rule\) => getEndlessBrakingRuleTaleReleaseCaseCount\(rule\) <= 1\)/);
+  assert.match(brakingSource, /function getEndlessBrakingEventOptions/);
+  assert.match(brakingSource, /activeRuleTaleRef/);
+  assert.match(brakingSource, /grayFakeChance/);
+  assert.match(brakingSource, /endlessBrakingEventKey/);
+  assert.match(brakingSource, /filterRecentEndlessBrakingEventOptions/);
+  assert.match(brakingSource, /recentEndlessHazardKeysRef/);
+  assert.match(brakingSource, /resolveEndlessBrakingReactionWindowMs/);
+  assert.match(brakingSource, /ENDLESS_BRAKING_LEVEL_10_REACTION_WINDOW_MS/);
+  assert.match(brakingSource, /bumpedHazards/);
+  assert.match(brakingSource, /advanced-hazard-bumped/);
+  assert.match(brakingSource, /rulePortalLanes/);
+  assert.match(cssSource, /\.advanced-hazard-bumped/);
+  assert.match(cssSource, /@keyframes advanced-brake-hazard-bumped/);
+  assert.doesNotMatch(bumpedKeyframes, /scale\(/);
+  assert.match(bumpedKeyframes, /rotate\(var\(--advanced-brake-bump-rotate/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-track\s*\{[\s\S]*overflow:\s*visible;/);
+  assert.match(cssSource, /\.advanced-braking\.endless-runner \.advanced-brake-lane\s*\{[\s\S]*overflow:\s*visible;/);
+});
+
+test("endless braking passive clears and skill impacts avoid misleading success flashes", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const skillImpactSource = brakingSource.slice(
+    brakingSource.indexOf("const isBigLuckSkillActive"),
+    brakingSource.indexOf("const recordHoldSuccess"),
+  );
+  const holdSuccessSource = brakingSource.slice(
+    brakingSource.indexOf("const recordHoldSuccess"),
+    brakingSource.indexOf("const startHazard"),
+  );
+  const reachedRunnerSource = brakingSource.slice(
+    brakingSource.indexOf("if (hasAdvancedBrakingHazardReachedRunner({"),
+    brakingSource.indexOf("if (!activeEndless && getAdvancedBrakeHasReachedFinish"),
+  );
+
+  assert.match(skillImpactSource, /bumpAdvancedBrakingHazard/);
+  assert.doesNotMatch(skillImpactSource, /showAdvancedFeedback\("success"\)/);
+  assert.match(holdSuccessSource, /if \(!endlessRef\.current\) showAdvancedFeedback\("success"\);/);
+  assert.equal(
+    reachedRunnerSource.indexOf("if (isBigLuckSkillActive())") < reachedRunnerSource.indexOf("if (movedHazard.correctAction"),
+    true,
+  );
+});
+
+test("endless braking big luck ends without post-skill grace or speed trail visuals", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const runtimeSource = readSource("../features/endless/endless-round-player.tsx");
+  const cssSource = readSource("../app/styles/base-flow/advanced.css");
+
+  assert.match(runtimeSource, /const ENDLESS_BRAKING_SKILL_DURATION_MS = 5000;/);
+  assert.match(brakingSource, /const ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS = 1300;/);
+  assert.match(brakingSource, /bigLuckRunningRef/);
+  assert.match(brakingSource, /bigLuckRecoveryDelayPendingRef/);
+  assert.match(brakingSource, /eventTimerRef\.current = Math\.max\(nextEventDelayMs, ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS\);/);
+  assert.match(brakingSource, /if \(bigLuckRunningRef\.current && !bigLuckRunning && activeEndlessRuntime\) \{[\s\S]*bigLuckRecoveryDelayPendingRef\.current = true;[\s\S]*if \(!hazardRef\.current && !rulePortalRef\.current\) resetEventTimer\(\);/);
+  assert.doesNotMatch(brakingSource, /postBigLuckGraceRef|consumePostBigLuckGrace|bigLuckWasActiveRef|clearCurrentEndlessHazardAfterGrace/);
+  assert.doesNotMatch(brakingSource, /bigLuckVisualActive|advanced-brake-skill-trail|flappy-speed-trail|flappy-speed-trail-flow|--flappy-speed-trail/);
+  assert.doesNotMatch(cssSource, /\.advanced-brake-skill-trail/);
+  assert.doesNotMatch(cssSource, /@keyframes advanced-brake-skill-trail-flow/);
+});
+
+test("endless green-light lane count changes use a readable buffer instead of instantly reshaping cells", () => {
+  const reactionSource = readSource("../features/rounds/native/reaction.tsx");
+  const cssSource = readSource("../app/styles/base-flow/native-reaction.css");
+
+  assert.match(reactionSource, /ENDLESS_REACTION_LANE_CHANGE_BUFFER_MS = 1000/);
+  assert.match(reactionSource, /targetLaneCount/);
+  assert.match(reactionSource, /laneChangeTimerRef/);
+  assert.match(reactionSource, /laneTransitioningRef/);
+  assert.match(reactionSource, /restartSignalAfterLaneChangeRef/);
+  assert.match(reactionSource, /if \(finishedRef\.current \|\| laneTransitioningRef\.current\) return;/);
+  assert.match(reactionSource, /if \(laneTransitioningRef\.current\) return;/);
+  assert.match(reactionSource, /clearTimers\(\);[\s\S]*setLaneTransitionState\(true\)/);
+  assert.match(reactionSource, /setLaneTransitioning\(nextTransitioning\)/);
+  assert.match(reactionSource, /setLaneTransitionState\(true\)/);
+  assert.match(reactionSource, /setActiveLaneCount\(targetLaneCount\)/);
+  assert.match(reactionSource, /advanced-reaction-grid cells-\$\{lanes\} \$\{laneTransitioning \? "lane-transitioning" : ""\}/);
+  assert.match(cssSource, /\.advanced-reaction-grid\.lane-transitioning/);
 });
 
 test("advanced braking endless runner uses a lightweight background parallax instead of in-track scenery posts", () => {

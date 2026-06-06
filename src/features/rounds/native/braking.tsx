@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -56,22 +57,60 @@ type AdvancedBrakeHazard = {
 
 };
 
+type AdvancedBrakeBumpedHazard = AdvancedBrakeHazard & {
+  id: number;
+  rotationDeg: number;
+};
+
 type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 type AdvancedBrakingRuleZoneState = "normal" | "entering" | "active" | "exiting";
 type AdvancedBrakingRulePortal = {
   x: number;
   targetState: AdvancedBrakingRuleZoneState;
 };
+type EndlessBrakingRuleTaleKind =
+  | "all-fake"
+  | "top-red-only"
+  | "bottom-red-only"
+  | "double-red-only"
+  | "fake-only"
+  | "top-fake-only"
+  | "bottom-fake-only";
+type EndlessBrakingRuleTale = {
+  kind: EndlessBrakingRuleTaleKind;
+  text: string;
+};
 
 const ENDLESS_BRAKE_RUNNER_LEFT_PERCENT = 16;
 const ENDLESS_BRAKING_FAST_REACTION_MS = 150;
 const ENDLESS_BIG_LUCK_SPEED_MULTIPLIER = 2;
-const ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER = 1.8;
+const ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER = 3.2;
+const ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS = 1300;
+const ENDLESS_BRAKING_LEVEL_10_REACTION_WINDOW_MS = 420;
 const ENDLESS_BRAKING_RULE_ZONE_MIN_DIFFICULTY = 0.48;
-const ENDLESS_BRAKING_RULE_ZONE_NORMAL_MAX_DIFFICULTY = 0.44;
-const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 64;
+const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 118;
 const ENDLESS_BRAKING_RULE_ZONE_DISTANCE = 520;
 const ENDLESS_BRAKING_RULE_ZONE_COOLDOWN_DISTANCE = 260;
+const ENDLESS_BRAKING_RULE_TALES: EndlessBrakingRuleTale[] = [
+  { kind: "all-fake", text: "规则：红色真危险和灰色假危险都不用松手" },
+  { kind: "top-red-only", text: "规则：只有上轨单独出现红色真危险时松手" },
+  { kind: "bottom-red-only", text: "规则：只有下轨单独出现红色真危险时松手" },
+  { kind: "double-red-only", text: "规则：只有上下双轨同时出现红色真危险时松手" },
+  { kind: "fake-only", text: "规则：只有上下双轨同时出现灰色假危险时松手" },
+  { kind: "top-fake-only", text: "规则：只有上轨单独出现灰色假危险时松手" },
+  { kind: "bottom-fake-only", text: "规则：只有下轨单独出现灰色假危险时松手" },
+];
+
+const ENDLESS_BRAKING_RULE_CASES: AdvancedBrakeEvent[] = [
+  { top: "red", bottom: null },
+  { top: null, bottom: "red" },
+  { top: "red", bottom: "red" },
+  { top: "gray", bottom: null },
+  { top: null, bottom: "gray" },
+  { top: "gray", bottom: "gray" },
+  { top: "red", bottom: "gray" },
+  { top: "gray", bottom: "red" },
+];
 
 function getAdvancedBrakingSpeedMultiplier(activeSkill: EndlessActiveSkill | null | undefined) {
   return activeSkill?.kind === "big-luck" ? ENDLESS_BIG_LUCK_SPEED_MULTIPLIER : 1;
@@ -79,6 +118,93 @@ function getAdvancedBrakingSpeedMultiplier(activeSkill: EndlessActiveSkill | nul
 
 function resolveAdvancedBrakingReactionWindowMs(baseReactionWindowMs: number, speedMultiplier: number) {
   return Math.max(80, Math.round(baseReactionWindowMs / Math.max(1, speedMultiplier)));
+}
+
+function resolveEndlessBrakingReactionWindowMs(baseReactionWindowMs: number, difficulty: number, speedMultiplier: number) {
+  const rampedReactionWindowMs = Math.round(baseReactionWindowMs + (ENDLESS_BRAKING_LEVEL_10_REACTION_WINDOW_MS - baseReactionWindowMs) * clamp(difficulty, 0, 1));
+  return resolveAdvancedBrakingReactionWindowMs(rampedReactionWindowMs, speedMultiplier);
+}
+
+function isEndlessBrakingSameEvent(left: AdvancedBrakeEvent, right: AdvancedBrakeEvent) {
+  return left.top === right.top && left.bottom === right.bottom;
+}
+
+function endlessBrakingEventKey(event: AdvancedBrakeEvent & { correctAction?: AdvancedBrakeAction }) {
+  return `${event.top ?? "none"}:${event.bottom ?? "none"}:${event.correctAction ?? "unknown"}`;
+}
+
+function filterRecentEndlessBrakingEventOptions<T extends AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }>(
+  options: T[],
+  recentKeys: string[],
+) {
+  const filtered = options.filter((event) => !recentKeys.includes(endlessBrakingEventKey(event)));
+  return filtered.length > 0 ? filtered : options;
+}
+
+function resolveEndlessBrakingRuleTaleAction(rule: EndlessBrakingRuleTale, event: AdvancedBrakeEvent): AdvancedBrakeAction {
+  const releaseCase: AdvancedBrakeEvent | null =
+    rule.kind === "top-red-only"
+      ? { top: "red", bottom: null }
+      : rule.kind === "bottom-red-only"
+        ? { top: null, bottom: "red" }
+        : rule.kind === "double-red-only"
+          ? { top: "red", bottom: "red" }
+          : rule.kind === "fake-only"
+            ? { top: "gray", bottom: "gray" }
+            : rule.kind === "top-fake-only"
+              ? { top: "gray", bottom: null }
+              : rule.kind === "bottom-fake-only"
+                ? { top: null, bottom: "gray" }
+                : null;
+  return releaseCase && isEndlessBrakingSameEvent(releaseCase, event) ? "release" : "hold";
+}
+
+function getEndlessBrakingRuleTaleReleaseCaseCount(rule: EndlessBrakingRuleTale) {
+  return ENDLESS_BRAKING_RULE_CASES.filter((event) => resolveEndlessBrakingRuleTaleAction(rule, event) === "release").length;
+}
+
+if (!ENDLESS_BRAKING_RULE_TALES.every((rule) => getEndlessBrakingRuleTaleReleaseCaseCount(rule) <= 1)) {
+  throw new Error("Each endless braking rule tale must map to at most one release case.");
+}
+
+function getEndlessBrakingEventOptions(rule: EndlessBrakingRuleTale, difficulty: number): Array<AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }> {
+  const grayFakeChance = clamp((difficulty - 0.18) / 0.42, 0, 1);
+  const redOptions: AdvancedBrakeEvent[] = [
+    { top: "red", bottom: null },
+    { top: null, bottom: "red" },
+    { top: "red", bottom: "red" },
+  ];
+  const fakeOptions: AdvancedBrakeEvent[] = grayFakeChance > 0
+    ? [
+        { top: "gray", bottom: null },
+        { top: null, bottom: "gray" },
+        { top: "gray", bottom: "gray" },
+        { top: "red", bottom: "gray" },
+        { top: "gray", bottom: "red" },
+      ]
+    : [];
+  const releaseOption = ENDLESS_BRAKING_RULE_CASES.find((event) => resolveEndlessBrakingRuleTaleAction(rule, event) === "release");
+  const mergedOptions = [...redOptions, ...fakeOptions];
+  if (releaseOption && !mergedOptions.some((event) => isEndlessBrakingSameEvent(event, releaseOption))) {
+    mergedOptions.push(releaseOption);
+  }
+  return mergedOptions.map((event) => ({ ...event, correctAction: resolveEndlessBrakingRuleTaleAction(rule, event) }));
+}
+
+function getEndlessBrakingExternalEventOptions(
+  level: number,
+  difficulty: number,
+  context: { eventIndex?: number; eventCount?: number; previousEvent?: AdvancedBrakeEvent | null },
+) {
+  const grayFakeChance = clamp((difficulty - 0.22) / 0.38, 0, 1);
+  const baseOptions = getAdvancedBrakeEventOptions(level, context);
+  if (grayFakeChance <= 0) return baseOptions;
+  const fakeOptions: Array<AdvancedBrakeEvent & { correctAction: AdvancedBrakeAction }> = [
+    { top: "gray", bottom: null, correctAction: "hold" },
+    { top: null, bottom: "gray", correctAction: "hold" },
+    { top: "gray", bottom: "gray", correctAction: "hold" },
+  ];
+  return [...baseOptions, ...fakeOptions.slice(0, Math.max(1, Math.ceil(grayFakeChance * fakeOptions.length)))];
 }
 
 function hasAdvancedBrakingHazardReachedRunner({
@@ -105,8 +231,12 @@ function hasAdvancedBrakingRulePortalReachedRunner({
   return portal.x <= runnerLeftPercent + runnerWidthPercent;
 }
 
-function endBigLuckSkillOnRelease(endlessRuntime: EndlessMiniGameRuntime | undefined) {
-  endlessRuntime?.updateActiveSkill((skill) => (skill.kind === "big-luck" ? null : skill));
+function pickEndlessBrakingRuleTale() {
+  return ENDLESS_BRAKING_RULE_TALES[Math.floor(Math.random() * ENDLESS_BRAKING_RULE_TALES.length)] ?? ENDLESS_BRAKING_RULE_TALES[0];
+}
+
+function pickEndlessBrakingRuleHint(rule = pickEndlessBrakingRuleTale()) {
+  return rule.text;
 }
 
 function resolveAdvancedBrakingEventDelayMs({
@@ -151,11 +281,8 @@ function getAdvancedBrakingRuleZoneConfig({
   endless?: EndlessMiniGameRuntime;
   endlessDifficulty: number;
 }) {
-  if (!endless) return config;
-  const sourceDifficulty = isAdvancedBrakingRuleZoneActive(brakingRuleZoneState)
-    ? endlessDifficulty
-    : Math.min(endlessDifficulty, ENDLESS_BRAKING_RULE_ZONE_NORMAL_MAX_DIFFICULTY);
-  return getEndlessReusableStageConfig({ difficulty: sourceDifficulty, roundId: "braking" }).sourceConfig;
+  if (!endless || !isAdvancedBrakingRuleZoneActive(brakingRuleZoneState)) return config;
+  return getEndlessReusableStageConfig({ difficulty: endlessDifficulty, roundId: "braking" }).sourceConfig;
 }
 
 function shouldAdvancedBrakingUseRuleZone({
@@ -215,7 +342,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const finishSafeDistance = getParamNumber(config, "finishSafeDistance", 12);
   const allowGray = getParamBoolean(config, "allowGray", false);
   const ruleHint = getAdvancedBrakeRuleHint(config.level, config.params.dualRule);
-  const [activeRuleHint, setActiveRuleHint] = useState(ruleHint);
+  const [activeRuleHint, setActiveRuleHint] = useState<string | null>(endless ? null : ruleHint);
   const [activeLaneCount, setActiveLaneCount] = useState(initialLaneCount);
   const [brakingRuleZoneState, setBrakingRuleZoneState] = useState<AdvancedBrakingRuleZoneState>("normal");
   const [rulePortal, setRulePortal] = useState<AdvancedBrakingRulePortal | null>(null);
@@ -245,6 +372,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const [holding, setHolding] = useState(false);
 
   const [hazard, setHazard] = useState<AdvancedBrakeHazard | null>(null);
+  const [bumpedHazards, setBumpedHazards] = useState<AdvancedBrakeBumpedHazard[]>([]);
 
   const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
   const endlessDistanceRef = useRef(0);
@@ -266,6 +394,12 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const rulePortalRef = useRef<AdvancedBrakingRulePortal | null>(null);
   const ruleZoneStartedAtRef = useRef(0);
   const ruleZoneSkillRef = useRef<EndlessActiveSkill | null>(null);
+  const ruleZoneHintRef = useRef<string | null>(null);
+  const activeRuleTaleRef = useRef<EndlessBrakingRuleTale | null>(null);
+  const recentEndlessHazardKeysRef = useRef<string[]>([]);
+  const bigLuckRunningRef = useRef(false);
+  const bigLuckRecoveryDelayPendingRef = useRef(false);
+  const pointerCaptureRef = useRef<{ element: HTMLDivElement; pointerId: number } | null>(null);
 
   const trialsRef = useRef<TrialEvent[]>([]);
 
@@ -281,6 +415,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   const finishedRef = useRef(false);
   const completionTimerRef = useRef<number | null>(null);
+  const bumpedHazardIdRef = useRef(0);
+  const bumpedHazardTimersRef = useRef<number[]>([]);
   const endlessRef = useRef(endless);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -305,14 +441,20 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     const ruleZoneConfig = endless
       ? getEndlessReusableStageConfig({ difficulty: endlessDifficulty, roundId: "braking" }).sourceConfig
       : config;
+    const ruleZoneActive = isAdvancedBrakingRuleZoneActive(brakingRuleZoneState);
     const activeConfig = getAdvancedBrakingRuleZoneConfig({
       brakingRuleZoneState,
       config,
       endless,
       endlessDifficulty,
     });
-    setActiveRuleHint(getAdvancedBrakeRuleHint(activeConfig.level, activeConfig.params.dualRule));
-    setActiveLaneCount(isAdvancedBrakingRuleZoneActive(brakingRuleZoneState) ? resolveAdvancedBrakingLaneCount(ruleZoneConfig) : resolveAdvancedBrakingLaneCount(config));
+    const nextRuleHint = endless
+      ? ruleZoneActive
+        ? ruleZoneHintRef.current ?? activeRuleTaleRef.current?.text ?? getAdvancedBrakeRuleHint(activeConfig.level, activeConfig.params.dualRule)
+        : null
+      : getAdvancedBrakeRuleHint(activeConfig.level, activeConfig.params.dualRule);
+    setActiveRuleHint(nextRuleHint);
+    setActiveLaneCount(isAdvancedBrakingRuleZoneActive(brakingRuleZoneState) ? Math.max(2, resolveAdvancedBrakingLaneCount(ruleZoneConfig)) : resolveAdvancedBrakingLaneCount(config));
   }, [brakingRuleZoneState, config, endless, endlessDifficulty, ruleHint]);
 
 
@@ -331,6 +473,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     feedbackTimerRef.current = null;
     if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
     completionTimerRef.current = null;
+    for (const timer of bumpedHazardTimersRef.current) window.clearTimeout(timer);
+    bumpedHazardTimersRef.current = [];
 
   }, []);
 
@@ -346,7 +490,26 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     }
   }, []);
 
+  const releaseAdvancedBrakingPointerCapture = useCallback(() => {
+    const captured = pointerCaptureRef.current;
+    pointerCaptureRef.current = null;
+    if (!captured) return;
+    try {
+      if (captured.element.hasPointerCapture(captured.pointerId)) {
+        captured.element.releasePointerCapture(captured.pointerId);
+      }
+    } catch {
+      // Pointer capture may already be gone after a scene transition.
+    }
+  }, []);
+
   const forceAdvancedBrakingStopAfterFailure = useCallback(() => {
+    releaseAdvancedBrakingPointerCapture();
+    holdingRef.current = false;
+    setHolding(false);
+  }, [releaseAdvancedBrakingPointerCapture]);
+
+  const resetAdvancedBrakingHold = useCallback(() => {
     holdingRef.current = false;
     setHolding(false);
   }, []);
@@ -355,14 +518,36 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   const resetEventTimer = useCallback(() => {
     const endlessRuntime = endlessRef.current;
-    eventTimerRef.current = resolveAdvancedBrakingEventDelayMs({
+    const nextEventDelayMs = resolveAdvancedBrakingEventDelayMs({
       endless: endlessRuntime,
       distance: endlessRuntime ? Math.max(endlessRuntime.score, endlessDistanceRef.current) : 0,
       maxEventDelayMs,
       minEventDelayMs,
     });
+    if (endlessRuntime && bigLuckRecoveryDelayPendingRef.current) {
+      eventTimerRef.current = Math.max(nextEventDelayMs, ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS);
+      bigLuckRecoveryDelayPendingRef.current = false;
+      return;
+    }
+    eventTimerRef.current = nextEventDelayMs;
 
   }, [maxEventDelayMs, minEventDelayMs]);
+
+  const resetAdvancedBrakingInput = useCallback(() => {
+    releaseAdvancedBrakingPointerCapture();
+    resetAdvancedBrakingHold();
+    if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
+    if (holdSuccessTimerRef.current) window.clearTimeout(holdSuccessTimerRef.current);
+    if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
+    collisionTimerRef.current = null;
+    holdSuccessTimerRef.current = null;
+    feedbackTimerRef.current = null;
+    hazardRef.current = null;
+    setHazard(null);
+    hazardShownAtRef.current = null;
+    setAdvancedFeedback("idle");
+    resetEventTimer();
+  }, [releaseAdvancedBrakingPointerCapture, resetAdvancedBrakingHold, resetEventTimer]);
 
 
 
@@ -376,6 +561,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
       clearTimers();
 
+      releaseAdvancedBrakingPointerCapture();
+
       setHolding(false);
 
       holdingRef.current = false;
@@ -388,7 +575,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
     },
 
-    [clearTimers, onComplete],
+    [clearTimers, onComplete, releaseAdvancedBrakingPointerCapture],
 
   );
 
@@ -460,23 +647,35 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     [],
   );
 
-  const consumeBigLuckObstacleBreak = useCallback(() => {
+  const bumpAdvancedBrakingHazard = useCallback((currentHazard: AdvancedBrakeHazard) => {
+    const bumpedHazard: AdvancedBrakeBumpedHazard = {
+      ...currentHazard,
+      id: bumpedHazardIdRef.current + 1,
+      rotationDeg: rand(-120, 120),
+    };
+    bumpedHazardIdRef.current = bumpedHazard.id;
+    setBumpedHazards((current) => [...current.slice(-3), bumpedHazard]);
+    const timer = window.setTimeout(() => {
+      setBumpedHazards((current) => current.filter((item) => item.id !== bumpedHazard.id));
+      bumpedHazardTimersRef.current = bumpedHazardTimersRef.current.filter((item) => item !== timer);
+    }, 520);
+    bumpedHazardTimersRef.current.push(timer);
+  }, []);
+
+  const isBigLuckSkillActive = useCallback(function isBigLuckSkillActive() {
     const activeEndless = endlessRef.current;
     const activeSkill = activeEndless?.getActiveSkill();
-    if (!activeEndless || activeSkill?.kind !== "big-luck" || (activeSkill.breakCharges ?? 0) <= 0) return false;
-    activeEndless.updateActiveSkill((skill) => {
-      if (skill.kind !== "big-luck") return skill;
-      return { ...skill, breakCharges: Math.max(0, (skill.breakCharges ?? 1) - 1) };
-    });
+    if (!activeEndless || activeSkill?.kind !== "big-luck") return false;
+    const currentHazard = hazardRef.current;
+    if (currentHazard) bumpAdvancedBrakingHazard(currentHazard);
     activeEndless.addScore(1);
-    showAdvancedFeedback("success");
     hazardRef.current = null;
     setHazard(null);
     hazardShownAtRef.current = null;
     hazardIndexRef.current += 1;
     resetEventTimer();
     return true;
-  }, [resetEventTimer, showAdvancedFeedback]);
+  }, [bumpAdvancedBrakingHazard, resetEventTimer]);
 
 
 
@@ -511,7 +710,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
       );
 
       endlessRef.current?.addScore(1);
-      showAdvancedFeedback("success");
+      if (!endlessRef.current) showAdvancedFeedback("success");
 
       clearHazardAfterSuccess();
 
@@ -542,10 +741,14 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     const activeAllowGray = endlessRuntime ? activeDifficulty >= 0.22 : allowGray;
     const activeSpeedMultiplier = getAdvancedBrakingSpeedMultiplier(endlessRuntime?.getActiveSkill());
     const baseReactionWindowMs = activeBrake?.reactionWindowMs ?? reactionWindowMs;
-    const activeReactionWindowMs = resolveAdvancedBrakingReactionWindowMs(baseReactionWindowMs, activeSpeedMultiplier);
+    const activeReactionWindowMs = endlessRuntime
+      ? resolveEndlessBrakingReactionWindowMs(baseReactionWindowMs, activeDifficulty, activeSpeedMultiplier)
+      : resolveAdvancedBrakingReactionWindowMs(baseReactionWindowMs, activeSpeedMultiplier);
     const activeSpeedPerSecond = (activeBrake?.roadSpeed ?? speedPerSecond) * activeSpeedMultiplier;
+    const ruleZoneActive = isAdvancedBrakingRuleZoneActive(brakingRuleZoneStateRef.current);
+    const activeRuleTale = ruleZoneActive ? activeRuleTaleRef.current ?? ENDLESS_BRAKING_RULE_TALES[0] : null;
 
-    const options = getAdvancedBrakeEventOptions(activeConfig.level, {
+    const eventContext = {
 
       eventIndex: hazardIndexRef.current,
 
@@ -553,7 +756,16 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
       previousEvent: previousHazardRef.current,
 
-    });
+    };
+
+    const rawOptions = endlessRuntime
+      ? activeRuleTale
+        ? getEndlessBrakingEventOptions(activeRuleTale, activeDifficulty)
+        : getEndlessBrakingExternalEventOptions(activeConfig.level, activeDifficulty, eventContext)
+      : getAdvancedBrakeEventOptions(activeConfig.level, eventContext);
+    const options = endlessRuntime
+      ? filterRecentEndlessBrakingEventOptions(rawOptions, recentEndlessHazardKeysRef.current)
+      : rawOptions;
 
     const picked = pickAdvancedBrakeEvent(options, {
       forceFake: shouldForceAdvancedBrakeFakeEvent({
@@ -562,7 +774,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
         eventIndex: hazardIndexRef.current,
         eventCount: activeEventCountTarget,
       }),
-      forceRuleDanger: endlessRuntime ? false : shouldForceAdvancedBrakeRuleDangerEvent({
+      forceRuleDanger: endlessRuntime ? isAdvancedBrakingRuleZoneActive(brakingRuleZoneStateRef.current) : shouldForceAdvancedBrakeRuleDangerEvent({
         level: activeConfig.level,
         ruleDangerEventUsed: ruleDangerEventUsedRef.current,
         eventIndex: hazardIndexRef.current,
@@ -573,6 +785,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     });
 
     if (!picked) return;
+    if (endlessRuntime) {
+      const pickedKey = endlessBrakingEventKey(picked);
+      recentEndlessHazardKeysRef.current = [...recentEndlessHazardKeysRef.current.filter((key) => key !== pickedKey), pickedKey].slice(-4);
+    }
 
     const hazardLeft = getAdvancedBrakeDangerLeft({
 
@@ -625,11 +841,11 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
         if (!hazardRef.current || hazardRef.current.correctAction !== "release") return;
 
-        if (consumeBigLuckObstacleBreak()) return;
+        if (isBigLuckSkillActive()) return;
+        const activeEndless = endlessRef.current;
 
         showAdvancedFeedback("crashed", true);
         forceAdvancedBrakingStopAfterFailure();
-        const activeEndless = endlessRef.current;
         if (activeEndless) {
           const canContinue = activeEndless.loseLife("collision");
           hazardRef.current = null;
@@ -697,7 +913,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     clearTimers,
     config,
 
-    consumeBigLuckObstacleBreak,
+    isBigLuckSkillActive,
 
     eventDurationMs,
 
@@ -730,6 +946,13 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
       const delta = frameNow - (lastFrameAtRef.current || frameNow);
 
       lastFrameAtRef.current = frameNow;
+      const activeEndlessRuntime = endlessRef.current;
+      const bigLuckRunning = getBigLuckSkill() !== null;
+      if (bigLuckRunningRef.current && !bigLuckRunning && activeEndlessRuntime) {
+        bigLuckRecoveryDelayPendingRef.current = true;
+        if (!hazardRef.current && !rulePortalRef.current) resetEventTimer();
+      }
+      bigLuckRunningRef.current = bigLuckRunning;
 
       if (holdingRef.current && !finishedRef.current) {
 
@@ -742,7 +965,9 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
         const activeBrake = activeEndless ? getEndlessBrakingConfig({ distance: activeDistance }) : null;
         const activeSpeedMultiplier = getAdvancedBrakingSpeedMultiplier(activeEndless?.getActiveSkill());
         const activeSpeedPerSecond = (activeBrake?.roadSpeed ?? speedPerSecond) * activeSpeedMultiplier;
-        const activeReactionWindowMs = resolveAdvancedBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, activeSpeedMultiplier);
+        const activeReactionWindowMs = activeEndless
+          ? resolveEndlessBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, activeDifficulty, activeSpeedMultiplier)
+          : resolveAdvancedBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, activeSpeedMultiplier);
         let distanceDelta = 0;
 
         if (activeEndless) {
@@ -783,8 +1008,21 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
               brakingRuleZoneStateRef.current = nextRuleZoneState;
               setBrakingRuleZoneState(nextRuleZoneState);
               ruleZoneSkillRef.current = activeEndless.getActiveSkill();
-              if (nextRuleZoneState === "active") ruleZoneStartedAtRef.current = endlessDistanceRef.current;
-              if (nextRuleZoneState === "normal") ruleZoneStartedAtRef.current = endlessDistanceRef.current;
+              if (nextRuleZoneState === "active") {
+                ruleZoneStartedAtRef.current = endlessDistanceRef.current;
+                const nextRuleTale = pickEndlessBrakingRuleTale();
+                activeRuleTaleRef.current = nextRuleTale;
+                ruleZoneHintRef.current = pickEndlessBrakingRuleHint(nextRuleTale);
+                setActiveRuleHint(ruleZoneHintRef.current);
+                resetAdvancedBrakingInput();
+              }
+              if (nextRuleZoneState === "normal") {
+                ruleZoneStartedAtRef.current = endlessDistanceRef.current;
+                activeRuleTaleRef.current = null;
+                ruleZoneHintRef.current = null;
+                setActiveRuleHint(null);
+                resetAdvancedBrakingInput();
+              }
               resetEventTimer();
             }
           } else if (shouldAdvancedBrakingUseRuleZone({
@@ -829,11 +1067,11 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
             collisionTimerRef.current = null;
             if (holdSuccessTimerRef.current) window.clearTimeout(holdSuccessTimerRef.current);
             holdSuccessTimerRef.current = null;
+            if (isBigLuckSkillActive()) {
+              frameRef.current = requestAnimationFrame(tick);
+              return;
+            }
             if (movedHazard.correctAction === "release") {
-              if (consumeBigLuckObstacleBreak()) {
-                frameRef.current = requestAnimationFrame(tick);
-                return;
-              }
               showAdvancedFeedback("crashed", true);
               forceAdvancedBrakingStopAfterFailure();
               const canContinue = activeEndless.loseLife("collision");
@@ -937,8 +1175,9 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     clearTimers,
 
     activeEventCountTarget,
+    config,
 
-    consumeBigLuckObstacleBreak,
+    isBigLuckSkillActive,
 
     finish,
 
@@ -951,6 +1190,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     recordHoldSuccess,
 
     reactionWindowMs,
+
+    resetAdvancedBrakingInput,
 
     resetEventTimer,
 
@@ -971,7 +1212,12 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (finishedRef.current || holdingRef.current) return;
 
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      pointerCaptureRef.current = { element: event.currentTarget, pointerId: event.pointerId };
+    } catch {
+      pointerCaptureRef.current = null;
+    }
 
     setAdvancedFeedback("idle");
 
@@ -984,14 +1230,30 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
 
   const release = (event: ReactPointerEvent<HTMLDivElement>) => {
+    releaseAdvancedBrakingPointerCapture();
+
     if (finishedRef.current || !holdingRef.current) return;
 
     const currentHazard = hazardRef.current;
+    const activeEndless = endlessRef.current;
+    if (!currentHazard) {
+      setHolding(false);
+      holdingRef.current = false;
+      if (activeEndless) {
+        showAdvancedFeedback("early", true);
+        forceAdvancedBrakingStopAfterFailure();
+        const canContinue = activeEndless.loseLife("early_stop");
+        resetEventTimer();
+        if (!canContinue) {
+          finishedRef.current = true;
+          clearTimers();
+        }
+      }
+      return;
+    }
 
     const releaseOutcome = getAdvancedBrakeReleaseOutcome(currentHazard);
-    const activeEndless = endlessRef.current;
     const releaseSpeedMultiplier = getAdvancedBrakingSpeedMultiplier(activeEndless?.getActiveSkill());
-    endBigLuckSkillOnRelease(activeEndless);
 
     setHolding(false);
 
@@ -1060,7 +1322,13 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     const latency = Math.round(now() - (hazardShownAtRef.current ?? now()));
 
     const activeBrake = activeEndless ? getEndlessBrakingConfig({ distance: Math.max(activeEndless.score, endlessDistanceRef.current) }) : null;
-    const activeReactionWindowMs = resolveAdvancedBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, releaseSpeedMultiplier);
+    const activeReactionWindowMs = activeEndless
+      ? resolveEndlessBrakingReactionWindowMs(
+          activeBrake?.reactionWindowMs ?? reactionWindowMs,
+          Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: Math.max(activeEndless.score, endlessDistanceRef.current) }), activeEndless.debugDifficulty),
+          releaseSpeedMultiplier,
+        )
+      : resolveAdvancedBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, releaseSpeedMultiplier);
 
     const correct = latency <= activeReactionWindowMs;
 
@@ -1117,7 +1385,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   const showAdvancedBrakingMiniScore = !endless;
   const ruleZoneVisualActive = isAdvancedBrakingRuleZoneActive(brakingRuleZoneState);
-  const showAdvancedBrakingRuleBackdrop = (!endless || ruleZoneVisualActive) && activeRuleHint;
+  const showAdvancedBrakingRuleBackdrop = ruleZoneVisualActive && activeRuleHint;
+  const rulePortalLanes = rulePortal
+    ? Array.from({ length: rulePortal.targetState === "normal" ? Math.max(2, activeLaneCount) : 1 }, (_, lane) => lane)
+    : [];
 
   return (
 
@@ -1145,19 +1416,18 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
         ref={trackRef}
       >
 
-        {rulePortal ? (
-          <span
-            className="advanced-brake-rule-portal"
-            data-target={rulePortal.targetState}
-            style={{ left: `${rulePortal.x}%` }}
-          />
-        ) : null}
-
         {showAdvancedBrakingRuleBackdrop ? <div className="advanced-brake-rule-backdrop-text">{activeRuleHint}</div> : null}
 
         {Array.from({ length: activeLaneCount }, (_, lane) => (
 
           <div className="advanced-brake-lane" key={lane}>
+            {rulePortal && rulePortalLanes.includes(lane) ? (
+              <span
+                className="advanced-brake-rule-portal"
+                data-target={rulePortal.targetState}
+                style={{ left: `${rulePortal.x}%` }}
+              />
+            ) : null}
 
             {hazard && (lane === 0 ? hazard.top : hazard.bottom) ? (
 
@@ -1170,6 +1440,22 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
               />
 
             ) : null}
+
+            {bumpedHazards.map((bumpedHazard) => {
+              const signal = lane === 0 ? bumpedHazard.top : bumpedHazard.bottom;
+              if (!signal) return null;
+              return (
+                <span
+                  className={`advanced-hazard advanced-hazard-bumped ${signal === "gray" ? "fake" : "real"}`}
+                  key={`${bumpedHazard.id}-${lane}`}
+                  style={{
+                    "--advanced-brake-bump-rotate": `${bumpedHazard.rotationDeg}deg`,
+                    left: `${bumpedHazard.x}%`,
+                    translate: "0 0",
+                  } as CSSProperties}
+                />
+              );
+            })}
 
             <span className="advanced-runner" style={{ left: `${progress}%`, translate: "0 0" }}>
               <PlayerAvatar

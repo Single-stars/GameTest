@@ -990,15 +990,16 @@ test("square jump double level defers miss resolution until after the second jum
 
 test("square jump base advance keeps two platforms visible and advances by camera only", () => {
   const componentSource = readMiniGameRuntimeSource();
+  const squareSource = readFileSync(new URL("../../features/mini-games/square-jump.tsx", import.meta.url), "utf8");
   const globalCss = readAppCssSource();
   const backgroundStyleSource = componentSource.slice(
     componentSource.indexOf("function squareProgressBackgroundStyle"),
     componentSource.indexOf("type SquareJumpUnifiedState"),
   );
 
-  assert.doesNotMatch(componentSource, /SquareJumpBasePrecomputedPrototype/);
-  assert.doesNotMatch(componentSource, /type SquareJumpRuntime/);
-  assert.doesNotMatch(componentSource, /sceneOffsetX|playerWorldX|squareRenderX|createSquareJumpRuntime|makeSquareJumpView/);
+  assert.doesNotMatch(squareSource, /SquareJumpBasePrecomputedPrototype/);
+  assert.doesNotMatch(squareSource, /type SquareJumpRuntime/);
+  assert.doesNotMatch(squareSource, /sceneOffsetX|playerWorldX|squareRenderX|createSquareJumpRuntime|makeSquareJumpView/);
   assert.match(componentSource, /if \(gameId === "square-jump"\) \{\s*return <SquareJumpPrototype/);
   assert.match(componentSource, /const platforms = selectSquareJumpVisiblePlatforms\(view\.currentPlatform, view\.nextPlatform, view\.exitingPlatform\);/);
   assert.match(componentSource, /current\.camera = sampleSquareJumpBaseAdvanceCamera\(current\.advancePlan, advanceProgress\);/);

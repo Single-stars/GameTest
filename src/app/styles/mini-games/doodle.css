@@ -35,6 +35,7 @@
 .flappy-player-shell,
 .doodle-platform,
 .doodle-hazard,
+.doodle-energy-pickup,
 .flappy-background,
 .flappy-start-platform,
 .flappy-gate,
@@ -166,6 +167,30 @@
   height: 13px;
   background: #37a96f;
   box-shadow: var(--glow-success);
+}
+
+.doodle-energy-pickup {
+  z-index: 8;
+  width: 32px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2dd4bf, #16a3b8);
+  box-shadow:
+    0 0 0 7px rgba(45, 212, 191, 0.14),
+    0 8px 18px rgba(22, 163, 184, 0.34);
+  pointer-events: none;
+}
+
+.doodle-energy-pickup::after {
+  content: "";
+  width: 42%;
+  height: 58%;
+  background: #fff8d7;
+  clip-path: polygon(55% 0, 18% 48%, 46% 48%, 34% 100%, 82% 36%, 52% 36%);
+  filter: drop-shadow(0 2px 4px rgba(16, 92, 104, 0.32));
 }
 
 .doodle-hazard {

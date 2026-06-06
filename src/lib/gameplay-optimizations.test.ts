@@ -117,7 +117,7 @@ test("reaction rounds use full-area shared-avatar eyes and only render ms after 
   assert.match(advancedReactionSource, /const \[feedbackTone, setFeedbackTone\] = useState<"idle" \| "good" \| "early">\("idle"\);/);
   assert.match(advancedReactionSource, /setFeedbackTone\("good"\)/);
   assert.match(advancedReactionSource, /setFeedbackTone\("early"\)/);
-  assert.match(advancedReactionSource, /advanced-reaction-grid cells-\$\{lanes\} \$\{feedbackTone\}/);
+  assert.match(advancedReactionSource, /advanced-reaction-grid cells-\$\{lanes\} \$\{laneTransitioning \? "lane-transitioning" : ""\} \$\{feedbackTone\}/);
   assert.match(advancedReactionSource, /\{cell\.clicked && cell\.resultText \? <span className="reaction-result-text">\{cell\.resultText\}<\/span> : null\}/);
   assert.doesNotMatch(advancedReactionSource, /text:\s*"/);
   assert.doesNotMatch(advancedReactionSource, /cell\.text/);
@@ -341,13 +341,14 @@ test("advanced braking mirrors base stop feedback for early release, crash, and 
   assert.match(cssSource, /\.advanced-braking\.success \.advanced-runner/);
 });
 
-test("advanced braking rule-tale variants show the active rule in the in-round HUD", () => {
+test("advanced braking keeps finite rule hints while endless rule text starts only inside portals", () => {
   const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
   const advancedBrakingSource = sourceBetween(brakingSource, "type AdvancedBrakingFeedback", "const DINO_TRIAL_COUNT");
 
   assert.match(advancedBrakingSource, /getAdvancedBrakeRuleHint/);
   assert.match(advancedBrakingSource, /const ruleHint = getAdvancedBrakeRuleHint\(config\.level, config\.params\.dualRule\);/);
-  assert.match(advancedBrakingSource, /const \[activeRuleHint, setActiveRuleHint\] = useState\(ruleHint\);/);
+  assert.match(advancedBrakingSource, /const \[activeRuleHint, setActiveRuleHint\] = useState<string \| null>\(endless \? null : ruleHint\);/);
+  assert.match(advancedBrakingSource, /const nextRuleHint = endless/);
   assert.match(advancedBrakingSource, /\{activeRuleHint \? <span>\{activeRuleHint\}<\/span> : null\}/);
   assert.match(advancedBrakingSource, /advanced-brake-rule-backdrop-text/);
 });

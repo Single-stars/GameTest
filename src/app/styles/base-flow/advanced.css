@@ -1733,11 +1733,16 @@
 
 .advanced-braking.endless-runner .advanced-brake-track {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .advanced-braking.endless-runner {
   --difficulty-wave-opacity: var(--difficulty-nonreaction-wave-opacity, 0.12);
+}
+
+.advanced-braking.rule-zone-active {
+  --difficulty-wave-color: rgba(5, 5, 5, 0.88);
+  --difficulty-wave-opacity: 0.32;
 }
 
 .advanced-braking.endless-runner .advanced-brake-lane::after {
@@ -1759,6 +1764,7 @@
 
 .advanced-braking.endless-runner .advanced-brake-lane {
   z-index: 1;
+  overflow: visible;
   border-bottom: 4px solid rgba(24, 24, 24, 0.16);
 }
 
@@ -1865,4 +1871,22 @@
 
 .advanced-brake-track > .advanced-brake-lane {
   z-index: 1;
+}
+
+.advanced-hazard-bumped {
+  z-index: 5;
+  pointer-events: none;
+  animation: advanced-brake-hazard-bumped 520ms cubic-bezier(0.18, 0.82, 0.22, 1) forwards;
+}
+
+@keyframes advanced-brake-hazard-bumped {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(96px, -42px, 0) rotate(var(--advanced-brake-bump-rotate, 28deg));
+  }
 }

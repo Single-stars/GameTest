@@ -67,9 +67,17 @@ import {
 const DOODLE_PLAYER_SPEED = 315;
 const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;
 const ENDLESS_DOODLE_ENERGY_DISTANCE = 5;
+const ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND = 1 / 60;
 const DEBUG_MINI_GAME_HITBOX = false;
 type DoodlePlatform = GeneratedDoodlePlatform & { used?: boolean };
 type DoodleHazard = GeneratedDoodleHazard;
+
+type DoodleEnergyPickup = {
+  id: number;
+  x: number;
+  y: number;
+  collected: boolean;
+};
 
 type DoodleFrame = {
   started: boolean;
@@ -80,6 +88,7 @@ type DoodleFrame = {
   cameraY: number;
   platforms: DoodlePlatform[];
   hazards: DoodleHazard[];
+  energyPickups: DoodleEnergyPickup[];
   riskHit: number;
   highEnergyStreak: number;
   playerTurns: number;
@@ -113,6 +122,7 @@ type DoodleViewFrame = {
   status: PrototypeStatus;
   time: number;
   visibleHazards: DoodleHazard[];
+  visibleEnergyPickups: DoodleEnergyPickup[];
   visiblePlatforms: DoodlePlatform[];
 };
 
@@ -274,6 +284,7 @@ function createDoodleRuntime(world: ReturnType<typeof makeDoodleWorld>, stageWid
     cameraY: 0,
     platforms: world.platforms.map((platform) => ({ ...platform, used: false })),
     hazards: world.hazards,
+    energyPickups: [],
     riskHit: 0,
     highEnergyStreak: 0,
     playerTurns: 0,
@@ -390,8 +401,17 @@ function makeDoodleView(frame: DoodleFrame, targetHeight: number, buffer: number
       cameraY: frame.cameraY,
       stageHeight,
     }),
+    visibleEnergyPickups: selectVisibleDoodleEnergyPickups(frame, buffer, stageHeight),
     visiblePlatforms: resolveDoodleSpectatorPlatforms(frame, buffer, stageHeight),
   };
+}
+
+function selectVisibleDoodleEnergyPickups(frame: DoodleFrame, buffer: number, stageHeight: number) {
+  return frame.energyPickups.filter((pickup) => {
+    if (pickup.collected) return false;
+    const screenY = stageHeight - (pickup.y - frame.cameraY);
+    return screenY >= -buffer && screenY <= stageHeight + buffer;
+  });
 }
 
 function resolveDoodleSpectatorPlatforms(frame: DoodleFrame, buffer: number, stageHeight: number) {
@@ -613,6 +633,8 @@ export function DoodleJumpPrototype({
   const authoritativePlayback = Boolean(authoritativeStateSubscription);
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
+  const energyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const energyPickupIdRef = useRef(0);
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
   const lastUiSyncRef = useRef(0);
   const lastRuntimeSyncRef = useRef(0);
@@ -666,6 +688,7 @@ export function DoodleJumpPrototype({
     lastUiSyncRef.current = 0;
     lastRuntimeSyncRef.current = 0;
     completedRef.current = false;
+    energyPickupIdRef.current = 0;
     authoritativeSmootherRef.current.reset();
     const timer = window.setTimeout(() => {
       setView(makeDoodleView(initialRuntime, world.targetHeight, visibleBuffer, logicStageHeight));
@@ -804,6 +827,7 @@ export function DoodleJumpPrototype({
       syncDoodleWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, logicStageWidth);
       const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
       const hazardById = new Map(current.hazards.map((hazard) => [hazard.id, hazard]));
+      const energyPickupById = new Map(current.energyPickups.map((pickup) => [pickup.id, pickup]));
       if (playerShellRef.current) {
         playerShellRef.current.style.display = "";
         if (!spectatingRemote) {
@@ -847,6 +871,16 @@ export function DoodleJumpPrototype({
         const rotate = hazard.movementPattern === "vertical" ? 0 : hazard.movementPattern === "patrolDiagonal" ? 28 : hazard.movementPattern === "slowCross" ? -12 : 45;
         const scale = position.size / hazard.size;
         node.style.transform = `${transformPoint3d(position.x - hazard.size / 2, y)} rotate(${rotate}deg) scale(${scale})`;
+      }
+
+      for (const [id, node] of energyPickupRefs.current) {
+        const pickup = energyPickupById.get(id);
+        if (!pickup || pickup.collected) {
+          node.style.display = "none";
+          continue;
+        }
+        node.style.display = "";
+        node.style.transform = transformPoint3d(pickup.x - 16, logicStageHeight - (pickup.y - current.cameraY) - 16);
       }
     };
 
@@ -996,6 +1030,34 @@ export function DoodleJumpPrototype({
               (nextTime - current.respawnCameraStartedAt) / Math.max(0.001, current.respawnCameraUntil - current.respawnCameraStartedAt),
             )
           : naturalCameraY;
+      if (isEndlessRun && Math.random() < delta * ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND) {
+        current.energyPickups.push({
+          id: energyPickupIdRef.current,
+          x: clamp(44 + Math.random() * (logicStageWidth - 88), 36, logicStageWidth - 36),
+          y: cameraY + logicStageHeight * (0.68 + Math.random() * 0.82),
+          collected: false,
+        });
+        energyPickupIdRef.current += 1;
+      }
+
+      if (isEndlessRun && current.energyPickups.length > 0) {
+        for (const pickup of current.energyPickups) {
+          if (pickup.collected) continue;
+          const dx = nextX - pickup.x;
+          const dy = nextY - pickup.y;
+          if (dx * dx + dy * dy <= 30 * 30) {
+            pickup.collected = true;
+            endlessRef.current?.fillEnergy();
+            eventChanged = true;
+          }
+        }
+        current.energyPickups = current.energyPickups.filter((pickup) => {
+          if (pickup.collected) return false;
+          const screenY = logicStageHeight - (pickup.y - cameraY);
+          return screenY >= -logicStageHeight * 0.65 && screenY <= logicStageHeight * 1.35;
+        });
+      }
+
       if (status === "playing" && !isEndlessRun && !unlimitedRespawn && riskHit < riskTotal) {
         let missedRisk = false;
         for (const platform of current.platforms) {
@@ -1216,7 +1278,8 @@ export function DoodleJumpPrototype({
                   transform: transformPoint3d(x - platform.width / 2, y),
                   width: `${platform.width}px`,
                 }}
-              />
+              >
+              </div>
             );
           })}
           {view.visibleHazards.map((hazard) => {
@@ -1240,6 +1303,17 @@ export function DoodleJumpPrototype({
               />
             );
           })}
+          {view.visibleEnergyPickups.map((pickup) => (
+            <div
+              className="doodle-energy-pickup"
+              key={pickup.id}
+              ref={(node) => {
+                if (node) energyPickupRefs.current.set(pickup.id, node);
+                else energyPickupRefs.current.delete(pickup.id);
+              }}
+              style={{ transform: transformPoint3d(pickup.x - 16, logicStageHeight - (pickup.y - view.cameraY) - 16) }}
+            />
+          ))}
           <div
             className={`doodle-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
             ref={playerShellRef}

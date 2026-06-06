@@ -69,7 +69,6 @@ export type EndlessSpecialBonus = {
   label: string;
 };
 export type EndlessActiveSkill = {
-  breakCharges?: number;
   charges?: number;
   invincibleCharges?: number;
   kind: EndlessSkillKind;
@@ -84,6 +83,7 @@ export type EndlessMiniGameRuntime = {
   debugEnergyLocked: boolean;
   debugDifficulty: number;
   energyPercent: number;
+  fillEnergy: () => void;
   getActiveSkill: () => EndlessActiveSkill | null;
   gainEnergy: (amount?: number, feedbackText?: string) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;

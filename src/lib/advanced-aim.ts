@@ -1,6 +1,6 @@
 import type { Point2D } from "./scoring";
 
-export type AdvancedAimEntityKind = "target" | "distractor";
+export type AdvancedAimEntityKind = "target" | "distractor" | "energy";
 
 export type AdvancedAimEntity = Point2D & {
   id: string;
@@ -142,7 +142,8 @@ function findFirstCollision(
     const delta = left.t - right.t;
     if (Math.abs(delta) > 0.000001) return delta;
     if (left.kind === right.kind) return 0;
-    return left.kind === "distractor" ? -1 : 1;
+    const priority: Record<AdvancedAimEntityKind, number> = { distractor: 0, target: 1, energy: 2 };
+    return priority[left.kind] - priority[right.kind];
   })[0];
 }
 

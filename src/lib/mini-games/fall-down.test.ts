@@ -256,6 +256,16 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);
 });
 
+test("fall down ledge walls only block the current standing platform", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(componentSource, /function resolveFallDownLedgeCollision/);
+  assert.match(componentSource, /currentPlatformId: number/);
+  assert.match(fallDownSource, /if \(platform\.id !== current\.currentPlatformId\) continue;/);
+  assert.doesNotMatch(fallDownSource, /for \(const platform of current\.platforms\) \{\s*const platformX = fallPlatformX\(platform, current\.time, stageWidth\);\s*current\.playerX = clamp\(resolveFallDownLedgeCollision/);
+});
+
 test("fall down respawn waits ride moving platforms before input resumes", () => {
   const componentSource = readMiniGameRuntimeSource();
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
