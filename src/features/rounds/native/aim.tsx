@@ -1047,13 +1047,18 @@ export function AdvancedAimRound({
           if (hitTarget) {
             hitCountRef.current += 1;
             setHitCount(hitCountRef.current);
-            endlessRuntime?.addScore(1);
+            if (endlessRuntime) {
+              endlessRuntime.addScore(1);
+              endlessRuntime.incrementMetric("targetHits");
+              if (arrow.penaltyBlocked) endlessRuntime.incrementMetric("fullFireHits");
+            }
             const trajectoryNormalizedError = result.collision.trajectoryNormalizedError;
             if (
               endlessRuntime
               && trajectoryNormalizedError >= ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR
               && trajectoryNormalizedError <= 1
             ) {
+              endlessRuntime.incrementMetric("edgeHits");
               endlessRuntime.awardSpecialBonus("极限命中！");
             }
             recordAimTrial({

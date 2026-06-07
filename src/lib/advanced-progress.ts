@@ -1,4 +1,8 @@
 import type { RankName, RoundId, TrialEvent } from "./scoring";
+import {
+  sanitizeEndlessRunSnapshot,
+  type EndlessRunSnapshot,
+} from "./endless-run-snapshot.ts";
 
 export const GAME_STATE_SCHEMA_VERSION = 1;
 export const GAME_STATE_STORAGE_KEY = "game-rank-test/state/v1";
@@ -47,6 +51,7 @@ export type AdvancedProgress = {
   legend100SkinUnlocked: boolean;
   dimensions: Record<RoundId, AdvancedDimensionProgress>;
   endlessBestScores: Record<RoundId, number>;
+  endlessBestRuns: Record<RoundId, EndlessRunSnapshot | null>;
   luckStars: number;
   luckBestScore: number;
   luckDrawChances: number;
@@ -81,6 +86,7 @@ export type AdvancedEndlessScoreRecord = {
   roundId: RoundId;
   score: number;
   completedAt?: string;
+  snapshot?: EndlessRunSnapshot;
 };
 
 export type AdvancedLevelChallengeSnapshot = {
@@ -92,7 +98,16 @@ export type AdvancedLevelChallengeSnapshot = {
 };
 
 export type AdvancedLevelState = "completed" | "current" | "locked";
-export type AdvancedBackSource = "select" | "intro" | "playing" | "base-playing" | "endless-playing" | "endless-complete" | "complete";
+export type AdvancedBackSource =
+  | "select"
+  | "intro"
+  | "playing"
+  | "base-playing"
+  | "endless-playing"
+  | "endless-complete"
+  | "challenge-playing"
+  | "challenge-complete"
+  | "complete";
 export type AdvancedBackDestination = "result" | "challenge";
 export type AdvancedCompletionAction = "retry" | "next" | "back";
 export type AppStage = "home" | "homeworld" | "outdoor-adventure" | "intro" | "playing" | "result" | "share" | "advanced" | "luck" | "avatar-lab";
@@ -211,6 +226,13 @@ function sanitizeEndlessBestScores(value: unknown): Record<RoundId, number> {
   >;
 }
 
+function sanitizeEndlessBestRuns(value: unknown): Record<RoundId, EndlessRunSnapshot | null> {
+  const source = typeof value === "object" && value !== null ? (value as Partial<Record<RoundId, unknown>>) : {};
+  return Object.fromEntries(
+    ADVANCED_ROUND_IDS.map((roundId) => [roundId, sanitizeEndlessRunSnapshot(source[roundId], roundId)]),
+  ) as Record<RoundId, EndlessRunSnapshot | null>;
+}
+
 function countClearedAdvancedLevels(dimensions: Record<RoundId, AdvancedDimensionProgress>) {
   return ADVANCED_ROUND_IDS.reduce((sum, roundId) => sum + dimensions[roundId].clearedLevels.filter(Boolean).length, 0);
 }
@@ -235,6 +257,7 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp()): Adva
     legend100SkinUnlocked: source.legend100SkinUnlocked === true,
     dimensions,
     endlessBestScores: sanitizeEndlessBestScores(source.endlessBestScores),
+    endlessBestRuns: sanitizeEndlessBestRuns(source.endlessBestRuns),
     luckStars,
     luckBestScore: clampInteger(source.luckBestScore, Math.min(100, luckStars * 5), 100),
     luckDrawChances: completedChallengeCount - luckDrawCount,
@@ -278,6 +301,7 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
       AdvancedDimensionProgress
     >,
     endlessBestScores: sanitizeEndlessBestScores(null),
+    endlessBestRuns: sanitizeEndlessBestRuns(null),
     luckStars: 0,
     luckBestScore: 0,
     luckDrawChances: 0,
@@ -328,6 +352,10 @@ export function getAdvancedTotalStars(progress: AdvancedProgress) {
 
 export function getAdvancedEndlessBestScore(progress: AdvancedProgress, roundId: RoundId) {
   return sanitizeAdvancedProgress(progress).endlessBestScores[roundId] ?? 0;
+}
+
+export function getAdvancedEndlessBestRun(progress: AdvancedProgress, roundId: RoundId) {
+  return sanitizeAdvancedProgress(progress).endlessBestRuns[roundId] ?? null;
 }
 
 export function markAdvancedUnlocked(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
@@ -407,12 +435,19 @@ export function recordAdvancedChallengeResult(progress: AdvancedProgress, record
 export function recordAdvancedEndlessScore(progress: AdvancedProgress, record: AdvancedEndlessScoreRecord): AdvancedProgress {
   const sanitized = sanitizeAdvancedProgress(progress, record.completedAt);
   const previousBest = sanitized.endlessBestScores[record.roundId] ?? 0;
-  const nextScore = Math.max(previousBest, clampEndlessScore(record.score));
+  const score = clampEndlessScore(record.score);
+  const improved = score > previousBest;
+  const nextScore = improved ? score : previousBest;
+  const nextSnapshot = improved ? sanitizeEndlessRunSnapshot(record.snapshot, record.roundId) : sanitized.endlessBestRuns[record.roundId] ?? null;
   return {
     ...sanitized,
     endlessBestScores: {
       ...sanitized.endlessBestScores,
       [record.roundId]: nextScore,
+    },
+    endlessBestRuns: {
+      ...sanitized.endlessBestRuns,
+      [record.roundId]: nextSnapshot,
     },
     updatedAt: record.completedAt ?? timestamp(),
   };
@@ -504,7 +539,7 @@ export function getAdvancedLevelToneForState(state: AdvancedLevelState, level: n
 }
 
 export function getAdvancedBackDestination(source: AdvancedBackSource): AdvancedBackDestination {
-  return source === "playing" || source === "base-playing" || source === "endless-playing" || source === "endless-complete" || source === "complete"
+  return source === "playing" || source === "base-playing" || source === "endless-playing" || source === "endless-complete" || source === "challenge-playing" || source === "challenge-complete" || source === "complete"
     ? "challenge"
     : "result";
 }

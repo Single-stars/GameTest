@@ -649,6 +649,7 @@ export function FlappyPrototype({
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
   const energyPickupRefs = useRef(new Map<number, HTMLDivElement>());
   const energyPickupIdRef = useRef(0);
+  const superDashGateStreakRef = useRef(0);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const flappySpeedTrailRef = useRef<HTMLSpanElement | null>(null);
   const flappySpeedTrailVisualRef = useRef<FlappySpeedTrailVisual | null>(null);
@@ -1021,6 +1022,7 @@ export function FlappyPrototype({
       const superDashSkill = activeEndlessSkill?.kind === "super-dash" ? activeEndlessSkill : null;
       const superDashActive = Boolean(superDashSkill);
       const superDashInvincible = Boolean(superDashSkill && (superDashSkill.invincibleCharges ?? 0) > 0);
+      if (!superDashActive) superDashGateStreakRef.current = 0;
       const activeSpeed = numberParam(activeFlappyParams, "speed", speed) * (superDashActive ? FLAPPY_SUPER_DASH_SPEED_MULTIPLIER : 1);
       const activeReverseDirection = reverseDirection;
       const activePlayerX = getFlappyPlayerX(stageWidth, activeReverseDirection);
@@ -1062,6 +1064,13 @@ export function FlappyPrototype({
         if (!gate.passed && gatePassed) {
           gate.passed = true;
           passed += 1;
+          if (isEndlessRun) {
+            endlessRef.current?.setMetricMax("gatesPassed", passed);
+            if (superDashActive) {
+              superDashGateStreakRef.current += 1;
+              endlessRef.current?.setMetricMax("bestDashGates", superDashGateStreakRef.current);
+            }
+          }
           if (superDashInvincible) {
             endlessRef.current?.updateActiveSkill((skill) => {
               if (skill.kind !== "super-dash") return skill;
@@ -1079,6 +1088,7 @@ export function FlappyPrototype({
           if (dx * dx + dy * dy <= 24 * 24) {
             gate.collected = true;
             collected += 1;
+            endlessRef.current?.incrementMetric("itemsCollected");
             endlessRef.current?.awardSpecialBonus("道具收集！");
             eventChanged = true;
           }

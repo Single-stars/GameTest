@@ -26,6 +26,7 @@ import {
   getEndlessReusableStageConfig,
   getEndlessScore,
 } from "@/lib/endless-mode";
+import { createEndlessRunSnapshot, type EndlessRunSnapshot } from "@/lib/endless-run-snapshot";
 import {
   createMiniGameRunSeed,
   getMiniGameLevel,
@@ -54,6 +55,7 @@ export type EndlessRoundCompletion = {
   revivesUsed: number;
   roundId: RoundId;
   score: number;
+  snapshot: EndlessRunSnapshot;
 };
 
 type EndlessRunApi = EndlessMiniGameRuntime & {
@@ -235,6 +237,7 @@ function useEndlessRun({
   const bonusPopupIdRef = useRef(0);
   const bonusPopupTimerRef = useRef<number | null>(null);
   const finishTimerRef = useRef<number | null>(null);
+  const metricsRef = useRef<Record<string, number>>({});
   const revivesRef = useRef(ENDLESS_STARTING_REVIVES);
   const shieldChargesRef = useRef(0);
   const debugEnergyLockedRef = useRef(false);
@@ -261,6 +264,36 @@ function useEndlessRun({
     startedAtRef.current = performance.now();
   }, []);
 
+  const normalizeMetricValue = useCallback((value: number) => {
+    if (!Number.isFinite(value) || value < 0) return 0;
+    return Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value));
+  }, []);
+
+  const setMetric = useCallback((key: string, value: number) => {
+    if (!key) return;
+    metricsRef.current[key] = normalizeMetricValue(value);
+  }, [normalizeMetricValue]);
+
+  const incrementMetric = useCallback((key: string, amount = 1) => {
+    if (!key) return;
+    const safeAmount = normalizeMetricValue(amount);
+    if (safeAmount <= 0) return;
+    metricsRef.current[key] = normalizeMetricValue((metricsRef.current[key] ?? 0) + safeAmount);
+  }, [normalizeMetricValue]);
+
+  const setMetricMax = useCallback((key: string, value: number) => {
+    if (!key) return;
+    const safeValue = normalizeMetricValue(value);
+    metricsRef.current[key] = Math.max(metricsRef.current[key] ?? 0, safeValue);
+  }, [normalizeMetricValue]);
+
+  const setMetricMin = useCallback((key: string, value: number) => {
+    if (!key) return;
+    const safeValue = normalizeMetricValue(value);
+    const current = metricsRef.current[key];
+    metricsRef.current[key] = current === undefined ? safeValue : Math.min(current, safeValue);
+  }, [normalizeMetricValue]);
+
   const finish = useCallback(
     (reason: string, finishDelayMs = 0, settlementMode: "normal" | "settled-exit" = "normal") => {
       void settlementMode;
@@ -269,14 +302,23 @@ function useEndlessRun({
       const complete = () => {
         finishTimerRef.current = null;
         const endedAt = typeof performance === "undefined" ? Date.now() : performance.now();
+        const elapsedMs = Math.max(0, Math.round(endedAt - startedAtRef.current));
+        const score = getEndlessScore({ bonusActions: bonusActionsRef.current, coreActions: coreActionsRef.current });
         onComplete({
           bonusActions: bonusActionsRef.current,
           coreActions: coreActionsRef.current,
-          elapsedMs: Math.max(0, Math.round(endedAt - startedAtRef.current)),
+          elapsedMs,
           reason,
           revivesUsed: ENDLESS_STARTING_REVIVES - revivesRef.current,
           roundId,
-          score: getEndlessScore({ bonusActions: bonusActionsRef.current, coreActions: coreActionsRef.current }),
+          score,
+          snapshot: createEndlessRunSnapshot({
+            completedAt: new Date().toISOString(),
+            durationMs: elapsedMs,
+            metrics: metricsRef.current,
+            roundId,
+            score,
+          }),
         });
       };
       if (finishDelayMs > 0) {
@@ -524,6 +566,7 @@ function useEndlessRun({
         return true;
       }
       setDamageInvincibleUntil(nowMs + ENDLESS_DAMAGE_PROTECTION_MS);
+      incrementMetric("damageTaken");
       endSkill();
       const nextRevives = Math.max(0, revivesRef.current - 1);
       revivesRef.current = nextRevives;
@@ -534,7 +577,7 @@ function useEndlessRun({
       }
       return true;
     },
-    [clearPassiveShield, endSkill, finish, setDamageInvincibleUntil, showEnergyFeedback],
+    [clearPassiveShield, endSkill, finish, incrementMetric, setDamageInvincibleUntil, showEnergyFeedback],
   );
 
   const settleExit = useCallback((reason: string) => {
@@ -601,6 +644,7 @@ function useEndlessRun({
     fillEnergy,
     gainEnergy,
     getActiveSkill,
+    incrementMetric,
     loseLife,
     paused,
     reportDifficulty,
@@ -610,6 +654,9 @@ function useEndlessRun({
     settleExit,
     setDebugDifficulty,
     setDistanceScore,
+    setMetric,
+    setMetricMax,
+    setMetricMin,
     setSkillEndHandler,
     shieldCharges,
     showFeedback: showEnergyFeedback,

@@ -22,6 +22,18 @@ import {
   type AdvancedProgress,
 } from "@/lib/advanced-progress";
 import { ENDLESS_MODE_LEVEL, getAdvancedEndlessStatusLabel, getEndlessLevelState } from "@/lib/endless-mode";
+import {
+  buildEndlessSettlementRows,
+  compareEndlessSettlementValues,
+  formatEndlessRunValue,
+  type EndlessRunSnapshot,
+  type EndlessSettlementRow,
+} from "@/lib/endless-run-snapshot";
+import {
+  getEndlessChallengeOutcome,
+  getEndlessChallengeOutcomeLabel,
+  type EndlessChallengePayload,
+} from "@/lib/endless-challenge-share";
 import { type RoundId, type TrialEvent } from "@/lib/scoring";
 import { EndlessRoundPlayer, type EndlessRoundCompletion } from "@/features/endless/endless-round-player";
 import { rounds } from "@/features/game-flow/round-config";
@@ -32,14 +44,23 @@ export type AdvancedChallengeState =
   | { mode: "playing"; roundId: RoundId; level: number; attemptId: number }
   | { mode: "base-playing"; roundId: RoundId; level: number; attemptId: number }
   | { mode: "endless-playing"; roundId: RoundId; attemptId: number }
+  | { mode: "challenge-playing"; roundId: RoundId; attemptId: number; target: EndlessChallengePayload }
   | {
       mode: "endless-complete";
       roundId: RoundId;
       score: number;
       bestScore: number;
       previousBestScore: number;
+      snapshot: EndlessRunSnapshot;
+      bestSnapshot: EndlessRunSnapshot | null;
       reason: string;
       revivesUsed: number;
+    }
+  | {
+      mode: "challenge-complete";
+      roundId: RoundId;
+      target: EndlessChallengePayload;
+      challenger: EndlessRunSnapshot;
     }
   | {
       mode: "complete";
@@ -78,7 +99,7 @@ type AdvancedRoundRenderProps =
       paused: boolean;
     };
 
-type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" | "endless-complete" }>;
+type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" | "endless-complete" | "challenge-complete" }>;
 type AdvancedPauseDialogState =
   | { mode: "advanced"; level: number; roundId: RoundId }
   | { mode: "base"; level: number; roundId: RoundId }
@@ -382,33 +403,135 @@ function AdvancedResultCard({
 function EndlessResultCard({
   challenge,
   onBack,
+  onShareChallenge,
   onStartLevel,
+  shareCopyNoticeId,
 }: {
   challenge: Extract<AdvancedChallengeState, { mode: "endless-complete" }>;
   onBack: () => void;
+  onShareChallenge: (snapshot: EndlessRunSnapshot) => void;
   onStartLevel: (level: number) => void;
+  shareCopyNoticeId: number;
 }) {
-  const improved = challenge.bestScore > challenge.previousBestScore;
+  const roundTitle = getRoundConfig(challenge.roundId).title;
+  const currentRows = buildEndlessSettlementRows(challenge.snapshot);
+  const bestRows = challenge.bestSnapshot ? buildEndlessSettlementRows(challenge.bestSnapshot) : [];
+  const bestRowsByKey = new Map(bestRows.map((row) => [row.key, row]));
+  const improved = challenge.score > challenge.previousBestScore;
+
+  const getBestRow = (row: EndlessSettlementRow): EndlessSettlementRow | null => {
+    const bestRow = bestRowsByKey.get(row.key);
+    if (bestRow) return bestRow;
+    if (row.key === "score" && challenge.previousBestScore > 0) {
+      return { ...row, value: challenge.previousBestScore };
+    }
+    return null;
+  };
   return (
     <div className="advanced-result-card advanced-endless-result passed">
-      <p className="eyebrow">无尽模式结算</p>
-      <div className="advanced-result-perfect">
-        <span className="advanced-result-goal-box" aria-hidden="true">∞</span>
-        <span>本次得分 {challenge.score}</span>
+      <p className="eyebrow">{roundTitle} · 无尽结算</p>
+      <div className="endless-settlement-heading">
+        <strong>{challenge.score}</strong>
+        <span>{improved ? "新纪录" : "本次总分"}</span>
       </div>
-      <ul className="advanced-result-goals">
-        <li className={`advanced-result-goal ${improved ? "complete" : "incomplete"}`}>
-          <span className="advanced-result-goal-box" aria-hidden="true">{improved ? "✓" : "·"}</span>
-          <span>历史最佳 {challenge.bestScore}</span>
-        </li>
-        <li className="advanced-result-goal incomplete">
-          <span className="advanced-result-goal-box" aria-hidden="true">❤</span>
-          <span>复活耗尽：{challenge.reason}</span>
-        </li>
-      </ul>
-      <div className="advanced-actions">
+      <div className="endless-settlement-table" role="table" aria-label={`${roundTitle}无尽结算`}>
+        <div className="endless-settlement-row header" role="row">
+          <div className="endless-settlement-label" role="columnheader" />
+          <div className="endless-settlement-column-title" role="columnheader">本次</div>
+          <div className="endless-settlement-column-title" role="columnheader">历史最佳</div>
+        </div>
+        {currentRows.map((row) => {
+          const bestRow = getBestRow(row);
+          const winner = compareEndlessSettlementValues({
+            compare: row.compare,
+            current: row.value,
+            best: bestRow?.value,
+          });
+          const currentClassName = ["endless-settlement-cell", winner === "current" ? "better" : ""].filter(Boolean).join(" ");
+          const bestClassName = ["endless-settlement-cell", winner === "best" ? "better" : ""].filter(Boolean).join(" ");
+
+          return (
+            <div className="endless-settlement-row" key={row.key} role="row">
+              <div className="endless-settlement-label" role="rowheader">{row.label}</div>
+              <div className={currentClassName} role="cell">
+                {formatEndlessRunValue(row)}
+                {row.key === "score" && improved ? <span className="endless-settlement-record">新</span> : null}
+              </div>
+              <div className={bestClassName} role="cell">
+                {bestRow ? formatEndlessRunValue(bestRow) : "--"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="advanced-actions advanced-actions-3">
+        <button className="secondary-button" type="button" onPointerDown={() => onShareChallenge(challenge.snapshot)}>
+          分享挑战
+        </button>
         <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
           再来一次
+        </button>
+        <button className="primary-button" type="button" onPointerDown={onBack}>
+          返回
+        </button>
+      </div>
+      {shareCopyNoticeId > 0 ? (
+        <small className="endless-challenge-share-toast" key={shareCopyNoticeId}>挑战链接已复制</small>
+      ) : null}
+    </div>
+  );
+}
+
+function EndlessChallengeResultCard({
+  challenge,
+  onBack,
+  onStartLevel,
+}: {
+  challenge: Extract<AdvancedChallengeState, { mode: "challenge-complete" }>;
+  onBack: () => void;
+  onStartLevel: (level: number) => void;
+}) {
+  const roundTitle = getRoundConfig(challenge.roundId).title;
+  const challengerRows = buildEndlessSettlementRows(challenge.challenger);
+  const targetRows = buildEndlessSettlementRows(challenge.target.target);
+  const targetRowsByKey = new Map(targetRows.map((row) => [row.key, row]));
+  const outcome = getEndlessChallengeOutcome(challenge.challenger, challenge.target.target);
+  const outcomeLabel = getEndlessChallengeOutcomeLabel(outcome);
+
+  return (
+    <div className={`advanced-result-card advanced-endless-result ${outcome === "lose" ? "failed" : "passed"}`}>
+      <p className="eyebrow">{roundTitle} · 挑战结果</p>
+      <div className={`endless-challenge-result-outcome ${outcome}`}>{outcomeLabel}</div>
+      <div className="endless-settlement-table" role="table" aria-label={`${roundTitle}挑战结果`}>
+        <div className="endless-settlement-row header" role="row">
+          <div className="endless-settlement-label" role="columnheader" />
+          <div className="endless-settlement-column-title" role="columnheader">你</div>
+          <div className="endless-settlement-column-title" role="columnheader">TA</div>
+        </div>
+        {challengerRows.map((row) => {
+          const targetRow = targetRowsByKey.get(row.key);
+          const winner = compareEndlessSettlementValues({
+            compare: row.compare,
+            current: row.value,
+            best: targetRow?.value,
+          });
+          const challengerClassName = ["endless-settlement-cell", winner === "current" ? "better" : ""].filter(Boolean).join(" ");
+          const targetClassName = ["endless-settlement-cell", winner === "best" ? "better" : ""].filter(Boolean).join(" ");
+
+          return (
+            <div className="endless-settlement-row" key={row.key} role="row">
+              <div className="endless-settlement-label" role="rowheader">{row.label}</div>
+              <div className={challengerClassName} role="cell">{formatEndlessRunValue(row)}</div>
+              <div className={targetClassName} role="cell">
+                {targetRow ? formatEndlessRunValue(targetRow) : "--"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="advanced-actions">
+        <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
+          再挑战一次
         </button>
         <button className="primary-button" type="button" onPointerDown={onBack}>
           返回
@@ -816,25 +939,29 @@ function AdvancedLobbyContent({
   currentLevel,
   endlessBestScore,
   round,
+  shareCopyNoticeId,
   unlockedLevel,
   onBack,
   onOpenLuckDraw,
   onPickLevel,
   onRestartBaseRound,
+  onShareEndlessChallenge,
   onStartLevel,
 }: {
   challenge: AdvancedLobbyChallengeState;
   currentLevel: number;
   endlessBestScore: number;
   round: AdvancedRoundConfig;
+  shareCopyNoticeId: number;
   unlockedLevel: number;
   onBack: () => void;
   onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
   onRestartBaseRound: (level: number) => void;
+  onShareEndlessChallenge: (snapshot: EndlessRunSnapshot) => void;
   onStartLevel: (level: number) => void;
 }) {
-  const activeLevel = challenge.mode === "select" ? 1 : challenge.mode === "endless-complete" ? ENDLESS_MODE_LEVEL : challenge.level;
+  const activeLevel = challenge.mode === "select" ? 1 : challenge.mode === "endless-complete" || challenge.mode === "challenge-complete" ? ENDLESS_MODE_LEVEL : challenge.level;
   const selectedLevel = activeLevel === ENDLESS_MODE_LEVEL
     ? ENDLESS_MODE_LEVEL
     : resolveAdvancedLobbySliderLevel({ currentLevel, requestedLevel: activeLevel });
@@ -906,7 +1033,15 @@ function AdvancedLobbyContent({
           onStartLevel={onStartLevel}
         />
       ) : challenge.mode === "endless-complete" ? (
-        <EndlessResultCard challenge={challenge} onBack={onBack} onStartLevel={onStartLevel} />
+        <EndlessResultCard
+          challenge={challenge}
+          onBack={onBack}
+          onShareChallenge={onShareEndlessChallenge}
+          onStartLevel={onStartLevel}
+          shareCopyNoticeId={shareCopyNoticeId}
+        />
+      ) : challenge.mode === "challenge-complete" ? (
+        <EndlessChallengeResultCard challenge={challenge} onBack={onBack} onStartLevel={onStartLevel} />
       ) : (
         <AdvancedLevelSelectionPanel
           activeConfig={activeConfig}
@@ -932,13 +1067,16 @@ export function AdvancedChallengeScreen({
   onBack,
   onBuildPerfectTrials,
   onCompleteBaseRound,
+  onCompleteEndlessChallenge,
   onCompleteEndlessRound,
   onCompleteRound,
   onOpenLuckDraw,
   onPickLevel,
   onRestartBaseRound,
+  onShareEndlessChallenge,
   onStartLevel,
   renderRound,
+  shareCopyNoticeId,
 }: {
   advancedProgress: AdvancedProgress;
   challenge: AdvancedChallengeState;
@@ -947,13 +1085,16 @@ export function AdvancedChallengeScreen({
   onBack: () => void;
   onBuildPerfectTrials: (config: AdvancedStageConfig) => TrialEvent[];
   onCompleteBaseRound: (record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => void;
+  onCompleteEndlessChallenge: (completion: EndlessRoundCompletion) => void;
   onCompleteEndlessRound: (completion: EndlessRoundCompletion) => void;
   onCompleteRound: (trials: TrialEvent[]) => void;
   onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
   onRestartBaseRound: (level: number) => void;
+  onShareEndlessChallenge: (snapshot: EndlessRunSnapshot) => void;
   onStartLevel: (level: number) => void;
   renderRound: (props: AdvancedRoundRenderProps) => React.ReactNode;
+  shareCopyNoticeId: number;
 }) {
   const round = getRoundConfig(challenge.roundId);
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
@@ -965,7 +1106,7 @@ export function AdvancedChallengeScreen({
     if (challenge.mode === "playing") setPauseDialog({ mode: "advanced", level: challenge.level, roundId: challenge.roundId });
   }, [challenge]);
   const openEndlessPauseDialog = React.useCallback(() => {
-    if (challenge.mode === "endless-playing") setPauseDialog({ mode: "endless", roundId: challenge.roundId });
+    if (challenge.mode === "endless-playing" || challenge.mode === "challenge-playing") setPauseDialog({ mode: "endless", roundId: challenge.roundId });
   }, [challenge]);
   const openBasePauseDialog = React.useCallback(() => {
     if (challenge.mode === "base-playing") setPauseDialog({ mode: "base", level: challenge.level, roundId: challenge.roundId });
@@ -1106,6 +1247,36 @@ export function AdvancedChallengeScreen({
     );
   }
 
+  if (challenge.mode === "challenge-playing") {
+    return (
+      <section className="play-screen advanced-play-screen endless-play-screen" aria-live="polite">
+        <header className="round-header advanced-round-header">
+          <AdaptiveAdvancedHeaderTitle
+            title={getAdvancedChallengeHeroTitle({
+              roundTitle: round.title,
+              stageTitle: "挑战模式",
+            })}
+          />
+          <div className="advanced-header-actions">
+            <button className="advanced-back-button" type="button" onPointerDown={openEndlessPauseDialog}>
+              暂停
+            </button>
+          </div>
+        </header>
+        <EndlessRoundPlayer
+          bestScore={challenge.target.target.score}
+          debugToolsVisible={debugToolsVisible}
+          key={`challenge-${challenge.roundId}-${challenge.attemptId}`}
+          onComplete={onCompleteEndlessChallenge}
+          paused={pauseDialog?.mode === "endless"}
+          roundId={challenge.roundId}
+          settleSignal={endlessSettleSignal}
+        />
+        {pauseDialogNode}
+      </section>
+    );
+  }
+
   if (challenge.mode === "base-playing") {
     return (
       <section className="play-screen advanced-base-play-screen" aria-live="polite">
@@ -1138,11 +1309,13 @@ export function AdvancedChallengeScreen({
       currentLevel={currentLevel}
       endlessBestScore={endlessBestScore}
       round={round}
+      shareCopyNoticeId={shareCopyNoticeId}
       unlockedLevel={unlockedLevel}
       onBack={onBack}
       onOpenLuckDraw={onOpenLuckDraw}
       onPickLevel={onPickLevel}
       onRestartBaseRound={onRestartBaseRound}
+      onShareEndlessChallenge={onShareEndlessChallenge}
       onStartLevel={onStartLevel}
     />
   );

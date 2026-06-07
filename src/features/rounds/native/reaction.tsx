@@ -369,8 +369,15 @@ export function AdvancedReactionRound({ advancedConfig, damageInvincible = false
     greenClicksRef.current += 1;
     const endlessRuntime = endlessRef.current;
     const greenLightSkillActive = endlessRuntime?.getActiveSkill()?.kind === "green-light";
-    if (endlessRuntime) endlessRuntime.addScore(greenLightSkillActive ? 2 : 1);
-    if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) endlessRuntime.awardSpecialBonus("顶级预判！");
+    if (endlessRuntime) {
+      endlessRuntime.addScore(greenLightSkillActive ? 2 : 1);
+      endlessRuntime.incrementMetric("successReactions");
+      endlessRuntime.setMetricMin("fastestReactionMs", ms);
+    }
+    if (endlessRuntime && ms <= ENDLESS_REACTION_PREDICTION_MS) {
+      endlessRuntime.incrementMetric("topPredictions");
+      endlessRuntime.awardSpecialBonus("顶级预判！");
+    }
     setFeedbackTone("good");
     trialsRef.current.push(
       trial("reaction", signalIndexRef.current, {

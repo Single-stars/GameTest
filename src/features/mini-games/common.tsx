@@ -87,12 +87,16 @@ export type EndlessMiniGameRuntime = {
   fillEnergy: () => void;
   getActiveSkill: () => EndlessActiveSkill | null;
   gainEnergy: (amount?: number, feedbackText?: string) => void;
+  incrementMetric: (key: string, amount?: number) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;
   paused?: boolean;
   reportDifficulty: (difficulty: number) => void;
   revives: number;
   score: number;
   setDistanceScore: (distanceScore: number, gainEnergyFromDistance?: boolean) => void;
+  setMetric: (key: string, value: number) => void;
+  setMetricMax: (key: string, value: number) => void;
+  setMetricMin: (key: string, value: number) => void;
   setSkillEndHandler?: (handler: ((skill: EndlessActiveSkill) => void) | null) => void;
   shieldCharges: number;
   showFeedback: (text: string, tone?: "skill" | "heal" | "shield" | "energy") => void;

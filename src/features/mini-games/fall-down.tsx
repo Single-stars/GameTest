@@ -1333,11 +1333,16 @@ export function FallDownPrototype({
             current.vy = 0;
             current.currentPlatformId = platform.id;
             current.layersReached = Math.max(current.layersReached, platform.id);
+            if (isEndlessRun) endlessRef.current?.setMetricMax("layersReached", current.layersReached);
             if (platform.kind !== "danger" && platform.kind !== "finish" && platform.kind !== "fragile") current.lastSafePlatformId = platform.id;
             if (platform.kind === "fragile" && platform.steppedAt === null) platform.steppedAt = current.time;
             if (isEndlessRun && fastDropDistance >= ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE) {
               const fastDropBonus = getEndlessFallDownFastDropBonus(fastDropDistance);
-              if (fastDropBonus > 0) endlessRef.current?.awardSpecialBonus({ label: `极速下降${fastDropDistance}！`, amount: fastDropBonus });
+              if (fastDropBonus > 0) {
+                endlessRef.current?.incrementMetric("fastDropLayers", fastDropDistance);
+                endlessRef.current?.setMetricMax("maxFastDrop", fastDropDistance);
+                endlessRef.current?.awardSpecialBonus({ label: `极速下降${fastDropDistance}！`, amount: fastDropBonus });
+              }
             }
             eventChanged = true;
             if (platform.kind === "finish" && !isEndlessRun) {

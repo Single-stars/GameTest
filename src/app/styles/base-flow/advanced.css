@@ -860,6 +860,187 @@
   color: #8f3b35;
 }
 
+.advanced-endless-result {
+  gap: 14px;
+}
+
+.endless-settlement-heading {
+  width: min(100%, 360px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  border-bottom: 1px solid rgba(24, 24, 24, 0.1);
+  padding-bottom: 10px;
+  color: var(--ink);
+}
+
+.endless-settlement-heading strong {
+  min-width: 0;
+  font-size: 42px;
+  font-weight: 950;
+  line-height: 0.95;
+}
+
+.endless-settlement-heading span {
+  justify-self: end;
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: rgba(35, 107, 84, 0.1);
+  color: #1e654c;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.endless-settlement-table {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 4px;
+}
+
+.endless-settlement-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 1.1fr) minmax(74px, 0.85fr) minmax(86px, 0.9fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+}
+
+.endless-settlement-row.header {
+  min-height: 30px;
+  color: rgba(24, 24, 24, 0.52);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.endless-settlement-label,
+.endless-settlement-column-title,
+.endless-settlement-cell {
+  min-width: 0;
+}
+
+.endless-settlement-label {
+  color: rgba(24, 24, 24, 0.72);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.endless-settlement-column-title {
+  text-align: center;
+}
+
+.endless-settlement-cell {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.endless-settlement-cell.better {
+  background: rgba(35, 107, 84, 0.14);
+  color: #164b38;
+}
+
+.endless-settlement-record {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #236b54;
+  color: #fffaf1;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.endless-challenge-share-toast {
+  color: rgba(24, 24, 24, 0.58);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.endless-challenge-result-outcome {
+  min-width: min(100%, 240px);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #236b54;
+  color: #fffaf1;
+  font-size: clamp(24px, 6vw, 34px);
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.endless-challenge-result-outcome.lose {
+  background: #8f3b35;
+}
+
+.endless-challenge-result-outcome.draw {
+  background: #5b6472;
+}
+
+.endless-challenge-notice {
+  position: fixed;
+  z-index: 75;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(calc(100vw - 28px), 360px);
+  box-sizing: border-box;
+  border: 1px solid rgba(35, 107, 84, 0.2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 250, 241, 0.96);
+  box-shadow: 0 18px 42px rgba(24, 24, 24, 0.16);
+  color: #1e654c;
+  font-size: 15px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.endless-challenge-dialog-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 5vw, 36px);
+  background: rgba(24, 24, 24, 0.34);
+  backdrop-filter: blur(5px);
+}
+
+.endless-challenge-dialog {
+  width: min(100%, 430px);
+  box-sizing: border-box;
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 8px;
+  padding: clamp(20px, 5vw, 28px);
+  background: #fffaf1;
+  box-shadow: 0 26px 70px rgba(24, 24, 24, 0.26);
+  text-align: center;
+}
+
+.endless-challenge-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(22px, 5.6vw, 30px);
+  font-weight: 950;
+  line-height: 1.12;
+}
+
 .advanced-luck-coin-card {
   width: 100%;
   box-sizing: border-box;
@@ -911,6 +1092,11 @@
 .advanced-actions-1 {
   width: min(100%, 230px);
   grid-template-columns: minmax(0, 1fr);
+}
+
+.advanced-actions.advanced-actions-3 {
+  width: min(100%, 460px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .advanced-actions .primary-button,
@@ -1509,6 +1695,10 @@
 }
 
 @media (max-width: 430px) {
+  .advanced-actions.advanced-actions-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .endless-hud {
     top: 8px;
     left: 8px;

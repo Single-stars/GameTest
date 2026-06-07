@@ -699,6 +699,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     holdSuccessTimerRef.current = null;
     const currentHazard = hazardRef.current;
     const clearedObstacles = currentHazard ? [currentHazard] : [];
+    if (clearedObstacles.length > 0) endlessRef.current?.incrementMetric("knockaways", clearedObstacles.length);
     for (const clearedObstacle of clearedObstacles) {
       bumpAdvancedBrakingHazard(clearedObstacle);
       previousHazardRef.current = clearedObstacle;
@@ -727,8 +728,12 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     const activeSkill = activeEndless?.getActiveSkill();
     if (!activeEndless || activeSkill?.kind !== "big-luck") return false;
     const currentHazard = hazardRef.current;
-    if (currentHazard) bumpAdvancedBrakingHazard(currentHazard);
+    if (currentHazard) {
+      bumpAdvancedBrakingHazard(currentHazard);
+      activeEndless.incrementMetric("knockaways");
+    }
     activeEndless.addScore(1);
+    activeEndless.incrementMetric("successfulResponses");
     hazardRef.current = null;
     setHazard(null);
     hazardShownAtRef.current = null;
@@ -769,7 +774,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
       );
 
-      endlessRef.current?.addScore(1);
+      const activeEndless = endlessRef.current;
+      if (activeEndless) {
+        activeEndless.addScore(1);
+        activeEndless.incrementMetric("successfulResponses");
+      }
       if (!endlessRef.current) showAdvancedFeedback("success");
 
       clearHazardAfterSuccess();
@@ -1438,7 +1447,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     else {
       if (activeEndless) {
         activeEndless.addScore(1);
-        if (latency <= ENDLESS_BRAKING_FAST_REACTION_MS) activeEndless.awardSpecialBonus("快速反应！");
+        activeEndless.incrementMetric("successfulResponses");
+        if (latency <= ENDLESS_BRAKING_FAST_REACTION_MS) {
+          activeEndless.incrementMetric("quickResponses");
+          activeEndless.awardSpecialBonus("快速反应！");
+        }
       }
       showAdvancedFeedback("success");
       clearHazardAfterSuccess();

@@ -805,7 +805,9 @@ export function KnifeHitPrototype({
     });
     current.insertedAngles.push(outcome.impactAngle);
     endlessRef.current?.addScore(1);
+    endlessRef.current?.incrementMetric("knifeHits");
     if (isEndlessRun && proximityDegrees !== null && proximityDegrees <= ENDLESS_KNIFE_DANGER_MARGIN_DEGREES) {
+      endlessRef.current?.incrementMetric("edgeHits");
       endlessRef.current?.awardSpecialBonus("极限飞刀！");
     }
     current.flying = false;
@@ -830,6 +832,7 @@ export function KnifeHitPrototype({
     if (isEndlessRun && current.insertedAngles.length >= shotCount) {
       showKnifeFeedback("good");
       if (current.failures === 0) {
+        endlessRef.current?.incrementMetric("perfectBreaks");
         endlessRef.current?.awardSpecialBonus({ label: "完美击破！", amount: 5 });
       }
       launcherVisibleRef.current = false;

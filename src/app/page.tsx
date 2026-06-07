@@ -29,6 +29,7 @@ import {
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
   getAdvancedBackDestination,
+  getAdvancedEndlessBestRun,
   getAdvancedEndlessBestScore,
   formatResultRankTitle,
   getAdvancedDimensionLevel,
@@ -56,6 +57,13 @@ import {
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
 import { ENDLESS_MODE_LEVEL, isEndlessModeUnlocked } from "@/lib/endless-mode";
+import {
+  createEndlessChallengePayload,
+  createEndlessChallengeUrl,
+  decodeEndlessChallengePayload,
+  type EndlessChallengePayload,
+} from "@/lib/endless-challenge-share";
+import { type EndlessRunSnapshot } from "@/lib/endless-run-snapshot";
 import { rounds } from "@/features/game-flow/round-config";
 import { AdvancedChallengeScreen, type AdvancedChallengeState } from "@/features/advanced/advanced-challenge-screen";
 import { ModeTransitionOverlay, useModeTransition, type ModeTransitionRouteOptions } from "@/features/app-transition/mode-transition";
@@ -170,6 +178,16 @@ function sanitizeHomeworldQuery(homeworldEntryVisible: boolean) {
   return homeworldUrl.search;
 }
 
+function cleanChallengeQuery() {
+  if (typeof window === "undefined") return "";
+  const challengeUrl = new URL(window.location.href);
+  if (!challengeUrl.searchParams.has("challenge")) return window.location.search;
+  challengeUrl.searchParams.delete("challenge");
+  const cleanedChallengeUrl = `${challengeUrl.pathname}${challengeUrl.search}${challengeUrl.hash}`;
+  window.history.replaceState(window.history.state, "", cleanedChallengeUrl);
+  return challengeUrl.search;
+}
+
 function markLegend100SkinUnlockedWhenDisplayed(
   progress: AdvancedProgress,
   currentTrials: TrialEvent[] | null,
@@ -246,6 +264,9 @@ export default function Home() {
   const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
+  const [pendingEndlessChallenge, setPendingEndlessChallenge] = useState<EndlessChallengePayload | null>(null);
+  const [challengeInviteVisible, setChallengeInviteVisible] = useState(false);
+  const [challengeNoticeVisible, setChallengeNoticeVisible] = useState(false);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
   const [rewardQueue, setRewardQueue] = useState<RewardOverlayItem[]>([]);
   const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
@@ -266,6 +287,7 @@ export default function Home() {
   const outdoorAdventureStateRef = useRef(outdoorAdventureState);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
+  const pendingEndlessChallengeRef = useRef<EndlessChallengePayload | null>(null);
   const pendingLuckRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
@@ -278,13 +300,17 @@ export default function Home() {
   const safeTrials = useMemo(() => (Array.isArray(trials) ? trials : []), [trials]);
   const result = useMemo(() => getGameRankResult(safeTrials), [safeTrials]);
   const activeRewardItem = rewardQueue[0] ?? null;
+  const pendingEndlessChallengeRoundTitle = useMemo(() => {
+    if (!pendingEndlessChallenge) return "";
+    return rounds.find((round) => round.id === pendingEndlessChallenge.target.roundId)?.title ?? "无尽关卡";
+  }, [pendingEndlessChallenge]);
   const showPerfectClearShortcut = shouldShowPerfectClearShortcut({ debugToolsVisible });
   const playShellActive =
     stage === "homeworld" ||
     stage === "outdoor-adventure" ||
     stage === "playing" ||
     (stage === "advanced" &&
-      (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing" || advancedChallenge?.mode === "endless-playing"));
+      (advancedChallenge?.mode === "playing" || advancedChallenge?.mode === "base-playing" || advancedChallenge?.mode === "endless-playing" || advancedChallenge?.mode === "challenge-playing"));
 
   const transitionToStage = useCallback(
     (nextStage: Stage, action?: () => void | Promise<void>) => {
@@ -417,6 +443,8 @@ export default function Home() {
     setRestartConfirmOpen(false);
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge(null);
+    setChallengeInviteVisible(false);
+    setChallengeNoticeVisible(false);
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
     setRewardQueue([]);
@@ -446,6 +474,10 @@ export default function Home() {
   const resetAllTestData = useCallback(() => {
     const nextProgress = createDefaultAdvancedProgress();
     resetCurrentRunState();
+    pendingEndlessChallengeRef.current = null;
+    setPendingEndlessChallenge(null);
+    setChallengeInviteVisible(false);
+    setChallengeNoticeVisible(false);
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     const storage = getBrowserStorage();
@@ -475,6 +507,10 @@ export default function Home() {
   useEffect(() => {
     advancedChallengeRef.current = advancedChallenge;
   }, [advancedChallenge]);
+
+  useEffect(() => {
+    pendingEndlessChallengeRef.current = pendingEndlessChallenge;
+  }, [pendingEndlessChallenge]);
 
   useEffect(() => {
     roundIndexRef.current = roundIndex;
@@ -525,7 +561,10 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
+    const challengeParam = new URLSearchParams(window.location.search).get("challenge");
+    const decodedChallenge = decodeEndlessChallengePayload(challengeParam);
     const currentSearch = sanitizeHomeworldQuery(nextHomeworldEntryVisible);
+    if (challengeParam !== null) cleanChallengeQuery();
     setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
     setHomeworldEntryVisible(nextHomeworldEntryVisible);
     const shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible && new URLSearchParams(currentSearch).get("homeworld") === "1";
@@ -535,7 +574,12 @@ export default function Home() {
     const storedTrials = stored.currentResult?.trials ?? [];
     let nextProgress = stored.advancedProgress;
 
-    if (!shouldOpenHomeworldFromQuery && storedTrials.length > 0) {
+    if (decodedChallenge) {
+      pendingEndlessChallengeRef.current = decodedChallenge;
+      setPendingEndlessChallenge(decodedChallenge);
+    }
+
+    if ((!shouldOpenHomeworldFromQuery || decodedChallenge) && storedTrials.length > 0) {
       const storedResult = getGameRankResult(storedTrials);
       if (storedResult.name === "最强王者" && !nextProgress.unlocked) {
         nextProgress = markAdvancedUnlocked(nextProgress);
@@ -545,6 +589,18 @@ export default function Home() {
       trialsRef.current = storedTrials;
       setTrials(storedTrials);
       setStage("result");
+    }
+
+    if (decodedChallenge) {
+      if (storedTrials.length > 0) {
+        setStage("result");
+        setChallengeInviteVisible(true);
+        setChallengeNoticeVisible(false);
+      } else {
+        setStage("home");
+        setChallengeInviteVisible(false);
+        setChallengeNoticeVisible(true);
+      }
     }
 
     advancedProgressRef.current = nextProgress;
@@ -604,6 +660,10 @@ export default function Home() {
           enqueueRewardItems(createSkinRewardItems(previousProgress, nextProgress, "base-result"));
         }
         persistGameState(nextTrials, nextProgress);
+        if (pendingEndlessChallengeRef.current) {
+          setChallengeNoticeVisible(false);
+          setChallengeInviteVisible(true);
+        }
         void transitionToStage("result");
         return;
       }
@@ -665,6 +725,24 @@ export default function Home() {
     void openShareImage({ kind: "default", url: window.location.href }, "home");
   }, [openShareImage]);
 
+  const shareEndlessChallenge = useCallback(async (snapshot: EndlessRunSnapshot) => {
+    if (typeof window === "undefined") return;
+    clearShareCopyToastTimer();
+    setShareCopyNoticeId(0);
+    const payload = createEndlessChallengePayload({
+      ownerName: playerName,
+      target: snapshot,
+    });
+    const challengeUrl = createEndlessChallengeUrl(window.location.href, payload);
+    try {
+      await copyTextToClipboard(challengeUrl);
+      showShareCopyToast();
+    } catch {
+      clearShareCopyToastTimer();
+      setShareCopyNoticeId(0);
+    }
+  }, [clearShareCopyToastTimer, playerName, showShareCopyToast]);
+
   const closeShareImage = useCallback(() => {
     clearShareCopyToastTimer();
     setShareCopyNoticeId(0);
@@ -678,6 +756,37 @@ export default function Home() {
     setAdvancedChallenge({ mode: "select", roundId });
     void transitionToStage("advanced");
   }, [transitionToStage]);
+
+  const acceptEndlessChallenge = useCallback(() => {
+    const challenge = pendingEndlessChallengeRef.current;
+    if (!challenge) return;
+    if (trialsRef.current.length === 0) {
+      setChallengeInviteVisible(false);
+      setChallengeNoticeVisible(true);
+      void transitionToStage("home");
+      return;
+    }
+
+    pendingEndlessChallengeRef.current = null;
+    setPendingEndlessChallenge(null);
+    setChallengeInviteVisible(false);
+    setChallengeNoticeVisible(false);
+    setAdvancedUnlockPulseId(0);
+    setAdvancedChallenge({
+      mode: "challenge-playing",
+      roundId: challenge.target.roundId,
+      attemptId: Date.now(),
+      target: challenge,
+    });
+    void transitionToStage("advanced");
+  }, [transitionToStage]);
+
+  const declineEndlessChallenge = useCallback(() => {
+    pendingEndlessChallengeRef.current = null;
+    setPendingEndlessChallenge(null);
+    setChallengeInviteVisible(false);
+    setChallengeNoticeVisible(false);
+  }, []);
 
   const openLuckDraw = useCallback(() => {
     setAdvancedUnlockPulseId(0);
@@ -789,6 +898,14 @@ export default function Home() {
       return;
     }
 
+    if (current.mode === "challenge-playing" || current.mode === "challenge-complete") {
+      setAdvancedChallenge(null);
+      releaseHistoryGuard();
+      scrollResultToTop();
+      void transitionToStage("result");
+      return;
+    }
+
     setAdvancedChallenge({
       mode: "intro",
       roundId: current.roundId,
@@ -813,6 +930,15 @@ export default function Home() {
   const startAdvancedLevel = useCallback((level?: number) => {
     const current = advancedChallengeRef.current;
     if (!current) return;
+    if (current.mode === "challenge-playing" || current.mode === "challenge-complete") {
+      setAdvancedChallenge({
+        mode: "challenge-playing",
+        roundId: current.roundId,
+        attemptId: Date.now(),
+        target: current.target,
+      });
+      return;
+    }
     const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
     const selectedLevel =
       level ??
@@ -842,6 +968,7 @@ export default function Home() {
   const startAdvancedBaseReplay = useCallback((level?: number) => {
     const current = advancedChallengeRef.current;
     if (!current) return;
+    if (current.mode === "challenge-playing" || current.mode === "challenge-complete") return;
     const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
     const selectedLevel =
       level ??
@@ -931,9 +1058,11 @@ export default function Home() {
       if (!current || current.mode !== "endless-playing") return;
       const previousProgress = advancedProgressRef.current;
       const previousBestScore = getAdvancedEndlessBestScore(previousProgress, current.roundId);
+      const previousBestSnapshot = getAdvancedEndlessBestRun(previousProgress, current.roundId);
       const nextProgress = recordAdvancedEndlessScore(previousProgress, {
         roundId: current.roundId,
         score: completion.score,
+        snapshot: completion.snapshot,
       });
       const bestScore = getAdvancedEndlessBestScore(nextProgress, current.roundId);
 
@@ -946,12 +1075,29 @@ export default function Home() {
         score: completion.score,
         bestScore,
         previousBestScore,
+        snapshot: completion.snapshot,
+        bestSnapshot: previousBestSnapshot,
         reason: completion.reason,
         revivesUsed: completion.revivesUsed,
       });
       void transitionToStage("advanced");
     },
     [persistGameState, transitionToStage],
+  );
+
+  const completeEndlessChallengeRound = useCallback(
+    (completion: EndlessRoundCompletion) => {
+      const current = advancedChallengeRef.current;
+      if (!current || current.mode !== "challenge-playing") return;
+      setAdvancedChallenge({
+        mode: "challenge-complete",
+        roundId: current.roundId,
+        target: current.target,
+        challenger: completion.snapshot,
+      });
+      void transitionToStage("advanced");
+    },
+    [transitionToStage],
   );
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
@@ -1238,11 +1384,13 @@ export default function Home() {
           onBack={requestAppBack}
           onBuildPerfectTrials={buildAdvancedPerfectTrials}
           onCompleteBaseRound={completeAdvancedBaseReplay}
+          onCompleteEndlessChallenge={completeEndlessChallengeRound}
           onCompleteEndlessRound={completeAdvancedEndlessRound}
           onCompleteRound={completeAdvancedLevel}
           onOpenLuckDraw={openLuckDraw}
           onPickLevel={pickAdvancedLevel}
           onRestartBaseRound={startAdvancedBaseReplay}
+          onShareEndlessChallenge={shareEndlessChallenge}
           onStartLevel={startAdvancedLevel}
           renderRound={(props) => (
             <RoundPlayer
@@ -1254,6 +1402,7 @@ export default function Home() {
               roundId={props.round}
             />
           )}
+          shareCopyNoticeId={shareCopyNoticeId}
         />
       ) : stage === "outdoor-adventure" ? (
         <OutdoorAdventureScreen
@@ -1365,6 +1514,29 @@ export default function Home() {
           onCancel={() => setRestartConfirmOpen(false)}
           onConfirm={confirmRestartToHome}
         />
+      ) : null}
+      {challengeNoticeVisible && pendingEndlessChallenge && !challengeInviteVisible ? (
+        <div className="endless-challenge-notice" role="status">
+          完成段位评定后即可挑战
+        </div>
+      ) : null}
+      {challengeInviteVisible && pendingEndlessChallenge ? (
+        <div className="endless-challenge-dialog-backdrop" role="presentation">
+          <div className="endless-challenge-dialog" role="dialog" aria-modal="true" aria-labelledby="endless-challenge-dialog-title">
+            <p className="eyebrow">无尽挑战</p>
+            <h2 id="endless-challenge-dialog-title">
+              你收到了一个无尽挑战：挑战 TA 的{pendingEndlessChallengeRoundTitle} {pendingEndlessChallenge.target.score} 分。
+            </h2>
+            <div className="advanced-actions">
+              <button className="primary-button" type="button" onPointerDown={acceptEndlessChallenge}>
+                接受挑战
+              </button>
+              <button className="secondary-button" type="button" onPointerDown={declineEndlessChallenge}>
+                放弃挑战
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       <RewardOverlay
         item={activeRewardItem}

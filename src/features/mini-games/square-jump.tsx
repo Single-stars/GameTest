@@ -918,11 +918,13 @@ export function SquareJumpPrototype({
       if (isEndlessRun) {
         endlessRef.current?.gainEnergy(1);
         if (Math.abs(current.playerOffsetOnCurrent) <= landedPlatform.width * ENDLESS_SQUARE_CENTER_LANDING_RATIO) {
+          endlessRef.current?.incrementMetric("perfectLandings");
           endlessRef.current?.awardSpecialBonus("精准落地！");
         }
       }
       current.currentIndex = current.nextIndex;
       current.currentPlatform = landedPlatform;
+      if (isEndlessRun) endlessRef.current?.setMetricMax("platformReached", current.currentIndex);
       const gravityState = resolveSquareJumpGravityAfterLanding({
         currentGravity: current.activeGravity,
         jumpLimit: gravityJumpLimit,
@@ -990,10 +992,11 @@ export function SquareJumpPrototype({
     current.charge = 0;
     current.chargeElapsedMs = 0;
     current.doubleJumpUsed = wasAirCharging;
+    if (isEndlessRun && wasAirCharging) endlessRef.current?.incrementMetric("doubleJumps");
     current.playerTurns += 1;
     current.state = "jumping";
     syncView();
-  }, [level, syncView]);
+  }, [isEndlessRun, level, syncView]);
 
   const startSharedCharge = useCallback(
     () => {

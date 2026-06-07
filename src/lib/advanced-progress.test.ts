@@ -14,6 +14,7 @@ import {
   getAdvancedLevelChallengeSnapshot,
   getAdvancedLevelTone,
   getAdvancedLevelToneForState,
+  getAdvancedEndlessBestRun,
   getAdvancedEndlessBestScore,
   getLuckDrawStatusText,
   getLuckLevelTone,
@@ -42,6 +43,7 @@ import {
   type AdvancedProgress,
   type StorageLike,
 } from "./advanced-progress.ts";
+import { createEndlessRunSnapshot } from "./endless-run-snapshot.ts";
 import type { TrialEvent } from "./scoring.ts";
 
 function makeTrial(roundId: TrialEvent["roundId"]): TrialEvent {
@@ -526,29 +528,79 @@ test("advanced level tone stays empty for the next pending or locked difficulty"
 test("advanced endless scores are stored per dimension without changing star progress", () => {
   const base = createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z");
   assert.equal(getAdvancedEndlessBestScore(base, "memory"), 0);
+  assert.equal(getAdvancedEndlessBestRun(base, "memory"), null);
 
+  const firstSnapshot = createEndlessRunSnapshot({
+    completedAt: "2026-05-10T00:00:01.000Z",
+    durationMs: 61_000,
+    metrics: { damageTaken: 2, gatesPassed: 18, itemsCollected: 4, bestDashGates: 3 },
+    roundId: "memory",
+    runId: "run-memory-24",
+    score: 24,
+  });
   const first = recordAdvancedEndlessScore(base, {
     roundId: "memory",
     score: 24,
     completedAt: "2026-05-10T00:00:01.000Z",
+    snapshot: firstSnapshot,
   });
   assert.equal(getAdvancedEndlessBestScore(first, "memory"), 24);
+  assert.equal(getAdvancedEndlessBestRun(first, "memory")?.runId, "run-memory-24");
   assert.equal(getAdvancedEndlessBestScore(first, "search"), 0);
   assert.equal(getAdvancedTotalStars(first), 0);
 
+  const lowerSnapshot = createEndlessRunSnapshot({
+    completedAt: "2026-05-10T00:00:02.000Z",
+    durationMs: 72_000,
+    metrics: { damageTaken: 0, gatesPassed: 20, itemsCollected: 8, bestDashGates: 5 },
+    roundId: "memory",
+    runId: "run-memory-12",
+    score: 12,
+  });
   const lower = recordAdvancedEndlessScore(first, {
     roundId: "memory",
     score: 12,
     completedAt: "2026-05-10T00:00:02.000Z",
+    snapshot: lowerSnapshot,
   });
   assert.equal(getAdvancedEndlessBestScore(lower, "memory"), 24);
+  assert.equal(getAdvancedEndlessBestRun(lower, "memory")?.runId, "run-memory-24");
 
+  const higherSnapshot = createEndlessRunSnapshot({
+    completedAt: "2026-05-10T00:00:03.000Z",
+    durationMs: 93_000,
+    metrics: { damageTaken: 3, gatesPassed: 31, itemsCollected: 6, bestDashGates: 7 },
+    roundId: "memory",
+    runId: "run-memory-39",
+    score: 39,
+  });
   const higher = recordAdvancedEndlessScore(lower, {
     roundId: "memory",
     score: 39,
     completedAt: "2026-05-10T00:00:03.000Z",
+    snapshot: higherSnapshot,
   });
   assert.equal(getAdvancedEndlessBestScore(higher, "memory"), 39);
+  assert.equal(getAdvancedEndlessBestRun(higher, "memory")?.runId, "run-memory-39");
+  assert.equal(getAdvancedEndlessBestRun(higher, "memory")?.fields.find((field) => field.key === "damageTaken")?.value, 3);
+});
+
+test("advanced progress backfills empty endless best run slots for older persisted state", () => {
+  const parsed = parsePersistedGameState(
+    JSON.stringify({
+      schemaVersion: 1,
+      currentResult: null,
+      advancedProgress: {
+        ...createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z"),
+        endlessBestScores: { memory: 18 },
+        endlessBestRuns: undefined,
+      },
+    }),
+    "2026-05-10T00:00:04.000Z",
+  );
+
+  assert.equal(getAdvancedEndlessBestScore(parsed.advancedProgress, "memory"), 18);
+  assert.equal(getAdvancedEndlessBestRun(parsed.advancedProgress, "memory"), null);
 });
 
 test("advanced back destination keeps attempts inside the selected challenge flow", () => {

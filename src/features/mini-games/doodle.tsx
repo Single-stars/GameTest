@@ -706,6 +706,7 @@ export function DoodleJumpPrototype({
     if (!isEndlessRun) return;
     if (timeMs - lastCloseCallBonusAtRef.current < ENDLESS_DOODLE_CLOSE_CALL_COOLDOWN_MS) return;
     lastCloseCallBonusAtRef.current = timeMs;
+    endlessRef.current?.incrementMetric("nearMissEscapes");
     endlessRef.current?.awardSpecialBonus("死里逃生！");
   }, [isEndlessRun]);
 
@@ -1043,6 +1044,7 @@ export function DoodleJumpPrototype({
             if (platform.risk) riskHit += 1;
             highEnergyStreak = highEnergyJump ? highEnergyStreak + 1 : 0;
             if (isEndlessRun && highEnergyStreak >= 3) {
+              endlessRef.current?.incrementMetric("crazyTriggers");
               endlessRef.current?.awardSpecialBonus({ label: `彻底疯狂${highEnergyStreak}！`, amount: 1 });
             }
             if (landedBelowScreenPlatform) awardDoodleCloseCallBonus(time);
@@ -1155,6 +1157,7 @@ export function DoodleJumpPrototype({
       if (isEndlessRun) {
         const endlessDistanceScore = Math.floor(Math.max(0, current.playerY) / 100);
         endlessRef.current?.setDistanceScore(endlessDistanceScore, false);
+        endlessRef.current?.setMetricMax("heightReached", endlessDistanceScore);
         const nextEnergyDistance = Math.floor(endlessDistanceScore / ENDLESS_DOODLE_ENERGY_DISTANCE);
         const energyGain = nextEnergyDistance - endlessEnergyDistanceRef.current;
         if (energyGain > 0) {

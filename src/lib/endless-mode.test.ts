@@ -881,6 +881,97 @@ test("advanced screen and app route endless mode through a real runtime with com
   assert.doesNotMatch(cssSource, /\.endless-stage\s*{/);
 });
 
+test("endless settlement stores run snapshots and renders current versus best rows", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(commonSource, /incrementMetric: \(key: string, amount\?: number\) => void/);
+  assert.match(commonSource, /setMetricMax: \(key: string, value: number\) => void/);
+  assert.match(commonSource, /setMetricMin: \(key: string, value: number\) => void/);
+  assert.match(runtimeSource, /createEndlessRunSnapshot/);
+  assert.match(runtimeSource, /metricsRef/);
+  assert.match(runtimeSource, /incrementMetric\("damageTaken"\)/);
+  assert.match(runtimeSource, /snapshot: createEndlessRunSnapshot/);
+  assert.match(pageSource, /getAdvancedEndlessBestRun/);
+  assert.match(pageSource, /snapshot: completion\.snapshot/);
+  assert.match(pageSource, /bestSnapshot/);
+  assert.match(screenSource, /buildEndlessSettlementRows/);
+  assert.match(screenSource, /compareEndlessSettlementValues/);
+  assert.match(screenSource, /formatEndlessRunValue/);
+  assert.match(screenSource, /endless-settlement-table/);
+  assert.match(cssSource, /\.endless-settlement-table\s*{/);
+  assert.match(cssSource, /\.endless-settlement-cell\.better\s*{/);
+});
+
+test("endless settlement metrics are recorded for every supported endless round", () => {
+  const reactionSource = readFileSync(new URL("../features/rounds/native/reaction.tsx", import.meta.url), "utf8");
+  const aimSource = readFileSync(new URL("../features/rounds/native/aim.tsx", import.meta.url), "utf8");
+  const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
+  const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const fallSource = readFileSync(new URL("../features/mini-games/fall-down.tsx", import.meta.url), "utf8");
+  const squareSource = readFileSync(new URL("../features/mini-games/square-jump.tsx", import.meta.url), "utf8");
+  const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
+  const knifeSource = readFileSync(new URL("../features/mini-games/knife.tsx", import.meta.url), "utf8");
+
+  assert.match(reactionSource, /incrementMetric\("successReactions"\)/);
+  assert.match(reactionSource, /incrementMetric\("topPredictions"\)/);
+  assert.match(reactionSource, /setMetricMin\("fastestReactionMs"/);
+  assert.match(aimSource, /incrementMetric\("targetHits"\)/);
+  assert.match(aimSource, /incrementMetric\("edgeHits"\)/);
+  assert.match(aimSource, /incrementMetric\("fullFireHits"\)/);
+  assert.match(doodleSource, /setMetricMax\("heightReached"/);
+  assert.match(doodleSource, /incrementMetric\("crazyTriggers"\)/);
+  assert.match(doodleSource, /incrementMetric\("nearMissEscapes"\)/);
+  assert.match(fallSource, /setMetricMax\("layersReached"/);
+  assert.match(fallSource, /incrementMetric\("fastDropLayers", fastDropDistance\)/);
+  assert.match(fallSource, /setMetricMax\("maxFastDrop", fastDropDistance\)/);
+  assert.match(squareSource, /setMetricMax\("platformReached"/);
+  assert.match(squareSource, /incrementMetric\("perfectLandings"\)/);
+  assert.match(squareSource, /incrementMetric\("doubleJumps"\)/);
+  assert.match(flappySource, /setMetricMax\("gatesPassed"/);
+  assert.match(flappySource, /incrementMetric\("itemsCollected"\)/);
+  assert.match(flappySource, /setMetricMax\("bestDashGates"/);
+  assert.match(brakingSource, /incrementMetric\("successfulResponses"\)/);
+  assert.match(brakingSource, /incrementMetric\("quickResponses"\)/);
+  assert.match(brakingSource, /incrementMetric\("knockaways"/);
+  assert.match(knifeSource, /incrementMetric\("knifeHits"\)/);
+  assert.match(knifeSource, /incrementMetric\("edgeHits"\)/);
+  assert.match(knifeSource, /incrementMetric\("perfectBreaks"\)/);
+});
+
+test("endless challenge links open a pending challenge and keep challenge runs out of normal best records", () => {
+  const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const shareSource = readFileSync(new URL("./endless-challenge-share.ts", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(shareSource, /decodeEndlessChallengePayload/);
+  assert.match(shareSource, /createEndlessChallengeUrl/);
+  assert.match(shareSource, /getEndlessChallengeOutcomeLabel/);
+  assert.match(pageSource, /new URLSearchParams\(window\.location\.search\)\.get\("challenge"\)/);
+  assert.match(pageSource, /decodeEndlessChallengePayload/);
+  assert.match(pageSource, /cleanChallengeQuery/);
+  assert.match(pageSource, /pendingEndlessChallenge/);
+  assert.match(pageSource, /setChallengeInviteVisible\(true\)/);
+  assert.match(pageSource, /完成段位评定后即可挑战/);
+  assert.match(pageSource, /acceptEndlessChallenge/);
+  assert.match(pageSource, /mode: "challenge-playing"/);
+  assert.match(pageSource, /mode: "challenge-complete"/);
+  assert.match(pageSource, /completeEndlessChallengeRound/);
+  assert.match(pageSource, /current\.mode !== "challenge-playing"/);
+  assert.doesNotMatch(sourceBetween(pageSource, "const completeEndlessChallengeRound", "const completeAdvancedBaseReplay"), /recordAdvancedEndlessScore/);
+  assert.match(screenSource, /mode: "challenge-playing"/);
+  assert.match(screenSource, /mode: "challenge-complete"/);
+  assert.match(screenSource, /EndlessChallengeResultCard/);
+  assert.match(screenSource, /onCompleteEndlessChallenge/);
+  assert.match(screenSource, /TA/);
+  assert.match(cssSource, /\.endless-challenge-dialog-backdrop\s*{/);
+  assert.match(cssSource, /\.endless-challenge-result-outcome\s*{/);
+});
+
 test("endless HUD removes strength controls and uses a ten-segment energy meter", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
