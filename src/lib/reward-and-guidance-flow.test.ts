@@ -81,7 +81,7 @@ test("advanced clears show lucky coin rewards while rank changes use the full-sc
   assert.match(pageSource, /const afterStars = getAdvancedTotalStars\(nextProgress\);/);
   assert.match(pageSource, /formatResultRankTitle\(baseRankName, beforeStars\)/);
   assert.match(pageSource, /formatResultRankTitle\(baseRankName, afterStars\)/);
-  assert.match(pageSource, /enqueueRewardItems\(\[/);
+  assert.match(pageSource, /enqueueRewardItems\(compactRewardItems\(\[/);
   assert.match(pageSource, /createRankRewardItem/);
   assert.match(pageSource, /getNewlyUnlockedPlayerAvatarSkins/);
   assert.match(pageSource, /openAvatarLabWithSkin/);
@@ -94,7 +94,7 @@ test("advanced clears show lucky coin rewards while rank changes use the full-sc
   assert.match(advancedCss, /\.advanced-luck-coin-card strong\s*{[\s\S]*text-align:\s*left;/);
 });
 
-test("skin and rank rewards share a full-screen overlay queue with skin rewards first", () => {
+test("rank, endless, and skin rewards share a full-screen overlay queue in fixed priority order", () => {
   const rewardOverlaySource = readSource("../features/rewards/reward-overlay.tsx");
   const pageSource = readSource("../app/page.tsx");
   const rewardCss = readSource("../app/styles/base-flow/rewards.css");
@@ -126,7 +126,8 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.doesNotMatch(rewardOverlaySource, /reward-rank-arrow/);
   assert.match(rewardOverlaySource, /RANK_REWARD_REVEAL_COMPLETE_MS = 1260/);
   assert.match(rewardOverlaySource, /\(item\.kind === "rank" \|\| item\.kind === "endless"\) \? RANK_REWARD_REVEAL_COMPLETE_MS : SKIN_REWARD_REVEAL_COMPLETE_MS/);
-  assert.match(rewardOverlaySource, /if \(item\.kind === "rank" \|\| item\.kind === "endless"\) return;/);
+  assert.doesNotMatch(rewardOverlaySource, /if \(item\.kind === "rank" \|\| item\.kind === "endless"\) return;/);
+  assert.match(rewardOverlaySource, /if \(finishReveal\(\)\) return;/);
   assert.doesNotMatch(rewardOverlaySource, /<RewardOverlayContent key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardSkinCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardRankCard key=\{item\.id\}/);
@@ -149,14 +150,17 @@ test("skin and rank rewards share a full-screen overlay queue with skin rewards 
   assert.match(pageSource, /const \[rewardQueue,\s*setRewardQueue\] = useState<RewardOverlayItem\[\]>\(\[\]\);/);
   assert.match(pageSource, /const activeRewardItem = rewardQueue\[0\] \?\? null;/);
   assert.match(pageSource, /createSkinRewardItems\(previousProgress,\s*nextProgress/);
+  assert.match(pageSource, /function sortRewardItemsByPriority/);
+  assert.match(pageSource, /const REWARD_ITEM_KIND_PRIORITY/);
+  assert.match(pageSource, /rank:\s*0/);
+  assert.match(pageSource, /endless:\s*1/);
+  assert.match(pageSource, /skin:\s*2/);
+  assert.match(pageSource, /setRewardQueue\(\(current\) => \[\.\.\.current, \.\.\.sortRewardItemsByPriority\(items\)\]\)/);
   assert.match(pageSource, /function createEndlessRewardItem\(previousProgress: AdvancedProgress, nextProgress: AdvancedProgress, roundId: RoundId, source: string\): RewardOverlayItem \| null/);
   assert.match(pageSource, /!isEndlessModeUnlocked\(previousProgress, roundId\) && isEndlessModeUnlocked\(nextProgress, roundId\)/);
   assert.match(pageSource, /kind:\s*"endless"/);
-  assert.match(pageSource, /\.\.\.createSkinRewardItems\([\s\S]*createRankRewardItem/);
-  assert.match(
-    pageSource,
-    /\.\.\.createSkinRewardItems\(previousProgress, nextProgress, `advanced-\$\{current\.roundId\}-\$\{current\.level\}`\),[\s\S]*\.\.\.compactRewardItems\(\[rankReward\]\),[\s\S]*\.\.\.compactRewardItems\(\[endlessReward\]\),/,
-  );
+  assert.doesNotMatch(pageSource, /\.\.\.createSkinRewardItems\([\s\S]*\.\.\.compactRewardItems\(\[rankReward\]\),[\s\S]*\.\.\.compactRewardItems\(\[endlessReward\]\),/);
+  assert.match(pageSource, /enqueueRewardItems\(compactRewardItems\(\[[\s\S]*rankReward,[\s\S]*endlessReward,[\s\S]*\.\.\.createSkinRewardItems/);
   assert.match(pageSource, /pendingLuckRewardItemsRef/);
   assert.match(pageSource, /onRevealRewards=\{revealPendingLuckRewards\}/);
   assert.match(luckSource, /onRevealRewards\?:\s*\(outcome:\s*LuckDrawOutcome\) => void/);
@@ -323,29 +327,39 @@ test("advanced lobby supports one-level swipe and first-three-level tutorial ove
   assert.match(advancedCss, /\.advanced-lobby-carousel[\s\S]*touch-action:\s*none;/);
 });
 
-test("advanced in-round top-right actions keep retry and add an explicit return", () => {
+test("advanced in-round top-right actions use pause dialogs and freeze live runtimes", () => {
   const advancedScreenSource = readSource("../features/advanced/advanced-challenge-screen.tsx");
+  const renderStart = advancedScreenSource.indexOf("const pauseDialogNode = pauseDialog ?");
+  const playingStart = advancedScreenSource.indexOf('if (challenge.mode === "playing")', renderStart);
   const playingSource = advancedScreenSource.slice(
-    advancedScreenSource.indexOf('if (challenge.mode === "playing")'),
-    advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")'),
+    playingStart,
+    advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")', playingStart),
   );
-  const endlessPlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")');
+  const endlessPlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "endless-playing")', renderStart);
   const endlessPlayingSource = advancedScreenSource.slice(
     endlessPlayingStart,
     advancedScreenSource.indexOf('if (challenge.mode === "base-playing")', endlessPlayingStart),
   );
-  const basePlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "base-playing")');
+  const basePlayingStart = advancedScreenSource.indexOf('if (challenge.mode === "base-playing")', renderStart);
   const basePlayingSource = advancedScreenSource.slice(
     basePlayingStart,
     advancedScreenSource.indexOf("<AdvancedLobbyContent", basePlayingStart),
   );
 
-  assert.match(playingSource, /onPointerDown=\{\(\) => onStartLevel\(challenge\.level\)\}/);
-  assert.match(playingSource, /onPointerDown=\{onBack\}/);
-  assert.match(endlessPlayingSource, /onPointerDown=\{\(\) => onStartLevel\(ENDLESS_MODE_LEVEL\)\}/);
-  assert.match(endlessPlayingSource, /onPointerDown=\{onBack\}/);
-  assert.match(basePlayingSource, /onPointerDown=\{\(\) => onRestartBaseRound\(challenge\.level\)\}/);
-  assert.match(basePlayingSource, /onPointerDown=\{onBack\}/);
+  assert.match(advancedScreenSource, /function AdvancedPauseDialog/);
+  assert.match(advancedScreenSource, /const \[pauseDialog, setPauseDialog\] = React\.useState<AdvancedPauseDialogState \| null>\(null\);/);
+  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onSettleExit\}>[\s\S]*?结算退出/);
+  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onRestart\}>[\s\S]*?重新开始/);
+  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onContinue\}>[\s\S]*?继续游戏/);
+  assert.match(playingSource, /onPointerDown=\{openAdvancedPauseDialog\}[\s\S]*?暂停/);
+  assert.match(playingSource, /paused:\s*pauseDialog\?\.mode === "advanced"/);
+  assert.match(endlessPlayingSource, /onPointerDown=\{openEndlessPauseDialog\}[\s\S]*?暂停/);
+  assert.match(endlessPlayingSource, /paused=\{pauseDialog\?\.mode === "endless"\}/);
+  assert.match(basePlayingSource, /onPointerDown=\{openBasePauseDialog\}[\s\S]*?暂停/);
+  assert.match(basePlayingSource, /paused:\s*pauseDialog\?\.mode === "base"/);
+  assert.doesNotMatch(playingSource, /onPointerDown=\{\(\) => onStartLevel\(challenge\.level\)\}/);
+  assert.doesNotMatch(endlessPlayingSource, /onPointerDown=\{\(\) => onStartLevel\(ENDLESS_MODE_LEVEL\)\}/);
+  assert.doesNotMatch(basePlayingSource, /onPointerDown=\{\(\) => onRestartBaseRound\(challenge\.level\)\}/);
 });
 
 test("advanced endless locked feedback is centered and restrained", () => {

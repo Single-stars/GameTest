@@ -12,6 +12,7 @@ import {
   createLevelSelectStateMessage,
   createRematchMessage,
   createResultMessage,
+  createRoomScoreMessage,
   createReturnRoomMessage,
   createStateMessage,
   createTimeSyncPingMessage,
@@ -301,6 +302,21 @@ test("level-select room messages carry independent presence and shared selected 
     assert.equal(state.selection.playMode, "versus");
     assert.equal(state.selection.slotTones.mode, "red");
   }
+});
+
+test("room score messages carry host and guest wins for reconnect recovery", () => {
+  const parsed = parseNetMessage(serializeNetMessage(createRoomScoreMessage({
+    guestWins: 1,
+    hostWins: 2,
+    lastMatchId: "match-7",
+  })));
+
+  assert.ok(parsed);
+  assert.equal(parsed.kind, "room-score");
+  if (parsed.kind !== "room-score") return;
+  assert.equal(parsed.score.hostWins, 2);
+  assert.equal(parsed.score.guestWins, 1);
+  assert.equal(parsed.score.lastMatchId, "match-7");
 });
 
 test("homeworld messages carry extensible asset-backed furniture state and side-view presence", () => {

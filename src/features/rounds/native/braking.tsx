@@ -61,6 +61,10 @@ type AdvancedBrakeBumpedHazard = AdvancedBrakeHazard & {
   id: number;
   rotationDeg: number;
 };
+type AdvancedBrakingShockwave = {
+  id: number;
+  x: number;
+};
 
 type AdvancedBrakingFeedback = "idle" | "success" | "early" | "crashed";
 type AdvancedBrakingRuleZoneState = "normal" | "entering" | "active" | "exiting";
@@ -86,6 +90,7 @@ const ENDLESS_BRAKING_FAST_REACTION_MS = 150;
 const ENDLESS_BIG_LUCK_SPEED_MULTIPLIER = 2;
 const ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER = 3.2;
 const ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS = 1300;
+const ENDLESS_BRAKING_CLEAR_SPAWN_LOCK_MS = 1000;
 const ENDLESS_BRAKING_LEVEL_10_REACTION_WINDOW_MS = 420;
 const ENDLESS_BRAKING_RULE_ZONE_MIN_DIFFICULTY = 0.48;
 const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 118;
@@ -315,7 +320,7 @@ function resolveAdvancedBrakingAvatarView(holding: boolean, feedback: AdvancedBr
   return { action: "idle", expression: "neutral" };
 }
 
-export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shielded = false }: RoundProps) {
+export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false, endless, onComplete, paused = false, shielded = false }: RoundProps) {
 
   const config = advancedConfig!;
 
@@ -373,9 +378,11 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
 
   const [hazard, setHazard] = useState<AdvancedBrakeHazard | null>(null);
   const [bumpedHazards, setBumpedHazards] = useState<AdvancedBrakeBumpedHazard[]>([]);
+  const [shockwaves, setShockwaves] = useState<AdvancedBrakingShockwave[]>([]);
 
   const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
   const endlessDistanceRef = useRef(0);
+  const pausedRef = useRef(paused);
 
   const holdingRef = useRef(false);
 
@@ -399,6 +406,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const recentEndlessHazardKeysRef = useRef<string[]>([]);
   const bigLuckRunningRef = useRef(false);
   const bigLuckRecoveryDelayPendingRef = useRef(false);
+  const spawnLockedUntilRef = useRef(0);
   const pointerCaptureRef = useRef<{ element: HTMLDivElement; pointerId: number } | null>(null);
 
   const trialsRef = useRef<TrialEvent[]>([]);
@@ -417,6 +425,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const completionTimerRef = useRef<number | null>(null);
   const bumpedHazardIdRef = useRef(0);
   const bumpedHazardTimersRef = useRef<number[]>([]);
+  const shockwaveIdRef = useRef(0);
+  const shockwaveTimersRef = useRef<number[]>([]);
   const endlessRef = useRef(endless);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -436,6 +446,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   useEffect(() => {
     endlessRef.current = endless;
   }, [endless]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     const ruleZoneConfig = endless
@@ -475,6 +489,8 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     completionTimerRef.current = null;
     for (const timer of bumpedHazardTimersRef.current) window.clearTimeout(timer);
     bumpedHazardTimersRef.current = [];
+    for (const timer of shockwaveTimersRef.current) window.clearTimeout(timer);
+    shockwaveTimersRef.current = [];
 
   }, []);
 
@@ -662,6 +678,50 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
     bumpedHazardTimersRef.current.push(timer);
   }, []);
 
+  const registerEndlessBrakingShockwave = useCallback(() => {
+    const shockwave: AdvancedBrakingShockwave = {
+      id: shockwaveIdRef.current + 1,
+      x: progressRef.current + trackMetrics.runnerWidthPercent / 2,
+    };
+    shockwaveIdRef.current = shockwave.id;
+    setShockwaves((current) => [...current.slice(-1), shockwave]);
+    const timer = window.setTimeout(() => {
+      setShockwaves((current) => current.filter((item) => item.id !== shockwave.id));
+      shockwaveTimersRef.current = shockwaveTimersRef.current.filter((item) => item !== timer);
+    }, 680);
+    shockwaveTimersRef.current.push(timer);
+  }, [trackMetrics.runnerWidthPercent]);
+
+  const clearEndlessBrakingHazards = useCallback(() => {
+    if (collisionTimerRef.current) window.clearTimeout(collisionTimerRef.current);
+    if (holdSuccessTimerRef.current) window.clearTimeout(holdSuccessTimerRef.current);
+    collisionTimerRef.current = null;
+    holdSuccessTimerRef.current = null;
+    const currentHazard = hazardRef.current;
+    const clearedObstacles = currentHazard ? [currentHazard] : [];
+    for (const clearedObstacle of clearedObstacles) {
+      bumpAdvancedBrakingHazard(clearedObstacle);
+      previousHazardRef.current = clearedObstacle;
+      hazardIndexRef.current += 1;
+    }
+    hazardRef.current = null;
+    setHazard(null);
+    hazardShownAtRef.current = null;
+    spawnLockedUntilRef.current = performance.now() + ENDLESS_BRAKING_CLEAR_SPAWN_LOCK_MS;
+    resetEventTimer();
+  }, [bumpAdvancedBrakingHazard, resetEventTimer]);
+
+  useEffect(() => {
+    if (!endless?.setSkillEndHandler) return undefined;
+    const handleEndlessSkillEnd = (endedSkill: EndlessActiveSkill) => {
+      if (endedSkill.kind !== "big-luck") return;
+      registerEndlessBrakingShockwave();
+      clearEndlessBrakingHazards();
+    };
+    endless.setSkillEndHandler(handleEndlessSkillEnd);
+    return () => endless.setSkillEndHandler?.(null);
+  }, [clearEndlessBrakingHazards, endless, registerEndlessBrakingShockwave]);
+
   const isBigLuckSkillActive = useCallback(function isBigLuckSkillActive() {
     const activeEndless = endlessRef.current;
     const activeSkill = activeEndless?.getActiveSkill();
@@ -725,6 +785,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
   const startHazard = useCallback(() => {
 
     if (hazardRef.current || rulePortalRef.current || finishedRef.current) return;
+    if (performance.now() < spawnLockedUntilRef.current) return;
 
     const endlessRuntime = endlessRef.current;
     const endlessDistance = endlessRuntime ? Math.max(endlessRuntime.score, endlessDistanceRef.current) : 0;
@@ -946,6 +1007,10 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
       const delta = frameNow - (lastFrameAtRef.current || frameNow);
 
       lastFrameAtRef.current = frameNow;
+      if (pausedRef.current) {
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
       const activeEndlessRuntime = endlessRef.current;
       const bigLuckRunning = getBigLuckSkill() !== null;
       if (bigLuckRunningRef.current && !bigLuckRunning && activeEndlessRuntime) {
@@ -1417,6 +1482,13 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
       >
 
         {showAdvancedBrakingRuleBackdrop ? <div className="advanced-brake-rule-backdrop-text">{activeRuleHint}</div> : null}
+        {shockwaves.map((shockwave) => (
+          <span
+            className="advanced-braking-shockwave"
+            key={shockwave.id}
+            style={{ left: `${shockwave.x}%` }}
+          />
+        ))}
 
         {Array.from({ length: activeLaneCount }, (_, lane) => (
 
@@ -1446,7 +1518,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
               if (!signal) return null;
               return (
                 <span
-                  className={`advanced-hazard advanced-hazard-bumped ${signal === "gray" ? "fake" : "real"}`}
+                  className={`advanced-hazard advanced-braking-obstacle knocked-away advanced-hazard-bumped ${signal === "gray" ? "fake" : "real"}`}
                   key={`${bumpedHazard.id}-${lane}`}
                   style={{
                     "--advanced-brake-bump-rotate": `${bumpedHazard.rotationDeg}deg`,
@@ -1457,7 +1529,7 @@ export function AdvancedBrakingRound({ advancedConfig, endless, onComplete, shie
               );
             })}
 
-            <span className="advanced-runner" style={{ left: `${progress}%`, translate: "0 0" }}>
+            <span className={`advanced-runner ${damageInvincible ? "damage-invincible" : ""}`} style={{ left: `${progress}%`, translate: "0 0" }}>
               <PlayerAvatar
                 {...resolveAdvancedBrakingAvatarView(holding, advancedFeedback)}
                 direction={holding ? "right" : "none"}
@@ -1504,6 +1576,7 @@ function resolveDinoAvatarView(status: DinoStatus): PlayerAvatarView {
 function BrakingRoundCore({
   onComplete,
   onPracticeSuccess,
+  paused = false,
   trialCount = DINO_TRIAL_COUNT,
 }: RoundProps & { onPracticeSuccess?: () => void; trialCount?: number }) {
   const [index, setIndex] = useState(0);
@@ -1532,6 +1605,7 @@ function BrakingRoundCore({
   const holdingRef = useRef(false);
   const progressRef = useRef(8);
   const statusRef = useRef<DinoStatus>("ready");
+  const pausedRef = useRef(paused);
   const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
 
@@ -1601,6 +1675,10 @@ function BrakingRoundCore({
 
 
   useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
+  useEffect(() => {
 
     const tick = () => {
 
@@ -1610,6 +1688,10 @@ function BrakingRoundCore({
 
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
+      if (pausedRef.current) {
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
       if (holdingRef.current && (statusRef.current === "running" || statusRef.current === "danger")) {
         const next = clamp(progressRef.current + (delta * DINO_SPEED_PER_SECOND) / 1000, 8, 78);
         progressRef.current = next;
@@ -1865,7 +1947,7 @@ function brakingPracticeMessage(trials: TrialEvent[]) {
   return "等危险出现再松手，再试一次";
 }
 
-export function BrakingRound({ onComplete }: RoundProps) {
+export function BrakingRound({ onComplete, paused = false }: RoundProps) {
   const [practicePassed, setPracticePassed] = useState(false);
   const [practiceKey, setPracticeKey] = useState(0);
   const [practiceMessage, setPracticeMessage] = useState("试一次：危险出现时松手停下");
@@ -1886,6 +1968,7 @@ export function BrakingRound({ onComplete }: RoundProps) {
           key={`braking-practice-${practiceKey}`}
           onComplete={completePractice}
           onPracticeSuccess={() => setPracticeMessage("")}
+          paused={paused}
           trialCount={1}
         />
         <small className="base-practice-message">{practiceMessage}</small>
@@ -1893,5 +1976,5 @@ export function BrakingRound({ onComplete }: RoundProps) {
     );
   }
 
-  return <BrakingRoundCore onComplete={onComplete} />;
+  return <BrakingRoundCore onComplete={onComplete} paused={paused} />;
 }

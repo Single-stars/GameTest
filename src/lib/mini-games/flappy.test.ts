@@ -505,7 +505,7 @@ test("flappy endless gravity changes use sine portals, early triggers, and smoot
   assert.match(flappyRuntimeSource, /const gateGravityEntered = activeReverseDirection \? gateGravityTriggerX >= activePlayerX : gateGravityTriggerX <= activePlayerX;/);
   assert.match(flappyRuntimeSource, /const enteredGateAnomaly = isEndlessRun \? getEndlessFlappyGateAnomaly\(gate, endlessRef\.current\?\.debugDifficulty \?\? 0\) : null;/);
   assert.match(flappyRuntimeSource, /triggerEndlessGravityChangeIfNeeded\(current, nextTime, enteredGateAnomaly\)/);
-  assert.match(flappyRuntimeSource, /endlessRef\.current\?\.showFeedback\("重力翻转！"\);/);
+  assert.doesNotMatch(flappyRuntimeSource, /endlessRef\.current\?\.showFeedback\("重力翻转！"\);/);
   assert.doesNotMatch(flappyRuntimeSource, /const passedGateAnomaly|passedGateAnomaly\?\.flipAfterGate|applyEndlessGravityChange\(current, nextTime, passedGateAnomaly\.targetFlipped\)/);
   assert.doesNotMatch(flappyRuntimeSource, /pendingGravityFlipTarget/);
   assert.match(flappyRuntimeSource, /const gateAnomaly = isEndlessRun \? getEndlessFlappyGateAnomaly\(gate, endless\?\.debugDifficulty \?\? 0\) : null;/);
@@ -561,6 +561,19 @@ test("flappy endless gravity changes use sine portals, early triggers, and smoot
   assert.doesNotMatch(cssSource, /@keyframes flappy-managed-flip|flappy-gravity-flip-banner/);
   assert.doesNotMatch(cssSource, /\.flappy-world\.gravity-flipped\s*{[\s\S]*--flappy-world-rotation:\s*180deg;/);
   assert.doesNotMatch(cssSource, /\.flappy-stage\.endless-gravity-anomaly::before|flappy-gravity-particles/);
+});
+
+test("flappy endless gravity anomaly does not render background gravity text", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+  const flappyRuntimeSource = componentSource.slice(componentSource.indexOf("export function FlappyPrototype"));
+
+  assert.match(flappyRuntimeSource, /activeViewReversedGravity \? "endless-gravity-anomaly" : ""/);
+  assert.match(cssSource, /\.flappy-stage \.difficulty-wave-backdrop\s*{[\s\S]*z-index:\s*1;/);
+  assert.match(cssSource, /\.flappy-world\s*{[\s\S]*z-index:\s*2;/);
+  assert.doesNotMatch(flappyRuntimeSource, /flappyGravityBackgroundLabel|flappyGravityHintText|flappy-gravity-background-hint/);
+  assert.doesNotMatch(cssSource, /flappy-gravity-background-hint|flappy-gravity-hint-in|flappy-gravity-hint-out/);
+  assert.doesNotMatch(flappyRuntimeSource, /showFeedback\("翻转重力"\)/);
 });
 
 test("flappy super dash uses one soft velocity-aligned tail and clamps the player inside the stage", () => {

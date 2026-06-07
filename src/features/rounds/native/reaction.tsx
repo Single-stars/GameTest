@@ -40,7 +40,7 @@ const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MIN_MS = 100;
 const ENDLESS_GREEN_LIGHT_SIGNAL_DELAY_MAX_MS = 500;
 const ENDLESS_GREEN_LIGHT_MIN_SIGNAL_INTERVAL_MS = 0;
 
-export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shielded = false }: RoundProps) {
+export function AdvancedReactionRound({ advancedConfig, damageInvincible = false, endless, onComplete, paused = false, shielded = false }: RoundProps) {
   const config = advancedConfig!;
   const endlessSignalConfig = endless ? getEndlessReactionConfig({ score: Math.max(endless.score, endless.debugDifficulty * 90) }) : null;
 
@@ -70,11 +70,16 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
   const completionTimerRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
   const endlessRef = useRef(endless);
+  const pausedRef = useRef(paused);
   const sequenceRef = useRef<("green" | "red")[]>([]);
 
   useEffect(() => {
     endlessRef.current = endless;
   }, [endless]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   const setLaneTransitionState = useCallback((nextTransitioning: boolean) => {
     laneTransitioningRef.current = nextTransitioning;
@@ -116,6 +121,10 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
 
   const startSignal = useCallback(() => {
     if (finishedRef.current || laneTransitioningRef.current) return;
+    if (pausedRef.current) {
+      timersRef.current.push(window.setTimeout(startSignal, 100));
+      return;
+    }
     clearTimers();
     resetCells();
     activeGreenIdsRef.current = new Set();
@@ -129,7 +138,11 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
     });
     timersRef.current.push(
       window.setTimeout(() => {
-        const shownAt = now();
+        if (pausedRef.current) {
+          timersRef.current.push(window.setTimeout(startSignal, 100));
+          return;
+        }
+        const shownAt = now();
         activeShownAtRef.current = shownAt;
         lastSignalShownAtRef.current = shownAt;
         const endlessRuntime = endlessRef.current;
@@ -182,7 +195,11 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
 
         timersRef.current.push(
           window.setTimeout(() => {
-            if (finishedRef.current) return;
+            if (finishedRef.current) return;
+            if (pausedRef.current) {
+              timersRef.current.push(window.setTimeout(startSignal, 100));
+              return;
+            }
             const greenIds = activeGreenIdsRef.current;
             if (greenIds.size > 0 && clickedGreenIdsRef.current.size < greenIds.size) {
               setFeedbackTone("early");
@@ -401,7 +418,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
           type="button"
           onPointerDown={(event) => clickCell(event, cell)}
         >
-          <span className="reaction-cell-avatar" aria-hidden="true">
+          <span className={`reaction-cell-avatar ${damageInvincible ? "damage-invincible" : ""}`} aria-hidden="true">
             <PlayerAvatar
               {...reactionAvatarView(cell, feedbackTone)}
               effect={shielded ? "shield" : reactionAvatarView(cell, feedbackTone).effect}
@@ -418,6 +435,7 @@ export function AdvancedReactionRound({ advancedConfig, endless, onComplete, shi
 function ReactionRoundCore({
   onComplete,
   onPracticeSuccess,
+  paused = false,
   trialCount = 3,
 }: RoundProps & { onPracticeSuccess?: () => void; trialCount?: number }) {
   const [status, setStatus] = useState<"waiting" | "ready" | "feedback">("waiting");
@@ -429,11 +447,16 @@ function ReactionRoundCore({
   const shownAtRef = useRef(0);
   const lastSignalShownAtRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
-  const readyTimerRef = useRef<number | null>(null);
+  const readyTimerRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
   const transitionTimerRef = useRef<number | null>(null);
   const stepRef = useRef(1);
   const finishedRef = useRef(false);
   const answeredRef = useRef(false);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   function getReactionCompletionDelay(step: number, trialCount: number) {
     void step;
@@ -465,12 +488,20 @@ function ReactionRoundCore({
       const shownAt = now();
       shownAtRef.current = shownAt;
       lastSignalShownAtRef.current = shownAt;
+      if (pausedRef.current) {
+        startStep(nextStep);
+        return;
+      }
       setStatus("ready");
       setMessage("");
     }, delay);
 
     timeoutRef.current = window.setTimeout(() => {
-      if (answeredRef.current) return;
+      if (pausedRef.current) {
+        startStep(nextStep);
+        return;
+      }
+      if (answeredRef.current) return;
       answeredRef.current = true;
       trialsRef.current.push(
         trial("reaction", nextStep, {
@@ -590,7 +621,7 @@ function reactionPracticeMessage(trials: TrialEvent[]) {
   return "看到绿灯再点。再试一次";
 }
 
-export function ReactionRound({ onComplete }: RoundProps) {
+export function ReactionRound({ onComplete, paused = false }: RoundProps) {
   const [practicePassed, setPracticePassed] = useState(false);
   const [practiceKey, setPracticeKey] = useState(0);
   const [practiceMessage, setPracticeMessage] = useState("试一次：看到绿灯后点一下");
@@ -611,6 +642,7 @@ export function ReactionRound({ onComplete }: RoundProps) {
           key={`reaction-practice-${practiceKey}`}
           onComplete={completePractice}
           onPracticeSuccess={() => setPracticeMessage("")}
+          paused={paused}
           trialCount={1}
         />
         <small className="base-practice-message">{practiceMessage}</small>
@@ -618,5 +650,5 @@ export function ReactionRound({ onComplete }: RoundProps) {
     );
   }
 
-  return <ReactionRoundCore onComplete={onComplete} />;
+  return <ReactionRoundCore onComplete={onComplete} paused={paused} />;
 }

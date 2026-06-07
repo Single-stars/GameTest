@@ -417,9 +417,9 @@ test("fall down platform layout varies by run seed", () => {
   assert.match(fallDownSource, /const lane = \(index \+ laneOffset\) % lanePattern\.length;/);
   assert.match(fallDownSource, /const spreadTargetRatio = clamp\(lanePattern\[lane\] \+ \(xNoise - 0\.5\) \* 0\.3, 0\.1, 0\.9\);/);
   assert.match(fallDownSource, /phase: rand\(\) \* Math\.PI \* 2/);
-  assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize, endless = false\): FallDownRuntime/);
   assert.match(fallDownSource, /makeFallDownPlatforms\(level, runSeed, stageSize\.width\)/);
-  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, logicStageSize\)/);
+  assert.match(fallDownSource, /createFallDownRuntime\(level, runSeed, logicStageSize, isEndlessRun\)/);
 });
 
 test("fall down restores fragile platforms when respawning", () => {
@@ -490,4 +490,17 @@ test("fall down adds falling hazards and L platforms without more than two conse
   assert.match(fallDownSource, /right: platform\.shape === "l-right" \? `-\$\{FALL_DOWN_LEDGE_WIDTH - 2\}px` : undefined/);
   assert.match(fallDownSource, /top: `-\$\{FALL_DOWN_LEDGE_HEIGHT - 2\}px`/);
   assert.doesNotMatch(fallDownSource, /top: "2px"/);
+});
+
+test("fall down endless removes finite finish platforms so green to blue segment boundaries stay normal sized", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const fallDownSource = componentSource.slice(componentSource.indexOf("const ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH"), componentSource.indexOf("function makeDoodleWorld"));
+
+  assert.match(fallDownSource, /const ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH = 108;/);
+  assert.match(fallDownSource, /function normalizeEndlessFallDownPlatforms/);
+  assert.match(fallDownSource, /const playablePlatform: FallDownPlatform = platform\.kind === "finish" \? \{ \.\.\.platform, kind: "normal" \} : platform;/);
+  assert.match(fallDownSource, /width:\s*Math\.min\(platform\.width, ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH\)/);
+  assert.match(fallDownSource, /normalizeEndlessFallDownPlatforms\(makeFallDownPlatforms\(level, runSeed, stageSize\.width\)\)/);
+  assert.match(fallDownSource, /normalizeEndlessFallDownPlatforms\(\s*makeFallDownPlatforms\(segmentLevel/);
+  assert.doesNotMatch(fallDownSource, /\.filter\(\(platform\) => platform\.kind !== "finish"\)\s*\.slice\(1\)/);
 });

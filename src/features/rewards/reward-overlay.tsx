@@ -154,9 +154,6 @@ function RewardOverlayContent({
   };
 
   const handleOverlayClick = () => {
-    if (!itemRevealSettled) {
-      if (item.kind === "rank" || item.kind === "endless") return;
-    }
     if (finishReveal()) return;
     onDismiss();
   };

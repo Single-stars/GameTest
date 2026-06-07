@@ -58,7 +58,7 @@ export type EndlessSkillKind =
 export type EndlessSpecialBonusLabel =
   | "顶级预判！"
   | "极限命中！"
-  | "无视野预判！"
+  | "死里逃生！"
   | "极速下降！"
   | "精准落地！"
   | "道具收集！"
@@ -80,6 +80,7 @@ export type EndlessMiniGameRuntime = {
   awardSpecialBonus: (bonus: EndlessSpecialBonusLabel | EndlessSpecialBonus) => void;
   canHeal: boolean;
   canUseSkill: boolean;
+  damageInvincible: boolean;
   debugEnergyLocked: boolean;
   debugDifficulty: number;
   energyPercent: number;
@@ -87,12 +88,14 @@ export type EndlessMiniGameRuntime = {
   getActiveSkill: () => EndlessActiveSkill | null;
   gainEnergy: (amount?: number, feedbackText?: string) => void;
   loseLife: (reason: string, finishDelayMs?: number) => boolean;
+  paused?: boolean;
   reportDifficulty: (difficulty: number) => void;
   revives: number;
   score: number;
   setDistanceScore: (distanceScore: number, gainEnergyFromDistance?: boolean) => void;
+  setSkillEndHandler?: (handler: ((skill: EndlessActiveSkill) => void) | null) => void;
   shieldCharges: number;
-  showFeedback: (text: string) => void;
+  showFeedback: (text: string, tone?: "skill" | "heal" | "shield" | "energy") => void;
   skillActive: boolean;
   skillEnding: boolean;
   toggleDebugEnergyLock: () => void;

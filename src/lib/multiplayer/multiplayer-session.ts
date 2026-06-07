@@ -13,6 +13,7 @@ import {
   createReadyMessage,
   createRematchMessage,
   createResultMessage,
+  createRoomScoreMessage,
   createReturnRoomMessage,
   createStateMessage,
   createTiebreakerMessage,
@@ -31,6 +32,7 @@ import type {
   MatchConfig,
   MultiplayerReactionEvent,
   MultiplayerReactionKind,
+  MultiplayerRoomScore,
   MultiplayerSnapshot,
   NetMessage,
   PlayerInfo,
@@ -99,6 +101,7 @@ export function buildInitialSnapshot(): MultiplayerSnapshot {
     levelSelectState: null,
     selfLevelSelectPresence: null,
     opponentLevelSelectPresence: null,
+    roomScore: null,
     reactions: [],
     errorMessage: null,
   };
@@ -183,6 +186,7 @@ export class MultiplayerSession {
           const currentHomeworldState = this.snapshot.homeworldState;
           const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
           const currentLevelSelectState = this.snapshot.levelSelectState;
+          const currentRoomScore = this.snapshot.roomScore;
           const currentOpponentPlayer = this.snapshot.opponentPlayer;
           const currentOpponentHomeworldPresence = this.snapshot.opponentHomeworldPresence;
           const currentOpponentLevelSelectPresence = this.snapshot.opponentLevelSelectPresence;
@@ -219,6 +223,7 @@ export class MultiplayerSession {
             levelSelectState: currentLevelSelectState,
             selfLevelSelectPresence: currentLevelSelectPresence,
             opponentLevelSelectPresence: currentOpponentLevelSelectPresence,
+            roomScore: currentRoomScore,
           });
           this.send(createHelloMessage(this.selfPlayer));
           this.sendCurrentRoomSnapshots();
@@ -364,6 +369,8 @@ export class MultiplayerSession {
         anim: sequencedState.anim,
         x: sequencedState.x,
         y: sequencedState.y,
+        screenX: sequencedState.screenX,
+        screenY: sequencedState.screenY,
         usedPlatformIds: sequencedState.usedPlatformIds,
         knifeInsertedAngles: sequencedState.knifeInsertedAngles,
         knifeFailedAngles: sequencedState.knifeFailedAngles,
@@ -480,6 +487,24 @@ export class MultiplayerSession {
     this.send(createLevelSelectPresenceMessage(presence));
   }
 
+  reportRoomScore(score: MultiplayerRoomScore) {
+    const nextScore: MultiplayerRoomScore = {
+      hostWins: Math.max(0, Math.round(score.hostWins)),
+      guestWins: Math.max(0, Math.round(score.guestWins)),
+      ...(score.lastMatchId ? { lastMatchId: score.lastMatchId } : {}),
+    };
+    const current = this.snapshot.roomScore;
+    if (
+      current?.hostWins === nextScore.hostWins &&
+      current?.guestWins === nextScore.guestWins &&
+      current?.lastMatchId === nextScore.lastMatchId
+    ) {
+      return;
+    }
+    this.patchSnapshot({ roomScore: nextScore });
+    this.send(createRoomScoreMessage(nextScore));
+  }
+
   forfeit() {
     const matchId = this.currentMatchId();
     if (!matchId) return;
@@ -552,6 +577,7 @@ export class MultiplayerSession {
       levelSelectState: null,
       selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,
+      roomScore: null,
     });
   }
 
@@ -619,6 +645,9 @@ export class MultiplayerSession {
     if (this.snapshot.selfLevelSelectPresence) {
       this.send(createLevelSelectPresenceMessage(this.snapshot.selfLevelSelectPresence));
     }
+    if (this.snapshot.roomScore) {
+      this.send(createRoomScoreMessage(this.snapshot.roomScore));
+    }
   }
 
   private handleMessage(message: NetMessage) {
@@ -645,6 +674,9 @@ export class MultiplayerSession {
         break;
       case "level-select-state":
         this.patchSnapshot({ levelSelectState: message.selection, selfReady: false, opponentReady: false });
+        break;
+      case "room-score":
+        this.patchSnapshot({ roomScore: message.score });
         break;
       case "start":
         this.acceptStartMessage(message);
@@ -690,6 +722,8 @@ export class MultiplayerSession {
             anim: message.anim,
             x: message.x,
             y: message.y,
+            screenX: message.screenX,
+            screenY: message.screenY,
             usedPlatformIds: message.usedPlatformIds,
             knifeInsertedAngles: message.knifeInsertedAngles,
             knifeFailedAngles: message.knifeFailedAngles,
@@ -821,6 +855,7 @@ export class MultiplayerSession {
             levelSelectState: null,
             selfLevelSelectPresence: null,
             opponentLevelSelectPresence: null,
+            roomScore: null,
             opponentReady: false,
           });
         }
@@ -923,6 +958,7 @@ export class MultiplayerSession {
       levelSelectState: currentLevelSelectState,
       selfLevelSelectPresence: currentLevelSelectPresence,
       opponentLevelSelectPresence: null,
+      roomScore: null,
     });
   }
 
@@ -1142,6 +1178,7 @@ export class MultiplayerSession {
       opponentJoining: false,
       opponentHomeworldPresence: null,
       opponentLevelSelectPresence: null,
+      roomScore: null,
     });
   }
 
@@ -1182,6 +1219,7 @@ export class MultiplayerSession {
       levelSelectState: null,
       selfLevelSelectPresence: null,
       opponentLevelSelectPresence: null,
+      roomScore: null,
       reactions: [],
     });
   }

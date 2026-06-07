@@ -290,7 +290,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(sessionSource, /case "homeworld-presence":/);
   assert.match(pageSource, /searchParams\.get\("homeworld"\)/);
   assert.match(pageSource, /readPersistedPlayerName/);
-  assert.doesNotMatch(pageSource, /writePersistedPlayerName/);
+  assert.match(pageSource, /writePersistedPlayerName\(nextName\)/);
   assert.match(pageSource, /const \[playerName, setPlayerName\] = useState\(""\);/);
   assert.match(pageSource, /createSelfPlayer\(role, resolvedSkin, resolvedName, resolvedCustomAvatar\)/);
   assert.match(pageSource, /autoCreateHomeworldHostRef/);
@@ -635,6 +635,131 @@ test("custom avatar profiles render for remote multiplayer avatars", () => {
   assert.match(squareJumpSource, /customImageUrl=\{remotePlayerSkin === "custom" \? remotePlayer\?\.customAvatar\?\.imageDataUrl : null\}/);
   assert.match(homeworldSource, /remoteCustomAvatar\?: PlayerInfo\["customAvatar"\]/);
   assert.match(homeworldSource, /customImageUrl=\{resolvedRemoteSkin === "custom" \? remoteCustomAvatar\?\.imageDataUrl : null\}/);
+});
+
+test("multiplayer first entry requires a nickname before creating or joining rooms", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(pageSource, /const \[nicknameDialogOpen, setNicknameDialogOpen\] = useState\(false\);/);
+  assert.match(pageSource, /请输入你的昵称/);
+  assert.match(pageSource, /function MultiplayerNicknameDialog/);
+  assert.match(pageSource, /ensureMultiplayerNickname/);
+  assert.match(pageSource, /await ensureMultiplayerNickname\(\)/);
+  assert.match(pageSource, /writePersistedPlayerName\(nextName\)/);
+  assert.match(pageSource, /setNicknameDialogOpen\(true\)/);
+  assert.match(cssSource, /\.multiplayer-nickname-dialog-backdrop/);
+  assert.match(cssSource, /\.multiplayer-nickname-dialog/);
+});
+
+test("multiplayer rooms show elegant room scores while gameplay keeps labels out of active matches", () => {
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const crownRule = cssRule(cssSource, ".multiplayer-player-crown");
+  const roomScoreboardRule = cssRule(cssSource, ".multiplayer-level-scoreboard");
+
+  assert.doesNotMatch(runtimeSource, /function MultiplayerPlayerOverlays/);
+  assert.doesNotMatch(runtimeSource, /selfDisplayName|opponentDisplayName/);
+  assert.doesNotMatch(runtimeSource, /multiplayer-player-label/);
+  assert.doesNotMatch(runtimeSource, /<MultiplayerPlayerOverlays/);
+  assert.doesNotMatch(runtimeSource, /backgroundImage:\s*'url\("\/icons\/crown\.svg"\)'/);
+  assert.doesNotMatch(shellSource, /multiplayer-room-scoreboard/);
+  assert.match(roomSource, /selfWins: number;/);
+  assert.match(roomSource, /opponentWins: number;/);
+  assert.match(roomSource, /scoreboardRoomBarOffset\?: boolean;/);
+  assert.match(roomSource, /scoreboardRoomBarOffset = false/);
+  assert.match(roomSource, /scoreboardVisible\?: boolean;/);
+  assert.match(roomSource, /scoreboardVisible = true/);
+  assert.match(roomSource, /scoreboardVisible \? \(/);
+  assert.match(roomSource, /scoreboardRoomBarOffset \? " room-bar-offset" : ""/);
+  assert.match(roomSource, /selfCustomAvatar\?: PlayerInfo\["customAvatar"\]/);
+  assert.match(roomSource, /multiplayer-level-scoreboard/);
+  assert.match(roomSource, /multiplayer-level-score-side self/);
+  assert.match(roomSource, /multiplayer-level-score-side opponent/);
+  assert.match(roomSource, /multiplayer-level-score-value/);
+  assert.doesNotMatch(roomSource, /multiplayer-level-score-names/);
+  assert.match(roomSource, /multiplayer-player-crown/);
+  assert.match(roomSource, /customImageUrl=\{selfSkin === "custom" \? selfCustomAvatar\?\.imageDataUrl : null\}/);
+  assert.match(pageSource, /selfWins=\{matchWins\.self\}/);
+  assert.match(pageSource, /opponentWins=\{matchWins\.opponent\}/);
+  assert.match(pageSource, /const levelSelectSelfCustomAvatar = snapshot\.selfPlayer\?\.customAvatar \?\? \(selectedSkin === "custom" && customAvatarSyncPayload \? customAvatarSyncPayload : undefined\);/);
+  assert.match(pageSource, /selfCustomAvatar=\{levelSelectSelfCustomAvatar\}/);
+  assert.doesNotMatch(pageSource, /<MultiplayerGameShell[\s\S]{0,600}selfWins=\{matchWins\.self\}/);
+  assert.doesNotMatch(pageSource, /<MultiplayerGameShell[\s\S]{0,600}opponentWins=\{matchWins\.opponent\}/);
+  assert.doesNotMatch(pageSource, /<MultiplayerMatchRuntime[\s\S]{0,900}selfWins=\{matchWins\.self\}/);
+  assert.doesNotMatch(pageSource, /<MultiplayerMatchRuntime[\s\S]{0,900}opponentWins=\{matchWins\.opponent\}/);
+  assert.match(pageSource, /const \[matchWins, setMatchWins\] = useState\(\{ self: 0, opponent: 0 }\);/);
+  assert.match(pageSource, /const matchWinsRoomIdRef = useRef<string \| null>\(null\);/);
+  assert.match(pageSource, /function roomScoreToLocalWins/);
+  assert.match(pageSource, /function localWinsToRoomScore/);
+  assert.match(pageSource, /sessionRef\.current\?\.reportRoomScore/);
+  assert.match(pageSource, /snapshot\.roomScore/);
+  assert.match(pageSource, /scoreboardRoomBarOffset=\{standaloneRoomBarVisible\}/);
+  assert.match(pageSource, /scoreboardVisible=\{Boolean\(snapshot\.roomId\)\}/);
+  assert.match(pageSource, /if \(snapshot\.roomId !== matchWinsRoomIdRef\.current\)/);
+  assert.doesNotMatch(pageSource, /if \(!snapshot\.opponentPlayer\)[\s\S]{0,180}setMatchWins/);
+  assert.match(pageSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};/);
+  assert.match(pageSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};/);
+  assert.match(pageSource, /localWinsToRoomScore\(next, snapshot\.role, matchId\)/);
+  assert.match(sessionSource, /reportRoomScore\(score: MultiplayerRoomScore\)/);
+  assert.match(sessionSource, /createRoomScoreMessage/);
+  assert.match(sessionSource, /case "room-score":[\s\S]*roomScore: message\.score/);
+  assert.match(sessionSource, /sendCurrentRoomSnapshots[\s\S]*createRoomScoreMessage\(this\.snapshot\.roomScore\)/);
+  assert.match(sessionSource, /case "bye":[\s\S]*this\.resetHostWaitingState\(\);/);
+  assert.match(sessionSource, /private resetHostWaitingState[\s\S]*opponentPlayer: null,[\s\S]*opponentLevelSelectPresence: null/);
+  assert.match(crownRule, /mask:\s*url\("\/icons\/crown\.svg"\)/);
+  assert.match(crownRule, /background:\s*(?:linear-gradient|#f|rgb\()/);
+  assert.match(roomScoreboardRule, /background:\s*transparent;/);
+  assert.match(roomScoreboardRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*minmax\(0,\s*1fr\);/);
+  assert.match(roomScoreboardRule, /top:\s*calc\(max\(14px,\s*env\(safe-area-inset-top\)\) \+ 58px\);/);
+  assert.doesNotMatch(roomScoreboardRule, /border:/);
+  assert.doesNotMatch(roomScoreboardRule, /border-radius:/);
+  assert.doesNotMatch(roomScoreboardRule, /box-shadow:/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-level-score-names/);
+  assert.match(cssSource, /\.multiplayer-level-scoreboard\.room-bar-offset/);
+  assert.doesNotMatch(cssSource, /\.multiplayer-room-scoreboard/);
+});
+
+test("multiplayer state messages carry stable screen anchors and WebRTC offers are serialized", () => {
+  const featureStateSource = readSource("../../features/game-sync/types.ts");
+  const typeSource = readSource("./types.ts");
+  const messageSource = readSource("./messages.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const doodleSource = readSource("../../features/mini-games/doodle.tsx");
+  const fallSource = readSource("../../features/mini-games/fall-down.tsx");
+  const flappySource = readSource("../../features/mini-games/flappy.tsx");
+  const squareSource = readSource("../../features/mini-games/square-jump.tsx");
+
+  assert.match(featureStateSource, /screenX\?: number;/);
+  assert.match(featureStateSource, /screenY\?: number;/);
+  assert.match(typeSource, /screenX\?: number;/);
+  assert.match(typeSource, /screenY\?: number;/);
+  assert.match(messageSource, /if \(value\.screenX !== undefined && !isNumber\(value\.screenX\)\) return false;/);
+  assert.match(messageSource, /screenX: data\.screenX/);
+  assert.match(sessionSource, /screenX: sequencedState\.screenX/);
+  assert.match(sessionSource, /screenX: message\.screenX/);
+  assert.match(runtimeSource, /state\.screenX/);
+  assert.match(runtimeSource, /state\.screenY/);
+  assert.match(doodleSource, /screenX:/);
+  assert.match(doodleSource, /screenY:/);
+  assert.match(fallSource, /screenX:/);
+  assert.match(fallSource, /screenY:/);
+  assert.match(flappySource, /screenX:/);
+  assert.match(flappySource, /screenY:/);
+  assert.match(squareSource, /screenX:/);
+  assert.match(squareSource, /screenY:/);
+
+  assert.match(transportSource, /signalHandlingChain/);
+  assert.match(transportSource, /enqueueSignalHandling/);
+  assert.match(transportSource, /void this\.enqueueSignalHandling\(message\.signal\);/);
+  assert.match(transportSource, /if \(peerConnection\.signalingState !== "stable"\)/);
+  assert.match(transportSource, /local-answer-ignored/);
 });
 
 test("multiplayer gameplay does not render a network fluctuation hint overlay", () => {
@@ -1682,7 +1807,9 @@ test("multiplayer result panel renders compact ordered settlement breakdown rows
   const shellSource = readSource("../../features/multiplayer/multiplayer-game-shell.tsx");
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
   const articleRule = cssRule(cssSource, ".multiplayer-game-result-grid article");
-  const rowRule = cssRule(cssSource, ".multiplayer-game-result-row,\n.multiplayer-game-result-final");
+  const rowRuleStart = cssSource.indexOf(".multiplayer-game-result-row,");
+  assert.notEqual(rowRuleStart, -1, "missing CSS rule .multiplayer-game-result-row, .multiplayer-game-result-final");
+  const rowRule = cssSource.slice(rowRuleStart, cssSource.indexOf("}", rowRuleStart) + 1);
 
   assert.match(shellSource, /renderResultBreakdown/);
   assert.match(shellSource, /multiplayer-game-result-breakdown/);
@@ -1891,7 +2018,9 @@ test("co-op fall-down guest input release only reports input and does not patch 
 test("Doodle multiplayer runtime state is sampled from the animation frame, not the UI sync", () => {
   const source = readSource("../../features/mini-games/doodle.tsx");
   const viewSyncSource = source.slice(source.indexOf("const syncDoodleView = useCallback"), source.indexOf("useEffect(() => {", source.indexOf("const syncDoodleView = useCallback")));
-  const tickSource = source.slice(source.indexOf("const tick = (time: number) =>"), source.indexOf("frameId = requestAnimationFrame(tick);", source.indexOf("const tick = (time: number) =>")));
+  const tickStart = source.indexOf("const tick = (time: number) =>");
+  const firstRuntimeSync = source.indexOf("syncDoodleRuntimeState(time);", tickStart);
+  const tickSource = source.slice(tickStart, firstRuntimeSync + "syncDoodleRuntimeState(time);".length);
 
   assert.match(source, /const DOODLE_MULTIPLAYER_RUNTIME_SYNC_MS = MULTIPLAYER_FAST_STATE_SYNC_MS;/);
   assert.match(source, /MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS/);

@@ -68,15 +68,21 @@ type AdvancedRoundRenderProps =
       advancedConfig: AdvancedStageConfig;
       round: RoundId;
       onComplete: (trials: TrialEvent[]) => void;
+      paused: boolean;
     }
   | {
       key: string;
       phase: "base";
       round: RoundId;
       onComplete: (trials: TrialEvent[]) => void;
+      paused: boolean;
     };
 
 type AdvancedLobbyChallengeState = Extract<AdvancedChallengeState, { mode: "select" | "intro" | "complete" | "endless-complete" }>;
+type AdvancedPauseDialogState =
+  | { mode: "advanced"; level: number; roundId: RoundId }
+  | { mode: "base"; level: number; roundId: RoundId }
+  | { mode: "endless"; roundId: RoundId };
 
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const ADVANCED_LOBBY_SWIPE_STEP_PX = 28;
@@ -192,6 +198,35 @@ function AdaptiveAdvancedHeroTitle({ title }: { title: string }) {
       minFontSizePx={ADVANCED_HERO_TITLE_MIN_FONT_SIZE_PX}
       maxFontSizePx={ADVANCED_HERO_TITLE_MAX_FONT_SIZE_PX}
     />
+  );
+}
+
+function AdvancedPauseDialog({
+  onContinue,
+  onRestart,
+  onSettleExit,
+}: {
+  onContinue: () => void;
+  onRestart: () => void;
+  onSettleExit: () => void;
+}) {
+  return (
+    <div className="advanced-pause-backdrop" role="presentation">
+      <div className="advanced-pause-dialog" role="dialog" aria-modal="true" aria-labelledby="advanced-pause-title">
+        <h2 id="advanced-pause-title">暂停</h2>
+        <div className="advanced-pause-actions">
+          <button type="button" onPointerDown={onSettleExit}>
+            结算退出
+          </button>
+          <button type="button" onPointerDown={onRestart}>
+            重新开始
+          </button>
+          <button type="button" onPointerDown={onContinue}>
+            继续游戏
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -924,6 +959,53 @@ export function AdvancedChallengeScreen({
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
   const unlockedLevel = getAdvancedLobbyUnlockedLevel(currentLevel);
   const [dismissedAdvancedTutorialKey, setDismissedAdvancedTutorialKey] = React.useState("");
+  const [pauseDialog, setPauseDialog] = React.useState<AdvancedPauseDialogState | null>(null);
+  const [endlessSettleSignal, setEndlessSettleSignal] = React.useState(0);
+  const openAdvancedPauseDialog = React.useCallback(() => {
+    if (challenge.mode === "playing") setPauseDialog({ mode: "advanced", level: challenge.level, roundId: challenge.roundId });
+  }, [challenge]);
+  const openEndlessPauseDialog = React.useCallback(() => {
+    if (challenge.mode === "endless-playing") setPauseDialog({ mode: "endless", roundId: challenge.roundId });
+  }, [challenge]);
+  const openBasePauseDialog = React.useCallback(() => {
+    if (challenge.mode === "base-playing") setPauseDialog({ mode: "base", level: challenge.level, roundId: challenge.roundId });
+  }, [challenge]);
+  const closePauseDialog = React.useCallback(() => setPauseDialog(null), []);
+  const settlePauseDialog = React.useCallback(() => {
+    const dialog = pauseDialog;
+    if (!dialog) return;
+    setPauseDialog(null);
+    if (dialog.mode === "endless") {
+      setEndlessSettleSignal((current) => current + 1);
+      return;
+    }
+    if (dialog.mode === "base") {
+      onCompleteBaseRound({ roundId: dialog.roundId, level: dialog.level, trials: [] });
+      return;
+    }
+    onCompleteRound([]);
+  }, [onCompleteBaseRound, onCompleteRound, pauseDialog]);
+  const restartPauseDialog = React.useCallback(() => {
+    const dialog = pauseDialog;
+    if (!dialog) return;
+    setPauseDialog(null);
+    if (dialog.mode === "endless") {
+      onStartLevel(ENDLESS_MODE_LEVEL);
+      return;
+    }
+    if (dialog.mode === "base") {
+      onRestartBaseRound(dialog.level);
+      return;
+    }
+    onStartLevel(dialog.level);
+  }, [onRestartBaseRound, onStartLevel, pauseDialog]);
+  const pauseDialogNode = pauseDialog ? (
+    <AdvancedPauseDialog
+      onContinue={closePauseDialog}
+      onRestart={restartPauseDialog}
+      onSettleExit={settlePauseDialog}
+    />
+  ) : null;
 
   if (challenge.mode === "playing") {
     const playingConfig = getAdvancedStageConfig(challenge.roundId, challenge.level);
@@ -945,11 +1027,8 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-              返回
-            </button>
-            <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
-              重试
+            <button className="advanced-back-button" type="button" onPointerDown={openAdvancedPauseDialog}>
+              暂停
             </button>
             {shouldShowPerfectClearShortcut({ debugToolsVisible }) ? (
               <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(onBuildPerfectTrials(playingConfig))}>
@@ -969,6 +1048,7 @@ export function AdvancedChallengeScreen({
               advancedConfig: playingConfig,
               round: challenge.roundId,
               onComplete: onCompleteRound,
+              paused: pauseDialog?.mode === "advanced",
             })}
         {advancedTutorialVisible ? (
           <div
@@ -991,6 +1071,7 @@ export function AdvancedChallengeScreen({
             </div>
           </div>
         ) : null}
+        {pauseDialogNode}
       </section>
     );
   }
@@ -1006,11 +1087,8 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-              返回
-            </button>
-            <button className="advanced-back-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
-              重试
+            <button className="advanced-back-button" type="button" onPointerDown={openEndlessPauseDialog}>
+              暂停
             </button>
           </div>
         </header>
@@ -1019,8 +1097,11 @@ export function AdvancedChallengeScreen({
           debugToolsVisible={debugToolsVisible}
           key={`endless-${challenge.roundId}-${challenge.attemptId}`}
           onComplete={onCompleteEndlessRound}
+          paused={pauseDialog?.mode === "endless"}
           roundId={challenge.roundId}
+          settleSignal={endlessSettleSignal}
         />
+        {pauseDialogNode}
       </section>
     );
   }
@@ -1034,11 +1115,8 @@ export function AdvancedChallengeScreen({
             <h1>{round.title}</h1>
           </div>
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-              返回
-            </button>
-            <button className="advanced-back-button" type="button" onPointerDown={() => onRestartBaseRound(challenge.level)}>
-            重试
+            <button className="advanced-back-button" type="button" onPointerDown={openBasePauseDialog}>
+              暂停
             </button>
           </div>
         </header>
@@ -1047,7 +1125,9 @@ export function AdvancedChallengeScreen({
           phase: "base",
           round: challenge.roundId,
           onComplete: (trials) => onCompleteBaseRound({ roundId: challenge.roundId, level: challenge.level, trials }),
+          paused: pauseDialog?.mode === "base",
         })}
+        {pauseDialogNode}
       </section>
     );
   }

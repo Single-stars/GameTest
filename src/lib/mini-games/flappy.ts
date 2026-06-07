@@ -12,6 +12,7 @@ export type GeneratedFlappyGate = {
   id: number;
   distance: number;
   baseCenterY: number;
+  gapY: number;
   moving: boolean;
   movingSpeed: number;
   gapSize: number;
@@ -170,6 +171,7 @@ export function generateFlappyGateLayout(
       id: index,
       distance,
       baseCenterY: centerY,
+      gapY: centerY,
       moving: rand() < movingRatio,
       movingSpeed,
       gapSize,

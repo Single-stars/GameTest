@@ -17,6 +17,14 @@
   will-change: transform;
 }
 
+.square-jump-stage .difficulty-wave-backdrop {
+  z-index: 1;
+}
+
+.square-jump-world-layer {
+  z-index: 2;
+}
+
 .square-jump-stage.gravity-light {
   --difficulty-gravity-flow-y: -260;
 }
@@ -164,6 +172,26 @@
   color: #ffffff;
 }
 
+.square-gravity-icon {
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 78% 78%;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 78% 78%;
+}
+
+.square-gravity-icon.icon-light {
+  mask: url("/icons/gravity-up.svg") center / 78% 78% no-repeat;
+  -webkit-mask: url("/icons/gravity-up.svg") center / 78% 78% no-repeat;
+}
+
+.square-gravity-icon.icon-heavy {
+  mask: url("/icons/gravity-down.svg") center / 78% 78% no-repeat;
+  -webkit-mask: url("/icons/gravity-down.svg") center / 78% 78% no-repeat;
+}
+
 .square-jump-base-platform.moving::before {
   content: "";
   position: absolute;
@@ -258,6 +286,21 @@
   z-index: 11;
   opacity: 0.78;
   filter: drop-shadow(0 4px 10px rgba(24, 24, 24, 0.18));
+}
+
+.square-jump-base-player-shell.double-jump-skill {
+  animation: square-double-jump-skill-pulse 420ms cubic-bezier(0.2, 1.45, 0.34, 1) infinite;
+}
+
+@keyframes square-double-jump-skill-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(20, 184, 166, 0));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 14px rgba(20, 184, 166, 0.5));
+  }
 }
 
 .square-jump-base-player-shell.jumping,

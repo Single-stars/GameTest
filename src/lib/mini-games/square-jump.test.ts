@@ -378,7 +378,7 @@ test("square jump stage gravity only changes wave speed while platform gravity c
 
   assert.match(componentSource, /squarePlatformMark\(platform\)/);
   assert.match(componentSource, /const platformMark = squarePlatformMark\(platform\)/);
-  assert.match(componentSource, /\{platformMark \? <span>\{platformMark\}<\/span> : null\}/);
+  assert.match(componentSource, /\{platformMark \? <span className=\{platformMark\} aria-hidden="true" \/> : null\}/);
   assert.match(componentSource, /function squarePlatformMark\(platform: SquareJumpBasePlatform\): string \| null/);
   assert.doesNotMatch(componentSource, /if \(platform\.finish\) return "⚑"/);
   assert.doesNotMatch(componentSource, /if \(platform\.moving\) return "↔"/);
@@ -963,6 +963,23 @@ test("square jump runtime supports double jump hover charging and 90 degree turn
   assert.match(componentSource, /sampleSquareJumpBaseFlyAway/);
   assert.doesNotMatch(componentSource, /current\.playerY \+= \(260 \+ fallingElapsed \* 780\) \* delta/);
   assert.doesNotMatch(globalCss, /\.square-jump-base-player-visual[\s\S]*transition: none;[\s\S]*transform: none;/);
+});
+
+test("square jump gravity platforms use icon assets without background gravity text", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const cssSource = readAppCssSource();
+
+  assert.match(componentSource, /function squareGravityIconClass/);
+  assert.match(componentSource, /square-gravity-icon icon-light/);
+  assert.match(componentSource, /square-gravity-icon icon-heavy/);
+  assert.doesNotMatch(componentSource, /return "\^";/);
+  assert.doesNotMatch(componentSource, /return "v";/);
+  assert.doesNotMatch(componentSource, /squareGravityBackgroundLabel|gravityBackgroundLabel|gravityHintText|square-gravity-background-hint/);
+  assert.match(cssSource, /\.square-jump-stage \.difficulty-wave-backdrop\s*{[\s\S]*z-index:\s*1;/);
+  assert.match(cssSource, /\.square-jump-world-layer\s*{[\s\S]*z-index:\s*2;/);
+  assert.match(cssSource, /\.square-gravity-icon\.icon-light\s*{[\s\S]*mask:\s*url\("\/icons\/gravity-up\.svg"\)/);
+  assert.match(cssSource, /\.square-gravity-icon\.icon-heavy\s*{[\s\S]*mask:\s*url\("\/icons\/gravity-down\.svg"\)/);
+  assert.doesNotMatch(cssSource, /square-gravity-background-hint|square-gravity-hint-in|square-gravity-hint-out/);
 });
 
 test("square jump double level defers miss resolution until after the second jump", () => {

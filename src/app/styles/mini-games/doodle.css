@@ -85,6 +85,13 @@
   animation: mini-player-flash 180ms linear infinite;
 }
 
+.doodle-player-shell.damage-invincible,
+.flappy-player-shell.damage-invincible,
+.fall-down-player-shell.damage-invincible,
+.square-jump-base-player-shell.damage-invincible {
+  animation: mini-player-damage-flicker 125ms steps(2, end) 4;
+}
+
 @keyframes mini-player-flash {
   0%,
   100% {
@@ -92,6 +99,19 @@
   }
   50% {
     opacity: 0.34;
+  }
+}
+
+@keyframes mini-player-damage-flicker {
+  0%,
+  100% {
+    opacity: 1;
+    filter: none;
+  }
+
+  50% {
+    opacity: 0.45;
+    filter: brightness(1.12);
   }
 }
 

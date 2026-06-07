@@ -12,6 +12,8 @@ export type SelfGameState = {
   t?: number;
   x?: number;
   y?: number;
+  screenX?: number;
+  screenY?: number;
   angle?: number;
   anim?: string;
   cameraX?: number;

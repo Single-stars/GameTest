@@ -106,6 +106,8 @@ function multiplayerStateSignature(state: SelfGameState) {
     state.angle ?? "",
     state.x ?? "",
     state.y ?? "",
+    state.screenX ?? "",
+    state.screenY ?? "",
     state.cameraX ?? "",
     state.cameraY ?? "",
     state.cameraScale ?? "",
@@ -144,6 +146,8 @@ function multiplayerImmediateStateSignature(state: SelfGameState) {
     state.phase ?? "",
     state.score ?? 0,
     state.angle ?? "",
+    state.screenX ?? "",
+    state.screenY ?? "",
     state.failures ?? 0,
     state.gravity ?? "",
     state.platformIndex ?? "",
@@ -242,6 +246,8 @@ type MultiplayerRuntimeState = {
   vy?: number;
   x: number;
   y: number;
+  screenX?: number;
+  screenY?: number;
 };
 
 type PlayerCustomAvatar = NonNullable<PlayerInfo["customAvatar"]>;
@@ -437,7 +443,9 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
     });
     syncRef.current = sync;
     sync.start();
-    return cleanupSync;
+    return () => {
+      cleanupSync();
+    };
   }, [cleanupSync, playMode, reportInput, reportState]);
 
   useEffect(() => {
@@ -540,6 +548,8 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         vy: runtime.vy,
         x: runtime.x,
         y: runtime.y,
+        screenX: runtime.screenX,
+        screenY: runtime.screenY,
       };
       if (coOpInputOnly) {
         const inputOnlyState: SelfGameState = {
@@ -666,19 +676,22 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
 
   useEffect(() => {
     if (level.gameId !== "knife" && level.gameId !== "square-jump" && level.gameId !== "aim") return;
-    publishRuntimeState(
-      {
-        cameraY: 0,
-        direction: "none",
-        elapsedMs: 0,
-        failures: 0,
-        progress: 0,
-        status: "playing",
-        x: 0,
-        y: 0,
-      },
-      0,
-    );
+    const initialStateFrame = window.requestAnimationFrame(() => {
+      publishRuntimeState(
+        {
+          cameraY: 0,
+          direction: "none",
+          elapsedMs: 0,
+          failures: 0,
+          progress: 0,
+          status: "playing",
+          x: 0,
+          y: 0,
+        },
+        0,
+      );
+    });
+    return () => window.cancelAnimationFrame(initialStateFrame);
   }, [level.gameId, publishRuntimeState, runSeed]);
 
   const coOpRole = coOpMode ? resolveCoOpRole(selfRole, resolveCoOpHostLeft(runSeed)) : null;

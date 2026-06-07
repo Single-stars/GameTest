@@ -90,7 +90,7 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.match(commonSource, /useSkill: \(\) => boolean/);
   assert.match(commonSource, /useHeal: \(\) => boolean/);
   assert.match(commonSource, /toggleDebugEnergyLock: \(\) => void/);
-  assert.match(commonSource, /showFeedback: \(text: string\) => void/);
+  assert.match(commonSource, /showFeedback: \(text: string, tone\?: "skill" \| "heal" \| "shield" \| "energy"\) => void/);
   assert.match(commonSource, /fillEnergy: \(\) => void/);
   assert.match(commonSource, /shieldCharges: number/);
   assert.match(runtimeSource, /const ENDLESS_ENERGY_THRESHOLD = 10;/);
@@ -131,6 +131,16 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.match(runtimeSource, /showFeedback: showEnergyFeedback/);
   assert.match(runtimeSource, /const fillEnergy = useCallback/);
   assert.match(runtimeSource, /fillEnergy,/);
+  assert.match(runtimeSource, /damageInvincible/);
+  assert.match(runtimeSource, /const ENDLESS_DAMAGE_PROTECTION_MS = 500;/);
+  assert.doesNotMatch(runtimeSource, /ENDLESS_DAMAGE_COOLDOWN_MS/);
+  assert.doesNotMatch(runtimeSource, /ENDLESS_DAMAGE_INVINCIBLE_MS/);
+  assert.doesNotMatch(runtimeSource, /lastLifeLossAtRef|lastDamageAtRef/);
+  assert.match(runtimeSource, /damageInvincibleUntilRef/);
+  assert.match(runtimeSource, /if \(nowMs < damageInvincibleUntilRef\.current\) return true;/);
+  assert.match(runtimeSource, /setDamageInvincibleUntil\(nowMs \+ ENDLESS_DAMAGE_PROTECTION_MS\);/);
+  assert.match(runtimeSource, /setDamageInvincibleUntil\(damageInvincibleUntilRef\.current \+ pausedDuration\)/);
+  assert.match(runtimeSource, /energyRef\.current >= ENDLESS_ENERGY_THRESHOLD/);
   assert.match(runtimeSource, /const endlessHudClassName = \[/);
   assert.match(runtimeSource, /api\.shieldCharges > 0 \? "shielded" : ""/);
   assert.match(runtimeSource, /className="endless-hearts"/);
@@ -147,7 +157,8 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(runtimeSource, /endless-debug-energy-control/);
   assert.doesNotMatch(runtimeSource, /\{debugToolsVisible \? \(/);
   assert.doesNotMatch(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
-  assert.match(runtimeSource, /shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0\}/);
+  assert.match(runtimeSource, /const shielded = avatarEffect === "shield" \|\| api\.shieldCharges > 0;/);
+  assert.doesNotMatch(runtimeSource, /shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0 \|\| api\.damageInvincible\}/);
   assert.match(flappySource, /endlessRef\.current\?\.awardSpecialBonus\(/);
   assert.match(energyCss, /\.endless-energy-segments\s*{/);
   assert.match(energyCss, /grid-template-columns:\s*repeat\(10,\s*minmax\(0,\s*1fr\)\);/);
@@ -161,6 +172,112 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(cssSource, /\.endless-debug-energy-control\s*{/);
   assert.match(cssSource, /\.endless-debug-energy-button\s*{/);
   assert.doesNotMatch(energyCss, /linear-gradient|endless-shield-pulse|\.endless-hud\.shielded/);
+});
+
+test("endless feedback uses per-round skill names, longer colored popups, and life recovery copy", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /const ENDLESS_FEEDBACK_POPUP_MS = 1400;/);
+  assert.match(runtimeSource, /type EndlessFeedbackTone = "skill" \| "heal" \| "shield" \| "energy";/);
+  assert.match(runtimeSource, /function getEndlessSkillFeedbackText\(roundId: RoundId\)/);
+  for (const label of ["超级跳跃！", "无尽坠落！", "二段跳跃！", "超级冲刺！", "火力全开！", "大运来喽！", "时间冻结！", "双倍分数！"]) {
+    assert.match(runtimeSource, new RegExp(label));
+  }
+  assert.doesNotMatch(runtimeSource, /加强状态！/);
+  assert.match(runtimeSource, /showEnergyFeedback\(getEndlessSkillFeedbackText\(roundId\), "skill"\);/);
+  assert.match(runtimeSource, /showEnergyFeedback\("生命恢复！", "heal"\);/);
+  assert.doesNotMatch(runtimeSource, /回血！/);
+  assert.match(runtimeSource, /className=\{`endless-energy-popup \$\{popup\.tone\}`\}/);
+  assert.match(cssSource, /\.endless-energy-popup\.skill\s*{/);
+  assert.match(cssSource, /\.endless-energy-popup\.heal\s*{/);
+  assert.match(cssSource, /animation:\s*endless-energy-popup 1400ms ease both;/);
+  assert.match(cssSource, /\.endless-energy-popup\s*{[\s\S]*min-height:\s*clamp\(30px,\s*5vw,\s*40px\);/);
+  assert.match(cssSource, /\.endless-energy-popup\s*{[\s\S]*font-size:\s*clamp\(15px,\s*3vw,\s*22px\);/);
+  assert.match(cssSource, /\.endless-energy-popup\s*{[\s\S]*background:\s*rgba\(255,\s*253,\s*248,\s*0\.82\);/);
+  assert.match(cssSource, /\.endless-energy-popups\s*{[\s\S]*top:\s*clamp\(62px,\s*10vw,\s*88px\);[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/);
+});
+
+test("endless damage invincibility flickers only the player avatar shells", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const embeddedSource = readFileSync(new URL("../features/mini-games/embedded-stage.tsx", import.meta.url), "utf8");
+  const miniGameSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../features/mini-games/fall-down.tsx", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../features/mini-games/square-jump.tsx", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../features/mini-games/knife.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../app/styles/mini-games/doodle.css", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../app/styles/mini-games/knife.css", import.meta.url), "utf8");
+
+  assert.doesNotMatch(runtimeSource, /endless-game-host[^`]*damage-invincible/);
+  assert.match(runtimeSource, /damageInvincible=\{api\.damageInvincible\}/);
+  assert.match(embeddedSource, /damageInvincible = false/);
+  assert.match(embeddedSource, /damageInvincible\?: boolean;/);
+  assert.match(embeddedSource, /damageInvincible=\{damageInvincible\}/);
+  assert.match(miniGameSource, /doodle-player-shell[\s\S]{0,180}damageInvincible \? "damage-invincible"/);
+  assert.match(miniGameSource, /flappy-player-shell[\s\S]{0,180}damageInvincible \? "damage-invincible"/);
+  assert.match(miniGameSource, /fall-down-player-shell[\s\S]{0,180}damageInvincible \? "damage-invincible"/);
+  assert.match(miniGameSource, /square-jump-base-player-shell[\s\S]{0,220}damageInvincible \? "damage-invincible"/);
+  assert.match(miniGameSource, /knife-wheel-avatar[\s\S]{0,160}damageInvincible \? "damage-invincible"/);
+  assert.doesNotMatch(cssSource, /\.endless-game-host\.damage-invincible/);
+  assert.doesNotMatch(cssSource, /endless-damage-invincible-flicker/);
+  assert.match(cssSource, /\.doodle-player-shell\.damage-invincible/);
+  assert.match(cssSource, /\.flappy-player-shell\.damage-invincible/);
+  assert.match(cssSource, /\.fall-down-player-shell\.damage-invincible/);
+  assert.match(cssSource, /\.square-jump-base-player-shell\.damage-invincible/);
+  assert.match(cssSource, /\.knife-wheel-avatar\.damage-invincible/);
+  assert.match(cssSource, /@keyframes mini-player-damage-flicker/);
+});
+
+test("endless pause dialog replaces restart and back actions while freezing live runtimes", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(commonSource, /paused\?: boolean;/);
+  assert.match(runtimeSource, /paused:\s*boolean;/);
+  assert.match(runtimeSource, /finish\(reason, 0, "settled-exit"\)/);
+  assert.match(runtimeSource, /pausedRef/);
+  assert.match(screenSource, /const \[pauseDialog, setPauseDialog\] = React\.useState<AdvancedPauseDialogState \| null>\(null\);/);
+  assert.match(screenSource, /function AdvancedPauseDialog/);
+  assert.match(screenSource, /结算退出/);
+  assert.match(screenSource, /重新开始/);
+  assert.match(screenSource, /继续游戏/);
+  assert.match(screenSource, /onPointerDown=\{openEndlessPauseDialog\}/);
+  assert.match(screenSource, /onPointerDown=\{openBasePauseDialog\}/);
+  assert.match(screenSource, />\s*暂停\s*<\/button>/);
+  assert.doesNotMatch(screenSource, /endless-playing[\s\S]{0,700}>返回<\/button>[\s\S]{0,220}>重试<\/button>/);
+  assert.doesNotMatch(screenSource, /base-playing[\s\S]{0,700}>返回<\/button>[\s\S]{0,220}>重试<\/button>/);
+  assert.match(screenSource, /paused=\{pauseDialog\?\.mode === "endless"\}/);
+  assert.match(screenSource, /paused:\s*pauseDialog\?\.mode === "base"/);
+  assert.match(cssSource, /\.advanced-pause-backdrop/);
+  assert.match(cssSource, /\.advanced-pause-dialog/);
+  assert.match(cssSource, /\.advanced-pause-actions\s*{[\s\S]*justify-items:\s*center;/);
+  assert.match(cssSource, /\.advanced-pause-actions button\s*{[\s\S]*background:\s*#f5eddd;/);
+});
+
+test("endless braking big-luck skill ends with one shield-colored shockwave and clears hazards safely", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/native-braking.css", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /onSkillEnd\?: \(skill: EndlessActiveSkill\) => void;/);
+  assert.match(runtimeSource, /endedSkill\?\.kind === "big-luck"[\s\S]*onSkillEndRef\.current\?\.\(endedSkill\)/);
+  assert.match(brakingSource, /const ENDLESS_BRAKING_CLEAR_SPAWN_LOCK_MS = 1000;/);
+  assert.match(brakingSource, /shockwaves/);
+  assert.match(brakingSource, /clearedObstacles/);
+  assert.match(brakingSource, /spawnLockedUntilRef/);
+  assert.match(brakingSource, /registerEndlessBrakingShockwave/);
+  assert.match(brakingSource, /clearEndlessBrakingHazards/);
+  assert.match(brakingSource, /spawnLockedUntilRef\.current = performance\.now\(\) \+ ENDLESS_BRAKING_CLEAR_SPAWN_LOCK_MS;/);
+  assert.match(brakingSource, /if \(performance\.now\(\) < spawnLockedUntilRef\.current\) return;/);
+  assert.match(brakingSource, /advanced-braking-shockwave/);
+  assert.match(brakingSource, /advanced-braking-obstacle knocked-away/);
+  assert.match(cssSource, /\.advanced-braking-shockwave\s*{[\s\S]*border:\s*3px solid rgba\(20,\s*184,\s*166,\s*0\.72\);/);
+  assert.match(cssSource, /@keyframes advanced-braking-shockwave/);
+  assert.match(cssSource, /\.advanced-braking-obstacle\.knocked-away/);
 });
 
 test("endless energy bonuses surface per-mode popup feedback and shield the player avatar", () => {
@@ -189,12 +306,13 @@ test("endless energy bonuses surface per-mode popup feedback and shield the play
   assert.match(runtimeSource, /bonusPopup/);
   assert.match(runtimeSource, /showEnergyFeedback/);
   assert.match(runtimeSource, /showBonusFeedback/);
-  assert.match(runtimeSource, /className="endless-energy-popup"/);
+  assert.match(runtimeSource, /className=\{`endless-energy-popup \$\{popup\.tone\}`\}/);
   assert.match(runtimeSource, /className=\{`endless-bonus-score-pop \$\{api\.bonusPopup\.amount > 10 \? "major" : ""\}`\}/);
   assert.match(runtimeSource, /label: typeof bonus === "string" \? bonus : bonus\.label/);
   assert.match(runtimeSource, /amount: typeof bonus === "string" \? ENDLESS_SPECIAL_BONUS_SCORE : Math\.max\(1, Math\.floor\(bonus\.amount \?\? ENDLESS_SPECIAL_BONUS_SCORE\)\)/);
   assert.match(runtimeSource, /const avatarEffect = getEndlessAvatarEffect\(api\.getActiveSkill\(\)\);/);
-  assert.match(runtimeSource, /shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0\}/);
+  assert.match(runtimeSource, /const shielded = avatarEffect === "shield" \|\| api\.shieldCharges > 0;/);
+  assert.doesNotMatch(runtimeSource, /shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0 \|\| api\.damageInvincible\}/);
   assert.match(runtimeSource, /avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\}/);
   assert.equal(runtimeSource.indexOf("const clearPassiveShield = useCallback") < runtimeSource.indexOf("const endSkill = useCallback"), true);
   assert.match(runtimeSource, /const endedSkill = activeSkillRef\.current;/);
@@ -209,6 +327,15 @@ test("endless energy bonuses surface per-mode popup feedback and shield the play
   assert.match(aimSource, /ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR = 0\.8/);
   assert.match(aimSource, /trajectoryNormalizedError >= ENDLESS_AIM_EDGE_TRAJECTORY_NORMALIZED_ERROR[\s\S]*trajectoryNormalizedError <= 1[\s\S]*awardSpecialBonus\(/);
   assert.match(doodleSource, /ENDLESS_DOODLE_ENERGY_DISTANCE = 5/);
+  assert.match(doodleSource, /ENDLESS_DOODLE_CLOSE_CALL_COOLDOWN_MS = 1200/);
+  assert.match(doodleSource, /ENDLESS_DOODLE_HAZARD_CLOSE_CALL_MARGIN = 20/);
+  assert.match(doodleSource, /awardDoodleCloseCallBonus/);
+  assert.match(doodleSource, /"死里逃生！"/);
+  assert.match(doodleSource, /let hazardCloseCall = false;/);
+  assert.match(doodleSource, /hazardCloseCall = true;/);
+  assert.match(doodleSource, /if \(status === "playing" && hazardCloseCall\) awardDoodleCloseCallBonus\(time\);/);
+  assert.doesNotMatch(doodleSource, /distanceSquared <= closeCallRadius \* closeCallRadius\) awardDoodleCloseCallBonus\(time\)/);
+  assert.doesNotMatch(doodleSource, /无视野预判|鏃犺閲庨鍒/);
   assert.match(doodleSource, /awardSpecialBonus\(/);
   assert.match(doodleSource, /awardSpecialBonus\(\{ label: `彻底疯狂\$\{highEnergyStreak\}！`, amount: 1 \}\)/);
   assert.doesNotMatch(doodleSource, /showFeedback\(`彻底疯狂\$\{highEnergyStreak\}`\)/);
@@ -222,6 +349,8 @@ test("endless energy bonuses surface per-mode popup feedback and shield the play
   assert.match(flappySource, /awardSpecialBonus\(/);
   assert.match(flappySource, /fillEnergy\(\)/);
   assert.match(flappySource, /energyPickup/);
+  assert.match(flappySource, /const pickupDistance = gateAfter\.distance;/);
+  assert.match(flappySource, /y: gateAfter\.gapY/);
   assert.doesNotMatch(flappySource, /ENDLESS_FLAPPY_FULL_ENERGY_GATE_INTERVAL/);
   assert.match(brakingSource, /ENDLESS_BRAKING_FAST_REACTION_MS = 150/);
   assert.match(brakingSource, /activeEndless\.addScore\(1\)/);
@@ -276,6 +405,8 @@ test("endless route mini games spawn rare full-energy pickups without edge skill
   assert.match(flappySource, /function pickEndlessFlappyEnergyPickupPosition/);
   assert.match(flappySource, /gate\.distance/);
   assert.match(flappySource, /gateAfter\.distance - gateBefore\.distance/);
+  assert.match(flappySource, /const pickupDistance = gateAfter\.distance;/);
+  assert.match(flappySource, /y: gateAfter\.gapY/);
   assert.doesNotMatch(flappySource, /activePlayerX \+ signedProgress \+ forwardDirection \* stageWidth \* \(0\.78 \+ Math\.random\(\) \* 0\.95\)/);
   assert.match(doodleCss, /\.doodle-energy-pickup/);
   assert.match(flappyCss, /\.flappy-energy-pickup/);
@@ -284,6 +415,16 @@ test("endless route mini games spawn rare full-energy pickups without edge skill
     assert.doesNotMatch(cssSource, /energy-pickup-pulse|animation:\s*[^;]*energy-pickup/);
   }
   assert.doesNotMatch(fallSource, /wallAir|edgeAir|edgePenalty|wallPenalty|stable.*edge|贴边/);
+});
+
+test("endless flappy gravity anomaly does not render background gravity text", () => {
+  const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
+  const flappyCss = readFileSync(new URL("../app/styles/mini-games/flappy.css", import.meta.url), "utf8");
+
+  assert.match(flappyCss, /\.flappy-stage \.difficulty-wave-backdrop\s*{[\s\S]*z-index:\s*1;/);
+  assert.match(flappyCss, /\.flappy-world\s*{[\s\S]*z-index:\s*2;/);
+  assert.doesNotMatch(flappySource, /flappyGravityBackgroundLabel|flappyGravityHintText|flappy-gravity-background-hint/);
+  assert.doesNotMatch(flappyCss, /flappy-gravity-background-hint|flappy-gravity-hint-in|flappy-gravity-hint-out/);
 });
 
 test("endless HUD animates resource changes and highlights new records", () => {
@@ -770,7 +911,9 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.doesNotMatch(runtimeSource, /className="endless-debug-panel"/);
   assert.match(shellSource, /<div className=\{`endless-game-host \$\{api\.skillActive \? "skill-active" : ""\} \$\{api\.skillEnding \? "skill-ending" : ""\}`\}/);
   assert.match(runtimeSource, /const avatarEffect = getEndlessAvatarEffect\(api\.getActiveSkill\(\)\);/);
-  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0\} avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\} \/>/);
+  assert.match(runtimeSource, /const shielded = avatarEffect === "shield" \|\| api\.shieldCharges > 0;/);
+  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{shielded\} avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\} paused=\{paused\} \/>/);
+  assert.doesNotMatch(shellSource, /api\.damageInvincible\}/);
   assert.doesNotMatch(shellSource, /<EndlessHud[\s\S]*<div className="endless-game-host"/);
   assert.match(hudCss, /position:\s*absolute;/);
   assert.match(hudCss, /top:\s*clamp\(/);

@@ -496,11 +496,13 @@ function getEndlessAimSpawnConfig(config: AdvancedStageConfig, score: number, de
 
 export function AdvancedAimRound({
   advancedConfig,
+  damageInvincible = false,
   endless,
   multiplayerPenaltyMode = false,
   onComplete,
   onPracticeSuccess,
   onRuntimeState,
+  paused = false,
   runSeed,
   shielded = false,
   tiebreakerRound = 0,
@@ -566,6 +568,7 @@ export function AdvancedAimRound({
   const lastRuntimeStateAtRef = useRef(0);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const pausedRef = useRef(paused);
 
   const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
     const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
@@ -601,6 +604,10 @@ export function AdvancedAimRound({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -804,7 +811,13 @@ export function AdvancedAimRound({
       rectRef.current = rect;
       const frameNow = now();
       const deltaMs = Math.min(34, frameNow - (lastFrameAtRef.current || frameNow));
-      lastFrameAtRef.current = frameNow;
+      lastFrameAtRef.current = frameNow;
+      if (pausedRef.current) {
+        lastSpawnAtRef.current = frameNow;
+        lastDistractorSpawnAtRef.current = frameNow;
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
       let nextTargets = targetsRef.current.map((entity) => moveAdvancedAimEntity(entity, deltaMs, frameNow, rect));
       const endlessRuntime = endlessRef.current;
@@ -1253,7 +1266,7 @@ export function AdvancedAimRound({
           {activeTiebreakerRound > 0 ? <span>加赛第{activeTiebreakerRound}轮 · 追加 1 靶</span> : null}
         </div>
       ) : null}
-      <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""}`} aria-hidden="true">
+      <div className={`advanced-aim-shooter ${shooterFiring ? "firing" : ""} ${damageInvincible ? "damage-invincible" : ""}`} aria-hidden="true">
         <PlayerAvatar
           {...shooterAvatarView}
           charge={shooterFiring ? 0.7 : 0}
@@ -1389,7 +1402,7 @@ const PRACTICE_AIM_CONFIG: AdvancedStageConfig = {
   },
 };
 
-export function AimRound({ onComplete }: RoundProps) {
+export function AimRound({ onComplete, paused = false }: RoundProps) {
   const [practicePassed, setPracticePassed] = useState(false);
   const [practiceKey, setPracticeKey] = useState(0);
   const [practiceMessage, setPracticeMessage] = useState("试一次：先命中一次靶子");
@@ -1411,11 +1424,12 @@ export function AimRound({ onComplete }: RoundProps) {
           advancedConfig={PRACTICE_AIM_CONFIG}
           onComplete={completePractice}
           onPracticeSuccess={() => setPracticeMessage("")}
+          paused={paused}
         />
         <small className="base-practice-message">{practiceMessage}</small>
       </div>
     );
   }
 
-  return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} />;
+  return <AdvancedAimRound advancedConfig={BASIC_AIM_CONFIG} onComplete={onComplete} paused={paused} />;
 }

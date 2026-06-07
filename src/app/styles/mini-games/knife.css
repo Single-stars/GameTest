@@ -86,6 +86,10 @@
   transform: translate(-50%, -50%);
 }
 
+.knife-wheel-avatar.damage-invincible {
+  animation: mini-player-damage-flicker 125ms steps(2, end) 4;
+}
+
 .knife-wheel-svg {
   position: absolute;
   inset: 0;

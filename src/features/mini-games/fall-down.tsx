@@ -56,6 +56,7 @@ import {
   MULTIPLAYER_FAST_STATE_SYNC_MS,
 } from "@/lib/multiplayer/protocol";
 const ENDLESS_FALL_DOWN_ENERGY_DISTANCE = 5;
+const ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH = 108;
 const ENDLESS_FALL_DOWN_FAST_DROP_DISTANCE = 5;
 const ENDLESS_FULL_ENERGY_PICKUP_CHANCE_PER_SECOND = 1 / 60;
 const FALL_DOWN_DANGER_ZIGZAG_SIZE = 18;
@@ -132,6 +133,8 @@ export type FallDownRuntimeState = {
   vy: number;
   x: number;
   y: number;
+  screenX: number;
+  screenY: number;
 };
 
 type FallDownRemotePlayer = {
@@ -199,6 +202,8 @@ function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: numb
     vy: runtime.vy,
     x: runtime.playerX,
     y: runtime.playerY,
+    screenX: runtime.playerX,
+    screenY: runtime.playerY - runtime.cameraY,
   };
 }
 
@@ -517,8 +522,20 @@ function applyFallDownAuthoritativeState(
   return true;
 }
 
-function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize): FallDownRuntime {
-  const platforms = makeFallDownPlatforms(level, runSeed, stageSize.width);
+function normalizeEndlessFallDownPlatforms(platforms: FallDownPlatform[]): FallDownPlatform[] {
+  return platforms.map((platform) => {
+    const playablePlatform: FallDownPlatform = platform.kind === "finish" ? { ...platform, kind: "normal" } : platform;
+    return {
+      ...playablePlatform,
+      width: Math.min(platform.width, ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH),
+    };
+  });
+}
+
+function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize, endless = false): FallDownRuntime {
+  const platforms = endless
+    ? normalizeEndlessFallDownPlatforms(makeFallDownPlatforms(level, runSeed, stageSize.width))
+    : makeFallDownPlatforms(level, runSeed, stageSize.width);
   const startPlatform = platforms[0];
   return {
     started: false,
@@ -576,9 +593,9 @@ function extendEndlessFallDownWorld(
   if (lowestPlatformY >= futureTargetY) return false;
 
   const segmentLevel = makeEndlessFallDownSegmentLevel(level, progress, debugDifficulty);
-  const generatedPlatforms = makeFallDownPlatforms(segmentLevel, `${runSeed}:endless:${Math.floor(lowestPlatformY)}`, stageSize.width)
-    .filter((platform) => platform.kind !== "finish")
-    .slice(1);
+  const generatedPlatforms = normalizeEndlessFallDownPlatforms(
+    makeFallDownPlatforms(segmentLevel, `${runSeed}:endless:${Math.floor(lowestPlatformY)}`, stageSize.width),
+  ).slice(1);
   const firstSegmentY = generatedPlatforms[0]?.y;
   if (firstSegmentY === undefined) return false;
 
@@ -589,7 +606,6 @@ function extendEndlessFallDownWorld(
     current.platforms.push({
       ...platform,
       id: nextPlatformId,
-      kind: platform.kind === "finish" ? "normal" : platform.kind,
       y: platform.y + offsetY,
     });
     nextPlatformId += 1;
@@ -670,6 +686,7 @@ export function FallDownPrototype({
   spectateRemoteState = null,
   runSeed,
   avatarEffect = "none",
+  damageInvincible = false,
   shielded = false,
   unlimitedRespawn = false,
   coOpInputState = null,
@@ -678,6 +695,7 @@ export function FallDownPrototype({
   coOpSkinId = null,
   coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
+  paused = false,
 }: {
   avatarEffect?: PlayerAvatarEffect;
   baseRevives?: number;
@@ -694,6 +712,7 @@ export function FallDownPrototype({
   remoteState?: SelfGameState | null;
   spectateRemoteState?: SelfGameState | null;
   runSeed: string;
+  damageInvincible?: boolean;
   shielded?: boolean;
   unlimitedRespawn?: boolean;
   coOpInputState?: SelfGameState | null;
@@ -703,6 +722,7 @@ export function FallDownPrototype({
   coOpCustomAvatar?: FallDownRemotePlayer["customAvatar"] | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
   onBaseReviveUsed?: () => void;
+  paused?: boolean;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -729,10 +749,7 @@ export function FallDownPrototype({
   const isEndlessRun = Boolean(endless);
   const initialRuntime = useMemo(
     () => {
-      const runtime = createFallDownRuntime(level, runSeed, logicStageSize);
-      if (isEndlessRun) {
-        runtime.platforms = runtime.platforms.map((platform) => (platform.kind === "finish" ? { ...platform, kind: "normal" } : platform));
-      }
+      const runtime = createFallDownRuntime(level, runSeed, logicStageSize, isEndlessRun);
       return runtime;
     },
     [isEndlessRun, level, logicStageSize, runSeed],
@@ -780,6 +797,7 @@ export function FallDownPrototype({
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
   const endlessEnergyDistanceRef = useRef(0);
+  const pausedRef = useRef(paused);
 
   const syncView = useCallback((time = performance.now()) => {
     lastUiSyncRef.current = time;
@@ -790,6 +808,10 @@ export function FallDownPrototype({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -1073,6 +1095,10 @@ export function FallDownPrototype({
       const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
+      if (pausedRef.current) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       const current = runtimeRef.current;
       let eventChanged = false;
       const paintFallDownFrame = (frame: FallDownRuntime, spectatingRemote = false, sceneTime = frame.time) => {
@@ -1542,7 +1568,7 @@ export function FallDownPrototype({
             />
           );
         })}
-        <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""}`} ref={playerShellRef} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
+        <div className={`fall-down-player-shell ${view.time < view.respawnUntil ? "respawn-warning" : ""} ${damageInvincible ? "damage-invincible" : ""}`} ref={playerShellRef} style={{ transform: transformPoint3d(view.playerX - PLAYER_SIZE / 2, view.playerY - view.cameraY - PLAYER_SIZE / 2) }}>
           <PlayerAvatar
             {...resolveFallDownPlayerAvatarView(view)}
             direction={resolveFallDownPlayerDirection(view.inputDirection)}

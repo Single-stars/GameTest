@@ -177,6 +177,10 @@
   transition: transform 140ms ease, filter 140ms ease;
 }
 
+.advanced-aim-shooter.damage-invincible {
+  animation: mini-player-damage-flicker 125ms steps(2, end) 4;
+}
+
 .advanced-aim-shooter.firing {
   transform: translateX(-50%) translateY(-4px) scale(1.08);
   filter: drop-shadow(0 8px 14px rgba(27, 154, 170, 0.22));

@@ -53,6 +53,12 @@ export type MultiplayerReactionEvent = {
   sentAt: number;
 };
 
+export type MultiplayerRoomScore = {
+  hostWins: number;
+  guestWins: number;
+  lastMatchId?: string;
+};
+
 export type PlayerInfo = {
   id: string;
   name: string;
@@ -120,6 +126,8 @@ export type NetStateMessage = {
   t?: number;
   x?: number;
   y?: number;
+  screenX?: number;
+  screenY?: number;
   angle?: number;
   anim?: string;
   cameraX?: number;
@@ -248,6 +256,12 @@ export type NetLevelSelectStateMessage = {
   selection: MultiplayerLevelSelectState;
 };
 
+export type NetRoomScoreMessage = {
+  v: 1;
+  kind: "room-score";
+  score: MultiplayerRoomScore;
+};
+
 export type NetResultMessage = {
   v: 1;
   kind: "result";
@@ -283,6 +297,7 @@ export type NetMessage =
   | NetHomeworldPresenceMessage
   | NetLevelSelectPresenceMessage
   | NetLevelSelectStateMessage
+  | NetRoomScoreMessage
   | NetByeMessage;
 
 export type MultiplayerSnapshot = {
@@ -307,6 +322,7 @@ export type MultiplayerSnapshot = {
   levelSelectState: MultiplayerLevelSelectState | null;
   selfLevelSelectPresence: MultiplayerLevelSelectPresence | null;
   opponentLevelSelectPresence: MultiplayerLevelSelectPresence | null;
+  roomScore: MultiplayerRoomScore | null;
   reactions: MultiplayerReactionEvent[];
   errorMessage: string | null;
 };

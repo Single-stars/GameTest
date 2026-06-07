@@ -119,12 +119,14 @@ export function MiniGameBaseRound({
   gameId,
   onBaseReviveUsed,
   onComplete,
+  paused = false,
   round,
 }: {
   baseRevives?: number;
   gameId: MiniGameId;
   onBaseReviveUsed?: () => void;
   onComplete: (trials: TrialEvent[]) => void;
+  paused?: boolean;
   round: RoundId;
 }) {
   const levelId = `${gameId}-base`;
@@ -167,12 +169,13 @@ export function MiniGameBaseRound({
       mode="base"
       onBaseReviveUsed={onBaseReviveUsed}
       onComplete={handleComplete}
+      paused={paused}
       runSeed={runSeed}
     />
   );
 }
 
-export function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advancedConfig: MiniAdvancedStageConfig; onComplete: (trials: TrialEvent[]) => void }) {
+export function MiniGameAdvancedRound({ advancedConfig, onComplete, paused = false }: { advancedConfig: MiniAdvancedStageConfig; onComplete: (trials: TrialEvent[]) => void; paused?: boolean }) {
   const config = advancedConfig;
   const [runId] = useState(() => Date.now());
   const shownAtRef = useRef(now());
@@ -211,6 +214,7 @@ export function MiniGameAdvancedRound({ advancedConfig, onComplete }: { advanced
       levelId={config.params.miniLevelId}
       mode="advanced"
       onComplete={handleComplete}
+      paused={paused}
       runSeed={runSeed}
     />
   );

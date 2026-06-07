@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ModeTransitionOverlay, useModeTransition, type ModeTransitionRouteOptions } from "@/features/app-transition/mode-transition";
 import { MultiplayerGameShell } from "@/features/multiplayer/multiplayer-game-shell";
@@ -21,7 +21,9 @@ import { useCustomAvatarImage } from "@/features/player-avatar/use-custom-avatar
 import {
   readPersistedPlayerAvatarSkin,
   readPersistedPlayerName,
+  sanitizePlayerName,
   writePersistedPlayerAvatarSkin,
+  writePersistedPlayerName,
 } from "@/features/player-avatar/player-avatar-storage";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
 import { createDefaultAdvancedProgress, getAdvancedLevelTone, readPersistedGameState, type AdvancedProgress } from "@/lib/advanced-progress";
@@ -47,6 +49,7 @@ import {
   type MultiplayerPlayMode,
 } from "@/lib/multiplayer/level-select";
 import { resolveMultiplayerWinnerText } from "@/lib/multiplayer/match-result";
+import { compareMultiplayerResults } from "@/lib/multiplayer/result-breakdown";
 import { getMultiplayerLevelRules } from "@/lib/multiplayer/rules";
 import {
   buildInitialSnapshot,
@@ -69,6 +72,7 @@ import {
 import type {
   GameResult,
   MultiplayerReactionKind,
+  MultiplayerRoomScore,
   MultiplayerSnapshot,
   PlayerInfo,
   SelfGameState,
@@ -93,6 +97,33 @@ function createSeed() {
 
 function createPlayerId(role: SessionRole) {
   return `${role}-${createSeed().slice(0, 8)}`;
+}
+
+function roomScoreToLocalWins(score: MultiplayerRoomScore, role: SessionRole | null) {
+  if (role === "guest") {
+    return {
+      self: score.guestWins,
+      opponent: score.hostWins,
+    };
+  }
+  return {
+    self: score.hostWins,
+    opponent: score.guestWins,
+  };
+}
+
+function localWinsToRoomScore(wins: { self: number; opponent: number }, role: SessionRole | null, lastMatchId?: string): MultiplayerRoomScore {
+  const hostWins = role === "guest" ? wins.opponent : wins.self;
+  const guestWins = role === "guest" ? wins.self : wins.opponent;
+  return {
+    hostWins,
+    guestWins,
+    ...(lastMatchId ? { lastMatchId } : {}),
+  };
+}
+
+function sameMatchWins(left: { self: number; opponent: number }, right: { self: number; opponent: number }) {
+  return left.self === right.self && left.opponent === right.opponent;
 }
 
 function standaloneRoomAutoJoinKey(roomCode: string | null | undefined) {
@@ -138,6 +169,40 @@ function createSelfPlayer(
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
   };
+}
+
+function MultiplayerNicknameDialog({
+  onChange,
+  onSubmit,
+  value,
+}: {
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  value: string;
+}) {
+  const sanitizedValue = sanitizePlayerName(value);
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!sanitizedValue) return;
+    onSubmit();
+  };
+
+  return (
+    <div className="multiplayer-nickname-dialog-backdrop" role="presentation">
+      <form className="multiplayer-nickname-dialog" role="dialog" aria-modal="true" aria-labelledby="multiplayer-nickname-title" onSubmit={handleSubmit}>
+        <h2 id="multiplayer-nickname-title">请输入你的昵称</h2>
+        <input
+          autoFocus
+          maxLength={16}
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+        <button type="submit" disabled={!sanitizedValue}>
+          进入联机
+        </button>
+      </form>
+    </div>
+  );
 }
 
 type LevelSelectSelectionSetters = {
@@ -288,11 +353,14 @@ function MultiplayerPageContent() {
   const [levelSelectStartCountdownEndsAt, setLevelSelectStartCountdownEndsAt] = useState<number | null>(null);
   const [levelSelectStartCountdownNow, setLevelSelectStartCountdownNow] = useState(0);
   const [levelSelectState, setLevelSelectState] = useState<MultiplayerLevelSelectState>(() => createDefaultMultiplayerLevelSelectState());
+  const [nicknameDialogOpen, setNicknameDialogOpen] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState("");
   const [homeworldEntryVisible, setHomeworldEntryVisible] = useState(false);
   const [unavailableModeHint, setUnavailableModeHint] = useState<{ id: number; message: string } | null>(null);
   const [standaloneJoinDialogOpen, setStandaloneJoinDialogOpen] = useState(false);
   const [standaloneJoinRoomCode, setStandaloneJoinRoomCode] = useState(roomParam);
   const [standaloneExitConfirmOpen, setStandaloneExitConfirmOpen] = useState(false);
+  const [matchWins, setMatchWins] = useState({ self: 0, opponent: 0 });
   const [copyStatus, setCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [skinHydrated, setSkinHydrated] = useState(false);
@@ -300,7 +368,11 @@ function MultiplayerPageContent() {
   const sessionRef = useRef<MultiplayerSession | null>(null);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const latestHomeworldPresenceRef = useRef<HomeworldPresence | null>(null);
+  const nicknamePromptRef = useRef<Promise<string | null> | null>(null);
+  const nicknameResolveRef = useRef<((name: string | null) => void) | null>(null);
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
+  const lastScoredMatchIdRef = useRef<string | null>(null);
+  const matchWinsRoomIdRef = useRef<string | null>(null);
   const autoJoinRoomRef = useRef<string | null>(null);
   const suppressedAutoJoinRoomRef = useRef<string | null>(null);
   const lastHostRoomInactiveAtRef = useRef<number | null>(null);
@@ -347,6 +419,7 @@ function MultiplayerPageContent() {
   const standaloneLevelSelectRoomKey = `${snapshot.role ?? "idle"}:${snapshot.roomId ?? "none"}:${standaloneSelectionAvailable ? "active" : "entry"}`;
   const levelSelectReadyAvailable = snapshot.connectionState === "connected" && snapshot.status === "connected" && Boolean(snapshot.opponentPlayer) && levelSelectSlotsConfirmed;
   const standaloneSelfSkin = resolvePlayerAvatarSkin(snapshot.selfPlayer?.skinId ?? selectedSkin);
+  const levelSelectSelfCustomAvatar = snapshot.selfPlayer?.customAvatar ?? (selectedSkin === "custom" && customAvatarSyncPayload ? customAvatarSyncPayload : undefined);
   const levelSelectStartCountdownSeconds =
     levelSelectStartCountdownEndsAt !== null
       ? Math.max(1, Math.ceil((levelSelectStartCountdownEndsAt - levelSelectStartCountdownNow) / 1000))
@@ -425,12 +498,42 @@ function MultiplayerPageContent() {
     [cleanupSession, isStandaloneSelectRoute, roomParam, router],
   );
 
+  const resolveNicknamePrompt = useCallback((name: string | null) => {
+    const resolver = nicknameResolveRef.current;
+    nicknamePromptRef.current = null;
+    nicknameResolveRef.current = null;
+    resolver?.(name);
+  }, []);
+
+  const ensureMultiplayerNickname = useCallback(async () => {
+    const currentName = sanitizePlayerName(skinHydrated ? playerName : readPersistedPlayerName());
+    if (currentName) return currentName;
+    if (!nicknamePromptRef.current) {
+      setNicknameDraft("");
+      setNicknameDialogOpen(true);
+      nicknamePromptRef.current = new Promise<string | null>((resolve) => {
+        nicknameResolveRef.current = resolve;
+      });
+    }
+    return nicknamePromptRef.current;
+  }, [playerName, skinHydrated]);
+
+  const submitMultiplayerNickname = useCallback(() => {
+    const nextName = sanitizePlayerName(nicknameDraft);
+    if (!nextName) return;
+    writePersistedPlayerName(nextName);
+    setPlayerName(nextName);
+    setNicknameDialogOpen(false);
+    resolveNicknamePrompt(nextName);
+  }, [nicknameDraft, resolveNicknamePrompt]);
+
   const bootstrapSession = useCallback(
     async (role: SessionRole, roomId?: string | null) => {
+      const resolvedName = await ensureMultiplayerNickname();
+      if (!resolvedName) return;
       cleanupSession();
       setSnapshot(buildInitialSnapshot());
       const resolvedSkin = skinHydrated ? selectedSkin : readPersistedPlayerAvatarSkin();
-      const resolvedName = skinHydrated ? playerName : readPersistedPlayerName();
       const resolvedCustomAvatar = resolvedSkin === "custom" ? customAvatarSyncPayload : null;
       const selfPlayer = createSelfPlayer(role, resolvedSkin, resolvedName, resolvedCustomAvatar);
       const session = new MultiplayerSession({
@@ -470,7 +573,7 @@ function MultiplayerPageContent() {
         }));
       }
     },
-    [cleanupSession, customAvatarSyncPayload, isStandaloneSelectRoute, levelSelectState, playerName, selectedSkin, skinHydrated],
+    [cleanupSession, customAvatarSyncPayload, ensureMultiplayerNickname, isStandaloneSelectRoute, levelSelectState, selectedSkin, skinHydrated],
   );
 
   const handleCreate = useCallback(() => {
@@ -761,9 +864,10 @@ function MultiplayerPageContent() {
       if (unavailableModeHintTimerRef.current !== null) {
         window.clearTimeout(unavailableModeHintTimerRef.current);
       }
+      resolveNicknamePrompt(null);
       cleanupSession();
     },
-    [cleanupSession],
+    [cleanupSession, resolveNicknamePrompt],
   );
 
   useEffect(() => {
@@ -776,6 +880,12 @@ function MultiplayerPageContent() {
     }
     setSkinHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!skinHydrated) return;
+    if (playerName) return;
+    void ensureMultiplayerNickname();
+  }, [ensureMultiplayerNickname, playerName, skinHydrated]);
 
   useEffect(() => {
     selectedSkinRef.current = selectedSkin;
@@ -1140,6 +1250,13 @@ function MultiplayerPageContent() {
             : "任意门准备中";
 
   const winnerText = resolveMultiplayerWinnerText(snapshot.selfResult, snapshot.opponentResult, activePlayMode);
+  const nicknameDialogNode = nicknameDialogOpen ? (
+    <MultiplayerNicknameDialog
+      value={nicknameDraft}
+      onChange={setNicknameDraft}
+      onSubmit={submitMultiplayerNickname}
+    />
+  ) : null;
   const countdownSeconds =
     snapshot.countdown && snapshot.countdown.remainMs > 0
       ? Math.ceil(snapshot.countdown.remainMs / 1000)
@@ -1158,6 +1275,48 @@ function MultiplayerPageContent() {
     const moveRole = resolveCoOpRole(snapshot.role, resolveCoOpHostLeft(runSeed));
     return moveRole === "left" ? "你负责左方向" : "你负责右方向";
   }, [activePlayMode, battleLevel.gameId, runSeed, snapshot.match, snapshot.role]);
+
+  useEffect(() => {
+    if (activePlayMode !== "versus") return;
+    if (snapshot.status !== "finished") return;
+    const matchId = snapshot.match?.matchId;
+    if (!matchId || lastScoredMatchIdRef.current === matchId) return;
+    if (!snapshot.selfResult || !snapshot.opponentResult) return;
+    lastScoredMatchIdRef.current = matchId;
+    const comparison = compareMultiplayerResults(snapshot.selfResult, snapshot.opponentResult);
+    if (comparison < 0) {
+      const next = { ...matchWins, self: matchWins.self + 1 };
+      setMatchWins(next);
+      sessionRef.current?.reportRoomScore(localWinsToRoomScore(next, snapshot.role, matchId));
+      return;
+    }
+    if (comparison > 0) {
+      const next = { ...matchWins, opponent: matchWins.opponent + 1 };
+      setMatchWins(next);
+      sessionRef.current?.reportRoomScore(localWinsToRoomScore(next, snapshot.role, matchId));
+    }
+  }, [activePlayMode, matchWins, snapshot.match?.matchId, snapshot.opponentResult, snapshot.role, snapshot.selfResult, snapshot.status]);
+
+  useEffect(() => {
+    if (snapshot.roomId !== matchWinsRoomIdRef.current) {
+      matchWinsRoomIdRef.current = snapshot.roomId;
+      lastScoredMatchIdRef.current = null;
+      setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
+    }
+  }, [snapshot.roomId]);
+
+  useEffect(() => {
+    if (snapshot.roomScore) {
+      const nextWins = roomScoreToLocalWins(snapshot.roomScore, snapshot.role);
+      lastScoredMatchIdRef.current = snapshot.roomScore.lastMatchId ?? lastScoredMatchIdRef.current;
+      setMatchWins((current) => (sameMatchWins(current, nextWins) ? current : nextWins));
+      return;
+    }
+    if (snapshot.roomId && snapshot.connectionState === "signaling" && !snapshot.opponentPlayer) {
+      lastScoredMatchIdRef.current = null;
+      setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
+    }
+  }, [snapshot.connectionState, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.roomScore]);
 
   const waitingForInitialHomeworldSession =
     isHomeworldRoute &&
@@ -1231,10 +1390,16 @@ function MultiplayerPageContent() {
               opponentPresence={snapshot.opponentLevelSelectPresence}
               opponentReady={snapshot.opponentReady}
               opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
+              opponentWins={matchWins.opponent}
               readyAvailable={standaloneReadyAvailable}
               rightReadyLabel={standaloneReadyAvailable ? "准备开始 →" : ""}
+              scoreboardRoomBarOffset={standaloneRoomBarVisible}
+              scoreboardVisible={Boolean(snapshot.roomId)}
+              selfCustomAvatar={levelSelectSelfCustomAvatar}
+              selfName={snapshot.selfPlayer?.name ?? playerName}
               selfReady={snapshot.selfReady}
               selfSkin={standaloneSelfSkin}
+              selfWins={matchWins.self}
               selection={activeLevelSelectState}
               selectionAvailable={standaloneSelectionAvailable}
               selectionUnavailableMessage={standaloneSelectionUnavailableMessage}
@@ -1353,6 +1518,7 @@ function MultiplayerPageContent() {
           </>
         )}
         <ModeTransitionOverlay state={transitionState} />
+        {nicknameDialogNode}
       </main>
     </PlayerAvatarSkinProvider>
   );
@@ -1362,6 +1528,7 @@ function MultiplayerPageContent() {
       <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
         <main className="app-shell app-shell-play route-blackout-shell multiplayer-route-loading-shell">
           <ModeTransitionOverlay state={transitionState} />
+          {nicknameDialogNode}
         </main>
       </PlayerAvatarSkinProvider>
     );
@@ -1372,6 +1539,7 @@ function MultiplayerPageContent() {
       <PlayerAvatarSkinProvider skin={selectedSkin} customImageUrl={customAvatarImageUrl} customOutlineColor={customAvatarOutlineColor}>
         <main className="app-shell app-shell-play route-blackout-shell multiplayer-route-loading-shell">
           <ModeTransitionOverlay state={transitionState} />
+          {nicknameDialogNode}
         </main>
       </PlayerAvatarSkinProvider>
     );
@@ -1438,9 +1606,14 @@ function MultiplayerPageContent() {
               opponentPresence={snapshot.opponentLevelSelectPresence}
               opponentReady={snapshot.opponentReady}
               opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
+              opponentWins={matchWins.opponent}
               readyAvailable={levelSelectReadyAvailable}
+              scoreboardVisible={Boolean(snapshot.roomId)}
+              selfCustomAvatar={levelSelectSelfCustomAvatar}
+              selfName={snapshot.selfPlayer?.name ?? playerName}
               selfReady={snapshot.selfReady}
               selfSkin={selectedSkin}
+              selfWins={matchWins.self}
               selection={activeLevelSelectState}
               startCountdownSeconds={levelSelectStartCountdownSeconds}
               onBackToRoom={handleCloseLevelSelectRoom}
@@ -1502,6 +1675,7 @@ function MultiplayerPageContent() {
             />
           )}
           <ModeTransitionOverlay state={transitionState} />
+          {nicknameDialogNode}
         </main>
       </PlayerAvatarSkinProvider>
     );

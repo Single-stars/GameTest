@@ -24,34 +24,35 @@ export type RoundPlayerProps = {
   advancedConfig?: AdvancedStageConfig;
   baseRevives?: number;
   onBaseReviveUsed?: () => void;
+  paused?: boolean;
 };
 
-export function RoundPlayer({ advancedConfig, baseRevives, onBaseReviveUsed, onComplete, phase, roundId }: RoundPlayerProps) {
+export function RoundPlayer({ advancedConfig, baseRevives, onBaseReviveUsed, onComplete, paused = false, phase, roundId }: RoundPlayerProps) {
   const implementation = getRoundDefinition(roundId)[phase];
 
   if (implementation.type === "mini-game") {
     if (phase === "advanced") {
       if (!isMiniGameAdvancedConfig(advancedConfig)) return null;
-      return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      return <MiniGameAdvancedRound advancedConfig={advancedConfig} onComplete={onComplete} paused={paused} />;
     }
-    return <MiniGameBaseRound gameId={implementation.gameId} baseRevives={baseRevives} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} round={roundId} />;
+    return <MiniGameBaseRound gameId={implementation.gameId} baseRevives={baseRevives} onBaseReviveUsed={onBaseReviveUsed} onComplete={onComplete} paused={paused} round={roundId} />;
   }
 
   switch (implementation.componentId) {
     case "reaction":
-      return <ReactionRound onComplete={onComplete} />;
+      return <ReactionRound onComplete={onComplete} paused={paused} />;
     case "aim":
-      return <AimRound onComplete={onComplete} />;
+      return <AimRound onComplete={onComplete} paused={paused} />;
     case "braking":
-      return <BrakingRound onComplete={onComplete} />;
+      return <BrakingRound onComplete={onComplete} paused={paused} />;
     case "advanced-reaction":
       if (!advancedConfig) return null;
-      return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      return <AdvancedReactionRound advancedConfig={advancedConfig} onComplete={onComplete} paused={paused} />;
     case "advanced-aim":
       if (!advancedConfig) return null;
-      return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      return <AdvancedAimRound advancedConfig={advancedConfig} onComplete={onComplete} paused={paused} />;
     case "advanced-braking":
       if (!advancedConfig) return null;
-      return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} />;
+      return <AdvancedBrakingRound advancedConfig={advancedConfig} onComplete={onComplete} paused={paused} />;
   }
 }

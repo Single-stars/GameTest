@@ -14,10 +14,12 @@ import type {
   NetRematchMessage,
   NetResultMessage,
   NetReturnRoomMessage,
+  NetRoomScoreMessage,
   NetStartMessage,
   NetStateMessage,
   NetTiebreakerMessage,
   NetTimeSyncMessage,
+  MultiplayerRoomScore,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
 import { resolveCustomAvatarSyncPayload } from "../../features/player-avatar/custom-avatar-storage.ts";
@@ -194,6 +196,8 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (value.t !== undefined && !isNumber(value.t)) return false;
   if (value.x !== undefined && !isNumber(value.x)) return false;
   if (value.y !== undefined && !isNumber(value.y)) return false;
+  if (value.screenX !== undefined && !isNumber(value.screenX)) return false;
+  if (value.screenY !== undefined && !isNumber(value.screenY)) return false;
   if (value.angle !== undefined && !isNumber(value.angle)) return false;
   if (value.anim !== undefined && typeof value.anim !== "string") return false;
   if (value.cameraX !== undefined && !isNumber(value.cameraX)) return false;
@@ -265,6 +269,22 @@ function isResultMessage(value: unknown): value is NetResultMessage {
     (value.timeMs === undefined || isNumber(value.timeMs)) &&
     (value.breakdown === undefined || isResultBreakdown(value.breakdown))
   );
+}
+
+function isRoomScore(value: unknown): value is MultiplayerRoomScore {
+  if (!isRecord(value)) return false;
+  return (
+    isNumber(value.hostWins) &&
+    isNumber(value.guestWins) &&
+    value.hostWins >= 0 &&
+    value.guestWins >= 0 &&
+    (value.lastMatchId === undefined || typeof value.lastMatchId === "string")
+  );
+}
+
+function isRoomScoreMessage(value: unknown): value is NetRoomScoreMessage {
+  if (!isRecord(value)) return false;
+  return isProtocolV1(value.v) && value.kind === "room-score" && isRoomScore(value.score);
 }
 
 function isByeMessage(value: unknown): value is NetByeMessage {
@@ -370,6 +390,7 @@ export function parseNetMessage(raw: unknown): NetMessage | null {
   if (isHomeworldPresenceMessage(payload)) return payload;
   if (isLevelSelectPresenceMessage(payload)) return payload;
   if (isLevelSelectStateMessage(payload)) return payload;
+  if (isRoomScoreMessage(payload)) return payload;
   if (isByeMessage(payload)) return payload;
 
   if (isRecord(payload) && payload.kind !== undefined) {
@@ -404,6 +425,8 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind" | "t
     t: data.t,
     x: data.x,
     y: data.y,
+    screenX: data.screenX,
+    screenY: data.screenY,
     angle: data.angle,
     anim: data.anim,
     cameraX: data.cameraX,
@@ -541,4 +564,16 @@ export function createLevelSelectPresenceMessage(presence: MultiplayerLevelSelec
 
 export function createLevelSelectStateMessage(selection: MultiplayerLevelSelectState): NetLevelSelectStateMessage {
   return { v: MULTIPLAYER_PROTOCOL_VERSION, kind: "level-select-state", selection };
+}
+
+export function createRoomScoreMessage(score: MultiplayerRoomScore): NetRoomScoreMessage {
+  return {
+    v: MULTIPLAYER_PROTOCOL_VERSION,
+    kind: "room-score",
+    score: {
+      hostWins: Math.max(0, Math.round(score.hostWins)),
+      guestWins: Math.max(0, Math.round(score.guestWins)),
+      ...(score.lastMatchId ? { lastMatchId: score.lastMatchId } : {}),
+    },
+  };
 }

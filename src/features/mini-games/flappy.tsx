@@ -153,6 +153,8 @@ export type FlappyRuntimeState = {
   vy: number;
   x: number;
   y: number;
+  screenX: number;
+  screenY: number;
 };
 
 type FlappyRemotePlayer = {
@@ -303,6 +305,8 @@ function makeFlappyRuntimeState(
     vy: frame.playerVy,
     x: playerX + signedDisplayProgress,
     y: frame.playerY,
+    screenX: playerX,
+    screenY: frame.playerY,
   };
 }
 
@@ -540,10 +544,11 @@ function pickEndlessFlappyEnergyPickupPosition(
     const gateAfter = gatePairs[index + 1];
     const gateGapDistance = gateAfter.distance - gateBefore.distance;
     if (gateGapDistance < FLAPPY_GATE_WIDTH + 72) continue;
-    const pickupDistance = gateBefore.distance + gateGapDistance * (0.36 + Math.random() * 0.28);
+    const pickupDistance = gateAfter.distance;
+    void stageHeight;
     return {
       x: reverseDirection ? -pickupDistance : stageWidth + pickupDistance,
-      y: clamp(72 + Math.random() * (stageHeight - 144), 56, stageHeight - 56),
+      y: gateAfter.gapY,
     };
   }
 
@@ -567,8 +572,10 @@ export function FlappyPrototype({
   spectateRemoteState = null,
   runSeed,
   avatarEffect = "none",
+  damageInvincible = false,
   shielded = false,
   unlimitedRespawn = false,
+  paused = false,
 }: {
   avatarEffect?: PlayerAvatarEffect;
   baseRevives?: number;
@@ -586,8 +593,10 @@ export function FlappyPrototype({
   remoteState?: FlappyRemoteState | null;
   spectateRemoteState?: SelfGameState | null;
   runSeed: string;
+  damageInvincible?: boolean;
   shielded?: boolean;
   unlimitedRespawn?: boolean;
+  paused?: boolean;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -656,6 +665,7 @@ export function FlappyPrototype({
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const spectateRemoteStateRef = useRef<SelfGameState | null>(spectateRemoteState);
   const endlessRef = useRef(endless);
+  const pausedRef = useRef(paused);
   const gravityChangeBlendRef = useRef<FlappyGravityChangeBlend | null>(null);
   const gravityFlippedRef = useRef(false);
   const gravityFlipPulseTimerRef = useRef<number | null>(null);
@@ -678,6 +688,10 @@ export function FlappyPrototype({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -727,7 +741,6 @@ export function FlappyPrototype({
       until: nextTime + FLAPPY_GRAVITY_CHANGE_BLEND_SECONDS,
     };
     gravityFlippedRef.current = targetFlipped;
-    endlessRef.current?.showFeedback("重力翻转！");
     setManagedGravityFlipped(targetFlipped);
     setGravityFlipTransitionActive(true);
     current.invincibleUntil = Math.max(current.invincibleUntil, nextTime + FLAPPY_GRAVITY_CHANGE_INVINCIBLE_SECONDS);
@@ -948,6 +961,10 @@ export function FlappyPrototype({
       recordFrame(time);
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
+      if (pausedRef.current) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
@@ -1453,7 +1470,7 @@ export function FlappyPrototype({
             );
           })}
           <div
-            className={`flappy-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""}`}
+            className={`flappy-player-shell ${view.time < view.invincibleUntil ? "invincible" : ""} ${damageInvincible ? "damage-invincible" : ""}`}
             ref={playerShellRef}
             style={{ transform: transformPoint3d(playerScreenX - PLAYER_SIZE / 2, view.playerY - PLAYER_SIZE / 2) }}
           >

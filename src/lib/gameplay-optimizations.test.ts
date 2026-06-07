@@ -81,7 +81,7 @@ test("reaction rounds show the shared player avatar with red closed eyes and gre
   assert.match(reactionSource, /cell\.color === "green" \? \{ action: "idle", expression: "neutral" \} : \{ action: "sleep", expression: "sleepy" \}/);
   assert.match(reactionSource, /\{\.\.\.reactionAvatarView\(cell, feedbackTone\)\}/);
   assert.match(reactionSource, /<PlayerAvatar/);
-  assert.match(reactionSource, /className="reaction-cell-avatar"/);
+  assert.match(reactionSource, /className=\{`reaction-cell-avatar \$\{damageInvincible \? "damage-invincible" : ""\}`\}/);
   assert.match(cssSource, /\.reaction-cell-avatar/);
   assert.match(cssSource, /\.reaction-pad-avatar/);
 });
@@ -455,12 +455,12 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   const neutralWaveStageBackgroundSource = sourceBetween(
     commonCss,
     "[data-difficulty-tone] .prototype-stage.doodle-stage,",
-    "\n}\n\n[data-difficulty-tone] .prototype-stage .flappy-background span,",
+    "[data-difficulty-tone] .prototype-stage .flappy-background span,",
   );
   const difficultyMediaSuppressionSource = sourceBetween(
     commonCss,
     "[data-difficulty-tone] .prototype-stage .flappy-background span,",
-    "\n}\n\n.difficulty-wave-backdrop",
+    ".difficulty-wave-backdrop",
   );
   const aimToneBlock = cssBlock(aimCss, "[data-difficulty-tone] .advanced-aim");
   const brakingToneBlock = cssBlock(brakingCss, "[data-difficulty-tone] .advanced-braking");
@@ -850,7 +850,7 @@ test("knife has a wheel-mounted avatar, stage feedback, and advanced failure imp
   assert.match(knifeSource, /showKnifeFeedback\("bad"\)/);
   assert.match(knifeSource, /current\.failedAngles\.push\(outcome\.impactAngle\);[\s\S]*?current\.failedAngle = outcome\.impactAngle;[\s\S]*?current\.status = "failed";/);
   assert.match(knifeSource, /className=\{`prototype-stage knife-stage[\s\S]*feedback-\$\{feedbackTone\}/);
-  assert.match(knifeSource, /className="knife-wheel-avatar"/);
+  assert.match(knifeSource, /className=\{`knife-wheel-avatar \$\{damageInvincible \? "damage-invincible" : ""\}`\}/);
   assert.match(knifeSource, /const panelFeedbackTone = panelClassName === "entering" \? "idle" : feedbackTone;/);
   assert.match(knifeSource, /const avatarView = resolveKnifeWheelAvatarView\(wheelView, panelFeedbackTone\);/);
   assert.match(knifeSource, /<PlayerAvatar[\s\S]*\{\.\.\.avatarView\}/);

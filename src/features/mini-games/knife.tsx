@@ -405,6 +405,7 @@ function createEndlessKnifeLevel(level: MiniGameLevelConfig, effectiveWheelIndex
 }
 
 export function KnifeHitPrototype({
+  damageInvincible = false,
   endless,
   level,
   mode,
@@ -418,7 +419,9 @@ export function KnifeHitPrototype({
   onRestart,
   remoteState,
   remoteStateSubscription,
+  paused = false,
 }: {
+  damageInvincible?: boolean;
   endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
   mode: MiniGameRunMode | "endless";
@@ -432,6 +435,7 @@ export function KnifeHitPrototype({
   onRestart: () => void;
   remoteState?: SelfGameState | null;
   remoteStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
+  paused?: boolean;
 }) {
   const { stageRef, stageSize } = useMiniGameStageSize<HTMLDivElement>();
   const knifeGeometry = useMemo(() => getKnifeStageGeometry(stageSize), [stageSize]);
@@ -476,6 +480,7 @@ export function KnifeHitPrototype({
   const lastAppliedRemoteSeqRef = useRef<number | null>(null);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const pausedRef = useRef(paused);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
@@ -491,6 +496,10 @@ export function KnifeHitPrototype({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -871,6 +880,10 @@ export function KnifeHitPrototype({
       recordFrame(time);
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
+      if (pausedRef.current) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
@@ -1022,7 +1035,7 @@ export function KnifeHitPrototype({
               <path d={knifeSectorPath(zone)} key={zone.id} />
             ))}
           </svg>
-          <div className="knife-wheel-avatar" aria-hidden="true">
+          <div className={`knife-wheel-avatar ${damageInvincible ? "damage-invincible" : ""}`} aria-hidden="true">
             <PlayerAvatar
               {...avatarView}
               effect={shielded ? "shield" : avatarView.effect}

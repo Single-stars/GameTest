@@ -220,6 +220,16 @@ function compactRewardItems(items: Array<RewardOverlayItem | null | undefined>) 
   return items.filter((item): item is RewardOverlayItem => item !== null && item !== undefined);
 }
 
+const REWARD_ITEM_KIND_PRIORITY: Record<RewardOverlayItem["kind"], number> = {
+  rank: 0,
+  endless: 1,
+  skin: 2,
+};
+
+function sortRewardItemsByPriority(items: RewardOverlayItem[]) {
+  return [...items].sort((a, b) => REWARD_ITEM_KIND_PRIORITY[a.kind] - REWARD_ITEM_KIND_PRIORITY[b.kind]);
+}
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
   const [roundIndex, setRoundIndex] = useState(0);
@@ -332,7 +342,7 @@ export default function Home() {
 
   const enqueueRewardItems = useCallback((items: RewardOverlayItem[]) => {
     if (items.length === 0) return;
-    setRewardQueue((current) => [...current, ...items]);
+    setRewardQueue((current) => [...current, ...sortRewardItemsByPriority(items)]);
   }, []);
 
   const dismissRewardItem = useCallback(() => {
@@ -886,11 +896,11 @@ export default function Home() {
       advancedProgressRef.current = nextProgress;
       setAdvancedProgress(nextProgress);
       persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
-      enqueueRewardItems([
+      enqueueRewardItems(compactRewardItems([
+        rankReward,
+        endlessReward,
         ...createSkinRewardItems(previousProgress, nextProgress, `advanced-${current.roundId}-${current.level}`),
-        ...compactRewardItems([rankReward]),
-        ...compactRewardItems([endlessReward]),
-      ]);
+      ]));
       setAdvancedChallenge({
         mode: "complete",
         roundId: current.roundId,
@@ -1239,6 +1249,7 @@ export default function Home() {
               key={props.key}
               advancedConfig={props.phase === "advanced" ? props.advancedConfig : undefined}
               onComplete={props.onComplete}
+              paused={props.paused}
               phase={props.phase}
               roundId={props.round}
             />

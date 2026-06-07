@@ -93,6 +93,8 @@ export type SquareJumpStateSnapshot = {
   turns: number;
   x: number;
   y: number;
+  screenX?: number;
+  screenY?: number;
 };
 
 type SquareJumpRemotePlayer = {
@@ -117,15 +119,15 @@ function squareGravityLabel(gravity: SquareGravityState) {
   return "正常";
 }
 
-function squareGravityMark(gravity: SquareGravityState) {
-  if (gravity === "light") return "^";
-  if (gravity === "heavy") return "v";
-  return ".";
+function squareGravityIconClass(gravity: SquareGravityState) {
+  if (gravity === "light") return "square-gravity-icon icon-light";
+  if (gravity === "heavy") return "square-gravity-icon icon-heavy";
+  return "";
 }
 
 function squarePlatformMark(platform: SquareJumpBasePlatform): string | null {
-  if (platform.gravity === "light") return squareGravityMark("light");
-  if (platform.gravity === "heavy") return squareGravityMark("heavy");
+  if (platform.gravity === "light") return squareGravityIconClass("light");
+  if (platform.gravity === "heavy") return squareGravityIconClass("heavy");
   return null;
 }
 
@@ -602,6 +604,7 @@ function recoverSquareJumpBaseMiss(current: SquareJumpUnifiedRuntime, reason: st
 }
 
 export function SquareJumpPrototype({
+  damageInvincible = false,
   endless,
   level,
   logicStageSizeOverride,
@@ -623,7 +626,9 @@ export function SquareJumpPrototype({
   coOpSkinId = null,
   coOpCustomAvatar = null,
   authoritativeStateSubscription = null,
+  paused = false,
 }: {
+  damageInvincible?: boolean;
   endless?: EndlessMiniGameRuntime;
   level: MiniGameLevelConfig;
   logicStageSizeOverride?: MiniGameStageSize;
@@ -645,6 +650,7 @@ export function SquareJumpPrototype({
   coOpSkinId?: string | null;
   coOpCustomAvatar?: SquareJumpRemotePlayer["customAvatar"] | null;
   authoritativeStateSubscription?: ((listener: (state: SelfGameState) => void) => (() => void)) | null;
+  paused?: boolean;
 }) {
   const { stageRef, stageSize: measuredStageSize } = useMiniGameStageSize<HTMLDivElement>();
   const logicStageSize = logicStageSizeOverride ?? measuredStageSize;
@@ -714,6 +720,7 @@ export function SquareJumpPrototype({
   const coOpPlayerSkin = resolveSquareJumpCoOpSkin(coOpSkinId);
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
+  const pausedRef = useRef(paused);
   const squareJumpDoubleJumpEnabled = useCallback(
     () => doubleJumpEnabled || endlessRef.current?.getActiveSkill()?.kind === "double-jump",
     [doubleJumpEnabled],
@@ -726,6 +733,10 @@ export function SquareJumpPrototype({
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
   }, [onRuntimeState]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -745,8 +756,13 @@ export function SquareJumpPrototype({
     if (!onRuntimeStateRef.current) return;
     if (!force && time - lastRuntimeSyncRef.current < SQUARE_JUMP_MULTIPLAYER_RUNTIME_SYNC_MS) return;
     lastRuntimeSyncRef.current = time;
-    onRuntimeStateRef.current(makeSquareJumpRuntimeState(runtimeRef.current, localChargeHeldRef.current));
-  }, []);
+    const current = runtimeRef.current;
+    onRuntimeStateRef.current({
+      ...makeSquareJumpRuntimeState(runtimeRef.current, localChargeHeldRef.current),
+      screenX: worldLayerOffsetX + (stageWidth / 2 + (current.playerX - current.camera.cameraX) * current.camera.scale) * worldLayerScale,
+      screenY: worldLayerOffsetY + (stageHeight / 2 + (current.playerY - current.camera.cameraY) * current.camera.scale) * worldLayerScale,
+    });
+  }, [stageHeight, stageWidth, worldLayerOffsetX, worldLayerOffsetY, worldLayerScale]);
   const canRecoverSquareJumpMiss = mode === "base" || unlimitedRespawn || isEndlessRun;
 
   useEffect(() => {
@@ -1099,6 +1115,10 @@ export function SquareJumpPrototype({
       const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
+      if (pausedRef.current) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
       const current = runtimeRef.current;
       let eventChanged = false;
       const paintSquareFrame = (spectatingRemote = false, sceneTime = current.time) => {
@@ -1343,11 +1363,12 @@ export function SquareJumpPrototype({
     transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale}) ${squareBaseWorldTransform(view.camera, logicStageSize)}`,
     transformOrigin: "0 0",
     width: `${stageWidth}px`,
-    zIndex: 2,
+    zIndex: 1,
   };
   const platforms = selectSquareJumpVisiblePlatforms(view.currentPlatform, view.nextPlatform, view.exitingPlatform);
   const tutorialPreviewPlan = level.levelId === "square-jump-base" && view.jumps < 3 && view.state === "charging" ? createSquareJumpPlan(level, view) : null;
   const isCharging = view.state === "charging" || view.state === "airCharging";
+  const doubleJumpSkillActive = endless?.getActiveSkill()?.kind === "double-jump";
   const coOpTurnIsMine = canControlSquareJumpCoOpTurn(view, coOpRole);
   const showSquareJumpMiniScore = !isEndlessRun;
   return (
@@ -1374,7 +1395,7 @@ export function SquareJumpPrototype({
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="square-progress-background" ref={progressBackgroundRef} style={squareProgressBackgroundStyle(view.camera)} aria-hidden="true" />
-        <div ref={worldLayerRef} style={worldLayerStyle} aria-hidden="true">
+        <div className="square-jump-world-layer" ref={worldLayerRef} style={worldLayerStyle} aria-hidden="true">
           {platforms.map((platform) => {
             const isCurrent = platform.id === view.currentPlatform.id;
             const isNext = platform.id === view.nextPlatform.id && !isCurrent;
@@ -1406,12 +1427,12 @@ export function SquareJumpPrototype({
               >
                 <div className="square-jump-base-platform-top" />
                 <div className="square-jump-base-platform-body" />
-                {platformMark ? <span>{platformMark}</span> : null}
+                {platformMark ? <span className={platformMark} aria-hidden="true" /> : null}
               </div>
             );
           })}
           <div
-            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""}`}
+            className={`square-jump-base-player-shell ${view.state === "jumping" ? "jumping" : ""} ${isCharging ? "charging" : ""} ${doubleJumpSkillActive ? "double-jump-skill" : ""} ${view.time < view.respawnUntil ? "respawn-warning" : ""} ${damageInvincible ? "damage-invincible" : ""}`}
             ref={playerShellRef}
             style={{
               left: "0px",

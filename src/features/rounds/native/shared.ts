@@ -7,7 +7,9 @@ export type { PointerKind, TrialEvent };
 export type RoundProps = {
   onComplete: (trials: TrialEvent[]) => void;
   advancedConfig?: AdvancedStageConfig;
+  damageInvincible?: boolean;
   endless?: EndlessMiniGameRuntime;
+  paused?: boolean;
   shielded?: boolean;
 };
 

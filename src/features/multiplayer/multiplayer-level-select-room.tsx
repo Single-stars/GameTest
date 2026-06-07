@@ -31,8 +31,14 @@ type LevelSelectRoomProps = {
   opponentPresence?: MultiplayerLevelSelectPresence | null;
   opponentReady: boolean;
   opponentSkin?: PlayerAvatarSkin;
+  opponentWins: number;
+  scoreboardRoomBarOffset?: boolean;
+  scoreboardVisible?: boolean;
+  selfCustomAvatar?: PlayerInfo["customAvatar"];
+  selfName?: string;
   selfReady: boolean;
   selfSkin: PlayerAvatarSkin;
+  selfWins: number;
   selection: MultiplayerLevelSelectState;
   startCountdownSeconds?: number | null;
   leftExitLabel?: string;
@@ -93,8 +99,14 @@ export function MultiplayerLevelSelectRoom({
   opponentPresence = null,
   opponentReady,
   opponentSkin,
+  opponentWins,
+  scoreboardRoomBarOffset = false,
+  scoreboardVisible = true,
+  selfCustomAvatar,
+  selfName = "你",
   selfSkin,
   selfReady,
+  selfWins,
   selection,
   startCountdownSeconds = null,
   leftExitLabel = "← 回到家园",
@@ -132,6 +144,8 @@ export function MultiplayerLevelSelectRoom({
     opponentPresence?.direction === "left" || opponentPresence?.direction === "right" ? opponentPresence.direction : "right";
   const remotePlayerAction = opponentPresence?.action === "move" ? "move" : "idle";
   const remotePlayerSkin = resolvePlayerAvatarSkin(opponentPresence?.skinId ?? opponentSkin);
+  const crownOwner = selfWins === opponentWins ? null : selfWins > opponentWins ? "self" : "opponent";
+  const scoreboardClassName = `multiplayer-level-scoreboard${scoreboardRoomBarOffset ? " room-bar-offset" : ""}`;
 
   const interactWithSlot = useCallback(
     (slot: MultiplayerLevelSelectSlot | null = reachableSlot) => {
@@ -324,6 +338,48 @@ export function MultiplayerLevelSelectRoom({
         </div>
       ) : null}
 
+      {scoreboardVisible ? (
+        <div className={scoreboardClassName} aria-label={`大比分 ${selfWins} 比 ${opponentWins}`}>
+          <div className="multiplayer-level-score-side self">
+            <span className="multiplayer-level-score-avatar" aria-hidden="true">
+              <PlayerAvatar
+                action="idle"
+                direction="right"
+                expression="neutral"
+                customImageUrl={selfSkin === "custom" ? selfCustomAvatar?.imageDataUrl : null}
+                customOutlineColor={selfSkin === "custom" ? selfCustomAvatar?.outlineColor ?? null : null}
+                skin={selfSkin}
+                size={28}
+                visualScale={1}
+              />
+            </span>
+            <span>{selfName}</span>
+            {crownOwner === "self" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
+          </div>
+          <div className="multiplayer-level-score-value" aria-hidden="true">
+            <span>{selfWins}</span>
+            <strong>:</strong>
+            <span>{opponentWins}</span>
+          </div>
+          <div className="multiplayer-level-score-side opponent">
+            {crownOwner === "opponent" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
+            <span>{opponentName}</span>
+            <span className="multiplayer-level-score-avatar" aria-hidden="true">
+              <PlayerAvatar
+                action="idle"
+                direction="left"
+                expression="neutral"
+                customImageUrl={remotePlayerSkin === "custom" ? opponentCustomAvatar?.imageDataUrl : null}
+                customOutlineColor={remotePlayerSkin === "custom" ? opponentCustomAvatar?.outlineColor ?? null : null}
+                skin={remotePlayerSkin}
+                size={28}
+                visualScale={1}
+              />
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       {unavailableModeHint ? (
         <div className="multiplayer-level-mode-hint" aria-live="polite" key={unavailableModeHintKey}>
           {unavailableModeHint}
@@ -366,6 +422,8 @@ export function MultiplayerLevelSelectRoom({
             action={playerAction}
             direction={direction}
             expression="neutral"
+            customImageUrl={selfSkin === "custom" ? selfCustomAvatar?.imageDataUrl : null}
+            customOutlineColor={selfSkin === "custom" ? selfCustomAvatar?.outlineColor ?? null : null}
             skin={selfSkin}
             size={ROOM_PLAYER_SIZE}
             visualScale={1.08}

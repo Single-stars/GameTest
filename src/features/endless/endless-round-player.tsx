@@ -43,6 +43,8 @@ const ENDLESS_BRAKING_SKILL_DURATION_MS = 5000;
 const ENDLESS_SKILL_ENDING_WARNING_MS = 1000;
 const ENDLESS_SPECIAL_BONUS_SCORE = 2;
 const ENDLESS_BONUS_POPUP_MS = 1500;
+const ENDLESS_FEEDBACK_POPUP_MS = 1400;
+const ENDLESS_DAMAGE_PROTECTION_MS = 500;
 
 export type EndlessRoundCompletion = {
   bonusActions: number;
@@ -58,14 +60,19 @@ type EndlessRunApi = EndlessMiniGameRuntime & {
   bonusPopup: EndlessBonusPopup | null;
   coreActions: number;
   energyPopups: EndlessEnergyPopup[];
-  finish: (reason: string) => void;
+  finish: (reason: string, finishDelayMs?: number, settlementMode?: "normal" | "settled-exit") => void;
+  onSkillEnd?: (skill: EndlessActiveSkill) => void;
   reportedDifficulty: number;
+  settleExit: (reason: string) => void;
   setDebugDifficulty: (difficulty: number) => void;
 };
+
+type EndlessFeedbackTone = "skill" | "heal" | "shield" | "energy";
 
 type EndlessEnergyPopup = {
   id: number;
   text: string;
+  tone: EndlessFeedbackTone;
 };
 
 type EndlessBonusPopup = {
@@ -178,6 +185,27 @@ function createEndlessSkillForRound(roundId: RoundId, nowMs: number): EndlessAct
   }
 }
 
+function getEndlessSkillFeedbackText(roundId: RoundId) {
+  switch (roundId) {
+    case "search":
+      return "超级跳跃！";
+    case "stroop":
+      return "无尽坠落！";
+    case "rhythm":
+      return "二段跳跃！";
+    case "memory":
+      return "超级冲刺！";
+    case "aim":
+      return "火力全开！";
+    case "braking":
+      return "大运来喽！";
+    case "patience":
+      return "时间冻结！";
+    case "reaction":
+      return "双倍分数！";
+  }
+}
+
 function getEndlessAvatarEffect(activeSkill: EndlessActiveSkill | null): PlayerAvatarEffect {
   if (!activeSkill) return "none";
   if (activeSkill.kind === "big-luck") return "shield";
@@ -187,13 +215,17 @@ function getEndlessAvatarEffect(activeSkill: EndlessActiveSkill | null): PlayerA
 
 function useEndlessRun({
   onComplete,
+  paused,
   roundId,
 }: {
   onComplete: (completion: EndlessRoundCompletion) => void;
+  paused: boolean;
   roundId: RoundId;
 }): EndlessRunApi {
   const startedAtRef = useRef(0);
   const completedRef = useRef(false);
+  const pausedRef = useRef(paused);
+  const pausedAtRef = useRef<number | null>(null);
   const coreActionsRef = useRef(0);
   const distanceEnergyScoreRef = useRef(0);
   const energyRef = useRef(0);
@@ -209,6 +241,9 @@ function useEndlessRun({
   const activeSkillRef = useRef<EndlessActiveSkill | null>(null);
   const skillTimerRef = useRef<number | null>(null);
   const skillEndingTimerRef = useRef<number | null>(null);
+  const onSkillEndRef = useRef<((skill: EndlessActiveSkill) => void) | null>(null);
+  const damageInvincibleUntilRef = useRef(0);
+  const damageInvincibleTimerRef = useRef<number | null>(null);
   const [bonusActions, setBonusActions] = useState(0);
   const [bonusPopup, setBonusPopup] = useState<EndlessBonusPopup | null>(null);
   const [coreActions, setCoreActions] = useState(0);
@@ -219,6 +254,7 @@ function useEndlessRun({
   const [debugEnergyLocked, setDebugEnergyLocked] = useState(false);
   const [activeSkill, setActiveSkill] = useState<EndlessActiveSkill | null>(null);
   const [skillEnding, setSkillEnding] = useState(false);
+  const [damageInvincible, setDamageInvincible] = useState(false);
   const [debugDifficulty, setDebugDifficultyState] = useState(0);
   const [reportedDifficulty, setReportedDifficulty] = useState(0);
   React.useEffect(() => {
@@ -226,7 +262,8 @@ function useEndlessRun({
   }, []);
 
   const finish = useCallback(
-    (reason: string, finishDelayMs = 0) => {
+    (reason: string, finishDelayMs = 0, settlementMode: "normal" | "settled-exit" = "normal") => {
+      void settlementMode;
       if (completedRef.current) return;
       completedRef.current = true;
       const complete = () => {
@@ -251,18 +288,19 @@ function useEndlessRun({
     [onComplete, roundId],
   );
 
-  const showEnergyFeedback = useCallback((feedbackText?: string) => {
+  const showEnergyFeedback = useCallback((feedbackText?: string, tone: EndlessFeedbackTone = "energy") => {
     if (!feedbackText) return;
     const popup = {
       id: energyPopupIdRef.current + 1,
       text: feedbackText,
+      tone,
     };
     energyPopupIdRef.current = popup.id;
     setEnergyPopups((current) => [...current.slice(-2), popup]);
     const timer = window.setTimeout(() => {
       setEnergyPopups((current) => current.filter((item) => item.id !== popup.id));
       energyPopupTimersRef.current = energyPopupTimersRef.current.filter((item) => item !== timer);
-    }, 900);
+    }, ENDLESS_FEEDBACK_POPUP_MS);
     energyPopupTimersRef.current.push(timer);
   }, []);
 
@@ -290,6 +328,16 @@ function useEndlessRun({
     skillEndingTimerRef.current = null;
   }, []);
 
+  const setDamageInvincibleUntil = useCallback((until: number) => {
+    damageInvincibleUntilRef.current = until;
+    setDamageInvincible(performance.now() < until);
+    if (damageInvincibleTimerRef.current !== null) window.clearTimeout(damageInvincibleTimerRef.current);
+    damageInvincibleTimerRef.current = window.setTimeout(() => {
+      damageInvincibleTimerRef.current = null;
+      if (performance.now() >= damageInvincibleUntilRef.current) setDamageInvincible(false);
+    }, Math.max(0, until - performance.now()));
+  }, []);
+
   const clearPassiveShield = useCallback(() => {
     if (shieldChargesRef.current <= 0) return;
     shieldChargesRef.current = 0;
@@ -300,6 +348,7 @@ function useEndlessRun({
     const endedSkill = activeSkillRef.current;
     clearSkillTimers();
     if (endedSkill?.kind === "big-luck") clearPassiveShield();
+    if (endedSkill) onSkillEndRef.current?.(endedSkill);
     activeSkillRef.current = null;
     setActiveSkill(null);
     setSkillEnding(false);
@@ -307,6 +356,7 @@ function useEndlessRun({
 
   const scheduleSkillTimers = useCallback((skill: EndlessActiveSkill) => {
     clearSkillTimers();
+    if (pausedRef.current) return;
     if (typeof skill.until !== "number") return;
     const remainingMs = Math.max(0, skill.until - performance.now());
     skillEndingTimerRef.current = window.setTimeout(() => {
@@ -315,6 +365,38 @@ function useEndlessRun({
     }, Math.max(0, remainingMs - ENDLESS_SKILL_ENDING_WARNING_MS));
     skillTimerRef.current = window.setTimeout(endSkill, remainingMs);
   }, [clearSkillTimers, endSkill]);
+
+  React.useEffect(() => {
+    if (paused === pausedRef.current) return;
+    pausedRef.current = paused;
+    const nowMs = performance.now();
+    if (paused) {
+      pausedAtRef.current = nowMs;
+      clearSkillTimers();
+      return;
+    }
+
+    const pausedAt = pausedAtRef.current;
+    pausedAtRef.current = null;
+    if (pausedAt === null) return;
+
+    const pausedDuration = Math.max(0, nowMs - pausedAt);
+    startedAtRef.current += pausedDuration;
+    const currentSkill = activeSkillRef.current;
+    if (currentSkill?.until) {
+      const nextSkill = { ...currentSkill, until: currentSkill.until + pausedDuration };
+      activeSkillRef.current = nextSkill;
+      setActiveSkill(nextSkill);
+      scheduleSkillTimers(nextSkill);
+    }
+    if (damageInvincibleUntilRef.current > nowMs) {
+      setDamageInvincibleUntil(damageInvincibleUntilRef.current + pausedDuration);
+    }
+  }, [clearSkillTimers, paused, scheduleSkillTimers, setDamageInvincibleUntil]);
+
+  const setSkillEndHandler = useCallback((handler: ((skill: EndlessActiveSkill) => void) | null) => {
+    onSkillEndRef.current = handler;
+  }, []);
 
   const getActiveSkill = useCallback(() => activeSkillRef.current, []);
 
@@ -394,7 +476,7 @@ function useEndlessRun({
     activeSkillRef.current = skill;
     setActiveSkill(skill);
     setSkillEnding(false);
-    showEnergyFeedback("加强状态！");
+    showEnergyFeedback(getEndlessSkillFeedbackText(roundId), "skill");
     scheduleSkillTimers(skill);
     return true;
   }, [clearPassiveShield, roundId, scheduleSkillTimers, showEnergyFeedback]);
@@ -408,7 +490,7 @@ function useEndlessRun({
     const nextRevives = Math.min(ENDLESS_STARTING_REVIVES, revivesRef.current + 1);
     revivesRef.current = nextRevives;
     setRevives(nextRevives);
-    showEnergyFeedback("回血！");
+    showEnergyFeedback("生命恢复！", "heal");
     return true;
   }, [clearPassiveShield, showEnergyFeedback]);
 
@@ -426,7 +508,10 @@ function useEndlessRun({
   const loseLife = useCallback(
     (reason: string, finishDelayMs = 0) => {
       if (completedRef.current) return false;
-      if (shieldChargesRef.current > 0) {
+      const nowMs = performance.now();
+      if (pausedRef.current) return true;
+      if (nowMs < damageInvincibleUntilRef.current) return true;
+      if (shieldChargesRef.current > 0 || energyRef.current >= ENDLESS_ENERGY_THRESHOLD) {
         clearPassiveShield();
         energyRef.current = 0;
         setEnergy(0);
@@ -434,9 +519,11 @@ function useEndlessRun({
           debugEnergyLockedRef.current = false;
           setDebugEnergyLocked(false);
         }
-        showEnergyFeedback("护盾抵消！");
+        setDamageInvincibleUntil(nowMs + ENDLESS_DAMAGE_PROTECTION_MS);
+        showEnergyFeedback("护盾抵消！", "shield");
         return true;
       }
+      setDamageInvincibleUntil(nowMs + ENDLESS_DAMAGE_PROTECTION_MS);
       endSkill();
       const nextRevives = Math.max(0, revivesRef.current - 1);
       revivesRef.current = nextRevives;
@@ -447,13 +534,18 @@ function useEndlessRun({
       }
       return true;
     },
-    [clearPassiveShield, endSkill, finish, showEnergyFeedback],
+    [clearPassiveShield, endSkill, finish, setDamageInvincibleUntil, showEnergyFeedback],
   );
+
+  const settleExit = useCallback((reason: string) => {
+    finish(reason, 0, "settled-exit");
+  }, [finish]);
 
   React.useEffect(() => {
     return () => {
       if (finishTimerRef.current !== null) window.clearTimeout(finishTimerRef.current);
       clearSkillTimers();
+      if (damageInvincibleTimerRef.current !== null) window.clearTimeout(damageInvincibleTimerRef.current);
       if (bonusPopupTimerRef.current !== null) window.clearTimeout(bonusPopupTimerRef.current);
       bonusPopupTimerRef.current = null;
       for (const timer of energyPopupTimersRef.current) window.clearTimeout(timer);
@@ -500,6 +592,7 @@ function useEndlessRun({
     canHeal: energy >= ENDLESS_SKILL_COST && revives < ENDLESS_STARTING_REVIVES,
     canUseSkill: energy >= ENDLESS_SKILL_COST && !activeSkill,
     coreActions,
+    damageInvincible,
     debugEnergyLocked,
     debugDifficulty,
     energyPopups,
@@ -509,12 +602,15 @@ function useEndlessRun({
     gainEnergy,
     getActiveSkill,
     loseLife,
+    paused,
     reportDifficulty,
     reportedDifficulty,
     revives,
     score: getEndlessScore({ bonusActions, coreActions }),
+    settleExit,
     setDebugDifficulty,
     setDistanceScore,
+    setSkillEndHandler,
     shieldCharges,
     showFeedback: showEnergyFeedback,
     skillActive: activeSkill !== null,
@@ -704,11 +800,13 @@ function EndlessHud({
 
 function EndlessNativeRound({
   api,
+  paused,
   runSeed,
   segment,
   shielded,
 }: {
   api: EndlessRunApi;
+  paused: boolean;
   runSeed: string;
   segment: EndlessSegment;
   shielded: boolean;
@@ -716,22 +814,24 @@ function EndlessNativeRound({
   const ignoreRoundCompletion = useCallback(() => undefined, []);
 
   if (segment.config.dimension === "reaction") {
-    return <AdvancedReactionRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} shielded={shielded} />;
+    return <AdvancedReactionRound advancedConfig={segment.config} damageInvincible={api.damageInvincible} endless={api} onComplete={ignoreRoundCompletion} paused={paused} shielded={shielded} />;
   }
   if (segment.config.dimension === "aim") {
-    return <AdvancedAimRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} runSeed={runSeed} shielded={shielded} />;
+    return <AdvancedAimRound advancedConfig={segment.config} damageInvincible={api.damageInvincible} endless={api} onComplete={ignoreRoundCompletion} paused={paused} runSeed={runSeed} shielded={shielded} />;
   }
-  return <AdvancedBrakingRound advancedConfig={segment.config} endless={api} onComplete={ignoreRoundCompletion} shielded={shielded} />;
+  return <AdvancedBrakingRound advancedConfig={segment.config} damageInvincible={api.damageInvincible} endless={api} onComplete={ignoreRoundCompletion} paused={paused} shielded={shielded} />;
 }
 
 function EndlessMiniGameRound({
   api,
   avatarEffect,
+  paused,
   segment,
   shielded,
 }: {
   api: EndlessRunApi;
   avatarEffect: PlayerAvatarEffect;
+  paused: boolean;
   segment: EndlessSegment;
   shielded: boolean;
 }) {
@@ -751,8 +851,10 @@ function EndlessMiniGameRound({
       levelId={miniLevel.levelId}
       levelOverride={miniLevel}
       mode="endless"
+      paused={paused}
       runSeed={runSeed}
       avatarEffect={avatarEffect}
+      damageInvincible={api.damageInvincible}
       shielded={shielded}
     />
   );
@@ -761,33 +863,39 @@ function EndlessMiniGameRound({
 function EndlessGameByRound({
   api,
   avatarEffect,
+  paused,
   runSeed,
   segment,
   shielded,
 }: {
   api: EndlessRunApi;
   avatarEffect: PlayerAvatarEffect;
+  paused: boolean;
   runSeed: string;
   segment: EndlessSegment;
   shielded: boolean;
 }) {
   if (segment.miniLevel) {
-    return <EndlessMiniGameRound api={api} avatarEffect={avatarEffect} segment={segment} shielded={shielded} />;
+    return <EndlessMiniGameRound api={api} avatarEffect={avatarEffect} paused={paused} segment={segment} shielded={shielded} />;
   }
-  return <EndlessNativeRound api={api} runSeed={runSeed} segment={segment} shielded={shielded} />;
+  return <EndlessNativeRound api={api} paused={paused} runSeed={runSeed} segment={segment} shielded={shielded} />;
 }
 
 export function EndlessRoundPlayer({
   bestScore,
   onComplete,
+  paused = false,
   roundId,
+  settleSignal = 0,
 }: {
   bestScore: number;
   debugToolsVisible: boolean;
   onComplete: (completion: EndlessRoundCompletion) => void;
+  paused?: boolean;
   roundId: RoundId;
+  settleSignal?: number;
 }) {
-  const api = useEndlessRun({ onComplete, roundId });
+  const api = useEndlessRun({ onComplete, paused, roundId });
   const segment = useMemo(() => buildEndlessSegment(roundId), [roundId]);
   const runSeed = useMemo(() => createMiniGameRunSeed(`endless-${roundId}`, roundId), [roundId]);
   const difficultyState = getEndlessRoundDifficultyState({
@@ -798,18 +906,24 @@ export function EndlessRoundPlayer({
   });
   const difficultyTone = getAdvancedLevelTone(difficultyState.sourceAdvancedLevel);
   const avatarEffect = getEndlessAvatarEffect(api.getActiveSkill());
+  const shielded = avatarEffect === "shield" || api.shieldCharges > 0;
+
+  React.useEffect(() => {
+    if (settleSignal <= 0) return;
+    api.settleExit("结算退出");
+  }, [api, settleSignal]);
 
   return (
     <div className="endless-shell" data-difficulty-tone={difficultyTone}>
       <div className={`endless-game-host ${api.skillActive ? "skill-active" : ""} ${api.skillEnding ? "skill-ending" : ""}`} data-source-level={difficultyState.sourceAdvancedLevel} data-difficulty-tone={difficultyTone}>
-        <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} shielded={avatarEffect === "shield" || api.shieldCharges > 0} avatarEffect={avatarEffect === "shield" ? "none" : avatarEffect} />
+        <EndlessGameByRound api={api} runSeed={runSeed} segment={segment} shielded={shielded} avatarEffect={avatarEffect === "shield" ? "none" : avatarEffect} paused={paused} />
         <EndlessHud
           api={api}
           bestScore={bestScore}
         />
         <div className="endless-energy-popups" aria-live="polite">
           {api.energyPopups.map((popup) => (
-            <span className="endless-energy-popup" key={popup.id}>
+            <span className={`endless-energy-popup ${popup.tone}`} key={popup.id}>
               {popup.text}
             </span>
           ))}

@@ -227,6 +227,10 @@ function canApplyRemoteAnswer(peerConnection: RTCPeerConnection) {
   return peerConnection.signalingState === "have-local-offer";
 }
 
+function readPeerSignalingState(peerConnection: RTCPeerConnection): RTCSignalingState {
+  return peerConnection.signalingState;
+}
+
 function now() {
   return Date.now();
 }
@@ -275,6 +279,7 @@ export class RoomSignalTransport {
   private iceRestartAttempts = 0;
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private pendingSignalQueue: SignalPayload[] = [];
+  private signalHandlingChain: Promise<void> = Promise.resolve();
   private ignoreNextControlClose = false;
   private roomMissingSince: number | null = null;
 
@@ -294,6 +299,7 @@ export class RoomSignalTransport {
     this.signalReady = false;
     this.pendingRemoteCandidates = [];
     this.pendingSignalQueue = [];
+    this.signalHandlingChain = Promise.resolve();
     this.iceDiagnostics = createIceDiagnostics();
     this.roomMissingSince = null;
     this.clearSignalReconnectTimer();
@@ -533,7 +539,7 @@ export class RoomSignalTransport {
         this.handleRoomClosed(message.reason);
         break;
       case "signal":
-        await this.handleSignal(message.signal);
+        void this.enqueueSignalHandling(message.signal);
         break;
       case "error":
         this.handleFailure(message.message);
@@ -884,11 +890,24 @@ export class RoomSignalTransport {
     const peerConnection = this.preparePeerConnection();
 
     if (signal.type === "offer") {
+      if (peerConnection.signalingState !== "stable") {
+        this.logIceDiagnostic("remote-offer-ignored", {
+          signalingState: peerConnection.signalingState,
+        });
+        return;
+      }
       this.startDataChannelOpenTimer();
       await peerConnection.setRemoteDescription(signal.description);
       this.recordRemoteDescription(signal.description);
       await this.flushPendingRemoteCandidates();
       const answer = await peerConnection.createAnswer();
+      const answerSignalingState = readPeerSignalingState(peerConnection);
+      if (answerSignalingState !== "have-remote-offer") {
+        this.logIceDiagnostic("local-answer-ignored", {
+          signalingState: answerSignalingState,
+        });
+        return;
+      }
       await peerConnection.setLocalDescription(answer);
       if (!peerConnection.localDescription) return;
       this.recordLocalDescription(peerConnection.localDescription);
@@ -924,6 +943,17 @@ export class RoomSignalTransport {
     if (signal.type === "restart-request" && this.role === "host") {
       await this.createOffer({ iceRestart: true });
     }
+  }
+
+  private enqueueSignalHandling(signal: SignalPayload) {
+    const next = this.signalHandlingChain.then(() => this.handleSignal(signal));
+    this.signalHandlingChain = next.catch((error) => {
+      this.logIceDiagnostic("signal-handling-error", {
+        message: error instanceof Error ? error.message : String(error),
+        signalType: signal.type,
+      });
+    });
+    return next;
   }
 
   private queueRemoteIceCandidate(candidate: RTCIceCandidateInit) {
@@ -1014,6 +1044,7 @@ export class RoomSignalTransport {
     this.peerConnection = null;
     this.pendingRemoteCandidates = [];
     this.pendingSignalQueue = [];
+    this.signalHandlingChain = Promise.resolve();
   }
 
   private closeSignalSocket(reason?: string) {

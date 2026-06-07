@@ -334,6 +334,10 @@ test("doodle only moving obstacle variants enable moving hazards", () => {
 test("doodle base and multiplayer respawn on the last safe platform and ease the camera back", () => {
   const componentSource = readMiniGameRuntimeSource();
   const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const endlessRecoverySource = doodleSource.slice(
+    doodleSource.indexOf("function recoverEndlessDoodleFailure"),
+    doodleSource.indexOf("function resolveDoodleCoOpInputDirection"),
+  );
 
   assert.match(componentSource, /lastSafePlatformId: number \| null;/);
   assert.match(componentSource, /function resolveDoodleLastSafePlatform/);
@@ -356,6 +360,16 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.doesNotMatch(doodleSource, /current\.playerVy = DOODLE_JUMP_VELOCITY;\s*current\.jumpTurnAvailable = true;\s*const respawnCameraY/);
   assert.doesNotMatch(doodleSource, /const respawnY = cameraY \+ logicStageHeight \* 0\.34;/);
   assert.doesNotMatch(doodleSource, /current\.platforms\.unshift\(respawnPlatform\);/);
+  assert.match(endlessRecoverySource, /const safeRespawnPlatform = resolveDoodleLastSafePlatform\(current\);/);
+  assert.match(endlessRecoverySource, /safeRespawnPlatform\.used = false;/);
+  assert.match(endlessRecoverySource, /syncDoodleRespawnPlayerWithPlatform\(current, time, stageWidth\);/);
+  assert.match(endlessRecoverySource, /current\.playerVy = 0;/);
+  assert.match(endlessRecoverySource, /current\.started = false;/);
+  assert.match(endlessRecoverySource, /current\.jumpTurnAvailable = false;/);
+  assert.match(endlessRecoverySource, /current\.respawnAwaitingInput = true;/);
+  assert.doesNotMatch(endlessRecoverySource, /DOODLE_JUMP_VELOCITY/);
+  assert.doesNotMatch(endlessRecoverySource, /current\.started = true/);
+  assert.doesNotMatch(endlessRecoverySource, /current\.platforms\.unshift/);
 });
 
 test("doodle unlimited respawn race mode ignores missed risk platforms", () => {
@@ -377,4 +391,17 @@ test("endless doodle awards extra score after three consecutive high-energy jump
   assert.doesNotMatch(doodleSource, /endlessRef\.current\?\.showFeedback\(`彻底疯狂\$\{highEnergyStreak\}`\);/);
   assert.match(doodleSource, /current\.highEnergyStreak = highEnergyStreak;/);
   assert.match(doodleSource, /current\.highEnergyStreak = 0;/);
+});
+
+test("endless doodle removes finite finish platforms so difficulty segment boundaries stay normal sized", () => {
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const runtimeSource = readMiniGameRuntimeSource();
+
+  assert.match(doodleSource, /function normalizeEndlessDoodlePlatforms/);
+  assert.match(doodleSource, /finish:\s*false/);
+  assert.match(doodleSource, /width:\s*Math\.min\(platform\.width, ENDLESS_DOODLE_MAX_NORMAL_PLATFORM_WIDTH\)/);
+  assert.match(doodleSource, /normalizeEndlessDoodlePlatforms\(world\.platforms\)/);
+  assert.match(doodleSource, /normalizeEndlessDoodlePlatforms\(segment\.platforms/);
+  assert.doesNotMatch(doodleSource, /current\.platforms\.push\(\{[\s\S]{0,180}\.\.\.platform,[\s\S]{0,180}finish:\s*platform\.finish/);
+  assert.match(runtimeSource, /ENDLESS_DOODLE_MAX_NORMAL_PLATFORM_WIDTH = 104/);
 });

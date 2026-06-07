@@ -49,6 +49,10 @@
   will-change: transform;
 }
 
+.flappy-stage .difficulty-wave-backdrop {
+  z-index: 1;
+}
+
 .flappy-background {
   z-index: 1;
   inset: 0;
