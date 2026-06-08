@@ -295,6 +295,7 @@ export default function Home() {
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
+  const appHistoryUserArmedRef = useRef(false);
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
   const exitConfirmedRef = useRef(false);
@@ -414,6 +415,25 @@ export default function Home() {
     appHistoryActiveRef.current = true;
     appHistoryLayerRef.current = layer;
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const armAppHistoryGuardAfterUserGesture = () => {
+      if (exitConfirmedRef.current || appHistoryUserArmedRef.current) return;
+      if (!appHistoryActiveRef.current || appHistoryLayerRef.current === 0) return;
+      appHistoryUserArmedRef.current = true;
+      writeHistoryGuard("push", appHistoryLayerRef.current);
+    };
+
+    window.addEventListener("pointerdown", armAppHistoryGuardAfterUserGesture, { capture: true });
+    window.addEventListener("touchstart", armAppHistoryGuardAfterUserGesture, { capture: true, passive: true });
+    window.addEventListener("keydown", armAppHistoryGuardAfterUserGesture, { capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", armAppHistoryGuardAfterUserGesture, { capture: true });
+      window.removeEventListener("touchstart", armAppHistoryGuardAfterUserGesture, { capture: true });
+      window.removeEventListener("keydown", armAppHistoryGuardAfterUserGesture, { capture: true });
+    };
+  }, [writeHistoryGuard]);
 
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
     const storage = getBrowserStorage();

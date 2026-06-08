@@ -222,6 +222,11 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(restartDialogSource, /export function AppExitConfirmDialog/);
   assert.match(appPageSource, /const \[exitConfirmOpen, setExitConfirmOpen\] = useState\(false\);/);
   assert.match(appPageSource, /const exitConfirmedRef = useRef\(false\);/);
+  assert.match(appPageSource, /const appHistoryUserArmedRef = useRef\(false\);/);
+  assert.match(appPageSource, /const armAppHistoryGuardAfterUserGesture = \(\) => \{[\s\S]*if \(exitConfirmedRef\.current \|\| appHistoryUserArmedRef\.current\) return;[\s\S]*if \(!appHistoryActiveRef\.current \|\| appHistoryLayerRef\.current === 0\) return;[\s\S]*appHistoryUserArmedRef\.current = true;[\s\S]*writeHistoryGuard\("push", appHistoryLayerRef\.current\);/);
+  assert.match(appPageSource, /window\.addEventListener\("pointerdown", armAppHistoryGuardAfterUserGesture, \{ capture: true \}\);/);
+  assert.match(appPageSource, /window\.addEventListener\("touchstart", armAppHistoryGuardAfterUserGesture, \{ capture: true, passive: true \}\);/);
+  assert.match(appPageSource, /window\.addEventListener\("keydown", armAppHistoryGuardAfterUserGesture, \{ capture: true \}\);/);
   assert.match(appPageSource, /exitConfirmedRef\.current = true;[\s\S]*window\.history\.back\(\);[\s\S]*window\.setTimeout\(\(\) => window\.history\.back\(\), 0\);/);
   assert.match(appPageSource, /if \(exitConfirmedRef\.current\) return undefined;/);
   assert.match(appPageSource, /exitConfirmOpen,/);
