@@ -339,6 +339,7 @@ export class RoomSignalTransport {
 
   send(message: NetMessage) {
     const serialized = serializeNetMessage(message);
+    if (!this.connected) return;
     const preferredChannel = message.kind === "input" ? this.inputChannel : message.kind === "state" ? this.stateChannel : this.controlChannel;
     if (message.kind === "state") {
       if (!channelIsOpen(preferredChannel)) {

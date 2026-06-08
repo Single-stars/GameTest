@@ -1502,6 +1502,7 @@ export function FallDownPrototype({
     : level.params;
   const viewFragileTime = numberParam(viewFallDownParams, "fragileTime", fragileTime);
   const showFallDownMiniScore = !isEndlessRun;
+  const baseGuideVisible = level.kind === "base" && !isEndlessRun;
   return (
     <div className="prototype-game-wrap">
       {showFallDownMiniScore ? (
@@ -1511,7 +1512,7 @@ export function FallDownPrototype({
         </div>
       ) : null}
       <div
-        className={`prototype-stage fall-down-stage ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
+        className={`prototype-stage fall-down-stage ${baseGuideVisible ? "base-guided" : ""} ${screenShakeClassName} ${view.status === "failed" ? "failed" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="一路向下"
@@ -1522,9 +1523,11 @@ export function FallDownPrototype({
         onPointerUp={stopDirection}
       >
         <DifficultyWaveBackdrop />
-        <div className="movement-control-backdrop" aria-hidden="true">
+        {baseGuideVisible ? (
+          <div className="movement-control-backdrop" aria-hidden="true">
           长按左右屏幕操控方向
         </div>
+        ) : null}
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div style={worldLayerStyle}>

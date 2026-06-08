@@ -277,7 +277,7 @@ export function HomeworldScreen({
   const sceneLeft = Math.max(0, (stageSize.width - HOMEWORLD_SCENE.width * sceneScale) / 2);
   const sceneTop = Math.max(0, (stageSize.height - HOMEWORLD_SCENE.height * sceneScale) / 2);
   const doorDefinition = getHomeworldFurnitureDefinition("door");
-  const doorReachable = isFurnitureReachable(player, doorDefinition);
+  const doorUseAllowed = canUseHomeworldInteraction(role, doorDefinition.id, doorDefinition.interaction);
   const ownerLabel = formatHomeworldTitle(homeOwnerName, role);
   const resolvedRemoteSkin = resolvePlayerAvatarSkin(remotePresence?.skinId ?? remoteSkin);
   const canLeaveHome = doorMode === "single-player" && canUseHomeworldDoorAction(role, "leave-home") && Boolean(onReturnHome);
@@ -416,14 +416,14 @@ export function HomeworldScreen({
   }, []);
 
   const handleDoorUse = useCallback(() => {
-    if (!doorReachable) return;
+    if (!doorUseAllowed) return;
     wake();
     setCustomizationOpen(false);
     setDoorMenuOpen((current) => !current);
-  }, [doorReachable, wake]);
+  }, [doorUseAllowed, wake]);
 
-  const handleFurnitureUse = useCallback((definition: HomeworldFurnitureDefinition, reachable: boolean) => {
-    if (!reachable || !canUseHomeworldInteraction(role, definition.id, definition.interaction)) return;
+  const handleFurnitureUse = useCallback((definition: HomeworldFurnitureDefinition) => {
+    if (!canUseHomeworldInteraction(role, definition.id, definition.interaction)) return;
 
     switch (definition.interaction) {
       case "open-skin":
@@ -789,7 +789,7 @@ export function HomeworldScreen({
                 const variant = getHomeworldFurnitureVariant(displayedState, definition.id);
                 const reachable = isFurnitureReachable(player, definition);
                 const useAllowed = canUseHomeworldInteraction(role, definition.id, definition.interaction);
-                const canUse = reachable && useAllowed;
+                const canUse = useAllowed;
                 return (
                   (() => {
                     const hitbox = getFurnitureHitbox(definition);
@@ -805,12 +805,12 @@ export function HomeworldScreen({
                     }}
                   >
                     <button
-                      aria-label={canUse ? `使用${variant.label}` : `靠近${variant.label}`}
+                      aria-label={canUse ? `使用${variant.label}` : variant.label}
                       className={furnitureClassName(definition, reachable)}
-                      disabled={!canUse}
+                      disabled={!useAllowed}
                       onClick={(event) => {
                         event.stopPropagation();
-                        handleFurnitureUse(definition, reachable);
+                        handleFurnitureUse(definition);
                       }}
                       type="button"
                     >

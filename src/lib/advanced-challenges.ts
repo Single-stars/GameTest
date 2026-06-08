@@ -22,9 +22,13 @@ export {
 
   getAdvancedBrakeDangerLeft,
 
+  getAdvancedBrakeDisplayProgress,
+
   getAdvancedBrakeEventOptions,
 
   getAdvancedBrakeHasReachedFinish,
+
+  getAdvancedBrakeRandomDangerLeft,
 
   getAdvancedBrakeRuleHint,
 

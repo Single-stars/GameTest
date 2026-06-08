@@ -564,7 +564,7 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(homeworldScreenSource, /onReturnHome/);
   assert.match(homeworldScreenSource, /onLeaveRoom/);
   assert.match(homeworldScreenSource, /HOMEWORLD_DOOR/);
-  assert.match(homeworldScreenSource, /doorReachable/);
+  assert.match(homeworldScreenSource, /const reachable = isFurnitureReachable\(player, definition\);/);
   assert.match(homeworldScreenSource, /homeworld-exit-door/);
   assert.match(homeworldScreenSource, /homeworld-door-menu/);
   assert.match(homeworldScreenSource, /homeworld-customization-panel/);
@@ -585,10 +585,10 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.doesNotMatch(roundIntroSource, /intro-start-button/);
   assert.doesNotMatch(roundIntroSource, /primary-button/);
   assert.match(homeIntroCss, /\.intro-start-hint/);
-  assert.match(homeIntroCss, /\.intro-card\s*\{[\s\S]*width:\s*100%;[\s\S]*align-content:\s*center;[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
-  assert.match(homeIntroCss, /\.intro-copy\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
-  assert.match(homeIntroCss, /\.intro-rule-lines\s*\{[\s\S]*justify-self:\s*stretch;[\s\S]*width:\s*100%;/);
-  assert.match(homeIntroCss, /\.intro-rule-lines span\s*\{[\s\S]*position:\s*fixed;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*width:\s*auto;[\s\S]*height:\s*1px;[\s\S]*background:\s*#ded6c8;/);
+  assert.match(homeIntroCss, /\.intro-screen \.intro-card\s*\{[\s\S]*width:\s*100%;[\s\S]*grid-template-rows:\s*none;[\s\S]*place-content:\s*center;[\s\S]*justify-items:\s*center;[\s\S]*text-align:\s*center;/);
+  assert.match(homeIntroCss, /\.intro-screen \.intro-copy\s*\{[\s\S]*justify-items:\s*center;[\s\S]*width:\s*min\(calc\(var\(--game-viewport-width,\s*100vw\)\s*-\s*64px\),\s*460px\);[\s\S]*max-width:\s*100%;[\s\S]*text-align:\s*center;/);
+  assert.match(homeIntroCss, /\.intro-screen \.intro-rule-lines\s*\{[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(calc\(var\(--game-viewport-width,\s*100vw\)\s*-\s*64px\),\s*520px\);[\s\S]*max-width:\s*100%;/);
+  assert.match(homeIntroCss, /\.intro-screen \.intro-rule-lines span\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*width:\s*auto;[\s\S]*height:\s*3px;[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*#ded6c8;/);
   assert.doesNotMatch(homeIntroCss, /\.intro-rule-lines[\s\S]*linear-gradient/);
   assert.doesNotMatch(homeIntroCss, /\.intro-rule-card/);
   assert.doesNotMatch(homeIntroCss, /\.intro-start-button/);

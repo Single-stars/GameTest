@@ -50,6 +50,7 @@ import {
   type MultiplayerLevelSelectState,
 } from "@/lib/multiplayer/level-select";
 import { buildForfeitResult, shouldStartMultiplayerTiebreaker } from "@/lib/multiplayer/result-breakdown";
+import { canSendPeerRoomMessageSnapshot } from "@/lib/multiplayer/room-message-gate";
 
 const COUNTDOWN_TICK_MS = 100;
 const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;
@@ -447,6 +448,7 @@ export class MultiplayerSession {
 
   reportHomeworldState(homeworld: HomeworldState) {
     this.patchSnapshot({ homeworldState: homeworld });
+    if (!this.canSendPeerRoomMessage()) return;
     this.send(createHomeworldStateMessage(homeworld));
   }
 
@@ -463,11 +465,13 @@ export class MultiplayerSession {
       return;
     }
     this.patchSnapshot({ selfHomeworldPresence: presence });
+    if (!this.canSendPeerRoomMessage()) return;
     this.send(createHomeworldPresenceMessage(presence));
   }
 
   reportLevelSelectState(selection: MultiplayerLevelSelectState) {
     this.patchSnapshot({ levelSelectState: selection, selfReady: false, opponentReady: false });
+    if (!this.canSendPeerRoomMessage()) return;
     this.send(createLevelSelectStateMessage(selection));
     this.send(createReadyMessage(false));
   }
@@ -485,6 +489,7 @@ export class MultiplayerSession {
       return;
     }
     this.patchSnapshot({ selfLevelSelectPresence: presence });
+    if (!this.canSendPeerRoomMessage()) return;
     this.send(createLevelSelectPresenceMessage(presence));
   }
 
@@ -503,6 +508,7 @@ export class MultiplayerSession {
       return;
     }
     this.patchSnapshot({ roomScore: nextScore });
+    if (!this.canSendPeerRoomMessage()) return;
     this.send(createRoomScoreMessage(nextScore));
   }
 
@@ -615,6 +621,10 @@ export class MultiplayerSession {
     return this.snapshot.connectionState === "connected" && this.transport?.isConnected === true;
   }
 
+  private canSendPeerRoomMessage() {
+    return canSendPeerRoomMessageSnapshot(this.snapshot, this.transport?.isConnected === true);
+  }
+
   private currentMatchIsKnife() {
     return this.snapshot.match?.levelId.startsWith("knife") === true;
   }
@@ -634,6 +644,7 @@ export class MultiplayerSession {
   }
 
   private sendCurrentRoomSnapshots() {
+    if (!this.canSendPeerRoomMessage()) return;
     if (this.snapshot.homeworldState) {
       this.send(createHomeworldStateMessage(this.snapshot.homeworldState));
     }

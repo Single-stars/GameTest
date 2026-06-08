@@ -17,8 +17,10 @@ import { type EndlessActiveSkill, type EndlessMiniGameRuntime } from "@/features
 import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backdrop";
 import {
   getAdvancedBrakeDangerLeft,
+  getAdvancedBrakeDisplayProgress,
   getAdvancedBrakeEventOptions,
   getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeRandomDangerLeft,
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
@@ -97,6 +99,7 @@ const ENDLESS_BRAKING_RULE_ZONE_MIN_DIFFICULTY = 0.48;
 const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 118;
 const ENDLESS_BRAKING_RULE_ZONE_DISTANCE = 520;
 const ENDLESS_BRAKING_RULE_ZONE_COOLDOWN_DISTANCE = 260;
+const ADVANCED_BRAKING_FAILURE_FEEDBACK_MS = 820;
 const ENDLESS_BRAKING_RULE_TALES: EndlessBrakingRuleTale[] = [
   { kind: "all-fake", text: "规则：红色真危险和灰色假危险都不用松手" },
   { kind: "top-red-only", text: "规则：只有上轨单独出现红色真危险时松手" },
@@ -613,23 +616,30 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     finish(extra);
   }, [canCompleteAdvancedBrakingRun, finish]);
 
-  const completeAdvancedNoDangerStop = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    finish(
-      trial("braking", hazardIndexRef.current, {
-        shownAt: now(),
-        responseAt: now(),
-        correct: false,
-        errorType: "early_stop",
-        pointerType: pointerKind(event.pointerType),
-        value: {
-          collision: false,
-          earlyStop: true,
-          fakeStop: false,
-          exited: false,
-        },
-      }),
-    );
-  }, [finish]);
+  const completeAdvancedEarlyStop = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (completionTimerRef.current !== null) return;
+    showAdvancedFeedback("early", true);
+    forceAdvancedBrakingStopAfterFailure();
+    setHolding(false);
+    holdingRef.current = false;
+    const failureTrial = trial("braking", hazardIndexRef.current, {
+      shownAt: now(),
+      responseAt: now(),
+      correct: false,
+      errorType: "early_stop",
+      pointerType: pointerKind(event.pointerType),
+      value: {
+        collision: false,
+        earlyStop: true,
+        fakeStop: false,
+        exited: false,
+      },
+    });
+    completionTimerRef.current = window.setTimeout(() => {
+      completionTimerRef.current = null;
+      finish(failureTrial);
+    }, ADVANCED_BRAKING_FAILURE_FEEDBACK_MS);
+  }, [finish, forceAdvancedBrakingStopAfterFailure, showAdvancedFeedback]);
 
 
 
@@ -896,19 +906,18 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
       recentEndlessHazardKeysRef.current = [...recentEndlessHazardKeysRef.current.filter((key) => key !== pickedKey), pickedKey].slice(-4);
     }
 
-    const hazardLeft = getAdvancedBrakeDangerLeft({
-
-      runnerLeftPercent: progressRef.current,
-
-      runnerWidthPercent: trackMetrics.runnerWidthPercent,
-
-      hazardWidthPercent: trackMetrics.hazardWidthPercent,
-
-      speedPerSecond: activeSpeedPerSecond,
-
-      reactionWindowMs: activeReactionWindowMs,
-
-    });
+    const hazardLeft = endlessRuntime
+      ? getAdvancedBrakeDangerLeft({
+          runnerLeftPercent: progressRef.current,
+          runnerWidthPercent: trackMetrics.runnerWidthPercent,
+          hazardWidthPercent: trackMetrics.hazardWidthPercent,
+          speedPerSecond: activeSpeedPerSecond,
+          reactionWindowMs: activeReactionWindowMs,
+        })
+      : getAdvancedBrakeRandomDangerLeft({
+          hazardWidthPercent: trackMetrics.hazardWidthPercent,
+          randomValue: Math.random(),
+        });
 
     if (hazardLeft === null) {
 
@@ -1371,7 +1380,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
         }
       }
       if (!activeEndless) {
-        completeAdvancedNoDangerStop(event);
+        completeAdvancedEarlyStop(event);
       }
       return;
     }
@@ -1532,7 +1541,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
       {showAdvancedBrakingMiniScore ? (
       <div className="mini-score">
 
-        {!endless ? <span>{Math.round(Math.min(100, progress + trackMetrics.runnerWidthPercent))}%</span> : null}
+        {!endless ? <span>{getAdvancedBrakeDisplayProgress({ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics.runnerWidthPercent })}%</span> : null}
         {activeRuleHint ? <span>{activeRuleHint}</span> : null}
 
       </div>

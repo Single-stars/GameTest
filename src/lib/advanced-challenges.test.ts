@@ -7,8 +7,10 @@ import {
   evaluateAdvancedChallengeCompletion,
   getAdvancedBrakeCorrectAction,
   getAdvancedBrakeDangerLeft,
+  getAdvancedBrakeDisplayProgress,
   getAdvancedBrakeEventOptions,
   getAdvancedBrakeHasReachedFinish,
+  getAdvancedBrakeRandomDangerLeft,
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
@@ -402,7 +404,7 @@ test("advanced braking cannot finish before hazards and required fake/rule event
   assert.match(advancedBrakingSource, /!shouldAdvancedBrakingRequireRuleDanger\(config\.level\) \|\| ruleDangerEventUsedRef\.current/);
   assert.match(advancedBrakingSource, /if \(!canCompleteAdvancedBrakingRun\(\)\) return;/);
   assert.match(advancedBrakingSource, /if \(!activeEndless && !hazardRef\.current && !rulePortalRef\.current && !canCompleteAdvancedBrakingRun\(\)\)/);
-  assert.match(advancedBrakingSource, /completeAdvancedNoDangerStop/);
+  assert.match(advancedBrakingSource, /completeAdvancedEarlyStop/);
   assert.match(advancedBrakingSource, /errorType:\s*"early_stop"/);
   assert.doesNotMatch(advancedBrakingSource, /if \(progressRef\.current >= 100\) \{[\s\S]{0,180}finish\(\);/);
 });
@@ -631,6 +633,40 @@ test("advanced braking positions danger by reaction window and wins when block r
   assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 0, runnerWidthPercent: 8 }), false);
   assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 91.9, runnerWidthPercent: 8 }), false);
   assert.equal(getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: 92, runnerWidthPercent: 8 }), true);
+});
+
+test("advanced braking displays zero at the left edge and samples finite danger across the whole lane", () => {
+  assert.equal(getAdvancedBrakeDisplayProgress({ runnerLeftPercent: 0, runnerWidthPercent: 8 }), 0);
+  assert.equal(getAdvancedBrakeDisplayProgress({ runnerLeftPercent: 46, runnerWidthPercent: 8 }), 50);
+  assert.equal(getAdvancedBrakeDisplayProgress({ runnerLeftPercent: 92, runnerWidthPercent: 8 }), 100);
+
+  assert.equal(getAdvancedBrakeRandomDangerLeft({ randomValue: 0, hazardWidthPercent: 6 }), 0);
+  assert.equal(getAdvancedBrakeRandomDangerLeft({ randomValue: 0.5, hazardWidthPercent: 6 }), 47);
+  assert.equal(getAdvancedBrakeRandomDangerLeft({ randomValue: 1, hazardWidthPercent: 6 }), 94);
+
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const advancedBrakingSource = brakingSource.slice(
+    brakingSource.indexOf("export function AdvancedBrakingRound"),
+    brakingSource.indexOf("const DINO_TRIAL_COUNT"),
+  );
+
+  assert.match(advancedBrakingSource, /getAdvancedBrakeDisplayProgress\(\{ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics\.runnerWidthPercent \}\)/);
+  assert.match(advancedBrakingSource, /endlessRuntime[\s\S]{0,260}getAdvancedBrakeDangerLeft/);
+  assert.match(advancedBrakingSource, /: getAdvancedBrakeRandomDangerLeft\(\{[\s\S]{0,160}randomValue: Math\.random\(\)/);
+});
+
+test("advanced braking keeps the base early-stop feedback before settling a finite failure", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const advancedBrakingSource = brakingSource.slice(
+    brakingSource.indexOf("export function AdvancedBrakingRound"),
+    brakingSource.indexOf("const DINO_TRIAL_COUNT"),
+  );
+
+  assert.match(advancedBrakingSource, /const completeAdvancedEarlyStop = useCallback/);
+  assert.match(advancedBrakingSource, /showAdvancedFeedback\("early", true\)/);
+  assert.match(advancedBrakingSource, /forceAdvancedBrakingStopAfterFailure\(\)/);
+  assert.match(advancedBrakingSource, /window\.setTimeout\(\(\) => \{[\s\S]*finish\([\s\S]*errorType:\s*"early_stop"[\s\S]*ADVANCED_BRAKING_FAILURE_FEEDBACK_MS/);
+  assert.doesNotMatch(advancedBrakingSource, /if \(!activeEndless\) \{\s*completeAdvancedNoDangerStop\(event\);\s*\}/);
 });
 
 test("advanced braking scheduler advances only while the player is holding and no event is active", () => {

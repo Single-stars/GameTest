@@ -51,10 +51,32 @@ test("luck draw screen keeps the old slot machine and adds a non-consuming luck 
   assert.doesNotMatch(screenSource, /LuckCoinTestCard[\s\S]*onDraw/);
   assert.doesNotMatch(screenSource, /LuckCoinTestCard[\s\S]*recordLuckDraw/);
   assert.match(screenSource, /className=\{`luck-coin-test-card tone-\$\{tier\.tone\}/);
-  assert.match(screenSource, /luckCoinPopups\.map/);
+  assert.match(screenSource, /const \[resultPopup, setResultPopup\] = useState/);
   assert.match(cssSource, /\.luck-coin-test-card\s*{/);
   assert.match(cssSource, /border-radius:\s*18px;/);
-  assert.match(cssSource, /@keyframes luck-coin-number-pop/);
+  assert.match(cssSource, /@keyframes luck-coin-result-pop/);
   assert.match(cssSource, /@keyframes luck-coin-card-flip/);
-  assert.match(cssSource, /\.luck-coin-test-popup\.rare/);
+  assert.match(cssSource, /\.luck-coin-test-result\.rare/);
+});
+
+test("luck coin test card explains the random click result without zero-star fractions or stacked popups", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const testCardSource = screenSource.slice(screenSource.indexOf("function LuckCoinTestCard"), screenSource.indexOf("  return (", screenSource.indexOf("function LuckCoinTestCard")));
+  const testCardRenderSource = screenSource.slice(screenSource.indexOf("<section className=\"luck-coin-test\""), screenSource.indexOf("</section>", screenSource.indexOf("<section className=\"luck-coin-test\"")));
+
+  assert.match(testCardSource, /const tierLabel =/);
+  assert.match(testCardSource, /const nextTierText =/);
+  assert.match(testCardSource, /const \[resultPopup, setResultPopup\] = useState/);
+  assert.match(testCardRenderSource, /luck-coin-test-tier/);
+  assert.match(testCardRenderSource, /luck-coin-test-next/);
+  assert.match(testCardRenderSource, /luck-coin-test-result/);
+  assert.doesNotMatch(testCardRenderSource, /\{tier\.star\}\/5/);
+  assert.doesNotMatch(testCardSource, /luckCoinPopups|setLuckCoinPopups|luckCoinPopups\.map/);
+  assert.doesNotMatch(testCardRenderSource, /luck-coin-test-progress/);
+
+  assert.match(cssSource, /\.luck-coin-test-result\s*\{/);
+  assert.match(cssSource, /@keyframes luck-coin-result-pop/);
+  assert.doesNotMatch(cssSource, /\.luck-coin-test-progress/);
+  assert.doesNotMatch(cssSource, /@keyframes luck-coin-number-pop/);
 });

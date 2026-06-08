@@ -47,3 +47,23 @@ test("advanced and base entry panels keep primary actions above scrollable descr
   assert.match(introRule, /grid-template-rows:[\s\S]*auto[\s\S]*auto[\s\S]*minmax\(0,\s*1fr\)/);
   assert.match(introRulesRule, /overflow-y:\s*auto;/);
 });
+
+test("round intro card centers its title group with balanced horizontal rules", () => {
+  const introCss = read("../app/styles/base-flow/home-intro.css");
+  const introCardRule = cssRule(introCss, ".intro-screen .intro-card");
+  const introCopyRule = cssRule(introCss, ".intro-screen .intro-copy");
+  const introRuleLinesRule = cssRule(introCss, ".intro-screen .intro-rule-lines");
+  const introRuleLineSpanRule = cssRule(introCss, ".intro-screen .intro-rule-lines span");
+  const introStartHintRule = cssRule(introCss, ".intro-screen .intro-start-hint");
+
+  assert.match(introCardRule, /place-content:\s*center;/);
+  assert.match(introCardRule, /justify-items:\s*center;/);
+  assert.match(introCardRule, /text-align:\s*center;/);
+  assert.match(introCopyRule, /justify-items:\s*center;/);
+  assert.match(introCopyRule, /text-align:\s*center;/);
+  assert.match(introRuleLinesRule, /width:\s*min\(calc\(var\(--game-viewport-width,\s*100vw\)\s*-\s*64px\),\s*520px\);/);
+  assert.match(introRuleLinesRule, /max-width:\s*100%;/);
+  assert.match(introRuleLineSpanRule, /position:\s*absolute;/);
+  assert.match(introRuleLineSpanRule, /border-radius:\s*999px;/);
+  assert.match(introStartHintRule, /text-align:\s*center;/);
+});

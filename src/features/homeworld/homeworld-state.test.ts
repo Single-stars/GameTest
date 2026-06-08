@@ -309,7 +309,7 @@ test("homeworld permissions cover implemented furniture and cabinet customizatio
   assert.equal(canUseHomeworldDoorAction("visitor", "leave-room"), true);
 });
 
-test("homeworld furniture interactions require the player to be close in the side-view scene", () => {
+test("homeworld furniture hit geometry still matches side-view highlight positions", () => {
   const bed = HOMEWORLD_FURNITURE.find((item) => item.id === "bed");
   const door = HOMEWORLD_FURNITURE.find((item) => item.id === "door");
   const ladder = HOMEWORLD_FURNITURE.find((item) => item.id === "ladder");
@@ -438,7 +438,7 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.doesNotMatch(homeworldCssSource, /\.homeworld-room-entry-toggle\s*\{[\s\S]*bottom:\s*0/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice section\s*\{[\s\S]*display:\s*contents/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.secondary-button\s*\{[\s\S]*border-color:\s*transparent/);
-  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*width:\s*100%[\s\S]*height: 50px[\s\S]*background:\s*#fffdf8/);
+  assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*width:\s*100%[\s\S]*min-height: 58px[\s\S]*background:\s*#fffdf8/);
   assert.match(homeworldCssSource, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*display:\s*grid[\s\S]*place-items:\s*center/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*display:\s*grid/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
@@ -448,7 +448,7 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.match(homeworldCssSource, /\.homeworld-room-invite-alert\s*\{[\s\S]*order:\s*-1/);
   assert.match(homeworldCssSource, /\.homeworld-room-invite \.secondary-button\s*\{[\s\S]*white-space:\s*nowrap/);
   assert.match(homeworldCssSource, /\.homeworld-door-menu\s*\{[\s\S]*width:\s*min\(360px, calc\(100vw - 20px\)\)/);
-  assert.match(homeworldCssSource, /\.homeworld-door-menu-panel button\s*\{[\s\S]*height:\s*58px[\s\S]*min-height:\s*58px/);
+  assert.match(homeworldCssSource, /\.homeworld-door-menu-panel button\s*\{[\s\S]*height:\s*64px[\s\S]*min-height:\s*64px/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-dialog\s*\{[\s\S]*align-items:\s*end/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-card\s*\{[\s\S]*width:\s*min\(420px,\s*100%\)/);
   assert.match(homeworldCssSource, /\.homeworld-room-code-card input\s*\{[\s\S]*height:\s*52px[\s\S]*font-size:\s*18px/);

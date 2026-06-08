@@ -1701,6 +1701,47 @@ test("host peer failures keep signaling alive so the displayed room code remains
   assert.match(sessionSource, /homeworldState: this\.snapshot\.homeworldState/);
 });
 
+test("host waiting room presence updates do not masquerade as reconnecting before a guest joins", () => {
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const transportSource = readSource("./webrtc-transport.ts");
+  const reportHomeworldSource = sessionSource.slice(
+    sessionSource.indexOf("reportHomeworldState(homeworld"),
+    sessionSource.indexOf("forfeit()"),
+  );
+  const snapshotReplaySource = sessionSource.slice(
+    sessionSource.indexOf("private sendCurrentRoomSnapshots"),
+    sessionSource.indexOf("private handleMessage"),
+  );
+
+  assert.match(sessionSource, /private canSendPeerRoomMessage\(\)/);
+  assert.match(sessionSource, /import \{ canSendPeerRoomMessageSnapshot \} from "@\/lib\/multiplayer\/room-message-gate";/);
+  assert.match(reportHomeworldSource, /this\.patchSnapshot\(\{ homeworldState: homeworld \}\);[\s\S]{0,140}if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(reportHomeworldSource, /this\.patchSnapshot\(\{ selfHomeworldPresence: presence \}\);[\s\S]{0,140}if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(reportHomeworldSource, /this\.patchSnapshot\(\{ levelSelectState: selection, selfReady: false, opponentReady: false \}\);[\s\S]{0,140}if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(reportHomeworldSource, /this\.patchSnapshot\(\{ selfLevelSelectPresence: presence \}\);[\s\S]{0,140}if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(reportHomeworldSource, /this\.patchSnapshot\(\{ roomScore: nextScore \}\);[\s\S]{0,140}if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(snapshotReplaySource, /if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
+  assert.match(sessionSource, /canSendPeerRoomMessageSnapshot\(this\.snapshot, this\.transport\?\.isConnected === true\)/);
+  assert.match(transportSource, /send\(message: NetMessage\) \{[\s\S]{0,180}if \(!this\.connected\) return;/);
+});
+
+test("homeworld room furniture and door actions are click-driven instead of distance-gated", () => {
+  const homeworldSource = readSource("../../features/homeworld/homeworld-screen.tsx");
+  const homeworldCss = readSource("../../app/styles/base-flow/homeworld.css");
+
+  assert.match(homeworldSource, /const doorUseAllowed = canUseHomeworldInteraction\(role, doorDefinition\.id, doorDefinition\.interaction\);/);
+  assert.match(homeworldSource, /const handleDoorUse = useCallback\(\(\) => \{[\s\S]{0,120}if \(!doorUseAllowed\) return;/);
+  assert.match(homeworldSource, /const handleFurnitureUse = useCallback\(\(definition: HomeworldFurnitureDefinition\) => \{/);
+  assert.match(homeworldSource, /if \(!canUseHomeworldInteraction\(role, definition\.id, definition\.interaction\)\) return;/);
+  assert.match(homeworldSource, /const canUse = useAllowed;/);
+  assert.match(homeworldSource, /handleFurnitureUse\(definition\);/);
+  assert.doesNotMatch(homeworldSource, /disabled=\{!canUse\}/);
+  assert.match(homeworldCss, /\.homeworld-door-menu-panel button\s*\{[\s\S]*min-height:\s*64px;/);
+  assert.match(homeworldCss, /\.homeworld-room-entry-choice \.primary-button,\s*\.homeworld-room-entry-choice \.secondary-button[\s\S]*min-height:\s*58px;/);
+  assert.match(homeworldCss, /\.homeworld-room-invite \.secondary-button\s*\{[\s\S]*min-height:\s*44px;/);
+  assert.match(homeworldCss, /\.homeworld-room-code-actions button\s*\{[\s\S]*min-height:\s*56px;/);
+});
+
 test("connected WebRTC sessions reopen signaling sockets so rooms stay joinable after transient socket drops", () => {
   const transportSource = readSource("./webrtc-transport.ts");
   const workerSource = readSource("../../../cloudflare/worker.ts");

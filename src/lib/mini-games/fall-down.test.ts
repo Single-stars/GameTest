@@ -531,3 +531,22 @@ test("fall down endless removes finite finish platforms so green to blue segment
   assert.match(fallDownSource, /normalizeEndlessFallDownPlatforms\(\s*makeFallDownPlatforms\(segmentLevel/);
   assert.doesNotMatch(fallDownSource, /\.filter\(\(platform\) => platform\.kind !== "finish"\)\s*\.slice\(1\)/);
 });
+
+test("fall down and doodle movement guides are large base-only background affordances", () => {
+  const fallDownSource = readFileSync(new URL("../../features/mini-games/fall-down.tsx", import.meta.url), "utf8");
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const cssSource = readAppCssSource();
+
+  assert.match(fallDownSource, /const baseGuideVisible = level\.kind === "base" && !isEndlessRun;/);
+  assert.match(doodleSource, /const baseGuideVisible = level\.kind === "base" && !isEndlessRun;/);
+  assert.match(fallDownSource, /fall-down-stage[\s\S]{0,180}\$\{baseGuideVisible \? "base-guided" : ""\}/);
+  assert.match(doodleSource, /doodle-stage[\s\S]{0,180}\$\{baseGuideVisible \? "base-guided" : ""\}/);
+  assert.match(fallDownSource, /\{baseGuideVisible \? \([\s\S]{0,160}<div className="movement-control-backdrop"/);
+  assert.match(doodleSource, /\{baseGuideVisible \? \([\s\S]{0,160}<div className="movement-control-backdrop"/);
+
+  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop\s*\{/);
+  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/);
+  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*border-radius:\s*999px;/);
+  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::after\s*\{/);
+  assert.doesNotMatch(cssSource, /\.prototype-stage:not\(\.base-guided\) \.movement-control-backdrop/);
+});

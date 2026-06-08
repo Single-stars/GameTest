@@ -170,6 +170,29 @@ export function getAdvancedBrakeDangerLeft({
   return Number(hazardLeft.toFixed(4));
 }
 
+export function getAdvancedBrakeRandomDangerLeft({
+  randomValue,
+  hazardWidthPercent,
+}: {
+  randomValue: number;
+  hazardWidthPercent: number;
+}) {
+  const clampedRandom = Math.min(1, Math.max(0, randomValue));
+  const maxHazardLeft = Math.max(0, 100 - Math.max(0, hazardWidthPercent));
+  return Number((clampedRandom * maxHazardLeft).toFixed(4));
+}
+
+export function getAdvancedBrakeDisplayProgress({
+  runnerLeftPercent,
+  runnerWidthPercent,
+}: {
+  runnerLeftPercent: number;
+  runnerWidthPercent: number;
+}) {
+  const finishLeft = Math.max(1, 100 - Math.max(0, runnerWidthPercent));
+  return Math.round(Math.min(100, Math.max(0, runnerLeftPercent / finishLeft) * 100));
+}
+
 export function getAdvancedBrakeHasReachedFinish({
   runnerLeftPercent,
   runnerWidthPercent,

@@ -1278,6 +1278,7 @@ export function DoodleJumpPrototype({
   }, [level.levelId, mode, onComplete, riskTotal, view.status, world.targetHeight]);
 
   const showDoodleMiniScore = !isEndlessRun;
+  const baseGuideVisible = level.kind === "base" && !isEndlessRun;
 
   return (
     <div className="prototype-game-wrap">
@@ -1289,7 +1290,7 @@ export function DoodleJumpPrototype({
         </div>
       ) : null}
       <div
-        className={`prototype-stage doodle-stage ${screenShakeClassName} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
+        className={`prototype-stage doodle-stage ${baseGuideVisible ? "base-guided" : ""} ${screenShakeClassName} ${isLowPowerDevice ? "low-power" : ""} ${DEBUG_MINI_GAME_HITBOX ? "debug-hitbox" : ""}`}
         ref={stageRef}
         role="application"
         aria-label="Doodle Jump 型小游戏"
@@ -1300,9 +1301,11 @@ export function DoodleJumpPrototype({
         onPointerUp={stopDoodleDirection}
       >
         <DifficultyWaveBackdrop />
-        <div className="movement-control-backdrop" aria-hidden="true">
+        {baseGuideVisible ? (
+          <div className="movement-control-backdrop" aria-hidden="true">
           长按左右屏幕操控方向
         </div>
+        ) : null}
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="doodle-world-layer" style={worldLayerStyle}>

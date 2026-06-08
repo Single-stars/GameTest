@@ -189,31 +189,44 @@ export function LuckDrawScreen({
   );
 }
 
-type LuckCoinPopup = {
-  id: number;
+type LuckCoinTestResultPopup = {
   points: number;
+  tick: number;
 };
 
 function LuckCoinTestCard() {
   const [score, setScore] = useState(0);
   const [lastPoints, setLastPoints] = useState(0);
   const [flipTick, setFlipTick] = useState(0);
-  const [luckCoinPopups, setLuckCoinPopups] = useState<LuckCoinPopup[]>([]);
+  const [resultPopup, setResultPopup] = useState<LuckCoinTestResultPopup | null>(null);
   const tier = getLuckCoinTestTier(score);
-  const nextProgress = tier.nextThreshold === null
-    ? 1
-    : (score - tier.threshold) / Math.max(1, tier.nextThreshold - tier.threshold);
+  const tierLabel = tier.star === 0
+    ? "未入段"
+    : tier.star === 1
+      ? "青铜段"
+      : tier.star === 2
+        ? "白银段"
+        : tier.star === 3
+          ? "紫晶段"
+          : tier.star === 4
+            ? "蓝钻段"
+            : "满运段";
+  const nextTierText = tier.nextThreshold === null
+    ? "已到最高段位"
+    : `距下阶段还差 ${Math.max(0, tier.nextThreshold - score)} 分`;
 
   const testDraw = () => {
     const points = resolveLuckCoinTestScore(Math.random());
-    setScore((current) => current + points);
+    setScore((current) => {
+      const nextScore = current + points;
+      setResultPopup({
+        points,
+        tick: Date.now(),
+      });
+      return nextScore;
+    });
     setLastPoints(points);
     setFlipTick((current) => current + 1);
-    const popup = { id: Date.now() + Math.random(), points };
-    setLuckCoinPopups((current) => [...current.slice(-5), popup]);
-    window.setTimeout(() => {
-      setLuckCoinPopups((current) => current.filter((item) => item.id !== popup.id));
-    }, 900);
   };
 
   return (
@@ -226,16 +239,14 @@ function LuckCoinTestCard() {
       >
         <span className="luck-coin-test-title">新版幸运币</span>
         <strong>{score}</strong>
-        <span className="luck-coin-test-stars">{tier.star}/5 星</span>
-        <span className="luck-coin-test-progress" style={{ "--luck-coin-progress": `${Math.min(1, Math.max(0, nextProgress))}` } as CSSProperties} />
-        <span className="luck-coin-test-last" aria-live="polite">{lastPoints > 0 ? `+${lastPoints}` : "0"}</span>
-        <span className="luck-coin-test-popups" aria-hidden="true">
-          {luckCoinPopups.map((popup) => (
-            <span className={`luck-coin-test-popup ${popup.points >= 3 ? "rare" : ""}`} key={popup.id}>
-              +{popup.points}
-            </span>
-          ))}
-        </span>
+        <span className="luck-coin-test-tier">{tierLabel}</span>
+        <span className="luck-coin-test-next">{nextTierText}</span>
+        <span className="luck-coin-test-last" aria-live="polite">{lastPoints > 0 ? `本次 +${lastPoints}` : "点击获得 1-5"}</span>
+        {resultPopup ? (
+          <span className={`luck-coin-test-result ${resultPopup.points >= 3 ? "rare" : ""}`} key={resultPopup.tick} aria-hidden="true">
+            +{resultPopup.points}
+          </span>
+        ) : null}
       </button>
     </section>
   );

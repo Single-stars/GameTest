@@ -1322,7 +1322,7 @@ test("endless games do not show normal finite progress pills that conflict with 
   assert.doesNotMatch(doodleSource, /<span>进度 \{Math\.round\(view\.progressPercent\)\}%<\/span>/);
   assert.match(doodleSource, /showDoodleMiniScore \? \([\s\S]*view\.progressPercent/);
   assert.match(brakingSource, /showAdvancedBrakingMiniScore/);
-  assert.match(brakingSource, /!\s*endless[\s\S]{0,120}progress \+ trackMetrics\.runnerWidthPercent/);
+  assert.match(brakingSource, /getAdvancedBrakeHasReachedFinish\(\{ runnerLeftPercent: next, runnerWidthPercent \}\)/);
 });
 
 test("endless runtime stays inside one mounted reusable stage", () => {
