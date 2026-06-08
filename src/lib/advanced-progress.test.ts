@@ -412,24 +412,19 @@ test("luck score helpers produce display copy for locked, ready and empty states
   );
   assert.equal(
     formatLuckDrawOutcomeText({ score: 100, stars: 20, improved: true, guaranteed: true }),
-    "运气已达到上限",
+    "运气已达最大值~",
   );
   assert.equal(
     getLuckDrawStatusText(true, { ...progressWithTwoDraws, luckStars: 20, luckBestScore: 100 }),
-    "已满运气，继续抽取不会降低历史最高",
+    "运气已达最大值~",
   );
 
   const maxedDrawResult = recordLuckDraw({ ...progressWithTwoDraws, luckStars: 20, luckBestScore: 100 }, 12);
-  assert.deepEqual(maxedDrawResult.outcome, {
-    score: 12,
-    stars: 2,
-    improved: false,
-    guaranteed: false,
-  });
+  assert.equal(maxedDrawResult.outcome, null);
   assert.equal(maxedDrawResult.progress.luckStars, 20);
   assert.equal(maxedDrawResult.progress.luckBestScore, 100);
-  assert.equal(maxedDrawResult.progress.luckDrawCount, progressWithTwoDraws.luckDrawCount + 1);
-  assert.equal(maxedDrawResult.progress.luckDrawChances, progressWithTwoDraws.luckDrawChances - 1);
+  assert.equal(maxedDrawResult.progress.luckDrawCount, progressWithTwoDraws.luckDrawCount);
+  assert.equal(maxedDrawResult.progress.luckDrawChances, progressWithTwoDraws.luckDrawChances);
 });
 
 test("luck draw availability requires unlock and remaining chances", () => {
@@ -444,7 +439,7 @@ test("luck draw availability requires unlock and remaining chances", () => {
   });
   assert.equal(canUseLuckDraw(true, ready), true);
   assert.equal(canUseLuckDraw(false, ready), false);
-  assert.equal(canUseLuckDraw(true, { ...ready, luckStars: 20, luckBestScore: 100 }), true);
+  assert.equal(canUseLuckDraw(true, { ...ready, luckStars: 20, luckBestScore: 100 }), false);
   assert.equal(canUseLuckDraw(true, { ...ready, luckDrawCount: 1 }), false);
 });
 
@@ -475,28 +470,22 @@ test("ten luck draws consume ten chances and display the best score from the bat
   assert.equal(result.progress.luckDrawCount, 18);
 });
 
-test("ten luck draws preserve historical max luck and include the eightieth draw guarantee", () => {
+test("ten luck draws are blocked after max luck and preserve remaining chances", () => {
   const ready = advancedProgressWithClearedLevels(80, {
     luckDrawCount: 70,
+    luckDrawChances: 10,
     luckBestScore: 100,
     luckStars: 20,
   });
 
   const result = recordLuckDrawBatch(ready, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
-  assert.deepEqual(result.outcome, {
-    score: 100,
-    stars: 20,
-    improved: false,
-    guaranteed: true,
-    draws: 10,
-    originalScores: [1, 2, 3, 4, 5, 6, 7, 8, 9, 100],
-  });
-  assert.equal(formatLuckDrawOutcomeText(result.outcome!), "十连最高运气100！");
+  assert.equal(canUseLuckDrawBatch(true, ready), false);
+  assert.equal(result.outcome, null);
   assert.equal(result.progress.luckBestScore, 100);
   assert.equal(result.progress.luckStars, 20);
-  assert.equal(result.progress.luckDrawChances, 0);
-  assert.equal(result.progress.luckDrawCount, 80);
+  assert.equal(result.progress.luckDrawChances, ready.luckDrawChances);
+  assert.equal(result.progress.luckDrawCount, ready.luckDrawCount);
 });
 
 test("advanced level states allow completed and next level while locking later levels", () => {

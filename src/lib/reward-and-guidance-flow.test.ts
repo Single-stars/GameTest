@@ -217,7 +217,9 @@ test("luck draw copy uses lucky coins instead of draw chances", () => {
 
   assert.match(progressSource, /幸运币/);
   assert.doesNotMatch(progressSource, /抽取次数 \$/);
-  assert.match(luckSource, /LUCK_RULE_TEXT[\s\S]*幸运币/);
+  assert.match(luckSource, /LUCK_RULE_LINES[\s\S]*幸运币/);
+  assert.match(luckSource, /概率：\+1 75%，\+2 20%，\+3 3%，\+4 1\.5%，\+5 0\.5%。/);
+  assert.match(luckSource, /达到 100 后不可继续使用，剩余幸运币保留。/);
   assert.match(luckSource, /<span>幸运币<\/span>/);
   assert.match(luckSource, /消耗 1 枚幸运币/);
   assert.match(resultSource, /幸运币/);
@@ -348,9 +350,9 @@ test("advanced in-round top-right actions use pause dialogs and freeze live runt
 
   assert.match(advancedScreenSource, /function AdvancedPauseDialog/);
   assert.match(advancedScreenSource, /const \[pauseDialog, setPauseDialog\] = React\.useState<AdvancedPauseDialogState \| null>\(null\);/);
-  assert.match(advancedScreenSource, /<button type="button" onClick=\{onSettleExit\}>[\s\S]*?结算退出/);
-  assert.match(advancedScreenSource, /<button type="button" onClick=\{onRestart\}>[\s\S]*?重新开始/);
-  assert.match(advancedScreenSource, /<button type="button" onClick=\{onContinue\}>[\s\S]*?继续游戏/);
+  assert.match(advancedScreenSource, /className="advanced-pause-action advanced-pause-action-settle"[\s\S]*onClick=\{onSettleExit\}[\s\S]*advanced-pause-action-icon[\s\S]*结算退出/);
+  assert.match(advancedScreenSource, /className="advanced-pause-action advanced-pause-action-restart"[\s\S]*onClick=\{onRestart\}[\s\S]*advanced-pause-action-icon[\s\S]*重新开始/);
+  assert.match(advancedScreenSource, /className="advanced-pause-action advanced-pause-action-continue"[\s\S]*onClick=\{onContinue\}[\s\S]*advanced-pause-action-icon[\s\S]*继续游戏/);
   assert.match(playingSource, /onClick=\{openAdvancedPauseDialog\}[\s\S]*?暂停/);
   assert.match(playingSource, /paused:\s*pauseDialog\?\.mode === "advanced"/);
   assert.match(endlessPlayingSource, /onClick=\{openEndlessPauseDialog\}[\s\S]*?暂停/);

@@ -767,7 +767,7 @@ function EndlessHud({
 
           return (
             <span className={heartClassName} key={index}>
-              <span className="endless-heart" aria-hidden="true">❤</span>
+              <span className="endless-heart" aria-hidden="true" />
             </span>
           );
         })}
@@ -813,7 +813,7 @@ function EndlessHud({
           }}
           onClick={handleHealClick}
         >
-          <span aria-hidden="true">{"\u2764\uFE0E"}</span>
+          <span className="endless-heal-icon" aria-hidden="true" />
         </button>
         <button
           className={`endless-action-button endless-skill-button ${skillActionReady ? "" : "hidden"} ${api.skillActive ? "active" : ""} ${api.skillEnding ? "ending" : ""}`}

@@ -242,8 +242,11 @@ test("luck draw rule tooltip uses readable copy instead of placeholder question 
   assert.doesNotMatch(luckDrawScreenSource, /LUCK_RULE_TEXT\s*=\s*"[^"]*\?{4,}[^"]*"/);
   assert.match(luckDrawScreenSource, /首次通关进阶关/);
   assert.match(luckDrawScreenSource, /幸运币/);
-  assert.match(luckDrawScreenSource, /0-100/);
-  assert.match(luckDrawScreenSource, /历史最高值/);
+  assert.match(luckDrawScreenSource, /点击运气按钮消耗 1 枚幸运币/);
+  assert.match(luckDrawScreenSource, /每次增加 1-5 运气分/);
+  assert.match(luckDrawScreenSource, /每 5 分折算 1 星/);
+  assert.match(luckDrawScreenSource, /达到 100 后不可继续使用/);
+  assert.match(luckDrawScreenSource, /剩余幸运币保留/);
 });
 
 test("result screen opens the avatar lab through a compact rank-side avatar entry", () => {

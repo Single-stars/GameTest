@@ -213,21 +213,29 @@
   z-index: 4;
 }
 
-.luck-rule-details p {
+.luck-rule-popover {
   position: absolute;
   z-index: 5;
   right: 0;
   top: 30px;
-  width: min(280px, 72vw);
+  width: min(340px, calc(100vw - 40px));
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px;
   background: #fffdf8;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
   box-shadow: 0 14px 34px rgba(24, 24, 24, 0.12);
+}
+
+.luck-rule-popover p {
+  margin: 0;
+}
+
+.luck-rule-popover p + p {
+  margin-top: 6px;
 }
 
 .luck-coin-test {
@@ -238,7 +246,6 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 18px 22px 24px;
-  margin-top: 16px;
   background: var(--surface);
   transition:
     background 180ms ease,
@@ -246,10 +253,10 @@
 }
 
 .luck-coin-test-layout {
-  width: min(100%, 600px);
+  width: min(100%, 640px);
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(132px, 0.65fr);
-  gap: 16px;
+  grid-template-columns: minmax(124px, 0.68fr) minmax(0, 1.32fr);
+  gap: 14px;
   align-items: stretch;
 }
 
@@ -264,7 +271,8 @@
 
 .luck-coin-test-score-card {
   position: relative;
-  min-height: 176px;
+  min-height: clamp(176px, 27vw, 210px);
+  aspect-ratio: 1.42 / 1;
   display: grid;
   place-items: center;
   align-content: center;
@@ -278,6 +286,24 @@
     border-color 360ms ease,
     box-shadow 360ms ease,
     transform 180ms ease;
+}
+
+.luck-coin-test-score-card.is-blocked {
+  cursor: pointer;
+}
+
+.luck-coin-test-score-card.blocked-feedback {
+  animation: luck-coin-blocked-shake 360ms ease both;
+}
+
+.luck-coin-test-score-card.first-draw-prompt::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 2px solid rgba(201, 137, 16, 0.42);
+  border-radius: 7px;
+  pointer-events: none;
+  animation: advanced-card-breath 1800ms ease-in-out infinite;
 }
 
 .luck-coin-test-score-card:active {
@@ -335,12 +361,6 @@
   box-shadow: 0 0 0 5px rgba(201, 137, 16, 0.24), 0 22px 46px rgba(201, 137, 16, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
-.luck-coin-test-last {
-  position: relative;
-  z-index: 1;
-  font-weight: 900;
-}
-
 .luck-coin-test-score-card strong {
   position: relative;
   z-index: 1;
@@ -349,38 +369,66 @@
   line-height: 1;
 }
 
-.luck-coin-test-last {
-  min-height: 28px;
-  color: rgba(36, 46, 62, 0.78);
-  font-size: clamp(18px, 4vw, 24px);
+.luck-coin-test-caption {
+  width: min(100%, 640px);
+  min-height: 22px;
+  margin: 0;
+  color: rgba(36, 46, 62, 0.72);
+  font-size: clamp(15px, 3.4vw, 18px);
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .luck-coin-test-side {
   display: grid;
   grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .luck-coin-test-stat-card {
-  min-height: 83px;
+  position: relative;
+  min-height: 88px;
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 6px;
-  padding: 12px 10px;
-  background: #fffdf8;
+  grid-template-rows: auto 1fr;
+  align-content: stretch;
+  justify-items: start;
+  gap: 12px;
+  overflow: hidden;
+  padding: 15px 16px 14px;
+  border-color: rgba(92, 70, 38, 0.16);
+  background: linear-gradient(180deg, #fffefa 0%, #fbf4ea 100%);
+  box-shadow: 0 12px 24px rgba(24, 24, 24, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  text-align: left;
 }
 
 .luck-coin-test-stat-card span {
-  color: rgba(36, 46, 62, 0.62);
-  font-size: 12px;
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  display: block;
+  padding: 0;
+  color: rgba(36, 46, 62, 0.74);
+  font-size: 15px;
   font-weight: 900;
+  line-height: 1;
 }
 
 .luck-coin-test-stat-card strong {
-  color: rgba(24, 32, 28, 0.9);
-  font-size: clamp(22px, 5vw, 30px);
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  justify-self: start;
+  color: rgba(20, 28, 24, 0.92);
+  font-size: clamp(32px, 6vw, 40px);
   line-height: 1;
+}
+
+.luck-coin-test-stat-card strong small {
+  margin-left: 2px;
+  color: rgba(36, 46, 62, 0.58);
+  font-size: 0.48em;
+  font-weight: 900;
 }
 
 .luck-coin-test-result {
@@ -394,6 +442,32 @@
   text-shadow: 0 3px 0 rgba(255, 255, 255, 0.78);
   pointer-events: none;
   animation: luck-coin-result-pop 420ms ease-out both;
+}
+
+.luck-coin-test-blocked-notice {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 2;
+  max-width: calc(100% - 32px);
+  border: 1px solid rgba(36, 46, 62, 0.14);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 253, 248, 0.92);
+  color: rgba(36, 46, 62, 0.78);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 12px 28px rgba(24, 24, 24, 0.14);
+  pointer-events: none;
+  animation: luck-coin-blocked-notice 1200ms ease both;
+}
+
+.luck-coin-test-blocked-notice.tone-max {
+  border-color: rgba(201, 137, 16, 0.28);
+  background: rgba(255, 241, 184, 0.94);
+  color: #8a5a00;
 }
 
 .luck-coin-test-result.tone-advanced-tier-1 {
@@ -446,22 +520,68 @@
   }
 }
 
+@keyframes luck-coin-blocked-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  22% {
+    transform: translate3d(-4px, 0, 0);
+  }
+
+  44% {
+    transform: translate3d(4px, 0, 0);
+  }
+
+  66% {
+    transform: translate3d(-2px, 0, 0);
+  }
+}
+
+@keyframes luck-coin-blocked-notice {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 6px, 0) scale(0.96);
+  }
+
+  16%,
+  78% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -4px, 0) scale(0.98);
+  }
+}
+
 @media (max-width: 420px) {
   .luck-coin-test-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(112px, 0.72fr);
-    gap: 8px;
+    grid-template-columns: minmax(108px, 0.64fr) minmax(0, 1.36fr);
+    gap: 10px;
   }
 
   .luck-coin-test-score-card {
-    min-height: 160px;
+    min-height: 158px;
     padding: 18px 14px;
   }
 
   .luck-coin-test-side {
-    gap: 8px;
+    gap: 10px;
   }
 
   .luck-coin-test-stat-card {
-    min-height: 76px;
+    min-height: 74px;
+    padding: 13px 12px 12px;
+  }
+
+  .luck-coin-test-stat-card span {
+    font-size: 14px;
+  }
+
+  .luck-coin-test-stat-card strong {
+    font-size: clamp(28px, 8vw, 34px);
   }
 }

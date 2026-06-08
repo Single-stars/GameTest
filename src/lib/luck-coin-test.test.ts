@@ -10,6 +10,24 @@ import {
   resolveLuckCoinTestScore,
 } from "./luck-coin-test.ts";
 
+function cssRule(source: string, selector: string) {
+  const start = source.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `Missing CSS rule: ${selector}`);
+  const end = source.indexOf("\n}", start);
+  assert.notEqual(end, -1, `Unterminated CSS rule: ${selector}`);
+  return source.slice(start, end);
+}
+
+function cssRuleAfter(source: string, selector: string, anchor: string) {
+  const anchorStart = source.indexOf(anchor);
+  assert.notEqual(anchorStart, -1, `Missing CSS anchor: ${anchor}`);
+  const start = source.indexOf(`${selector} {`, anchorStart + anchor.length);
+  assert.notEqual(start, -1, `Missing CSS rule after ${anchor}: ${selector}`);
+  const end = source.indexOf("\n}", start);
+  assert.notEqual(end, -1, `Unterminated CSS rule: ${selector}`);
+  return source.slice(start, end);
+}
+
 test("luck coin test card uses the requested 1-5 point probability table", () => {
   assert.deepEqual(LUCK_COIN_TEST_SCORE_TABLE, [
     { points: 1, probability: 0.75 },
@@ -49,18 +67,28 @@ test("luck coin test tiers upgrade from zero toward the eighty-click target", ()
   assert.equal(getLuckCoinTestPointTone(5), "advanced-gold");
 });
 
-test("luck draw screen keeps the old slot machine and adds an isolated luck coin test card", () => {
+test("luck draw screen promotes the luck coin button to the production draw entry", () => {
   const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
 
-  assert.match(screenSource, /className="slot-machine"/);
   assert.match(screenSource, /LuckCoinTestCard/);
-  assert.match(screenSource, /resolveLuckCoinTestScore\(Math\.random\(\)\)/);
-  assert.doesNotMatch(screenSource, /LuckCoinTestCard[\s\S]*onDraw/);
-  assert.doesNotMatch(screenSource, /LuckCoinTestCard[\s\S]*recordLuckDraw/);
-  assert.match(screenSource, /className=\{`luck-coin-test-score-card tone-\$\{tier\.tone\} \$\{resultPopup \? `result-tone-\$\{resultPopup\.tone\}` : ""\}`\}/);
+  assert.match(screenSource, /<LuckCoinTestCard[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*onDraw=\{draw\}[\s\S]*\/>/);
+  assert.doesNotMatch(screenSource.slice(screenSource.indexOf("<LuckCoinTestCard"), screenSource.indexOf("{SHOW_LEGACY_LUCK_SLOT")), /statusText=/);
+  assert.match(screenSource, /const isMaxLuck = advancedProgress\.luckBestScore >= 100 \|\| advancedProgress\.luckStars >= 20/);
+  assert.match(screenSource, /const hasLuckCoin = coinBalance > 0/);
+  assert.match(screenSource, /const isFirstLuckDrawPrompt = drawCount === 0 && coinBalance >= 1 && score === 0/);
+  assert.match(screenSource, /const actionText = isMaxLuck[\s\S]*\? "幸运已达最大值"[\s\S]*: hasLuckCoin[\s\S]*\? "消耗一枚幸运币点击按钮"[\s\S]*: "首次通关进阶关卡获得幸运币"/);
+  assert.doesNotMatch(screenSource.slice(screenSource.indexOf("function LuckCoinTestCard"), screenSource.indexOf("function LegacyLuckSlotMachine")), /"暂无幸运币"/);
+  assert.doesNotMatch(screenSource.slice(screenSource.indexOf("function LuckCoinTestCard"), screenSource.indexOf("function LegacyLuckSlotMachine")), /"抽取中"/);
+  assert.match(screenSource, /const \[blockedNotice, setBlockedNotice\] = useState/);
+  assert.match(screenSource, /triggerBlockedNotice\("幸运已达最大值", "max"\)/);
+  assert.match(screenSource, /triggerBlockedNotice\("幸运币不足", "empty"\)/);
+  assert.match(screenSource, /const outcome = onDraw\(\);/);
+  assert.doesNotMatch(screenSource, /const testCoinBalance = 9999;/);
+  assert.doesNotMatch(screenSource, /resolveLuckCoinTestScore\(Math\.random\(\)\)/);
+  assert.match(screenSource, /className=\{`luck-coin-test-score-card tone-\$\{tier\.tone\}[\s\S]*blocked-feedback[\s\S]*first-draw-prompt[\s\S]*result-tone/);
   assert.match(screenSource, /const \[resultPopup, setResultPopup\] = useState/);
-  assert.match(screenSource, /const testCoinBalance = 9999;/);
+  assert.match(screenSource, /\{advancedProgress\.luckDrawChances\}/);
   assert.match(cssSource, /\.luck-coin-test-layout\s*{/);
   assert.match(cssSource, /\.luck-coin-test-side\s*{/);
   assert.match(cssSource, /@keyframes luck-coin-result-pop/);
@@ -68,27 +96,50 @@ test("luck draw screen keeps the old slot machine and adds an isolated luck coin
   assert.match(cssSource, /\.luck-coin-test-result\.tone-advanced-gold/);
 });
 
-test("luck coin test card uses a left score card and two aligned right stat cards", () => {
+test("luck coin production card uses real progress and hides the legacy slot machine from production UI", () => {
   const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
-  const testCardSource = screenSource.slice(screenSource.indexOf("function LuckCoinTestCard"), screenSource.indexOf("  return (", screenSource.indexOf("function LuckCoinTestCard")));
+  const testCardStart = screenSource.indexOf("function LuckCoinTestCard");
+  const testCardDrawStart = screenSource.indexOf("  const draw = () => {", testCardStart);
+  const testCardSource = screenSource.slice(testCardStart, screenSource.indexOf("  return (", testCardDrawStart));
   const testCardRenderSource = screenSource.slice(screenSource.indexOf("<section className=\"luck-coin-test\""), screenSource.indexOf("</section>", screenSource.indexOf("<section className=\"luck-coin-test\"")));
+  const scoreButtonSource = screenSource.slice(screenSource.indexOf("<button", screenSource.indexOf("<section className=\"luck-coin-test\"")), screenSource.indexOf("</button>", screenSource.indexOf("<section className=\"luck-coin-test\"")));
+  const productionSource = screenSource.slice(screenSource.indexOf("return ("), screenSource.indexOf("function LegacyLuckSlotMachine"));
+  const statCardRule = cssRuleAfter(cssSource, ".luck-coin-test-stat-card", ".luck-coin-test-side {");
+  const statLabelRule = cssRule(cssSource, ".luck-coin-test-stat-card span");
 
-  assert.match(testCardSource, /Math\.min\(100, current \+ points\)/);
-  assert.match(testCardSource, /Math\.min\(80, current \+ 1\)/);
-  assert.match(testCardSource, /const testCoinBalance = 9999;/);
+  assert.match(testCardSource, /const score = advancedProgress\.luckBestScore;/);
+  assert.match(testCardSource, /const drawCount = advancedProgress\.luckDrawCount;/);
+  assert.match(testCardSource, /const coinBalance = advancedProgress\.luckDrawChances;/);
   assert.match(testCardSource, /const \[resultPopup, setResultPopup\] = useState/);
-  assert.match(testCardSource, /getLuckCoinTestPointTone\(points\)/);
+  assert.match(testCardSource, /const points = Math\.max\(0, outcome\.score - previousScore\);/);
+  assert.match(testCardSource, /getLuckCoinTestPointTone\(Math\.max\(1, points\)\)/);
   assert.doesNotMatch(testCardSource, /lastPoints/);
   assert.match(testCardRenderSource, /luck-coin-test-layout/);
   assert.match(testCardRenderSource, /luck-coin-test-score-card/);
   assert.match(testCardRenderSource, /luck-coin-test-side/);
+  assert.ok(testCardRenderSource.indexOf("luck-coin-test-side") < testCardRenderSource.indexOf("luck-coin-test-score-card"));
   assert.match(testCardRenderSource, /luck-coin-test-stat-card/);
   assert.match(testCardRenderSource, /已投币/);
   assert.match(testCardRenderSource, /幸运币/);
-  assert.match(testCardRenderSource, /消耗 1 枚幸运币/);
-  assert.match(testCardRenderSource, /\{testCoinBalance\}/);
+  assert.match(testCardRenderSource, /className="luck-coin-test-caption"/);
+  assert.match(testCardRenderSource, /<p className="luck-coin-test-caption" aria-live="polite">\{actionText\}<\/p>/);
+  assert.ok(testCardRenderSource.indexOf("</button>") < testCardRenderSource.indexOf("luck-coin-test-caption"));
+  assert.doesNotMatch(testCardRenderSource, /\{actionText \? \(/);
+  assert.doesNotMatch(scoreButtonSource, /luck-coin-test-caption|actionText|消耗一枚幸运币点击按钮|首次通关进阶关卡获得幸运币|幸运已达最大值/);
+  assert.match(testCardRenderSource, /aria-disabled=\{!canDraw \? true : undefined\}/);
+  assert.doesNotMatch(testCardRenderSource, /disabled=\{!canDraw\}/);
+  assert.match(testCardRenderSource, /luck-coin-test-stat-value/);
+  assert.match(testCardRenderSource, /\{drawCount\}<small>\/80<\/small>/);
+  assert.match(testCardRenderSource, /\{coinBalance\}/);
   assert.match(testCardRenderSource, /luck-coin-test-result/);
+  assert.match(testCardRenderSource, /luck-coin-test-blocked-notice/);
+  assert.match(testCardRenderSource, /first-draw-prompt/);
+  assert.doesNotMatch(testCardRenderSource, /luck-rule-text/);
+  assert.doesNotMatch(testCardSource, /statusText/);
+  assert.doesNotMatch(testCardRenderSource, /新版幸运币测试/);
+  assert.doesNotMatch(productionSource, /className="slot-machine"/);
+  assert.match(screenSource, /function LegacyLuckSlotMachine/);
   assert.doesNotMatch(testCardRenderSource, /本次/);
   assert.doesNotMatch(testCardRenderSource, /\{tier\.star\}\/5/);
   assert.doesNotMatch(testCardRenderSource, /luck-coin-test-tier/);
@@ -97,6 +148,12 @@ test("luck coin test card uses a left score card and two aligned right stat card
   assert.doesNotMatch(testCardRenderSource, /luck-coin-test-progress/);
 
   assert.match(cssSource, /\.luck-coin-test\s*\{[\s\S]*border:\s*1px solid var\(--line\);[\s\S]*background:\s*var\(--surface\);/);
+  assert.doesNotMatch(cssSource, /\.luck-coin-test\s*\{[\s\S]*margin-top:\s*16px;/);
+  assert.match(cssSource, /\.luck-coin-test-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(124px,\s*0\.68fr\)\s*minmax\(0,\s*1\.32fr\);/);
+  assert.match(cssSource, /\.luck-coin-test-score-card\.first-draw-prompt::after\s*\{[\s\S]*animation:\s*advanced-card-breath 1800ms ease-in-out infinite;/);
+  assert.match(cssSource, /\.luck-coin-test-score-card\.blocked-feedback\s*\{[\s\S]*luck-coin-blocked-shake/);
+  assert.match(cssSource, /\.luck-coin-test-blocked-notice\s*\{/);
+  assert.match(cssSource, /\.luck-coin-test-caption\s*\{/);
   assert.match(cssSource, /\.luck-coin-test-result\s*\{/);
   assert.match(cssSource, /\.luck-coin-test-result\.tone-advanced-empty/);
   assert.match(cssSource, /\.luck-coin-test-result\.tone-advanced-tier-1/);
@@ -108,7 +165,45 @@ test("luck coin test card uses a left score card and two aligned right stat card
   assert.match(cssSource, /@keyframes luck-coin-result-pop/);
   assert.match(cssSource, /@keyframes luck-coin-result-pop\s*\{[\s\S]*100%\s*\{[\s\S]*opacity:\s*1;/);
   assert.match(cssSource, /\.luck-coin-test-side\s*\{[\s\S]*grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(cssSource, /\.luck-coin-test-stat-card\s*\{[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*justify-items:\s*start;/);
+  assert.match(cssSource, /\.luck-coin-test-score-card,\s*\.luck-coin-test-stat-card\s*\{[\s\S]*border:\s*1px solid var\(--line\);[\s\S]*background:\s*#fffdf8;/);
+  assert.doesNotMatch(statCardRule, /border:\s*0;/);
+  assert.doesNotMatch(statCardRule, /background:\s*transparent;/);
+  assert.doesNotMatch(statCardRule, /box-shadow:\s*none;/);
+  assert.doesNotMatch(cssSource, /\.luck-coin-test-stat-card::before/);
+  assert.match(cssSource, /\.luck-coin-test-stat-card span\s*\{[\s\S]*font-size:\s*15px;/);
+  assert.doesNotMatch(statLabelRule, /background:/);
+  assert.doesNotMatch(statLabelRule, /border:/);
+  assert.match(cssSource, /\.luck-coin-test-stat-card strong\s*\{[\s\S]*justify-self:\s*start;/);
+  assert.match(cssSource, /\.luck-coin-test-stat-card strong small\s*\{/);
   assert.doesNotMatch(cssSource, /\.luck-coin-test-progress/);
   assert.doesNotMatch(cssSource, /@keyframes luck-coin-number-pop/);
   assert.doesNotMatch(cssSource, /luck-coin-rare-glow/);
+});
+
+test("luck rule tooltip uses compact multi-line copy with point probabilities", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+
+  assert.match(screenSource, /LUCK_RULE_LINES = \[/);
+  assert.match(screenSource, /每次增加 1-5 运气分/);
+  assert.match(screenSource, /\+1 75%/);
+  assert.match(screenSource, /\+2 20%/);
+  assert.match(screenSource, /\+3 3%/);
+  assert.match(screenSource, /\+4 1\.5%/);
+  assert.match(screenSource, /\+5 0\.5%/);
+  assert.match(screenSource, /className="luck-rule-popover"/);
+  assert.match(screenSource, /LUCK_RULE_LINES\.map/);
+  assert.match(cssSource, /\.luck-rule-popover\s*\{/);
+  assert.match(cssSource, /\.luck-rule-popover p\s*\{[\s\S]*margin:\s*0;/);
+});
+
+test("luck button production draw records a real 1-5 point gain", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const drawLuckSource = appPageSource.slice(appPageSource.indexOf("const drawLuck = useCallback"), appPageSource.indexOf("const drawLuckBatch", appPageSource.indexOf("const drawLuck = useCallback")));
+
+  assert.match(appPageSource, /resolveLuckCoinTestScore/);
+  assert.match(drawLuckSource, /const luckPointGain = resolveLuckCoinTestScore\(Math\.random\(\)\);/);
+  assert.match(drawLuckSource, /recordLuckDraw\(\s*previousProgress,\s*Math\.min\(100,\s*previousProgress\.luckBestScore \+ luckPointGain\),\s*\)/);
+  assert.doesNotMatch(drawLuckSource, /Math\.floor\(Math\.random\(\) \* 101\)/);
 });

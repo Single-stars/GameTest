@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game Icon Pack Candidates</title>
+    <style>
+      :root {
+        color: #20262d;
+        background: #f4efe7;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 18px;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 12px;
+      }
+
+      .icon-card {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        border: 1px solid rgba(32, 38, 45, 0.14);
+        border-radius: 8px;
+        padding: 16px 10px 12px;
+        background: #fffdf8;
+        box-shadow: 0 10px 24px rgba(24, 24, 24, 0.06);
+      }
+
+      .icon-card img {
+        width: 56px;
+        height: 56px;
+        image-rendering: auto;
+      }
+
+      .icon-card span {
+        max-width: 100%;
+        color: rgba(32, 38, 45, 0.72);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Game Icon Pack Candidates</h1>
+    <main class="grid" id="icons"></main>
+    <script>
+      const icons = [
+        "action-close.svg",
+        "action-copy.svg",
+        "action-link.svg",
+        "action-refresh.svg",
+        "action-retry.svg",
+        "action-save.svg",
+        "action-share.svg",
+        "adventure-backpack.svg",
+        "adventure-compass.svg",
+        "avatar-camera.svg",
+        "avatar-palette.svg",
+        "avatar-user.svg",
+        "control-pause.svg",
+        "control-play.svg",
+        "edit-paintbrush.svg",
+        "help-info.svg",
+        "help-question.svg",
+        "home-house.svg",
+        "hud-heal-medkit.svg",
+        "hud-life-heart.svg",
+        "hud-life-heart-card.svg",
+        "hud-life-hearts.svg",
+        "hud-lightning.svg",
+        "hud-potion.svg",
+        "hud-shield.svg",
+        "luck-clover.svg",
+        "luck-coin.svg",
+        "luck-star.svg",
+        "media-image.svg",
+        "mode-gamepad.svg",
+        "multiplayer-friends.svg",
+        "multiplayer-group.svg",
+        "multiplayer-invite.svg",
+        "nav-back.svg",
+        "settings-gear.svg",
+        "spectator-visible.svg",
+        "state-blocked.svg",
+        "state-lock.svg",
+        "state-success.svg",
+        "state-unlock.svg",
+        "status-crown.svg",
+      ];
+
+      const root = document.getElementById("icons");
+      for (const icon of icons) {
+        const card = document.createElement("a");
+        card.className = "icon-card";
+        card.href = icon;
+        card.target = "_blank";
+        card.rel = "noreferrer";
+
+        const image = document.createElement("img");
+        image.src = icon;
+        image.alt = icon;
+
+        const label = document.createElement("span");
+        label.textContent = icon;
+
+        card.append(image, label);
+        root.append(card);
+      }
+    </script>
+  </body>
+</html>

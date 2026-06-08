@@ -105,6 +105,7 @@ type AdvancedPauseDialogState =
   | { mode: "base"; level: number; roundId: RoundId }
   | { mode: "endless"; roundId: RoundId };
 
+const ADVANCED_PAUSE_BACK_HISTORY_STATE = { gameRankTestInternal: true, gameRankTestLayer: 2 } as const;
 const DEFAULT_LOBBY_TRACK_STEP_PX = 156;
 const ADVANCED_LOBBY_SWIPE_STEP_PX = 28;
 const ADVANCED_TITLE_MIN_FONT_SIZE_PX = 14;
@@ -134,6 +135,18 @@ function getResponsiveTitleFontSize({
 
 function getRoundConfig(roundId: RoundId) {
   return rounds.find((round) => round.id === roundId) ?? rounds[0];
+}
+
+function getPauseDialogForChallenge(challenge: AdvancedChallengeState): AdvancedPauseDialogState | null {
+  if (challenge.mode === "playing") return { mode: "advanced", level: challenge.level, roundId: challenge.roundId };
+  if (challenge.mode === "base-playing") return { mode: "base", level: challenge.level, roundId: challenge.roundId };
+  if (challenge.mode === "endless-playing" || challenge.mode === "challenge-playing") return { mode: "endless", roundId: challenge.roundId };
+  return null;
+}
+
+function writePauseBackHistoryGuard() {
+  if (typeof window === "undefined") return;
+  window.history.pushState(ADVANCED_PAUSE_BACK_HISTORY_STATE, "", window.location.href);
 }
 
 type AdvancedRoundConfig = ReturnType<typeof getRoundConfig>;
@@ -236,14 +249,17 @@ function AdvancedPauseDialog({
       <div className="advanced-pause-dialog" role="dialog" aria-modal="true" aria-labelledby="advanced-pause-title">
         <h2 id="advanced-pause-title">暂停</h2>
         <div className="advanced-pause-actions">
-          <button type="button" onClick={onSettleExit}>
-            结算退出
+          <button className="advanced-pause-action advanced-pause-action-settle" type="button" onClick={onSettleExit}>
+            <span className="advanced-pause-action-icon" aria-hidden="true" />
+            <span className="advanced-pause-action-label">结算退出</span>
           </button>
-          <button type="button" onClick={onRestart}>
-            重新开始
+          <button className="advanced-pause-action advanced-pause-action-restart" type="button" onClick={onRestart}>
+            <span className="advanced-pause-action-icon" aria-hidden="true" />
+            <span className="advanced-pause-action-label">重新开始</span>
           </button>
-          <button type="button" onClick={onContinue}>
-            继续游戏
+          <button className="advanced-pause-action advanced-pause-action-continue" type="button" onClick={onContinue}>
+            <span className="advanced-pause-action-icon" aria-hidden="true" />
+            <span className="advanced-pause-action-label">继续游戏</span>
           </button>
         </div>
       </div>
@@ -1101,6 +1117,8 @@ export function AdvancedChallengeScreen({
   const [dismissedAdvancedTutorialKey, setDismissedAdvancedTutorialKey] = React.useState("");
   const [pauseDialog, setPauseDialog] = React.useState<AdvancedPauseDialogState | null>(null);
   const [endlessSettleSignal, setEndlessSettleSignal] = React.useState(0);
+  const pauseBackDialog = React.useMemo(() => getPauseDialogForChallenge(challenge), [challenge]);
+  const isPauseBackGuardActive = pauseBackDialog !== null;
   const openAdvancedPauseDialog = React.useCallback(() => {
     if (challenge.mode === "playing") setPauseDialog({ mode: "advanced", level: challenge.level, roundId: challenge.roundId });
   }, [challenge]);
@@ -1111,6 +1129,22 @@ export function AdvancedChallengeScreen({
     if (challenge.mode === "base-playing") setPauseDialog({ mode: "base", level: challenge.level, roundId: challenge.roundId });
   }, [challenge]);
   const closePauseDialog = React.useCallback(() => setPauseDialog(null), []);
+  React.useEffect(() => {
+    if (!isPauseBackGuardActive) return undefined;
+    const handlePauseBackPopState = (event: PopStateEvent) => {
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      writePauseBackHistoryGuard();
+      if (pauseDialog) {
+        setPauseDialog(null);
+        return;
+      }
+      setPauseDialog(pauseBackDialog);
+    };
+
+    window.addEventListener("popstate", handlePauseBackPopState, { capture: true });
+    return () => window.removeEventListener("popstate", handlePauseBackPopState, { capture: true });
+  }, [isPauseBackGuardActive, pauseBackDialog, pauseDialog]);
   const settlePauseDialog = React.useCallback(() => {
     const dialog = pauseDialog;
     if (!dialog) return;

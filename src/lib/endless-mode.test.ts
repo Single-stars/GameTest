@@ -78,7 +78,9 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
   const skillIconUrl = new URL("../../public/icons/endless-skill-lightning.svg", import.meta.url);
+  const heartIconUrl = new URL("../../public/icons/endless-life-heart.svg", import.meta.url);
   const skillIconSource = existsSync(skillIconUrl) ? readFileSync(skillIconUrl, "utf8") : "";
+  const heartIconSource = existsSync(heartIconUrl) ? readFileSync(heartIconUrl, "utf8") : "";
   const energyCss = sourceBetween(cssSource, ".endless-energy-meter {", ".endless-score-readout {");
 
   assert.match(commonSource, /gainEnergy: \(amount\?: number, feedbackText\?: string\) => void/);
@@ -151,9 +153,14 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.match(runtimeSource, /endless-action-rail/);
   assert.match(runtimeSource, /endless-heal-button/);
   assert.match(runtimeSource, /endless-debug-energy-button/);
-  assert.match(runtimeSource, /endless-heal-button[\s\S]*aria-hidden="true">\{"\\u2764\\uFE0E"\}<\/span>[\s\S]*endless-skill-button[\s\S]*<span className="endless-skill-icon" aria-hidden="true" \/>[\s\S]*endless-debug-energy-button[\s\S]*aria-hidden="true">10<\/span>/);
+  assert.match(runtimeSource, /endless-heal-button[\s\S]*<span className="endless-heal-icon" aria-hidden="true" \/>[\s\S]*endless-skill-button[\s\S]*<span className="endless-skill-icon" aria-hidden="true" \/>[\s\S]*endless-debug-energy-button[\s\S]*aria-hidden="true">10<\/span>/);
+  assert.match(runtimeSource, /<span className="endless-heart" aria-hidden="true" \/>/);
+  assert.doesNotMatch(runtimeSource, /❤|\\u2764\\uFE0E/);
   assert.equal(existsSync(skillIconUrl), true);
+  assert.equal(existsSync(heartIconUrl), true);
   assert.match(skillIconSource, /<svg[\s\S]*<\/svg>/);
+  assert.match(heartIconSource, /<svg[\s\S]*<\/svg>/);
+  assert.match(heartIconSource, /viewBox="1\.15 1\.15 7\.7 7\.7"/);
   assert.doesNotMatch(runtimeSource, /endless-debug-energy-control/);
   assert.doesNotMatch(runtimeSource, /\{debugToolsVisible \? \(/);
   assert.doesNotMatch(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
@@ -167,6 +174,10 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(cssSource, /\.endless-action-rail\.ready\s*{/);
   assert.match(cssSource, /\.endless-heal-button\s*{/);
   assert.match(cssSource, /\.endless-skill-icon\s*{/);
+  assert.match(cssSource, /\.endless-heal-icon\s*{/);
+  assert.match(cssSource, /\.endless-heal-icon\s*\{[\s\S]*mask:\s*url\("\/icons\/endless-life-heart\.svg"\) center \/ contain no-repeat;/);
+  assert.doesNotMatch(cssSource, /endless-heal-medkit/);
+  assert.match(cssSource, /\.endless-heart\s*\{[\s\S]*mask:\s*url\("\/icons\/endless-life-heart\.svg"\) center \/ contain no-repeat;/);
   assert.match(cssSource, /mask:\s*url\("\/icons\/endless-skill-lightning\.svg"\) center \/ contain no-repeat;/);
   assert.match(cssSource, /background:\s*currentColor;/);
   assert.doesNotMatch(cssSource, /\.endless-debug-energy-control\s*{/);
@@ -245,6 +256,15 @@ test("endless pause dialog replaces restart and back actions while freezing live
   assert.match(screenSource, /结算退出/);
   assert.match(screenSource, /重新开始/);
   assert.match(screenSource, /继续游戏/);
+  assert.match(screenSource, /advanced-pause-action advanced-pause-action-settle/);
+  assert.match(screenSource, /advanced-pause-action advanced-pause-action-restart/);
+  assert.match(screenSource, /advanced-pause-action advanced-pause-action-continue/);
+  assert.match(screenSource, /advanced-pause-action-icon/);
+  assert.match(screenSource, /const isPauseBackGuardActive =/);
+  assert.match(screenSource, /window\.addEventListener\("popstate", handlePauseBackPopState, \{ capture: true \}\)/);
+  assert.match(screenSource, /event\.stopImmediatePropagation\(\)/);
+  assert.match(screenSource, /writePauseBackHistoryGuard\(\)/);
+  assert.match(screenSource, /if \(pauseDialog\) \{\s*setPauseDialog\(null\);\s*return;/);
   assert.match(screenSource, /onClick=\{openEndlessPauseDialog\}/);
   assert.match(screenSource, /onClick=\{openBasePauseDialog\}/);
   assert.match(screenSource, />\s*暂停\s*<\/button>/);
@@ -255,7 +275,14 @@ test("endless pause dialog replaces restart and back actions while freezing live
   assert.match(cssSource, /\.advanced-pause-backdrop/);
   assert.match(cssSource, /\.advanced-pause-dialog/);
   assert.match(cssSource, /\.advanced-pause-actions\s*{[\s\S]*justify-items:\s*center;/);
-  assert.match(cssSource, /\.advanced-pause-actions button\s*{[\s\S]*background:\s*#f5eddd;/);
+  assert.match(cssSource, /\.advanced-pause-actions button\s*{[\s\S]*display:\s*flex;[\s\S]*justify-content:\s*center;[\s\S]*gap:\s*0\.42em;[\s\S]*background:\s*#f5eddd;/);
+  assert.match(cssSource, /\.advanced-pause-action-icon\s*{[\s\S]*width:\s*1\.05em;[\s\S]*background:\s*currentColor;/);
+  assert.match(cssSource, /\.advanced-pause-action-settle\s*{[\s\S]*color:\s*#9a6a22;/);
+  assert.match(cssSource, /\.advanced-pause-action-settle \.advanced-pause-action-icon\s*{[\s\S]*mask:\s*url\("\/icons\/game-icon-pack-candidates\/nav-back\.svg"\) center \/ contain no-repeat;/);
+  assert.match(cssSource, /\.advanced-pause-action-restart\s*{[\s\S]*color:\s*#356fbe;/);
+  assert.match(cssSource, /\.advanced-pause-action-restart \.advanced-pause-action-icon\s*{[\s\S]*mask:\s*url\("\/icons\/game-icon-pack-candidates\/action-refresh\.svg"\) center \/ contain no-repeat;/);
+  assert.match(cssSource, /\.advanced-pause-action-continue\s*{[\s\S]*color:\s*#159a75;/);
+  assert.match(cssSource, /\.advanced-pause-action-continue \.advanced-pause-action-icon\s*{[\s\S]*mask:\s*url\("\/icons\/game-icon-pack-candidates\/control-play\.svg"\) center \/ contain no-repeat;/);
 });
 
 test("endless braking big-luck skill ends with one shield-colored shockwave and clears hazards safely", () => {
@@ -1087,17 +1114,21 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.doesNotMatch(shellSource, /<EndlessHud[\s\S]*<div className="endless-game-host"/);
   assert.match(hudCss, /position:\s*absolute;/);
   assert.match(hudCss, /top:\s*clamp\(/);
+  assert.match(hudCss, /left:\s*clamp\(6px,\s*1\.4vw,\s*12px\);/);
   assert.match(hudCss, /z-index:\s*20;/);
   assert.match(hudCss, /grid-template-columns:\s*minmax\(0,\s*136px\) auto;/);
   assert.match(hudCss, /grid-template-rows:\s*auto auto;/);
   assert.match(hudCss, /align-items:\s*start;/);
   assert.match(hudCss, /\.endless-hearts\s*\{/);
-  assert.match(hudCss, /grid-template-columns:\s*repeat\(3,\s*24px\);/);
+  assert.match(hudCss, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
+  assert.match(hudCss, /\.endless-hearts\s*\{[\s\S]*gap:\s*2px;/);
+  assert.match(hudCss, /\.endless-heart-token\s*\{[\s\S]*width:\s*32px;[\s\S]*height:\s*34px;/);
+  assert.match(hudCss, /\.endless-heart\s*\{[\s\S]*width:\s*32px;[\s\S]*height:\s*32px;/);
   assert.match(hudCss, /grid-column:\s*1;/);
   assert.match(hudCss, /grid-row:\s*1;/);
   assert.match(hudCss, /\.endless-heart-token\s*\{/);
   assert.match(hudCss, /\.endless-score-readout\s*\{/);
-  assert.match(hudCss, /\.endless-energy-console\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*2;[\s\S]*width:\s*136px;/);
+  assert.match(hudCss, /\.endless-energy-console\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*2;[\s\S]*margin-left:\s*4px;[\s\S]*width:\s*136px;/);
   assert.match(hudCss, /\.endless-energy-segments\s*\{/);
   assert.match(hudCss, /grid-template-columns:\s*repeat\(10,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(hudCss, /\.endless-score-readout\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 2;/);
@@ -1366,7 +1397,11 @@ test("endless HUD stays separate, plain, and stage-integrated", () => {
 
   assert.match(cssSource, /\.endless-hearts\s*\{/);
   assert.match(cssSource, /\.endless-heart-token\s*\{/);
-  assert.match(heartsRule, /grid-template-columns:\s*repeat\(3,\s*24px\);/);
+  assert.match(heartsRule, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
+  assert.match(heartsRule, /gap:\s*2px;/);
+  assert.match(tokenRule, /width:\s*32px;/);
+  assert.match(tokenRule, /height:\s*34px;/);
+  assert.match(cssSource, /\.endless-heart\s*\{[\s\S]*width:\s*32px;[\s\S]*height:\s*32px;/);
   assert.match(hudRule, /background:\s*transparent;/);
   assert.match(hudRule, /box-shadow:\s*none;/);
   assert.match(hudRule, /backdrop-filter:\s*none;/);

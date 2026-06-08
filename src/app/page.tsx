@@ -111,6 +111,7 @@ import { RoundIntro } from "@/features/game-flow/round-intro";
 import { buildAdvancedPerfectTrials } from "@/features/rounds/perfect-trials";
 import { RoundPlayer } from "@/features/rounds/round-player";
 import { LuckDrawScreen } from "@/features/results/luck-draw-screen";
+import { resolveLuckCoinTestScore } from "@/lib/luck-coin-test";
 import { AvatarLabScreen } from "@/features/player-avatar/avatar-lab-screen";
 import {
   PlayerAvatar,
@@ -846,7 +847,11 @@ export default function Home() {
     const previousProgress = advancedProgressRef.current;
     const beforeStars = getAdvancedTotalStars(previousProgress);
     const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
-    const result = recordLuckDraw(previousProgress, Math.floor(Math.random() * 101));
+    const luckPointGain = resolveLuckCoinTestScore(Math.random());
+    const result = recordLuckDraw(
+      previousProgress,
+      Math.min(100, previousProgress.luckBestScore + luckPointGain),
+    );
     if (!result.outcome) return null;
     const nextProgress = markLegend100SkinUnlockedWhenDisplayed(result.progress, trialsRef.current);
     const afterStars = getAdvancedTotalStars(nextProgress);
