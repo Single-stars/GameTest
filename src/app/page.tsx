@@ -126,7 +126,7 @@ import {
   writePersistedPlayerAvatarSkin,
 } from "@/features/player-avatar/player-avatar-storage";
 import { useCustomAvatarImage } from "@/features/player-avatar/use-custom-avatar-image";
-import { RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
+import { AppExitConfirmDialog, RestartConfirmDialog } from "@/features/results/restart-confirm-dialog";
 import { ResultScreen } from "@/features/results/result-screen";
 import { RewardOverlay, type RewardOverlayItem } from "@/features/rewards/reward-overlay";
 import { ShareImageScreen } from "@/features/results/share-image-screen";
@@ -263,6 +263,7 @@ export default function Home() {
   const [homeConsentAccepted, setHomeConsentAccepted] = useState(false);
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [advancedUnlockPulseId, setAdvancedUnlockPulseId] = useState(0);
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedProgress>(() => createDefaultAdvancedProgress());
   const [advancedChallenge, setAdvancedChallenge] = useState<AdvancedChallengeState | null>(null);
@@ -296,6 +297,7 @@ export default function Home() {
   const appHistoryActiveRef = useRef(false);
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
   const skipNextPopRef = useRef(false);
+  const exitConfirmedRef = useRef(false);
   const appBackHandlerRef = useRef<() => AppBackNavigation>(() => "unhandled");
   const { runModeTransition, runRouteTransition, transitionState } = useModeTransition();
   const currentRound = rounds[roundIndex];
@@ -450,6 +452,7 @@ export default function Home() {
     setShareImageTitle(null);
     setShareCopyNoticeId(0);
     setRestartConfirmOpen(false);
+    setExitConfirmOpen(false);
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge(null);
     setChallengeInviteVisible(false);
@@ -470,6 +473,17 @@ export default function Home() {
       persistGameState(null, advancedProgressRef.current);
     });
   };
+
+  const confirmExitGame = useCallback(() => {
+    setExitConfirmOpen(false);
+    if (typeof window === "undefined") return;
+    exitConfirmedRef.current = true;
+    appHistoryActiveRef.current = false;
+    appHistoryLayerRef.current = 0;
+    skipNextPopRef.current = true;
+    window.history.back();
+    window.setTimeout(() => window.history.back(), 0);
+  }, []);
 
   const requestRestartToHome = () => {
     if (trialsRef.current.length > 0) {
@@ -1254,8 +1268,19 @@ export default function Home() {
       stage,
       restartConfirmOpen,
       advancedBackSource: advancedChallengeRef.current?.mode ?? null,
+      exitConfirmOpen,
     });
     if (navigation === "unhandled") return "unhandled";
+    if (exitConfirmOpen) {
+      setExitConfirmOpen(false);
+      writeHistoryGuard("push", 1);
+      return navigation;
+    }
+    if (navigation === "confirm-exit") {
+      setExitConfirmOpen(true);
+      writeHistoryGuard("push", 1);
+      return "guard";
+    }
     if (restartConfirmOpen) {
       setRestartConfirmOpen(false);
       return navigation;
@@ -1285,7 +1310,7 @@ export default function Home() {
       return navigation;
     }
     return navigation;
-  }, [backOutdoorAdventureToHomeworld, clearCurrentRunToHome, closeAdvancedChallenge, closeAvatarLab, closeLuckDraw, closeShareImage, restartConfirmOpen, stage]);
+  }, [backOutdoorAdventureToHomeworld, clearCurrentRunToHome, closeAdvancedChallenge, closeAvatarLab, closeLuckDraw, closeShareImage, exitConfirmOpen, restartConfirmOpen, stage, writeHistoryGuard]);
 
   useEffect(() => {
     appBackHandlerRef.current = handleAppBack;
@@ -1306,6 +1331,7 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
+    if (exitConfirmedRef.current) return undefined;
     const historyLayer: AppBackHistoryLayer = getAppBackHistoryLayer({
       stage,
       restartConfirmOpen,
@@ -1330,9 +1356,9 @@ export default function Home() {
       if (!appHistoryActiveRef.current) return;
       const landedLayer = readAppBackHistoryLayer(event.state);
       const navigation = appBackHandlerRef.current();
-      if (navigation === "guard" && landedLayer > 0) {
+      if (navigation === "guard") {
         appHistoryActiveRef.current = true;
-        appHistoryLayerRef.current = landedLayer;
+        appHistoryLayerRef.current = landedLayer > 0 ? landedLayer : appHistoryLayerRef.current || 1;
       } else {
         appHistoryActiveRef.current = false;
         appHistoryLayerRef.current = 0;
@@ -1341,7 +1367,7 @@ export default function Home() {
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [advancedChallenge, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
+  }, [advancedChallenge, exitConfirmOpen, releaseHistoryGuard, restartConfirmOpen, stage, writeHistoryGuard]);
 
   if (!localStateHydrated) {
     return (
@@ -1522,6 +1548,12 @@ export default function Home() {
         <RestartConfirmDialog
           onCancel={() => setRestartConfirmOpen(false)}
           onConfirm={confirmRestartToHome}
+        />
+      ) : null}
+      {exitConfirmOpen ? (
+        <AppExitConfirmDialog
+          onCancel={() => setExitConfirmOpen(false)}
+          onConfirm={confirmExitGame}
         />
       ) : null}
       {challengeNoticeVisible && pendingEndlessChallenge && !challengeInviteVisible ? (

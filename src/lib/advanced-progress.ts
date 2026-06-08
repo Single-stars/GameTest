@@ -111,7 +111,7 @@ export type AdvancedBackSource =
 export type AdvancedBackDestination = "result" | "challenge";
 export type AdvancedCompletionAction = "retry" | "next" | "back";
 export type AppStage = "home" | "homeworld" | "outdoor-adventure" | "intro" | "playing" | "result" | "share" | "advanced" | "luck" | "avatar-lab";
-export type AppBackNavigation = "unhandled" | "release" | "guard";
+export type AppBackNavigation = "unhandled" | "release" | "guard" | "confirm-exit";
 export type AppBackHistoryLayer = 0 | 1 | 2;
 
 export type AdvancedLevelTone =
@@ -545,7 +545,19 @@ export function getAdvancedBackDestination(source: AdvancedBackSource): Advanced
 }
 
 export function shouldGuardAppBack(stage: AppStage, restartConfirmOpen: boolean) {
-  return restartConfirmOpen || (stage !== "home" && stage !== "homeworld" && stage !== "result");
+  const guardedStages: readonly AppStage[] = [
+    "home",
+    "homeworld",
+    "outdoor-adventure",
+    "intro",
+    "playing",
+    "result",
+    "share",
+    "advanced",
+    "luck",
+    "avatar-lab",
+  ];
+  return restartConfirmOpen || guardedStages.includes(stage);
 }
 
 export function getAppBackHistoryLayer({
@@ -579,13 +591,17 @@ export function resolveAppBackNavigation({
   stage,
   restartConfirmOpen,
   advancedBackSource,
+  exitConfirmOpen = false,
 }: {
   stage: AppStage;
   restartConfirmOpen: boolean;
   advancedBackSource?: AdvancedBackSource | null;
+  exitConfirmOpen?: boolean;
 }): AppBackNavigation {
+  if (exitConfirmOpen) return "guard";
   if (restartConfirmOpen) return shouldGuardAppBack(stage, false) ? "guard" : "release";
   if (stage === "share" || stage === "luck" || stage === "avatar-lab" || stage === "outdoor-adventure" || stage === "intro" || stage === "playing") return "release";
+  if (stage === "home" || stage === "homeworld" || stage === "result") return "confirm-exit";
   if (stage !== "advanced") return "unhandled";
   if (!advancedBackSource) return "release";
   return getAdvancedBackDestination(advancedBackSource) === "challenge" ? "guard" : "release";

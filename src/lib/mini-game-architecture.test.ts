@@ -219,6 +219,15 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(resultScreenSource, /export function ResultScreen/);
   assert.match(luckDrawScreenSource, /export function LuckDrawScreen/);
   assert.match(restartDialogSource, /export function RestartConfirmDialog/);
+  assert.match(restartDialogSource, /export function AppExitConfirmDialog/);
+  assert.match(appPageSource, /const \[exitConfirmOpen, setExitConfirmOpen\] = useState\(false\);/);
+  assert.match(appPageSource, /const exitConfirmedRef = useRef\(false\);/);
+  assert.match(appPageSource, /exitConfirmedRef\.current = true;[\s\S]*window\.history\.back\(\);[\s\S]*window\.setTimeout\(\(\) => window\.history\.back\(\), 0\);/);
+  assert.match(appPageSource, /if \(exitConfirmedRef\.current\) return undefined;/);
+  assert.match(appPageSource, /exitConfirmOpen,/);
+  assert.match(appPageSource, /if \(navigation === "confirm-exit"\) \{[\s\S]*setExitConfirmOpen\(true\);[\s\S]*writeHistoryGuard\("push", 1\);[\s\S]*return "guard";/);
+  assert.match(appPageSource, /if \(exitConfirmOpen\) \{[\s\S]*setExitConfirmOpen\(false\);[\s\S]*writeHistoryGuard\("push", 1\);[\s\S]*return navigation;/);
+  assert.match(appPageSource, /<AppExitConfirmDialog[\s\S]*onCancel=\{\(\) => setExitConfirmOpen\(false\)\}[\s\S]*onConfirm=\{confirmExitGame\}/);
   assert.match(restartDialogSource, /className="restart-dialog-backdrop"[\s\S]*onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.doesNotMatch(restartDialogSource, /className="restart-dialog-backdrop"[\s\S]*onPointerDown=\{onCancel\}/);
   assert.match(restartDialogSource, /className="secondary-button"[\s\S]*onClick=\{onCancel\}/);
