@@ -515,7 +515,7 @@ test("fall down multiplayer spectator sync carries fragile platform state", () =
   assert.match(renderSource, /className="movement-control-backdrop"/);
   assert.match(cssSource, /\.movement-control-backdrop\s*{[\s\S]*pointer-events:\s*none;/);
   assert.match(cssSource, /\.movement-control-backdrop\s*{[\s\S]*z-index:\s*1;/);
-  assert.match(cssSource, /\.movement-control-backdrop::before\s*{[\s\S]*border-left:\s*2px dashed/);
+  assert.doesNotMatch(cssSource, /\.movement-control-backdrop::before\s*{[\s\S]*border-left:\s*2px dashed/);
 }
 );
 
@@ -543,10 +543,18 @@ test("fall down and doodle movement guides are large base-only background afford
   assert.match(doodleSource, /doodle-stage[\s\S]{0,180}\$\{baseGuideVisible \? "base-guided" : ""\}/);
   assert.match(fallDownSource, /\{baseGuideVisible \? \([\s\S]{0,160}<div className="movement-control-backdrop"/);
   assert.match(doodleSource, /\{baseGuideVisible \? \([\s\S]{0,160}<div className="movement-control-backdrop"/);
+  assert.match(fallDownSource, /长按左右屏幕移动/);
+  assert.match(doodleSource, /长按左右屏幕移动/);
 
+  const guideBeforeRule = cssSource.match(/\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop\s*\{/);
-  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/);
-  assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*border-radius:\s*999px;/);
+  assert.match(guideBeforeRule, /top:\s*0;[\s\S]*bottom:\s*0;/);
+  assert.match(guideBeforeRule, /width:\s*10px;/);
+  assert.match(guideBeforeRule, /background-image:\s*url\("data:image\/svg\+xml/);
+  assert.match(guideBeforeRule, /background-size:\s*10px 66px;/);
+  assert.match(guideBeforeRule, /background-repeat:\s*repeat-y;/);
+  assert.doesNotMatch(guideBeforeRule, /repeating-linear-gradient/);
   assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::after\s*\{/);
+  assert.match(cssSource, /\.movement-control-backdrop > span\s*\{/);
   assert.doesNotMatch(cssSource, /\.prototype-stage:not\(\.base-guided\) \.movement-control-backdrop/);
 });

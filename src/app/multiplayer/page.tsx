@@ -87,6 +87,10 @@ const MATCH_LOGIC_HEIGHT = 640;
 const MOVEMENT_SPECTATOR_GAME_IDS: ReadonlySet<MiniGameId> = new Set(["flappy", "doodle", "fall-down", "square-jump"]);
 type CopyStatus = "idle" | "copied" | "manual";
 type RoomShareCopyStatus = CopyStatus | "expired";
+type LevelSelectAutoMoveRequest = {
+  action: "ready" | "exit";
+  id: number;
+};
 
 function createSeed() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -253,6 +257,7 @@ function standaloneStatusText(status: MultiplayerSnapshot["status"]) {
 }
 
 function standaloneConciseStatusText(snapshot: MultiplayerSnapshot, errorText: string) {
+  if (snapshot.role === "host" && snapshot.status === "waiting" && !snapshot.opponentPlayer) return "等待好友加入";
   if (snapshot.opponentPlayer === null && snapshot.connectionState === "connected" && snapshot.status === "connected") return "好友已断开";
   if (snapshot.connectionState === "reconnecting" || snapshot.connectionState === "stale") return "断线重连中";
   if (snapshot.status === "failed" || snapshot.status === "disconnected") return errorText || "重连失败请重新创建或加入房间";
@@ -353,6 +358,7 @@ function MultiplayerPageContent() {
   const [standaloneJoinDialogOpen, setStandaloneJoinDialogOpen] = useState(false);
   const [standaloneJoinRoomCode, setStandaloneJoinRoomCode] = useState(roomParam);
   const [standaloneExitConfirmOpen, setStandaloneExitConfirmOpen] = useState(false);
+  const [standaloneLevelSelectAutoMoveRequest, setStandaloneLevelSelectAutoMoveRequest] = useState<LevelSelectAutoMoveRequest | null>(null);
   const [matchWins, setMatchWins] = useState({ self: 0, opponent: 0 });
   const [copyStatus, setCopyStatus] = useState<RoomShareCopyStatus>("idle");
   const [roomCodeCopyStatus, setRoomCodeCopyStatus] = useState<RoomShareCopyStatus>("idle");
@@ -803,6 +809,14 @@ function MultiplayerPageContent() {
     }
     setStandaloneExitConfirmOpen(true);
   }, [confirmStandaloneLevelSelectExit, snapshot.role]);
+
+  const requestStandaloneReadyAutoMove = useCallback(() => {
+    setStandaloneLevelSelectAutoMoveRequest((current) => ({ action: "ready", id: (current?.id ?? 0) + 1 }));
+  }, []);
+
+  const requestStandaloneExitAutoMove = useCallback(() => {
+    setStandaloneLevelSelectAutoMoveRequest((current) => ({ action: "exit", id: (current?.id ?? 0) + 1 }));
+  }, []);
 
   const cancelStandaloneLevelSelectExit = useCallback(() => {
     setStandaloneExitConfirmOpen(false);
@@ -1394,6 +1408,7 @@ function MultiplayerPageContent() {
         ) : (
           <>
             <MultiplayerLevelSelectRoom
+              autoMoveRequest={standaloneLevelSelectAutoMoveRequest}
               key={standaloneLevelSelectRoomKey}
               leftExitLabel={standaloneLeftExitLabel}
               opponentCustomAvatar={snapshot.opponentPlayer?.customAvatar}
@@ -1463,8 +1478,8 @@ function MultiplayerPageContent() {
                   )}
                 </div>
                 <div className="multiplayer-select-guide-row">
-                  <button type="button" onClick={requestStandaloneLevelSelectExit}>{standaloneLeftExitLabel}</button>
-                  {standaloneReadyAvailable ? <button className="ready" type="button" onClick={() => setLevelSelectReady(true)}>{`准备开始 →`}</button> : null}
+                  <button type="button" onClick={requestStandaloneExitAutoMove}>{standaloneLeftExitLabel}</button>
+                  {standaloneReadyAvailable ? <button className="ready" type="button" onClick={requestStandaloneReadyAutoMove}>{`准备开始 →`}</button> : null}
                 </div>
               </section>
             ) : null}

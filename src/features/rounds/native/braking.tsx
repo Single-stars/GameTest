@@ -18,9 +18,9 @@ import { DifficultyWaveBackdrop } from "@/features/visuals/difficulty-wave-backd
 import {
   getAdvancedBrakeDangerLeft,
   getAdvancedBrakeDisplayProgress,
+  getAdvancedBrakeEventProgressTargets,
   getAdvancedBrakeEventOptions,
   getAdvancedBrakeHasReachedFinish,
-  getAdvancedBrakeRandomDangerLeft,
   getAdvancedBrakeRuleHint,
   getAdvancedBrakeReleaseOutcome,
   getAdvancedBrakeSchedulerStep,
@@ -397,6 +397,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const eventTimerRef = useRef(initialEventDelayMs);
 
   const hazardIndexRef = useRef(0);
+  const finiteEventProgressTargetsRef = useRef<number[]>([]);
 
   const previousHazardRef = useRef<AdvancedBrakeEvent | null>(null);
   const fakeEventUsedRef = useRef(false);
@@ -446,6 +447,23 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
 
   const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
+
+  useEffect(() => {
+    if (endless || holdingRef.current || hazardIndexRef.current > 0) return;
+    const finiteReactionWindowMs = resolveAdvancedBrakingReactionWindowMs(reactionWindowMs, 1);
+    const maxRunnerLeftPercent = Math.max(
+      0,
+      100 -
+        trackMetrics.runnerWidthPercent -
+        trackMetrics.hazardWidthPercent -
+        (speedPerSecond * finiteReactionWindowMs) / 1000,
+    );
+    finiteEventProgressTargetsRef.current = getAdvancedBrakeEventProgressTargets({
+      eventCount: eventCountTarget,
+      maxRunnerLeftPercent,
+      randomValueAt: () => Math.random(),
+    });
+  }, [endless, eventCountTarget, reactionWindowMs, speedPerSecond, trackMetrics.hazardWidthPercent, trackMetrics.runnerWidthPercent]);
 
   useEffect(() => {
     endlessRef.current = endless;
@@ -788,6 +806,13 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     return true;
   }, [bumpAdvancedBrakingHazard, resetEventTimer]);
 
+  const shouldSpawnFiniteAdvancedBrakeEvent = useCallback(function shouldSpawnFiniteAdvancedBrakeEvent(runnerLeftPercent: number) {
+    if (endlessRef.current || hazardRef.current || rulePortalRef.current || finishedRef.current) return false;
+    if (hazardIndexRef.current >= activeEventCountTarget) return false;
+    const nextTarget = finiteEventProgressTargetsRef.current[hazardIndexRef.current];
+    return typeof nextTarget === "number" && runnerLeftPercent >= nextTarget;
+  }, [activeEventCountTarget]);
+
 
 
   const recordHoldSuccess = useCallback(
@@ -906,18 +931,13 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
       recentEndlessHazardKeysRef.current = [...recentEndlessHazardKeysRef.current.filter((key) => key !== pickedKey), pickedKey].slice(-4);
     }
 
-    const hazardLeft = endlessRuntime
-      ? getAdvancedBrakeDangerLeft({
-          runnerLeftPercent: progressRef.current,
-          runnerWidthPercent: trackMetrics.runnerWidthPercent,
-          hazardWidthPercent: trackMetrics.hazardWidthPercent,
-          speedPerSecond: activeSpeedPerSecond,
-          reactionWindowMs: activeReactionWindowMs,
-        })
-      : getAdvancedBrakeRandomDangerLeft({
-          hazardWidthPercent: trackMetrics.hazardWidthPercent,
-          randomValue: Math.random(),
-        });
+    const hazardLeft = getAdvancedBrakeDangerLeft({
+      runnerLeftPercent: progressRef.current,
+      runnerWidthPercent: trackMetrics.runnerWidthPercent,
+      hazardWidthPercent: trackMetrics.hazardWidthPercent,
+      speedPerSecond: activeSpeedPerSecond,
+      reactionWindowMs: activeReactionWindowMs,
+    });
 
     if (hazardLeft === null) {
 
@@ -1209,11 +1229,6 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
           }
         }
 
-        if (!activeEndless && !hazardRef.current && !rulePortalRef.current && !canCompleteAdvancedBrakingRun()) {
-          eventTimerRef.current = 0;
-          startHazard();
-        }
-
         if (!activeEndless && getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: next, runnerWidthPercent })) {
           if (!canCompleteAdvancedBrakingRun()) {
             frameRef.current = requestAnimationFrame(tick);
@@ -1260,7 +1275,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
           }) !== null;
 
-        const scheduleStep = getAdvancedBrakeSchedulerStep({
+        if (!activeEndless && canPlaceNextDanger && shouldSpawnFiniteAdvancedBrakeEvent(next)) {
+          startHazard();
+        }
+
+        const scheduleStep = activeEndless ? getAdvancedBrakeSchedulerStep({
 
           holding: holdingRef.current,
 
@@ -1276,7 +1295,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
           nearFinish: activeEndless ? false : !canPlaceNextDanger || next >= 100 - finishSafeDistance,
 
-        });
+        }) : { eventTimerMs: eventTimerRef.current, shouldSpawn: false };
 
         eventTimerRef.current = scheduleStep.eventTimerMs;
 
@@ -1324,6 +1343,8 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     resetAdvancedBrakingInput,
 
     resetEventTimer,
+
+    shouldSpawnFiniteAdvancedBrakeEvent,
 
     showAdvancedFeedback,
 

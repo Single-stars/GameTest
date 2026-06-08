@@ -24,6 +24,8 @@ export {
 
   getAdvancedBrakeDisplayProgress,
 
+  getAdvancedBrakeEventProgressTargets,
+
   getAdvancedBrakeEventOptions,
 
   getAdvancedBrakeHasReachedFinish,

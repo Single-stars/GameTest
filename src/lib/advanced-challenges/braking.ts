@@ -182,6 +182,32 @@ export function getAdvancedBrakeRandomDangerLeft({
   return Number((clampedRandom * maxHazardLeft).toFixed(4));
 }
 
+export function getAdvancedBrakeEventProgressTargets({
+  eventCount,
+  maxRunnerLeftPercent,
+  randomValueAt,
+}: {
+  eventCount: number;
+  maxRunnerLeftPercent: number;
+  randomValueAt: (index: number) => number;
+}) {
+  const count = Math.max(0, Math.floor(eventCount));
+  const maxProgress = Math.max(0, maxRunnerLeftPercent);
+  if (count <= 0 || maxProgress <= 0) return [];
+
+  const segmentSize = maxProgress / count;
+  const edgePadding = Math.min(3, segmentSize / 3);
+  return Array.from({ length: count }, (_, index) => {
+    const segmentStart = segmentSize * index;
+    const segmentEnd = index === count - 1 ? maxProgress : segmentStart + segmentSize;
+    const clampedRandom = Math.min(1, Math.max(0, randomValueAt(index)));
+    const rawTarget = segmentStart + clampedRandom * segmentSize;
+    const minTarget = segmentStart + edgePadding;
+    const maxTarget = Math.max(minTarget, segmentEnd - edgePadding);
+    return Number(Math.min(maxTarget, Math.max(minTarget, rawTarget)).toFixed(4));
+  });
+}
+
 export function getAdvancedBrakeDisplayProgress({
   runnerLeftPercent,
   runnerWidthPercent,

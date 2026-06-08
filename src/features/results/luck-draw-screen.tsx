@@ -8,7 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
-import { getLuckCoinTestTier, resolveLuckCoinTestScore } from "@/lib/luck-coin-test";
+import { getLuckCoinTestPointTone, getLuckCoinTestTier, resolveLuckCoinTestScore } from "@/lib/luck-coin-test";
 import {
   canUseLuckDraw,
   canUseLuckDrawBatch,
@@ -192,62 +192,61 @@ export function LuckDrawScreen({
 type LuckCoinTestResultPopup = {
   points: number;
   tick: number;
+  tone: string;
 };
 
 function LuckCoinTestCard() {
   const [score, setScore] = useState(0);
-  const [lastPoints, setLastPoints] = useState(0);
+  const [drawCount, setDrawCount] = useState(0);
   const [flipTick, setFlipTick] = useState(0);
   const [resultPopup, setResultPopup] = useState<LuckCoinTestResultPopup | null>(null);
   const tier = getLuckCoinTestTier(score);
-  const tierLabel = tier.star === 0
-    ? "未入段"
-    : tier.star === 1
-      ? "青铜段"
-      : tier.star === 2
-        ? "白银段"
-        : tier.star === 3
-          ? "紫晶段"
-          : tier.star === 4
-            ? "蓝钻段"
-            : "满运段";
-  const nextTierText = tier.nextThreshold === null
-    ? "已到最高段位"
-    : `距下阶段还差 ${Math.max(0, tier.nextThreshold - score)} 分`;
+  const testCoinBalance = 9999;
 
   const testDraw = () => {
     const points = resolveLuckCoinTestScore(Math.random());
+    const tone = getLuckCoinTestPointTone(points);
     setScore((current) => {
-      const nextScore = current + points;
+      const nextScore = Math.min(100, current + points);
       setResultPopup({
         points,
         tick: Date.now(),
+        tone,
       });
       return nextScore;
     });
-    setLastPoints(points);
+    setDrawCount((current) => Math.min(80, current + 1));
     setFlipTick((current) => current + 1);
   };
 
   return (
     <section className="luck-coin-test" aria-label="新版幸运币测试">
-      <button
-        className={`luck-coin-test-card tone-${tier.tone} ${lastPoints >= 3 ? "rare" : ""}`}
-        key={flipTick}
-        type="button"
-        onClick={testDraw}
-      >
-        <span className="luck-coin-test-title">新版幸运币</span>
-        <strong>{score}</strong>
-        <span className="luck-coin-test-tier">{tierLabel}</span>
-        <span className="luck-coin-test-next">{nextTierText}</span>
-        <span className="luck-coin-test-last" aria-live="polite">{lastPoints > 0 ? `本次 +${lastPoints}` : "点击获得 1-5"}</span>
-        {resultPopup ? (
-          <span className={`luck-coin-test-result ${resultPopup.points >= 3 ? "rare" : ""}`} key={resultPopup.tick} aria-hidden="true">
-            +{resultPopup.points}
-          </span>
-        ) : null}
-      </button>
+      <div className="luck-coin-test-layout">
+        <button
+          className={`luck-coin-test-score-card tone-${tier.tone} ${resultPopup ? `result-tone-${resultPopup.tone}` : ""}`}
+          key={flipTick}
+          type="button"
+          onClick={testDraw}
+        >
+          <strong>{score}</strong>
+          <span className="luck-coin-test-last" aria-live="polite">消耗 1 枚幸运币</span>
+          {resultPopup ? (
+            <span className={`luck-coin-test-result tone-${resultPopup.tone}`} key={resultPopup.tick} aria-hidden="true">
+              +{resultPopup.points}
+            </span>
+          ) : null}
+        </button>
+        <div className="luck-coin-test-side">
+          <div className="luck-coin-test-stat-card">
+            <span>已投币</span>
+            <strong>{drawCount}/80</strong>
+          </div>
+          <div className="luck-coin-test-stat-card">
+            <span>幸运币</span>
+            <strong>{testCoinBalance}</strong>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

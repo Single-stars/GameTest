@@ -1525,7 +1525,7 @@ export function FallDownPrototype({
         <DifficultyWaveBackdrop />
         {baseGuideVisible ? (
           <div className="movement-control-backdrop" aria-hidden="true">
-          长按左右屏幕操控方向
+          <span>长按左右屏幕移动</span>
         </div>
         ) : null}
         <MiniGameFpsBadge fps={fps} />

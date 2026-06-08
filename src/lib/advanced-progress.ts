@@ -628,9 +628,9 @@ export function getLuckLevelTone(stars: number): AdvancedLevelTone {
 export function getLuckScoreTone(score: number): AdvancedLevelTone {
   const normalizedScore = clampScore(score);
   if (normalizedScore >= 100) return "advanced-gold";
-  if (normalizedScore >= 70) return "advanced-tier-3";
-  if (normalizedScore >= 40) return "advanced-tier-2";
-  if (normalizedScore >= 10) return "advanced-tier-1";
+  if (normalizedScore >= 75) return "advanced-tier-3";
+  if (normalizedScore >= 50) return "advanced-tier-2";
+  if (normalizedScore >= 25) return "advanced-tier-1";
   return "advanced-empty";
 }
 

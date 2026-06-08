@@ -535,14 +535,14 @@ test("homeworld level-select start flow waits in the room before sending startMa
   assert.match(roomSource, /selectionLocked = selfReady \|\| opponentReady/);
   assert.match(roomSource, /if \(!slot \|\| selectionLocked\) return;/);
   assert.match(roomSource, /if \(!selectionAvailable\) \{[\s\S]{0,120}onUnavailablePlayMode\?\.\(selectionUnavailableMessage\);[\s\S]{0,60}return;/);
-  assert.match(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
+  assert.match(roomSource, /disabled=\{selectionLocked\}/);
   assert.match(roomSource, /skinId: selfSkin/);
   assert.match(roomSource, /className="multiplayer-level-room-player remote"/);
   assert.match(pageSource, /opponentPresence=\{snapshot\.opponentLevelSelectPresence\}/);
   assert.match(pageSource, /opponentSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
   assert.match(roomSource, /← 回到家园/);
   assert.match(roomSource, /准备开始 →/);
-  assert.match(roomSource, /\{readyGuideVisible \? <button className="multiplayer-level-guide right" type="button" onClick=\{confirmReadyFromGuide\}>/);
+  assert.match(roomSource, /\{readyGuideVisible \? <button className="multiplayer-level-guide right" type="button" onClick=\{requestReadyAutoMove\}>/);
   assert.match(roomSource, /你已准备/);
   assert.match(roomSource, /已准备/);
   assert.match(roomSource, /startCountdownSeconds/);
@@ -563,10 +563,10 @@ test("standalone level-select controls stay locked until a room exists", () => {
   assert.match(roomSource, /selectionAvailable\?: boolean;/);
   assert.match(roomSource, /selectionUnavailableMessage\?: string;/);
   assert.match(roomSource, /if \(!selectionAvailable\) \{[\s\S]{0,120}onUnavailablePlayMode\?\.\(selectionUnavailableMessage\);[\s\S]{0,60}return;/);
-  assert.match(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
-  assert.match(roomSource, /aria-disabled=\{!selectionAvailable \|\| selectionLocked \|\| reachableSlot !== slot \? true : undefined\}/);
+  assert.match(roomSource, /disabled=\{selectionLocked\}/);
+  assert.match(roomSource, /aria-disabled=\{!selectionAvailable \|\| selectionLocked \? true : undefined\}/);
   assert.match(roomSource, /!selectionAvailable \? "locked" : ""/);
-  assert.match(roomSource, /onClick=\{\(\) => interactWithSlot\(!selectionAvailable \? slot : reachableSlot === slot \? slot : null\)\}/);
+  assert.match(roomSource, /onClick=\{\(\) => interactWithSlot\(slot\)\}/);
   assert.match(pageSource, /const standaloneSelectionAvailable = standalonePeerConnected;/);
   assert.match(pageSource, /const standaloneSelectionUnavailableMessage = snapshot\.status === "waiting"\s*\?\s*"请先邀请好友加入房间"\s*:\s*"请先创建或加入房间";/);
   assert.match(pageSource, /selectionAvailable=\{standaloneSelectionAvailable\}/);
@@ -779,9 +779,9 @@ test("level-select text guides are clickable commands without hijacking floor mo
   const guideRowRule = cssRule(cssSource, ".multiplayer-level-room-guides");
   const guideRule = cssRule(cssSource, ".multiplayer-level-guide");
 
-  assert.match(roomSource, /const confirmReadyFromGuide = useCallback/);
-  assert.match(roomSource, /onClick=\{onBackToRoom\}/);
-  assert.match(roomSource, /onClick=\{confirmReadyFromGuide\}/);
+  assert.match(roomSource, /const requestExitAutoMove = useCallback/);
+  assert.match(roomSource, /onClick=\{requestExitAutoMove\}/);
+  assert.match(roomSource, /onClick=\{requestReadyAutoMove\}/);
   assert.match(roomSource, /<button className="multiplayer-level-guide left" type="button"/);
   assert.match(roomSource, /<button className="multiplayer-level-guide right" type="button"/);
   assert.match(guideRowRule, /pointer-events:\s*none;/);
@@ -1282,11 +1282,56 @@ test("standalone multiplayer room controls hide after peer connection and ready 
   assert.match(pageSource, /const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;/);
   assert.match(pageSource, /const standaloneRoomBarVisible = !standalonePeerConnected;/);
   assert.match(pageSource, /\{standaloneRoomBarVisible \? \(/);
-  assert.match(pageSource, /standaloneReadyAvailable \? <button className="ready" type="button" onClick=\{\(\) => setLevelSelectReady\(true\)\}>/);
+  assert.match(pageSource, /standaloneReadyAvailable \? <button className="ready" type="button" onClick=\{requestStandaloneReadyAutoMove\}>/);
+  assert.match(pageSource, /onClick=\{requestStandaloneExitAutoMove\}>\{standaloneLeftExitLabel\}/);
   assert.match(pageSource, /readyAvailable=\{standaloneReadyAvailable\}/);
+  assert.match(pageSource, /autoMoveRequest=\{standaloneLevelSelectAutoMoveRequest\}/);
   assert.match(roomSource, /readyAvailable = true/);
   assert.match(roomSource, /const readyGuideVisible = readyAvailable && complete;/);
-  assert.match(roomSource, /const nextReady = readyAvailable && isMultiplayerLevelSelectReadyZone\(selection, clamped\);/);
+  assert.match(roomSource, /const nextReady = readyAvailable && autoMoveTaskRef\.current === null && isMultiplayerLevelSelectReadyZone\(selection, clamped\);/);
+});
+
+test("multiplayer level select click actions auto-move before ready or exit and release player input afterward", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(roomSource, /type LevelSelectAutoMoveTask = "ready" \| "exit";/);
+  assert.match(roomSource, /const autoMoveTaskRef = useRef<LevelSelectAutoMoveTask \| null>\(null\);/);
+  assert.match(roomSource, /const requestReadyAutoMove = useCallback/);
+  assert.match(roomSource, /const requestExitAutoMove = useCallback/);
+  assert.match(roomSource, /startAutoMove\("ready"\)/);
+  assert.match(roomSource, /startAutoMove\("exit"\)/);
+  assert.match(roomSource, /if \(autoMoveTaskRef\.current\) return;/);
+  assert.match(roomSource, /publishPresence\(playerXRef\.current, autoDirection, readyRef\.current\)/);
+  assert.match(roomSource, /completeAutoMoveTask\(activeAutoMoveTask\)/);
+  assert.match(roomSource, /inputDirectionRef\.current = "none";[\s\S]{0,220}setMoving\(false\);/);
+  assert.match(roomSource, /if \(task === "ready"\)[\s\S]{0,120}updateReady\(true\);/);
+  assert.match(roomSource, /if \(task === "exit"\)[\s\S]{0,240}window\.setTimeout\(onBackToRoom, 0\);/);
+  assert.match(roomSource, /onKeyDown=\{\(event\) => \{[\s\S]{0,120}if \(autoMoveTaskRef\.current\) return;/);
+  assert.match(roomSource, /onKeyUp=\{\(event\) => \{[\s\S]{0,120}if \(autoMoveTaskRef\.current\) return;/);
+  assert.match(pageSource, /requestStandaloneReadyAutoMove/);
+  assert.match(pageSource, /requestStandaloneExitAutoMove/);
+  assert.match(cssSource, /\.multiplayer-level-guide\s*\{[\s\S]*min-height:\s*44px;/);
+});
+
+test("multiplayer level select floor buttons are click-driven instead of distance-gated", () => {
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(roomSource, /onClick=\{\(\) => interactWithSlot\(slot\)\}/);
+  assert.doesNotMatch(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
+  assert.doesNotMatch(roomSource, /interactWithSlot\(!selectionAvailable \? slot : reachableSlot === slot \? slot : null\)/);
+});
+
+test("multiplayer level select scoreboard stacks names above avatars with crown next to the name", () => {
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+
+  assert.match(roomSource, /className="multiplayer-level-player-name"/);
+  assert.match(roomSource, /crownOwner === "self" \? <span className="multiplayer-player-crown" aria-hidden="true" \/> : null\}[\s\S]{0,80}<span>\{selfName\}<\/span>/);
+  assert.match(roomSource, /crownOwner === "opponent" \? <span className="multiplayer-player-crown" aria-hidden="true" \/> : null\}[\s\S]{0,80}<span>\{opponentName\}<\/span>/);
+  assert.match(cssSource, /\.multiplayer-level-score-side\s*\{[\s\S]*grid-template-rows:\s*auto auto;/);
+  assert.match(cssSource, /\.multiplayer-level-player-name\s*\{[\s\S]*max-width:\s*min\(28vw,\s*150px\);/);
 });
 
 test("standalone multiplayer left exit asks for confirmation before risky room leave actions", () => {
@@ -1703,6 +1748,7 @@ test("host peer failures keep signaling alive so the displayed room code remains
 
 test("host waiting room presence updates do not masquerade as reconnecting before a guest joins", () => {
   const sessionSource = readSource("./multiplayer-session.ts");
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
   const transportSource = readSource("./webrtc-transport.ts");
   const reportHomeworldSource = sessionSource.slice(
     sessionSource.indexOf("reportHomeworldState(homeworld"),
@@ -1723,6 +1769,16 @@ test("host waiting room presence updates do not masquerade as reconnecting befor
   assert.match(snapshotReplaySource, /if \(!this\.canSendPeerRoomMessage\(\)\) return;/);
   assert.match(sessionSource, /canSendPeerRoomMessageSnapshot\(this\.snapshot, this\.transport\?\.isConnected === true\)/);
   assert.match(transportSource, /send\(message: NetMessage\) \{[\s\S]{0,180}if \(!this\.connected\) return;/);
+  assert.match(sessionSource, /if \(this\.role === "host" && !this\.snapshot\.opponentPlayer\) \{[\s\S]{0,120}this\.resetHostWaitingState\(null\);[\s\S]{0,40}return;/);
+  assert.equal(
+    pageSource.indexOf('if (snapshot.role === "host" && snapshot.status === "waiting" && !snapshot.opponentPlayer)'),
+    pageSource.indexOf("function standaloneConciseStatusText") < 0 ? -1 : pageSource.indexOf('if (snapshot.role === "host" && snapshot.status === "waiting" && !snapshot.opponentPlayer)'),
+  );
+  assert.equal(
+    pageSource.indexOf('if (snapshot.role === "host" && snapshot.status === "waiting" && !snapshot.opponentPlayer)') <
+      pageSource.indexOf('if (snapshot.connectionState === "reconnecting" || snapshot.connectionState === "stale")'),
+    true,
+  );
 });
 
 test("homeworld room furniture and door actions are click-driven instead of distance-gated", () => {

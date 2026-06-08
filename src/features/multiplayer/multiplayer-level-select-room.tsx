@@ -22,8 +22,15 @@ import type { PlayerInfo } from "@/lib/multiplayer/types";
 const ROOM_PLAYER_SIZE = 58;
 const BUTTON_REACH = 12;
 const MOVE_SPEED = 42;
+const AUTO_MOVE_SPEED = 72;
 const EXIT_LEFT = -9;
 const LEVEL_SELECT_PRESENCE_SYNC_MS = 90;
+
+type LevelSelectAutoMoveTask = "ready" | "exit";
+type LevelSelectAutoMoveRequest = {
+  action: LevelSelectAutoMoveTask;
+  id: number;
+};
 
 type LevelSelectRoomProps = {
   opponentName?: string;
@@ -49,6 +56,7 @@ type LevelSelectRoomProps = {
   showGuides?: boolean;
   unavailableModeHint?: string | null;
   unavailableModeHintKey?: number;
+  autoMoveRequest?: LevelSelectAutoMoveRequest | null;
   onBackToRoom: () => void;
   onUnavailablePlayMode?: (message: string) => void;
   onPresenceChange: (presence: MultiplayerLevelSelectPresence) => void;
@@ -117,6 +125,7 @@ export function MultiplayerLevelSelectRoom({
   showGuides = true,
   unavailableModeHint = null,
   unavailableModeHintKey = 0,
+  autoMoveRequest = null,
   onBackToRoom,
   onUnavailablePlayMode,
   onPresenceChange,
@@ -129,6 +138,10 @@ export function MultiplayerLevelSelectRoom({
   const playerXRef = useRef(50);
   const inputDirectionRef = useRef<"left" | "right" | "none">("none");
   const inputPointerIdRef = useRef<number | null>(null);
+  const autoMoveTaskRef = useRef<LevelSelectAutoMoveTask | null>(null);
+  const autoMoveTargetRef = useRef(50);
+  const lastAutoMoveRequestIdRef = useRef<number | null>(null);
+  const [autoMoveTask, setAutoMoveTask] = useState<LevelSelectAutoMoveTask | null>(null);
   const returnedRef = useRef(false);
   const lastPresenceSentRef = useRef(0);
   const readyRef = useRef(selfReady);
@@ -187,12 +200,66 @@ export function MultiplayerLevelSelectRoom({
     [onReadyChange, publishPresence],
   );
 
-  const confirmReadyFromGuide = useCallback(() => {
-    if (!readyGuideVisible) return;
-    updateReady(true);
-  }, [readyGuideVisible, updateReady]);
+  const cancelAutoMove = useCallback(() => {
+    if (!autoMoveTaskRef.current) return;
+    autoMoveTaskRef.current = null;
+    setAutoMoveTask(null);
+    inputDirectionRef.current = "none";
+    inputPointerIdRef.current = null;
+    setMoving(false);
+    publishPresence(playerXRef.current, "none", readyRef.current);
+  }, [publishPresence]);
+
+  const completeAutoMoveTask = useCallback(
+    (task: LevelSelectAutoMoveTask) => {
+      autoMoveTaskRef.current = null;
+      setAutoMoveTask(null);
+      inputDirectionRef.current = "none";
+      inputPointerIdRef.current = null;
+      setMoving(false);
+      if (task === "ready") {
+        updateReady(true);
+        return;
+      }
+      if (task === "exit") {
+        updateReady(false);
+        publishPresence(playerXRef.current, "none", false);
+        window.setTimeout(onBackToRoom, 0);
+      }
+    },
+    [onBackToRoom, publishPresence, updateReady],
+  );
+
+  const startAutoMove = useCallback(
+    (task: LevelSelectAutoMoveTask) => {
+      if (autoMoveTaskRef.current) return;
+      if (task === "ready" && !readyGuideVisible) return;
+      const target = task === "ready" ? getMultiplayerLevelSelectRightLimit(selection) : EXIT_LEFT;
+      autoMoveTaskRef.current = task;
+      autoMoveTargetRef.current = target;
+      setAutoMoveTask(task);
+      inputPointerIdRef.current = null;
+      const autoDirection: "left" | "right" | "none" =
+        Math.abs(target - playerXRef.current) <= 0.5 ? "none" : target > playerXRef.current ? "right" : "left";
+      inputDirectionRef.current = autoDirection;
+      setMoving(autoDirection !== "none");
+      if (autoDirection !== "none") setDirection(autoDirection);
+      publishPresence(playerXRef.current, autoDirection, readyRef.current);
+      if (autoDirection === "none") completeAutoMoveTask(task);
+    },
+    [completeAutoMoveTask, publishPresence, readyGuideVisible, selection],
+  );
+
+  const requestReadyAutoMove = useCallback(() => {
+    startAutoMove("ready");
+  }, [startAutoMove]);
+
+  const requestExitAutoMove = useCallback(() => {
+    startAutoMove("exit");
+  }, [startAutoMove]);
 
   const setInputDirection = useCallback((nextDirection: "left" | "right" | "none") => {
+    if (autoMoveTaskRef.current) return;
     inputDirectionRef.current = nextDirection;
     setMoving(nextDirection !== "none");
     if (nextDirection !== "none") setDirection(nextDirection);
@@ -206,6 +273,7 @@ export function MultiplayerLevelSelectRoom({
 
   const beginMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      if (autoMoveTaskRef.current) return;
       if (isControlTarget(event.target)) return;
       inputPointerIdRef.current = event.pointerId;
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -216,6 +284,7 @@ export function MultiplayerLevelSelectRoom({
 
   const updateMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      if (autoMoveTaskRef.current) return;
       if (inputPointerIdRef.current !== event.pointerId) return;
       setInputDirection(chooseDirection(event));
     },
@@ -223,6 +292,7 @@ export function MultiplayerLevelSelectRoom({
   );
 
   const stopMove = useCallback((event?: PointerEvent<HTMLElement>) => {
+    if (autoMoveTaskRef.current) return;
     if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
     inputDirectionRef.current = "none";
     setMoving(false);
@@ -238,14 +308,23 @@ export function MultiplayerLevelSelectRoom({
   }, [selfReady]);
 
   useEffect(() => {
+    if (autoMoveTaskRef.current) return;
     if (isMultiplayerLevelSelectReadyZone(selection, playerX)) return;
     updateReady(false);
   }, [playerX, selection, updateReady]);
 
   useEffect(() => {
     if (readyAvailable && selectionAvailable) return;
+    cancelAutoMove();
     updateReady(false);
-  }, [readyAvailable, selectionAvailable, updateReady]);
+  }, [cancelAutoMove, readyAvailable, selectionAvailable, updateReady]);
+
+  useEffect(() => {
+    if (!autoMoveRequest) return;
+    if (lastAutoMoveRequestIdRef.current === autoMoveRequest.id) return;
+    lastAutoMoveRequestIdRef.current = autoMoveRequest.id;
+    startAutoMove(autoMoveRequest.action);
+  }, [autoMoveRequest, startAutoMove]);
 
   useEffect(() => {
     let frameId = 0;
@@ -254,13 +333,30 @@ export function MultiplayerLevelSelectRoom({
     const tick = (time: number) => {
       const dt = Math.min(0.032, Math.max(0, (time - lastTime) / 1000));
       lastTime = time;
-      const inputDirection = inputDirectionRef.current;
+      const activeAutoMoveTask = autoMoveTaskRef.current;
+      const autoTarget = autoMoveTargetRef.current;
+      const autoDirection: "left" | "right" | "none" = activeAutoMoveTask
+        ? Math.abs(autoTarget - playerXRef.current) <= 0.5 ? "none" : autoTarget > playerXRef.current ? "right" : "left"
+        : "none";
+      const inputDirection = activeAutoMoveTask ? autoDirection : inputDirectionRef.current;
+      if (activeAutoMoveTask) {
+        inputDirectionRef.current = inputDirection;
+        setMoving(inputDirection !== "none");
+        if (inputDirection !== "none") setDirection(inputDirection);
+      }
+      if (activeAutoMoveTask && inputDirection === "none") {
+        completeAutoMoveTask(activeAutoMoveTask);
+        frameId = window.requestAnimationFrame(tick);
+        return;
+      }
       if (inputDirection !== "none") {
-        const next = playerXRef.current + (inputDirection === "left" ? -MOVE_SPEED : MOVE_SPEED) * dt;
-        const clamped = Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), next));
+        const speed = activeAutoMoveTask ? AUTO_MOVE_SPEED : MOVE_SPEED;
+        const next = playerXRef.current + (inputDirection === "left" ? -speed : speed) * dt;
+        const reachedAutoTarget = Boolean(activeAutoMoveTask) && (inputDirection === "right" ? next >= autoTarget : next <= autoTarget);
+        const clamped = reachedAutoTarget ? autoTarget : Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), next));
         playerXRef.current = clamped;
         setPlayerX(clamped);
-        const nextReady = readyAvailable && isMultiplayerLevelSelectReadyZone(selection, clamped);
+        const nextReady = readyAvailable && autoMoveTaskRef.current === null && isMultiplayerLevelSelectReadyZone(selection, clamped);
         updateReady(nextReady);
         if (returnedRef.current && clamped > EXIT_LEFT + 1) {
           returnedRef.current = false;
@@ -269,7 +365,9 @@ export function MultiplayerLevelSelectRoom({
           lastPresenceSentRef.current = time;
           publishPresence(clamped, inputDirection);
         }
-        if (!returnedRef.current && next <= EXIT_LEFT) {
+        if (activeAutoMoveTask && reachedAutoTarget) {
+          completeAutoMoveTask(activeAutoMoveTask);
+        } else if (!activeAutoMoveTask && !returnedRef.current && next <= EXIT_LEFT) {
           returnedRef.current = true;
           window.setTimeout(onBackToRoom, 0);
         }
@@ -279,9 +377,9 @@ export function MultiplayerLevelSelectRoom({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [onBackToRoom, publishPresence, readyAvailable, selection, updateReady]);
+  }, [completeAutoMoveTask, onBackToRoom, publishPresence, readyAvailable, selection, updateReady]);
 
-  const playerAction = moving ? "move" : "idle";
+  const playerAction = moving || autoMoveTask ? "move" : "idle";
   const wallNodes = useMemo(
     () =>
       SLOT_ORDER.map((slot) => {
@@ -306,6 +404,7 @@ export function MultiplayerLevelSelectRoom({
       aria-label="联机选关房间"
       className={`multiplayer-level-room tone-${roomTone}`}
       onKeyDown={(event) => {
+        if (autoMoveTaskRef.current) return;
         if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
           event.preventDefault();
           setInputDirection("left");
@@ -320,6 +419,7 @@ export function MultiplayerLevelSelectRoom({
         }
       }}
       onKeyUp={(event) => {
+        if (autoMoveTaskRef.current) return;
         if (
           event.key === "ArrowLeft" ||
           event.key === "ArrowRight" ||
@@ -338,14 +438,18 @@ export function MultiplayerLevelSelectRoom({
     >
       {showGuides ? (
         <div className="multiplayer-level-room-guides">
-          <button className="multiplayer-level-guide left" type="button" onClick={onBackToRoom}>{leftExitLabel}</button>
-          {readyGuideVisible ? <button className="multiplayer-level-guide right" type="button" onClick={confirmReadyFromGuide}>{rightReadyLabel}</button> : null}
+          <button className="multiplayer-level-guide left" type="button" onClick={requestExitAutoMove}>{leftExitLabel}</button>
+          {readyGuideVisible ? <button className="multiplayer-level-guide right" type="button" onClick={requestReadyAutoMove}>{rightReadyLabel}</button> : null}
         </div>
       ) : null}
 
       {scoreboardVisible ? (
         <div className={scoreboardClassName} aria-label={`大比分 ${selfWins} 比 ${opponentWins}`}>
           <div className="multiplayer-level-score-side self">
+            <span className="multiplayer-level-player-name">
+              {crownOwner === "self" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
+              <span>{selfName}</span>
+            </span>
             <span className="multiplayer-level-score-avatar" aria-hidden="true">
               <PlayerAvatar
                 action="idle"
@@ -358,8 +462,6 @@ export function MultiplayerLevelSelectRoom({
                 visualScale={1}
               />
             </span>
-            <span>{selfName}</span>
-            {crownOwner === "self" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
           </div>
           <div className="multiplayer-level-score-value" aria-hidden="true">
             <span>{selfWins}</span>
@@ -367,8 +469,10 @@ export function MultiplayerLevelSelectRoom({
             <span>{opponentWins}</span>
           </div>
           <div className="multiplayer-level-score-side opponent">
-            {crownOwner === "opponent" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
-            <span>{opponentName}</span>
+            <span className="multiplayer-level-player-name">
+              {crownOwner === "opponent" ? <span className="multiplayer-player-crown" aria-hidden="true" /> : null}
+              <span>{opponentName}</span>
+            </span>
             <span className="multiplayer-level-score-avatar" aria-hidden="true">
               <PlayerAvatar
                 action="idle"
@@ -412,13 +516,13 @@ export function MultiplayerLevelSelectRoom({
         {SLOT_ORDER.map((slot) => (
           <button
             aria-label={slotAriaLabel(slot)}
-            aria-disabled={!selectionAvailable || selectionLocked || reachableSlot !== slot ? true : undefined}
+            aria-disabled={!selectionAvailable || selectionLocked ? true : undefined}
             className={`multiplayer-floor-switch slot-${slot} ${reachableSlot === slot ? "reachable" : ""} ${!selectionAvailable ? "locked" : ""}`}
-            disabled={selectionLocked || (selectionAvailable && reachableSlot !== slot)}
+            disabled={selectionLocked}
             key={slot}
             style={{ left: `${slotX(slot)}%` }}
             type="button"
-            onClick={() => interactWithSlot(!selectionAvailable ? slot : reachableSlot === slot ? slot : null)}
+            onClick={() => interactWithSlot(slot)}
           />
         ))}
 

@@ -1136,6 +1136,10 @@ export class MultiplayerSession {
   }
 
   private preserveRoomAfterConnectionIssue(message: string) {
+    if (this.role === "host" && !this.snapshot.opponentPlayer) {
+      this.resetHostWaitingState(null);
+      return;
+    }
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopSelfStateSnapshotTimer();

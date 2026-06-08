@@ -363,8 +363,10 @@
 }
 
 .multiplayer-select-guide-row button {
+  min-height: 44px;
   border: 0;
-  padding: 0;
+  padding: 10px 12px;
+  margin: -10px -12px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -758,7 +760,9 @@
 
 .multiplayer-level-score-side {
   min-width: 0;
-  display: inline-flex;
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-items: center;
   align-items: center;
   gap: 6px;
   color: rgba(24, 34, 29, 0.82);
@@ -770,16 +774,25 @@
 }
 
 .multiplayer-level-score-side.self {
-  justify-content: flex-start;
+  justify-content: start;
 }
 
 .multiplayer-level-score-side.opponent {
-  justify-content: flex-end;
+  justify-content: end;
 }
 
-.multiplayer-level-score-side > span:not(.multiplayer-level-score-avatar, .multiplayer-player-crown) {
+.multiplayer-level-player-name {
   min-width: 0;
-  max-width: min(24vw, 132px);
+  max-width: min(28vw, 150px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.multiplayer-level-player-name > span:not(.multiplayer-player-crown) {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -831,7 +844,9 @@
 
 .multiplayer-level-guide {
   border: 0;
-  padding: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  margin: -10px -12px;
   background: transparent;
   color: rgba(35, 48, 42, 0.82);
   cursor: pointer;

@@ -374,11 +374,12 @@ test("luck score helpers produce display copy for locked, ready and empty states
   assert.equal(getLuckLevelTone(19), "advanced-tier-3");
   assert.equal(getLuckLevelTone(20), "advanced-gold");
   assert.equal(getLuckScoreTone(0), "advanced-empty");
-  assert.equal(getLuckScoreTone(10), "advanced-tier-1");
-  assert.equal(getLuckScoreTone(39), "advanced-tier-1");
-  assert.equal(getLuckScoreTone(40), "advanced-tier-2");
-  assert.equal(getLuckScoreTone(69), "advanced-tier-2");
-  assert.equal(getLuckScoreTone(70), "advanced-tier-3");
+  assert.equal(getLuckScoreTone(24), "advanced-empty");
+  assert.equal(getLuckScoreTone(25), "advanced-tier-1");
+  assert.equal(getLuckScoreTone(49), "advanced-tier-1");
+  assert.equal(getLuckScoreTone(50), "advanced-tier-2");
+  assert.equal(getLuckScoreTone(74), "advanced-tier-2");
+  assert.equal(getLuckScoreTone(75), "advanced-tier-3");
   assert.equal(getLuckScoreTone(99), "advanced-tier-3");
   assert.equal(getLuckScoreTone(100), "advanced-gold");
   assert.equal(getLuckDrawStatusText(false, createDefaultAdvancedProgress()), "达到最强王者后解锁进阶挑战和运气玩法");

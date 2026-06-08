@@ -11,12 +11,11 @@ export const LUCK_COIN_TEST_SCORE_EXPECTATION = Number(
 );
 
 const LUCK_COIN_TEST_THRESHOLDS = [
-  { star: 0, threshold: 0, nextThreshold: 20, tone: "empty" },
-  { star: 1, threshold: 20, nextThreshold: 40, tone: "bronze" },
-  { star: 2, threshold: 40, nextThreshold: 60, tone: "silver" },
-  { star: 3, threshold: 60, nextThreshold: 80, tone: "violet" },
-  { star: 4, threshold: 80, nextThreshold: 100, tone: "blue" },
-  { star: 5, threshold: 100, nextThreshold: null, tone: "gold" },
+  { star: 0, threshold: 0, nextThreshold: 25, tone: "advanced-empty" },
+  { star: 1, threshold: 25, nextThreshold: 50, tone: "advanced-tier-1" },
+  { star: 2, threshold: 50, nextThreshold: 75, tone: "advanced-tier-2" },
+  { star: 3, threshold: 75, nextThreshold: 100, tone: "advanced-tier-3" },
+  { star: 5, threshold: 100, nextThreshold: null, tone: "advanced-gold" },
 ] as const;
 
 export function resolveLuckCoinTestScore(random: number) {
@@ -36,4 +35,13 @@ export function getLuckCoinTestTier(score: number) {
     if (normalized >= tier.threshold) return { ...tier };
   }
   return { ...LUCK_COIN_TEST_THRESHOLDS[0] };
+}
+
+export function getLuckCoinTestPointTone(points: number) {
+  const normalized = Math.max(1, Math.floor(points));
+  if (normalized >= 5) return "advanced-gold";
+  if (normalized >= 4) return "advanced-tier-3";
+  if (normalized >= 3) return "advanced-tier-2";
+  if (normalized >= 2) return "advanced-tier-1";
+  return "advanced-empty";
 }
