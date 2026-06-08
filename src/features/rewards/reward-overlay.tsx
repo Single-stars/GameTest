@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { PlayerAvatar, PLAYER_AVATAR_SKIN_LABELS, type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar";
+import type { RoundId } from "@/lib/scoring";
 
 const REWARD_CARD_FLIP_MS = 920;
 const SKIN_REWARD_REVEAL_COMPLETE_MS = 1900;
@@ -23,6 +24,7 @@ export type RewardOverlayItem =
   | {
       id: string;
       kind: "endless";
+      roundId: RoundId;
       roundTitle: string;
     };
 
@@ -84,11 +86,18 @@ function RewardRankCard({
 
 function RewardEndlessCard({
   item,
+  onStartEndlessChallenge,
   revealSettled,
 }: {
   item: Extract<RewardOverlayItem, { kind: "endless" }>;
+  onStartEndlessChallenge: (roundId: RoundId) => void;
   revealSettled: boolean;
 }) {
+  const handleStartEndlessChallenge = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onStartEndlessChallenge(item.roundId);
+  };
+
   return (
     <div className={`reward-overlay-card reward-rank-card reward-endless-card ${revealSettled ? "is-settled" : ""}`} role="dialog" aria-modal="true" aria-label={`已解锁${item.roundTitle}·无尽模式`}>
       <span className="reward-rank-eyebrow reward-endless-eyebrow reward-endless-unlock-label">已解锁</span>
@@ -97,6 +106,9 @@ function RewardEndlessCard({
         <strong className="reward-rank-value reward-rank-new">{item.roundTitle}·无尽模式</strong>
       </div>
       <span className="reward-endless-subtitle">可以进入无尽挑战</span>
+      <button className="reward-endless-action" type="button" onClick={handleStartEndlessChallenge}>
+        前往挑战
+      </button>
     </div>
   );
 }
@@ -105,10 +117,12 @@ function RewardOverlayContent({
   item,
   onDismiss,
   onOpenAvatarLabSkin,
+  onStartEndlessChallenge,
 }: {
   item: RewardOverlayItem;
   onDismiss: () => void;
   onOpenAvatarLabSkin: (skin: PlayerAvatarSkin) => void;
+  onStartEndlessChallenge: (roundId: RoundId) => void;
 }) {
   const [activeItemId, setActiveItemId] = useState(item.id);
   const [revealSettled, setRevealSettled] = useState(false);
@@ -173,7 +187,7 @@ function RewardOverlayContent({
       ) : item.kind === "rank" ? (
         <RewardRankCard key={item.id} item={item} revealSettled={itemRevealSettled} />
       ) : (
-        <RewardEndlessCard key={item.id} item={item} revealSettled={itemRevealSettled} />
+        <RewardEndlessCard key={item.id} item={item} onStartEndlessChallenge={onStartEndlessChallenge} revealSettled={itemRevealSettled} />
       )}
     </div>
   );
@@ -183,12 +197,14 @@ export function RewardOverlay({
   item,
   onDismiss,
   onOpenAvatarLabSkin,
+  onStartEndlessChallenge,
 }: {
   item: RewardOverlayItem | null;
   onDismiss: () => void;
   onOpenAvatarLabSkin: (skin: PlayerAvatarSkin) => void;
+  onStartEndlessChallenge: (roundId: RoundId) => void;
 }) {
   if (!item) return null;
 
-  return <RewardOverlayContent item={item} onDismiss={onDismiss} onOpenAvatarLabSkin={onOpenAvatarLabSkin} />;
+  return <RewardOverlayContent item={item} onDismiss={onDismiss} onOpenAvatarLabSkin={onOpenAvatarLabSkin} onStartEndlessChallenge={onStartEndlessChallenge} />;
 }

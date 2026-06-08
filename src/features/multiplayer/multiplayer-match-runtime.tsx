@@ -115,6 +115,7 @@ function multiplayerStateSignature(state: SelfGameState) {
     state.nextPlatformIndex ?? "",
     state.exitingPlatformIndex ?? "",
     state.failures ?? 0,
+    state.fragileStates?.map((fragile) => `${fragile.id},${fragile.steppedAt ?? ""},${fragile.broken ? 1 : 0}`).join("|") ?? "",
     state.gravity ?? "",
     state.turns ?? "",
     state.knifeShotIndex ?? "",
@@ -213,6 +214,7 @@ type MultiplayerRuntimeState = {
   exitingPlatformIndex?: number;
   exitingPlatformOffsetY?: number;
   failures: number;
+  fragileStates?: SelfGameState["fragileStates"];
   gravity?: SelfGameState["gravity"];
   knifeCollisions?: number;
   knifeDangerHits?: number;
@@ -519,6 +521,7 @@ export const MultiplayerMatchRuntime = memo(function MultiplayerMatchRuntime({
         exitingPlatformIndex: runtime.exitingPlatformIndex,
         exitingPlatformOffsetY: runtime.exitingPlatformOffsetY,
         failures: runtime.failures,
+        fragileStates: runtime.fragileStates,
         gravity: runtime.gravity,
         knifeInsertedAngles: runtime.knifeInsertedAngles,
         knifeFailedAngles: runtime.knifeFailedAngles,

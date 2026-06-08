@@ -348,14 +348,14 @@ test("advanced in-round top-right actions use pause dialogs and freeze live runt
 
   assert.match(advancedScreenSource, /function AdvancedPauseDialog/);
   assert.match(advancedScreenSource, /const \[pauseDialog, setPauseDialog\] = React\.useState<AdvancedPauseDialogState \| null>\(null\);/);
-  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onSettleExit\}>[\s\S]*?结算退出/);
-  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onRestart\}>[\s\S]*?重新开始/);
-  assert.match(advancedScreenSource, /<button type="button" onPointerDown=\{onContinue\}>[\s\S]*?继续游戏/);
-  assert.match(playingSource, /onPointerDown=\{openAdvancedPauseDialog\}[\s\S]*?暂停/);
+  assert.match(advancedScreenSource, /<button type="button" onClick=\{onSettleExit\}>[\s\S]*?结算退出/);
+  assert.match(advancedScreenSource, /<button type="button" onClick=\{onRestart\}>[\s\S]*?重新开始/);
+  assert.match(advancedScreenSource, /<button type="button" onClick=\{onContinue\}>[\s\S]*?继续游戏/);
+  assert.match(playingSource, /onClick=\{openAdvancedPauseDialog\}[\s\S]*?暂停/);
   assert.match(playingSource, /paused:\s*pauseDialog\?\.mode === "advanced"/);
-  assert.match(endlessPlayingSource, /onPointerDown=\{openEndlessPauseDialog\}[\s\S]*?暂停/);
+  assert.match(endlessPlayingSource, /onClick=\{openEndlessPauseDialog\}[\s\S]*?暂停/);
   assert.match(endlessPlayingSource, /paused=\{pauseDialog\?\.mode === "endless"\}/);
-  assert.match(basePlayingSource, /onPointerDown=\{openBasePauseDialog\}[\s\S]*?暂停/);
+  assert.match(basePlayingSource, /onClick=\{openBasePauseDialog\}[\s\S]*?暂停/);
   assert.match(basePlayingSource, /paused:\s*pauseDialog\?\.mode === "base"/);
   assert.doesNotMatch(playingSource, /onPointerDown=\{\(\) => onStartLevel\(challenge\.level\)\}/);
   assert.doesNotMatch(endlessPlayingSource, /onPointerDown=\{\(\) => onStartLevel\(ENDLESS_MODE_LEVEL\)\}/);
@@ -374,8 +374,9 @@ test("advanced endless locked feedback is centered and restrained", () => {
   assert.doesNotMatch(advancedCss, /\.advanced-endless-lock-toast\s*{[\s\S]*width:\s*min\(320px,\s*calc\(100% - 36px\)\);/);
   assert.match(advancedScreenSource, /endlessShakeTimerRef\.current = window\.setTimeout\(\(\) => setEndlessShake\(false\), 240\);/);
   assert.match(advancedScreenSource, /lockedEndlessNoticeTimerRef\.current = window\.setTimeout\(\(\) => setLockedEndlessNoticeVisible\(false\), 1150\);/);
-  assert.match(advancedCss, /@keyframes advanced-endless-shake\s*{[\s\S]*transform:\s*translateY\(-1px\) scale\(var\(--advanced-lobby-level-scale, 1\)\);[\s\S]*transform:\s*translateY\(1px\) scale\(var\(--advanced-lobby-level-scale, 1\)\);/);
   const shakeKeyframes = sourceBetween(advancedCss, "@keyframes advanced-endless-shake", ".advanced-lobby-badge");
+  assert.match(shakeKeyframes, /translate3d\(var\(--advanced-endless-shake-x, 1px\), var\(--advanced-endless-shake-y, -1px\), 0\) scale\(var\(--advanced-lobby-level-scale, 1\)\)/);
+  assert.match(shakeKeyframes, /translate3d\(calc\(var\(--advanced-endless-shake-x, 1px\) \* -1\), calc\(var\(--advanced-endless-shake-y, -1px\) \* -1\), 0\) scale\(var\(--advanced-lobby-level-scale, 1\)\)/);
   assert.match(advancedCss, /\.advanced-lobby-level\s*{[\s\S]*--advanced-lobby-level-scale:\s*1;/);
   assert.match(advancedCss, /\.advanced-lobby-level\.previous,\s*[\s\S]*\.advanced-lobby-level\.next\s*{[\s\S]*--advanced-lobby-level-scale:\s*0\.86;[\s\S]*transform:\s*scale\(var\(--advanced-lobby-level-scale\)\);/);
   assert.match(shakeKeyframes, /scale\(var\(--advanced-lobby-level-scale, 1\)\)/);

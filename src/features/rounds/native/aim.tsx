@@ -662,6 +662,24 @@ export function AdvancedAimRound({
       onComplete(finalTrials);
     }, ROUND_SETTLEMENT_DELAY_MS);
   }, [isEndless, multiplayerPenaltyMode, onComplete, requiredHits, syncAimRuntimeState]);
+
+  const settleEndlessAimFailure = useCallback((reason: "fly_out" | "miss" | "decoy", frameNow: number, penaltyBlocked = false) => {
+    const endlessRuntime = endlessRef.current;
+    if (!endlessRuntime) return false;
+    if (!penaltyBlocked) showAimFeedback("bad");
+    if (penaltyBlocked) {
+      syncAimRuntimeState(frameNow, "playing", true);
+      return false;
+    }
+    const canContinue = endlessRuntime.loseLife(reason);
+    if (!canContinue) {
+      showAimFeedback("bad", true);
+      finish();
+      return true;
+    }
+    syncAimRuntimeState(frameNow, "playing", true);
+    return false;
+  }, [finish, showAimFeedback, syncAimRuntimeState]);
 
   const recordAimTrial = useCallback((patch: Omit<Partial<TrialEvent>, "roundId" | "trialIndex" | "viewport">) => {
     const item = trial("aim", trialsRef.current.length, patch);
@@ -828,6 +846,7 @@ export function AdvancedAimRound({
       const activeSpawnIntervalMs = getParamNumber(spawnConfig, "spawnIntervalMs", spawnIntervalMs);
       const activeFailOnFlyOut = endlessRuntime ? getParamBoolean(spawnConfig, "failOnFlyOut") : failOnFlyOut;
       const maxActiveEndlessTargets = endlessRuntime ? 1 : activeTargetCountRef.current;
+      let endlessSettled = false;
       if (
         (!endlessRuntime && (activeSpawnMode === "incoming" || activeSpawnMode === "boss")) &&
         (endlessRuntime
@@ -871,12 +890,9 @@ export function AdvancedAimRound({
         if (endlessRuntime) {
           nextTargets = nextTargets.map((entity) => (entity.id === flyOutTarget.id ? { ...entity, active: false } : entity));
           lastSpawnAtRef.current = frameNow - activeSpawnIntervalMs;
-          if (!shotPenaltyBlocked) showAimFeedback("bad");
-          if (!endlessRuntime.loseLife("fly_out")) {
-            finishedRef.current = true;
+          if (settleEndlessAimFailure("fly_out", frameNow, shotPenaltyBlocked)) {
             return;
           }
-          syncAimRuntimeState(frameNow, "playing", true);
         } else if (multiplayerPenaltyMode) {
           nextTargets = nextTargets.map((entity) => (entity.id === flyOutTarget.id ? { ...entity, active: false } : entity));
           showAimFeedback("bad");
@@ -963,11 +979,7 @@ export function AdvancedAimRound({
               missCountRef.current += 1;
               if (endlessRuntime) {
                 const shotPenaltyBlocked = arrow.penaltyBlocked;
-                if (!shotPenaltyBlocked) showAimFeedback("bad");
-                if (!shotPenaltyBlocked && !endlessRuntime.loseLife("miss")) {
-                  finishedRef.current = true;
-                }
-                syncAimRuntimeState(frameNow, "playing", true);
+                if (settleEndlessAimFailure("miss", frameNow, shotPenaltyBlocked)) endlessSettled = true;
                 return { ...movedArrow, active: false, status: "miss" as const, settledAt: frameNow };
               }
               if (unlimitedArrows) {
@@ -1008,10 +1020,7 @@ export function AdvancedAimRound({
               );
             }
             if (endlessRuntime) {
-              if (!arrow.penaltyBlocked && !endlessRuntime.loseLife("decoy")) {
-                finishedRef.current = true;
-              }
-              syncAimRuntimeState(frameNow, "playing", true);
+              if (settleEndlessAimFailure("decoy", frameNow, arrow.penaltyBlocked)) endlessSettled = true;
             } else if (multiplayerPenaltyMode) {
               syncAimRuntimeState(frameNow, "playing", true);
             } else {
@@ -1134,9 +1143,27 @@ export function AdvancedAimRound({
             arrow !== null && (arrow.active || frameNow - (arrow.settledAt ?? frameNow) < ADVANCED_AIM_ARROW_PRUNE_MS),
         );
 
+      if (endlessRuntime && !finishedRef.current && countAdvancedAimShootableTargets(nextTargets) === 0) {
+        const spawnedShootable = makeEndlessAimShootableTarget({
+          config: spawnConfig,
+          energyTargetIndex: spawnedEnergyTargetsRef.current,
+          mode: activeSpawnMode,
+          rect,
+          runSeed,
+          spawnedAt: frameNow,
+          targetIndex: spawnedTargetsRef.current,
+        });
+        nextTargets = [...nextTargets, spawnedShootable.entity];
+        if (spawnedShootable.kind === "energy") spawnedEnergyTargetsRef.current += 1;
+        else spawnedTargetsRef.current += 1;
+        lastSpawnAtRef.current = frameNow;
+      }
+
       publishTargets(nextTargets);
       publishDistractors(nextDistractors);
       publishArrows(nextArrows);
+
+      if (endlessSettled || finishedRef.current) return;
 
       if (missed) {
         finish();
@@ -1193,6 +1220,7 @@ export function AdvancedAimRound({
     onPracticeSuccess,
     recordAimTrial,
     runSeed,
+    settleEndlessAimFailure,
     spawnIntervalMs,
     publishArrows,
     publishDistractors,

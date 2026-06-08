@@ -71,7 +71,7 @@ export function PlayFrame({
         <div className="round-header-actions">
           <span className="round-measure-pill">{round.measure}</span>
           {showPerfectClearShortcut ? (
-            <button className="advanced-back-button" type="button" onPointerDown={onSkipPerfect}>
+            <button className="advanced-back-button" type="button" onClick={onSkipPerfect}>
               一键满分过关
             </button>
           ) : null}

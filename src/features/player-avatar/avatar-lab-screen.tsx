@@ -255,7 +255,7 @@ export function AvatarLabScreen({
   return (
     <section className="avatar-lab-screen">
       <header className="advanced-topbar">
-        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+        <button className="advanced-back-button" type="button" onClick={onBack}>
           返回
         </button>
         <span>小方块皮肤</span>

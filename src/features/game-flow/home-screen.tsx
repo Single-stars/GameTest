@@ -83,7 +83,7 @@ export function HomeScreen({
 
   return (
     <section className="home-screen">
-      <button aria-label="生成默认分享图片" className="icon-button home-image-button" type="button" onPointerDown={onShareImage}>
+      <button aria-label="生成默认分享图片" className="icon-button home-image-button" type="button" onClick={onShareImage}>
         <ShareIcon />
       </button>
       <div className="home-main">

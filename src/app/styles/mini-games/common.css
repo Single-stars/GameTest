@@ -114,6 +114,29 @@
   user-select: none;
 }
 
+.movement-control-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: rgba(36, 46, 62, 0.24);
+  font-size: clamp(13px, 3.4vw, 18px);
+  font-weight: 800;
+  text-align: center;
+}
+
+.movement-control-backdrop::before {
+  content: "";
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  border-left: 2px dashed rgba(36, 46, 62, 0.2);
+  transform: translateX(-50%);
+}
+
 [data-difficulty-tone] .prototype-stage.doodle-stage,
 [data-difficulty-tone] .prototype-stage.flappy-stage,
 [data-difficulty-tone] .prototype-stage.flappy-stage.reverse,

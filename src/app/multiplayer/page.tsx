@@ -252,24 +252,17 @@ function standaloneStatusText(status: MultiplayerSnapshot["status"]) {
   }
 }
 
-function standaloneConnectionStatusText(snapshot: MultiplayerSnapshot) {
-  switch (snapshot.connectionState) {
-    case "signaling":
-      return snapshot.status === "waiting" ? "等待好友加入" : "正在连接";
-    case "connected":
-      return standaloneStatusText(snapshot.status);
-    case "reconnecting":
-      return "尝试重连中";
-    case "stale":
-      return "尝试重连中";
-    case "replaced":
-      return "已在其他标签页打开";
-    case "closed":
-      return standaloneStatusText(snapshot.status);
-    case "idle":
-    default:
-      return standaloneStatusText(snapshot.status);
-  }
+function standaloneConciseStatusText(snapshot: MultiplayerSnapshot, errorText: string) {
+  if (snapshot.opponentPlayer === null && snapshot.connectionState === "connected" && snapshot.status === "connected") return "好友已断开";
+  if (snapshot.connectionState === "reconnecting" || snapshot.connectionState === "stale") return "断线重连中";
+  if (snapshot.status === "failed" || snapshot.status === "disconnected") return errorText || "重连失败请重新创建或加入房间";
+  if (errorText) return errorText;
+  if (snapshot.opponentJoining) return "好友加入中";
+  if (snapshot.connectionState === "connected" && snapshot.status === "connected") return "已连接";
+  if (snapshot.status === "waiting") return "等待好友加入";
+  if (snapshot.status === "creating") return "正在创建房间";
+  if (snapshot.status === "joining" || snapshot.connectionState === "signaling") return "正在连接";
+  return standaloneStatusText(snapshot.status);
 }
 
 function standaloneErrorText(errorMessage: string | null) {
@@ -373,6 +366,7 @@ function MultiplayerPageContent() {
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
   const lastScoredMatchIdRef = useRef<string | null>(null);
   const matchWinsRoomIdRef = useRef<string | null>(null);
+  const lastValidRoomScoreRef = useRef<{ roomId: string | null; score: MultiplayerRoomScore } | null>(null);
   const autoJoinRoomRef = useRef<string | null>(null);
   const suppressedAutoJoinRoomRef = useRef<string | null>(null);
   const lastHostRoomInactiveAtRef = useRef<number | null>(null);
@@ -1301,22 +1295,39 @@ function MultiplayerPageContent() {
     if (snapshot.roomId !== matchWinsRoomIdRef.current) {
       matchWinsRoomIdRef.current = snapshot.roomId;
       lastScoredMatchIdRef.current = null;
-      setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
+      if (lastValidRoomScoreRef.current?.roomId === snapshot.roomId) {
+        const cachedWins = roomScoreToLocalWins(lastValidRoomScoreRef.current.score, snapshot.role);
+        setMatchWins((current) => (sameMatchWins(current, cachedWins) ? current : cachedWins));
+      } else if (!snapshot.roomId) {
+        setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
+      }
     }
-  }, [snapshot.roomId]);
+  }, [snapshot.role, snapshot.roomId]);
 
   useEffect(() => {
     if (snapshot.roomScore) {
+      lastValidRoomScoreRef.current = { roomId: snapshot.roomId, score: snapshot.roomScore };
       const nextWins = roomScoreToLocalWins(snapshot.roomScore, snapshot.role);
       lastScoredMatchIdRef.current = snapshot.roomScore.lastMatchId ?? lastScoredMatchIdRef.current;
       setMatchWins((current) => (sameMatchWins(current, nextWins) ? current : nextWins));
       return;
     }
-    if (snapshot.roomId && snapshot.connectionState === "signaling" && !snapshot.opponentPlayer) {
+    if (snapshot.roomId && lastValidRoomScoreRef.current?.roomId === snapshot.roomId) {
+      const cachedWins = roomScoreToLocalWins(lastValidRoomScoreRef.current.score, snapshot.role);
+      setMatchWins((current) => (sameMatchWins(current, cachedWins) ? current : cachedWins));
+      return;
+    }
+    if (!snapshot.roomId && snapshot.connectionState === "signaling" && !snapshot.opponentPlayer) {
       lastScoredMatchIdRef.current = null;
       setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
     }
   }, [snapshot.connectionState, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.roomScore]);
+
+  useEffect(() => {
+    if (snapshot.role !== "host" || !snapshot.opponentPlayer || !lastValidRoomScoreRef.current) return;
+    if (lastValidRoomScoreRef.current.roomId !== snapshot.roomId) return;
+    sessionRef.current?.reportRoomScore(lastValidRoomScoreRef.current.score);
+  }, [snapshot.opponentPlayer, snapshot.role, snapshot.roomId]);
 
   const waitingForInitialHomeworldSession =
     isHomeworldRoute &&
@@ -1451,16 +1462,14 @@ function MultiplayerPageContent() {
                     </div>
                   )}
                 </div>
-                <div className="multiplayer-select-guide-row" aria-hidden="true">
-                  <span>{standaloneLeftExitLabel}</span>
-                  {standaloneReadyAvailable ? <span className="ready">{`准备开始 →`}</span> : null}
+                <div className="multiplayer-select-guide-row">
+                  <button type="button" onClick={requestStandaloneLevelSelectExit}>{standaloneLeftExitLabel}</button>
+                  {standaloneReadyAvailable ? <button className="ready" type="button" onClick={() => setLevelSelectReady(true)}>{`准备开始 →`}</button> : null}
                 </div>
               </section>
             ) : null}
             <div className="multiplayer-select-status-text">
-              联机状态：{standaloneConnectionStatusText(snapshot)}
-              {snapshot.opponentJoining ? " / 好友加入中" : ""}
-              {standaloneConnectionErrorText ? ` · ${standaloneConnectionErrorText}` : ""}
+              {standaloneConciseStatusText(snapshot, standaloneConnectionErrorText)}
             </div>
             {standaloneJoinDialogOpen ? (
               <div className="multiplayer-join-dialog-backdrop" role="presentation" onPointerDown={closeStandaloneJoinDialog}>

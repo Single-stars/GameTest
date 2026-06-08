@@ -650,7 +650,7 @@ test("dinosaur braking metrics capture safe stops and collisions", () => {
   assert.equal(metrics.dinoAvgStopMs, 200);
 });
 
-test("five base braking trials count as a completed scoring dimension", () => {
+test("three base braking trials count as a completed scoring dimension", () => {
   const trials = [
     ...buildPerfectTrials("reaction"),
     ...buildPerfectTrials("aim"),
@@ -658,22 +658,22 @@ test("five base braking trials count as a completed scoring dimension", () => {
     ...buildPerfectTrials("stroop"),
     ...buildPerfectTrials("rhythm"),
     ...buildPerfectTrials("memory"),
-    ...dinoBrakeTrials(Array.from({ length: 5 }, () => ({ safeStop: true, stopLatencyMs: 180 }))),
+    ...dinoBrakeTrials(Array.from({ length: 3 }, () => ({ safeStop: true, stopLatencyMs: 180 }))),
     ...buildPerfectTrials("patience"),
   ];
 
-  assert.equal(buildPerfectTrials("braking").length, 5);
+  assert.equal(buildPerfectTrials("braking").length, 3);
   assert.equal(deriveMetrics(trials).completedDimensions, 8);
   assert.equal(calculateScores(trials).confidence, 100);
 });
 
-test("base braking source uses five rounds with advanced danger placement and graphics", () => {
+test("base braking source uses three rounds with advanced danger placement and graphics", () => {
   const source = nativeRoundsSource();
   const brakingFileSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
   const styles = readAppCssSource();
   const brakingCoreSource = sourceBetween(brakingFileSource, "function BrakingRoundCore", "function brakingPracticeMessage");
 
-  assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*5/);
+  assert.match(source, /const DINO_TRIAL_COUNT\s*=\s*3/);
   assert.match(source, /DINO_FAILURE_FEEDBACK_MS/);
   assert.match(brakingFileSource, /AdvancedBrakeHazard/);
   assert.match(brakingCoreSource, /getAdvancedBrakeDangerLeft/);

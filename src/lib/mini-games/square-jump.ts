@@ -519,14 +519,16 @@ export function generateSquareJumpPlatformSequence(
       platformIndex: index,
       previousGravity: current.gravity ?? "normal",
     });
-    if (targetGravity !== "normal") {
+    const isFinish = index === numberParam(level.params, "jumpsRequired", 5);
+    const platformGravity = isFinish ? "normal" : targetGravity;
+    if (platformGravity !== "normal") {
       gravityPlatformCount += 1;
       lastGravityPlatformIndex = index;
     }
 
     platforms.push({
-      finish: index === numberParam(level.params, "jumpsRequired", 5),
-      gravity: targetGravity,
+      finish: isFinish,
+      gravity: platformGravity,
       id: `platform-${index}`,
       moving,
       phase: rand() * Math.PI * 2,

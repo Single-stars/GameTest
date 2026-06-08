@@ -542,7 +542,7 @@ test("homeworld level-select start flow waits in the room before sending startMa
   assert.match(pageSource, /opponentSkin=\{resolvePlayerAvatarSkin\(snapshot\.opponentPlayer\?\.skinId\)\}/);
   assert.match(roomSource, /← 回到家园/);
   assert.match(roomSource, /准备开始 →/);
-  assert.match(roomSource, /\{readyGuideVisible \? <div className="multiplayer-level-guide right">/);
+  assert.match(roomSource, /\{readyGuideVisible \? <button className="multiplayer-level-guide right" type="button" onClick=\{confirmReadyFromGuide\}>/);
   assert.match(roomSource, /你已准备/);
   assert.match(roomSource, /已准备/);
   assert.match(roomSource, /startCountdownSeconds/);
@@ -703,6 +703,9 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.match(pageSource, /scoreboardRoomBarOffset=\{standaloneRoomBarVisible\}/);
   assert.match(pageSource, /scoreboardVisible=\{Boolean\(snapshot\.roomId\)\}/);
   assert.match(pageSource, /if \(snapshot\.roomId !== matchWinsRoomIdRef\.current\)/);
+  assert.match(pageSource, /lastValidRoomScoreRef/);
+  assert.match(pageSource, /roomScoreToLocalWins\(lastValidRoomScoreRef\.current\.score, snapshot\.role\)/);
+  assert.doesNotMatch(pageSource, /if \(snapshot\.roomId\)[\s\S]{0,220}setMatchWins\(\(current\) => \(current\.self === 0 && current\.opponent === 0 \? current : \{ self: 0, opponent: 0 \}\)\)/);
   assert.doesNotMatch(pageSource, /if \(!snapshot\.opponentPlayer\)[\s\S]{0,180}setMatchWins/);
   assert.match(pageSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};/);
   assert.match(pageSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};/);
@@ -713,6 +716,8 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.match(sessionSource, /sendCurrentRoomSnapshots[\s\S]*createRoomScoreMessage\(this\.snapshot\.roomScore\)/);
   assert.match(sessionSource, /case "bye":[\s\S]*this\.resetHostWaitingState\(\);/);
   assert.match(sessionSource, /private resetHostWaitingState[\s\S]*opponentPlayer: null,[\s\S]*opponentLevelSelectPresence: null/);
+  assert.match(sessionSource, /const currentRoomScore = this\.snapshot\.roomScore;/);
+  assert.match(sessionSource, /private resetHostWaitingState[\s\S]*roomScore: currentRoomScore/);
   assert.match(crownRule, /mask:\s*url\("\/icons\/crown\.svg"\)/);
   assert.match(crownRule, /background:\s*(?:linear-gradient|#f|rgb\()/);
   assert.match(roomScoreboardRule, /background:\s*transparent;/);
@@ -730,6 +735,65 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.doesNotMatch(cssSource, /\.multiplayer-level-score-names/);
   assert.match(cssSource, /\.multiplayer-level-scoreboard\.room-bar-offset/);
   assert.doesNotMatch(cssSource, /\.multiplayer-room-scoreboard/);
+});
+
+test("fall-down multiplayer state sync includes fragile platform state from publish to spectator restore", () => {
+  const stateTypesSource = readSource("../../features/game-sync/types.ts");
+  const multiplayerTypesSource = readSource("./types.ts");
+  const messagesSource = readSource("./messages.ts");
+  const sessionSource = readSource("./multiplayer-session.ts");
+  const runtimeSource = readSource("../../features/multiplayer/multiplayer-match-runtime.tsx");
+  const fallDownSource = readSource("../../features/mini-games/fall-down.tsx");
+
+  assert.match(stateTypesSource, /fragileStates\?: FallDownFragileState\[\];/);
+  assert.match(multiplayerTypesSource, /fragileStates\?: FallDownFragileState\[\];/);
+  assert.match(messagesSource, /if \(value\.fragileStates !== undefined && !isFallDownFragileStateArray\(value\.fragileStates\)\) return false;/);
+  assert.match(messagesSource, /fragileStates: data\.fragileStates/);
+  assert.match(sessionSource, /fragileStates: sequencedState\.fragileStates/);
+  assert.match(sessionSource, /fragileStates: message\.fragileStates/);
+  assert.match(runtimeSource, /state\.fragileStates\?\.map/);
+  assert.match(runtimeSource, /fragileStates: runtime\.fragileStates/);
+  assert.match(fallDownSource, /fragileStates: collectFallDownFragileStates\(runtime\)/);
+  assert.match(fallDownSource, /applyFallDownFragileStates\(current, spectatorState\.fragileStates\)/);
+});
+
+test("standalone multiplayer select status is fixed bottom-left and renders one concise status string", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const statusRule = cssRule(cssSource, ".multiplayer-select-status-text");
+
+  assert.match(pageSource, /function standaloneConciseStatusText\(snapshot: MultiplayerSnapshot, errorText: string\)/);
+  assert.match(pageSource, /<div className="multiplayer-select-status-text">\s*\{standaloneConciseStatusText\(snapshot, standaloneConnectionErrorText\)\}\s*<\/div>/);
+  assert.doesNotMatch(pageSource, /联机状态：\{standaloneConnectionStatusText\(snapshot\)\}/);
+  assert.doesNotMatch(pageSource, /snapshot\.opponentJoining \? " \/ 好友加入中"/);
+  assert.doesNotMatch(pageSource, /standaloneConnectionErrorText \? ` · \$\{standaloneConnectionErrorText\}`/);
+  assert.match(statusRule, /position:\s*fixed;/);
+  assert.match(statusRule, /left:\s*max\(14px,\s*calc\(\(100vw - var\(--game-viewport-width, 100vw\)\) \/ 2 \+ env\(safe-area-inset-left\) \+ 14px\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(\(100vh - var\(--game-viewport-height, 100vh\)\) \/ 2 \+ env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.doesNotMatch(statusRule, /72px/);
+});
+
+test("level-select text guides are clickable commands without hijacking floor movement", () => {
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const guideRowRule = cssRule(cssSource, ".multiplayer-level-room-guides");
+  const guideRule = cssRule(cssSource, ".multiplayer-level-guide");
+
+  assert.match(roomSource, /const confirmReadyFromGuide = useCallback/);
+  assert.match(roomSource, /onClick=\{onBackToRoom\}/);
+  assert.match(roomSource, /onClick=\{confirmReadyFromGuide\}/);
+  assert.match(roomSource, /<button className="multiplayer-level-guide left" type="button"/);
+  assert.match(roomSource, /<button className="multiplayer-level-guide right" type="button"/);
+  assert.match(guideRowRule, /pointer-events:\s*none;/);
+  assert.match(guideRule, /pointer-events:\s*auto;/);
+});
+
+test("spectator badge is placed below the top HUD instead of covering the stage capsule", () => {
+  const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
+  const badgeRule = cssRule(cssSource, ".multiplayer-spectating-badge");
+
+  assert.match(badgeRule, /top:\s*max\(72px,\s*calc\(env\(safe-area-inset-top\) \+ 72px\)\);/);
+  assert.doesNotMatch(badgeRule, /top:\s*12px;/);
 });
 
 test("multiplayer state messages carry stable screen anchors and WebRTC offers are serialized", () => {
@@ -1159,7 +1223,8 @@ test("default multiplayer route reuses the level-select room with room controls"
   assert.doesNotMatch(modeHintRule, /left:\s*50%;/);
   assert.match(modeHintRule, /left:\s*max\(16px,\s*env\(safe-area-inset-left\)\);/);
   assert.match(modeHintRule, /right:\s*max\(16px,\s*env\(safe-area-inset-right\)\);/);
-  assert.match(statusRule, /bottom:\s*max\(72px, calc\(env\(safe-area-inset-bottom\) \+ 72px\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(\(100vh - var\(--game-viewport-height, 100vh\)\) \/ 2 \+ env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.doesNotMatch(statusRule, /72px/);
   assert.match(dangerButtonRule, /border:\s*1px solid rgba\(122, 34, 34, 0\.34\);/);
   assert.doesNotMatch(pageSource, /联机挑战选关/);
   assert.doesNotMatch(pageSource, /const showEntry = snapshot\.status === "idle"/);
@@ -1217,7 +1282,7 @@ test("standalone multiplayer room controls hide after peer connection and ready 
   assert.match(pageSource, /const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;/);
   assert.match(pageSource, /const standaloneRoomBarVisible = !standalonePeerConnected;/);
   assert.match(pageSource, /\{standaloneRoomBarVisible \? \(/);
-  assert.match(pageSource, /standaloneReadyAvailable \? <span className="ready">/);
+  assert.match(pageSource, /standaloneReadyAvailable \? <button className="ready" type="button" onClick=\{\(\) => setLevelSelectReady\(true\)\}>/);
   assert.match(pageSource, /readyAvailable=\{standaloneReadyAvailable\}/);
   assert.match(roomSource, /readyAvailable = true/);
   assert.match(roomSource, /const readyGuideVisible = readyAvailable && complete;/);
@@ -1396,8 +1461,8 @@ test("host shows when a guest socket is joining before the direct connection ope
   assert.match(sessionSource, /onPeerJoining: \(\) => \{/);
   assert.match(sessionSource, /opponentJoining:\s*this\.role === "host"/);
   assert.match(sessionSource, /onConnected: \(\) => \{[\s\S]*opponentJoining:\s*false/);
-  assert.match(pageSource, /snapshot\.opponentJoining \? /);
-  assert.match(pageSource, /snapshot\.opponentJoining[\s\S]{0,120}好友加入中/);
+  assert.match(pageSource, /if \(snapshot\.opponentJoining\) return "好友加入中";/);
+  assert.doesNotMatch(pageSource, /snapshot\.opponentJoining \? " \/ 好友加入中"/);
 });
 
 test("host clears half-open guest slots with heartbeat stale detection so rooms can be rejoined", () => {
@@ -1443,7 +1508,7 @@ test("idle multiplayer presence waits longer before showing concise reconnect co
   assert.match(protocolSource, /MULTIPLAYER_RECONNECTING_MESSAGE = "尝试重连中"/);
   assert.match(staleSource, /markPeerTemporarilyStale\(message = MULTIPLAYER_RECONNECTING_MESSAGE\)/);
   assert.match(staleSource, /errorMessage:\s*message/);
-  assert.match(pageSource, /case "reconnecting":[\s\S]{0,80}return "尝试重连中"/);
+  assert.match(pageSource, /snapshot\.connectionState === "reconnecting" \|\| snapshot\.connectionState === "stale"\)[\s\S]{0,80}return "断线重连中"/);
   assert.doesNotMatch(pageSource, /等待对方恢复连接 · 对方已断开，联机已结束/);
 });
 

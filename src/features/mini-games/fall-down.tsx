@@ -48,7 +48,7 @@ import {
   type MiniGameLevelConfig,
 } from "@/lib/mini-games";
 import { getEndlessMiniGameStageConfig } from "@/lib/endless-mode";
-import type { SelfGameState } from "@/features/game-sync/types";
+import type { FallDownFragileState, SelfGameState } from "@/features/game-sync/types";
 import {
   MULTIPLAYER_REMOTE_INTERPOLATION_DELAY_MS,
   MULTIPLAYER_REMOTE_MAX_EXTRAPOLATION_MS,
@@ -127,6 +127,7 @@ export type FallDownRuntimeState = {
   direction: PlayerAvatarDirection;
   elapsedMs: number;
   failures: number;
+  fragileStates: FallDownFragileState[];
   progress: number;
   status: PrototypeStatus;
   vx: number;
@@ -196,6 +197,7 @@ function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: numb
     direction: resolveFallDownPlayerDirection(inputDirection),
     elapsedMs: Math.round(runtime.time * 1000),
     failures: runtime.failures,
+    fragileStates: collectFallDownFragileStates(runtime),
     progress: Number((runtime.layersReached / Math.max(1, requiredLayers)).toFixed(4)),
     status: runtime.status,
     vx: runtime.vx,
@@ -205,6 +207,16 @@ function makeFallDownRuntimeState(runtime: FallDownRuntime, requiredLayers: numb
     screenX: runtime.playerX,
     screenY: runtime.playerY - runtime.cameraY,
   };
+}
+
+function collectFallDownFragileStates(runtime: FallDownRuntime): FallDownFragileState[] {
+  return runtime.platforms
+    .filter((platform) => platform.kind === "fragile" && (platform.steppedAt !== null || platform.broken))
+    .map((platform) => ({
+      id: platform.id,
+      steppedAt: platform.steppedAt,
+      broken: platform.broken,
+    }));
 }
 
 function makeFallDownNoisePoints(rand: () => number, count: number) {
@@ -512,6 +524,7 @@ function applyFallDownAuthoritativeState(
   current.time = Math.max(current.time, (authoritativeState.elapsedMs ?? 0) / 1000);
   current.failures = authoritativeState.failures ?? current.failures;
   current.layersReached = Math.round((authoritativeState.progress ?? 0) * Math.max(1, requiredLayers));
+  applyFallDownFragileStates(current, authoritativeState.fragileStates);
   current.status = authoritativeState.status === "finished" ? "passed" : authoritativeState.status;
   current.started = current.status === "playing";
   if (current.status !== "playing") {
@@ -530,6 +543,24 @@ function normalizeEndlessFallDownPlatforms(platforms: FallDownPlatform[]): FallD
       width: Math.min(platform.width, ENDLESS_FALL_DOWN_MAX_NORMAL_PLATFORM_WIDTH),
     };
   });
+}
+
+function applyFallDownFragileStates(runtime: FallDownRuntime, fragileStates: FallDownFragileState[] | null | undefined) {
+  if (!fragileStates) return false;
+  let changed = false;
+  for (const fragileState of fragileStates) {
+    const platform = runtime.platforms.find((candidate) => candidate.id === fragileState.id && candidate.kind === "fragile");
+    if (!platform) continue;
+    if (platform.steppedAt !== fragileState.steppedAt) {
+      platform.steppedAt = fragileState.steppedAt;
+      changed = true;
+    }
+    if (platform.broken !== fragileState.broken) {
+      platform.broken = fragileState.broken;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function createFallDownRuntime(level: MiniGameLevelConfig, runSeed: string, stageSize: MiniGameStageSize, endless = false): FallDownRuntime {
@@ -655,6 +686,7 @@ function restoreFallDownSpectatorPlatforms(
   runSeed: string,
   stageSize: MiniGameStageSize,
   cameraY: number,
+  fragileStates?: FallDownFragileState[],
 ) {
   if (hasFallDownSpectatorPlatforms(runtime, cameraY, stageSize.height)) return false;
   const restored = createFallDownRuntime(level, runSeed, stageSize);
@@ -666,6 +698,7 @@ function restoreFallDownSpectatorPlatforms(
   );
   if (restoredPlatforms.length === 0) return false;
   runtime.platforms = [...runtime.platforms, ...restoredPlatforms.map((platform) => ({ ...platform }))].sort((left, right) => left.y - right.y);
+  applyFallDownFragileStates(runtime, fragileStates);
   return true;
 }
 
@@ -741,6 +774,7 @@ export function FallDownPrototype({
     transform: `${transformPoint3d(worldLayerOffsetX, worldLayerOffsetY)} scale(${worldLayerScale})`,
     transformOrigin: "top left",
     width: `${stageWidth}px`,
+    zIndex: 2,
   };
   const requiredLayers = numberParam(level.params, "layersRequired", 12);
   const fallDownPlayerSpeed = numberParam(level.params, "playerSpeed", 230);
@@ -1143,8 +1177,9 @@ export function FallDownPrototype({
         let spectatorViewChanged = false;
         if (spectatingRemote && typeof spectatorState?.cameraY === "number") {
           current.cameraY = smoothSpectatorCamera(current.cameraY, spectatorState.cameraY, delta);
-          spectatorViewChanged = restoreFallDownSpectatorPlatforms(current, level, runSeed, logicStageSize, spectatorState.cameraY);
+          spectatorViewChanged = restoreFallDownSpectatorPlatforms(current, level, runSeed, logicStageSize, spectatorState.cameraY, spectatorState.fragileStates);
         }
+        if (spectatingRemote) spectatorViewChanged = applyFallDownFragileStates(current, spectatorState.fragileStates) || spectatorViewChanged;
         paintFallDownFrame(current, spectatingRemote, spectatorSceneTimeRef.current);
         if (spectatorViewChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) syncView(time);
         syncRuntimeState(time, true);
@@ -1487,6 +1522,9 @@ export function FallDownPrototype({
         onPointerUp={stopDirection}
       >
         <DifficultyWaveBackdrop />
+        <div className="movement-control-backdrop" aria-hidden="true">
+          长按左右屏幕操控方向
+        </div>
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div style={worldLayerStyle}>

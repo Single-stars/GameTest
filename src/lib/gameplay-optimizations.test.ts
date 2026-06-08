@@ -308,8 +308,8 @@ test("mobile gameplay centering avoids unsupported individual transform properti
   assert.match(cssBlock(aimCss, ".advanced-aim-shooter.firing"), /transform:\s*translateX\(-50%\) translateY\(-4px\) scale\(1\.08\);/);
   assert.match(cssBlock(knifeCss, ".knife-wheel-wrap"), /position:\s*absolute;/);
   assert.match(cssBlock(knifeCss, ".knife-wheel-wrap"), /transform:\s*translateX\(-50%\);/);
-  assert.match(cssBlock(knifeCss, ".knife-launcher"), /transform:\s*translateX\(-50%\);/);
-  assert.match(knifeCss, /transform:\s*translateX\(-50%\) translateY\(calc\(-1 \* var\(--knife-flight-distance, 276px\)\)\);/);
+  assert.match(cssBlock(knifeCss, ".knife-launcher"), /transform:\s*translateX\(-50%\)/);
+  assert.match(knifeCss, /transform:\s*translateX\(-50%\) translateY\(-100%\) translateY\(calc\(var\(--knife-impact-y, 272px\) - var\(--knife-launcher-y, 548px\)\)\);/);
   assert.match(cssBlock(commonCss, ".prototype-feedback"), /transform:\s*translate\(-50%, -50%\);/);
   assert.match(cssBlock(doodleCss, ".doodle-platform.risk::after"), /transform:\s*translate\(-50%, -58%\);/);
   assert.doesNotMatch(playFrameCss, /base-practice-message[\s\S]*translate:\s*-50% 0;/);

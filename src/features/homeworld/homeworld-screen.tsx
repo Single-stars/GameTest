@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type PointerEvent,
 } from "react";
 import Image from "next/image";
@@ -390,7 +391,7 @@ export function HomeworldScreen({
     setCustomizationOpen(false);
   }, []);
 
-  const handleOpenMultiplayerEntry = useCallback((event?: PointerEvent<HTMLButtonElement>) => {
+  const handleOpenMultiplayerEntry = useCallback((event?: MouseEvent<HTMLButtonElement>) => {
     event?.stopPropagation();
     if (!canCreateRoom) return;
     setDoorMenuOpen(false);
@@ -400,7 +401,7 @@ export function HomeworldScreen({
     onOpenMultiplayerEntry?.();
   }, [canCreateRoom, onOpenMultiplayerEntry]);
 
-  const handleOpenOutdoorAdventure = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleOpenOutdoorAdventure = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!canOpenOutdoorAdventure) return;
     setDoorMenuOpen(false);
@@ -409,7 +410,7 @@ export function HomeworldScreen({
     onOpenOutdoorAdventure?.();
   }, [canOpenOutdoorAdventure, onOpenOutdoorAdventure]);
 
-  const toggleRoomEntryPanel = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const toggleRoomEntryPanel = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setRoomEntryPanelCollapsed((current) => !current);
   }, []);
@@ -465,46 +466,46 @@ export function HomeworldScreen({
     }
   }, [handleDoorUse, onOpenAvatarLab, openCustomization, player.sleeping, role, transferFloor, wake]);
 
-  const handleLeaveHome = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleLeaveHome = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!canLeaveHome) return;
     setDoorMenuOpen(false);
     onReturnHome?.();
   }, [canLeaveHome, onReturnHome]);
 
-  const handleCreateRoom = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleCreateRoom = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!canCreateRoom) return;
     setRoomEntryPanelCollapsed(false);
     onCreateRoom?.();
   }, [canCreateRoom, onCreateRoom]);
 
-  const handleLeaveRoom = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleLeaveRoom = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!canLeaveRoom) return;
     setDoorMenuOpen(false);
     onLeaveRoom?.();
   }, [canLeaveRoom, onLeaveRoom]);
 
-  const handleOpenLevelSelectRoom = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleOpenLevelSelectRoom = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!canOpenLevelSelectRoom) return;
     setDoorMenuOpen(false);
     onOpenLevelSelectRoom?.();
   }, [canOpenLevelSelectRoom, onOpenLevelSelectRoom]);
 
-  const handleJoinRoom = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleJoinRoom = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setRoomEntryPanelCollapsed(false);
     setJoinRoomDialogOpen(true);
   }, []);
 
-  const closeJoinRoomDialog = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const closeJoinRoomDialog = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setJoinRoomDialogOpen(false);
   }, []);
 
-  const handleConfirmJoinRoom = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handleConfirmJoinRoom = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     const roomCode = joinRoomCode.trim();
     if (!roomCode) return;
@@ -679,7 +680,7 @@ export function HomeworldScreen({
                 className={displayedState.room.variantId === variant.id ? "selected" : ""}
                 disabled={role !== "owner"}
                 key={variant.id}
-                onPointerDown={(event) => {
+                onClick={(event) => {
                   event.stopPropagation();
                   updateRoomVariant(variant.id);
                 }}
@@ -704,7 +705,7 @@ export function HomeworldScreen({
               className={displayedState.furniture[slot].variantId === variant.id ? "selected" : ""}
               disabled={role !== "owner"}
               key={variant.id}
-              onPointerDown={(event) => {
+              onClick={(event) => {
                 event.stopPropagation();
                 updateFurnitureVariant(slot, variant.id);
               }}
@@ -807,7 +808,7 @@ export function HomeworldScreen({
                       aria-label={canUse ? `使用${variant.label}` : `靠近${variant.label}`}
                       className={furnitureClassName(definition, reachable)}
                       disabled={!canUse}
-                      onPointerDown={(event) => {
+                      onClick={(event) => {
                         event.stopPropagation();
                         handleFurnitureUse(definition, reachable);
                       }}
@@ -862,22 +863,22 @@ export function HomeworldScreen({
                   <div className="homeworld-door-menu-panel">
                     {doorMode === "room" ? (
                       <>
-                        <button className="primary-button" disabled={!canOpenLevelSelectRoom} type="button" onPointerDown={handleOpenLevelSelectRoom}>
+                        <button className="primary-button" disabled={!canOpenLevelSelectRoom} type="button" onClick={handleOpenLevelSelectRoom}>
                           一起玩
                         </button>
-                        <button className="secondary-button" disabled={!canLeaveRoom} type="button" onPointerDown={handleLeaveRoom}>
+                        <button className="secondary-button" disabled={!canLeaveRoom} type="button" onClick={handleLeaveRoom}>
                           {role === "owner" ? "解散房间" : "离开房间"}
                         </button>
                       </>
                     ) : (
                       <>
-                        <button className="primary-button" disabled={!canCreateRoom} type="button" onPointerDown={handleOpenMultiplayerEntry}>
+                        <button className="primary-button" disabled={!canCreateRoom} type="button" onClick={handleOpenMultiplayerEntry}>
                           联机模式
                         </button>
-                        <button className="primary-button" disabled={!canOpenOutdoorAdventure} type="button" onPointerDown={handleOpenOutdoorAdventure}>
+                        <button className="primary-button" disabled={!canOpenOutdoorAdventure} type="button" onClick={handleOpenOutdoorAdventure}>
                           外出冒险
                         </button>
-                        <button className="secondary-button" disabled={!canLeaveHome} type="button" onPointerDown={handleLeaveHome}>
+                        <button className="secondary-button" disabled={!canLeaveHome} type="button" onClick={handleLeaveHome}>
                           离开家园
                         </button>
                       </>
@@ -930,7 +931,7 @@ export function HomeworldScreen({
           {customizationOpen ? (
             <div className="homeworld-customization-panel homeworld-customization-page" onPointerDown={(event) => event.stopPropagation()}>
               <header className="advanced-topbar homeworld-customization-topbar">
-                <button className="advanced-back-button" type="button" onPointerDown={closeCustomization}>
+                <button className="advanced-back-button" type="button" onClick={closeCustomization}>
                   返回
                 </button>
                 <span>家具皮肤</span>
@@ -942,7 +943,7 @@ export function HomeworldScreen({
                       aria-pressed={activeCategory.id === category.id}
                       className={activeCategory.id === category.id ? "selected" : ""}
                       key={category.id}
-                      onPointerDown={(event) => {
+                      onClick={(event) => {
                         event.stopPropagation();
                         setActiveCustomizationCategory(category.id);
                       }}
@@ -966,7 +967,7 @@ export function HomeworldScreen({
                   className={`homeworld-room-entry-toggle${roomEntryPanelCollapsed ? " collapsed" : ""}`}
                   type="button"
                   aria-label={roomEntryPanelCollapsed ? "Open multiplayer panel" : "Collapse multiplayer panel"}
-                  onPointerDown={toggleRoomEntryPanel}
+                  onClick={toggleRoomEntryPanel}
                 >
                   {roomEntryPanelCollapsed ? "^" : "v"}
                 </button>
@@ -978,14 +979,14 @@ export function HomeworldScreen({
                     <div className="homeworld-room-invite-item">
                       <span className="homeworld-room-invite-label">房间码</span>
                       <output className="code" aria-label="家园联机房间码">{roomCode}</output>
-                      <button className="secondary-button" type="button" onPointerDown={onCopyRoomCode}>
+                      <button className="secondary-button" type="button" onClick={onCopyRoomCode}>
                         {roomCodeCopyStatus === "copied" ? "已复制" : "复制码"}
                       </button>
                     </div>
                     <div className="homeworld-room-invite-item">
                       <span className="homeworld-room-invite-label">邀请链接</span>
                       <output aria-label="家园联机邀请链接">{inviteLink}</output>
-                      <button className="secondary-button" type="button" onPointerDown={onCopyInvite} aria-label={`复制家园联机邀请链接 ${inviteLink}`}>
+                      <button className="secondary-button" type="button" onClick={onCopyInvite} aria-label={`复制家园联机邀请链接 ${inviteLink}`}>
                         {copyStatus === "copied" ? "已复制" : "复制链接"}
                       </button>
                     </div>
@@ -995,12 +996,12 @@ export function HomeworldScreen({
                 ) : (
                   <div className="homeworld-room-entry-choice">
                     <section>
-                      <button className="primary-button" disabled={!canCreateRoom} type="button" onPointerDown={handleCreateRoom}>
+                      <button className="primary-button" disabled={!canCreateRoom} type="button" onClick={handleCreateRoom}>
                         创建房间
                       </button>
                     </section>
                     <section>
-                      <button className="secondary-button" type="button" onPointerDown={handleJoinRoom}>
+                      <button className="secondary-button" type="button" onClick={handleJoinRoom}>
                         加入房间
                       </button>
                     </section>
@@ -1035,10 +1036,10 @@ export function HomeworldScreen({
                   value={joinRoomCode}
                 />
                 <div className="homeworld-room-code-actions">
-                  <button className="primary-button" disabled={!joinRoomCode.trim()} type="button" onPointerDown={handleConfirmJoinRoom}>
+                  <button className="primary-button" disabled={!joinRoomCode.trim()} type="button" onClick={handleConfirmJoinRoom}>
                     确认
                   </button>
-                  <button className="secondary-button" type="button" onPointerDown={closeJoinRoomDialog}>
+                  <button className="secondary-button" type="button" onClick={closeJoinRoomDialog}>
                     取消
                   </button>
                 </div>

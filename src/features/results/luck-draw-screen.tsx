@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { buildLuckSlotSpinSchedule } from "@/lib/luck-animation";
+import { getLuckCoinTestTier, resolveLuckCoinTestScore } from "@/lib/luck-coin-test";
 import {
   canUseLuckDraw,
   canUseLuckDrawBatch,
@@ -118,10 +119,10 @@ export function LuckDrawScreen({
 
   return (
     <section className="luck-screen">
-      <header className="advanced-topbar">
-        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
-          返回
-        </button>
+      <header className="advanced-topbar">
+        <button className="advanced-back-button" type="button" onClick={onBack}>
+          返回
+        </button>
         <span>运气</span>
       </header>
 
@@ -169,20 +170,73 @@ export function LuckDrawScreen({
         </div>
 
         <div className="luck-draw-actions">
-          <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onPointerDown={draw}>
+          <button className="primary-button luck-draw-button" disabled={!canDraw} type="button" onClick={draw}>
             {spinning ? "抽取中" : "消耗 1 枚幸运币"}
-          </button>
-          {advancedProgress.luckDrawChances >= 10 ? (
-            <button className="secondary-button luck-draw-button" disabled={!canDrawBatch} type="button" onPointerDown={drawBatch}>
-              十连抽
-            </button>
-          ) : null}
+          </button>
+          {advancedProgress.luckDrawChances >= 10 ? (
+            <button className="secondary-button luck-draw-button" disabled={!canDrawBatch} type="button" onClick={drawBatch}>
+              十连抽
+            </button>
+          ) : null}
         </div>
 
         <p className="luck-rule-text">
-          {resultText}
-        </p>
+          {resultText}
+        </p>
       </div>
+      <LuckCoinTestCard />
+    </section>
+  );
+}
+
+type LuckCoinPopup = {
+  id: number;
+  points: number;
+};
+
+function LuckCoinTestCard() {
+  const [score, setScore] = useState(0);
+  const [lastPoints, setLastPoints] = useState(0);
+  const [flipTick, setFlipTick] = useState(0);
+  const [luckCoinPopups, setLuckCoinPopups] = useState<LuckCoinPopup[]>([]);
+  const tier = getLuckCoinTestTier(score);
+  const nextProgress = tier.nextThreshold === null
+    ? 1
+    : (score - tier.threshold) / Math.max(1, tier.nextThreshold - tier.threshold);
+
+  const testDraw = () => {
+    const points = resolveLuckCoinTestScore(Math.random());
+    setScore((current) => current + points);
+    setLastPoints(points);
+    setFlipTick((current) => current + 1);
+    const popup = { id: Date.now() + Math.random(), points };
+    setLuckCoinPopups((current) => [...current.slice(-5), popup]);
+    window.setTimeout(() => {
+      setLuckCoinPopups((current) => current.filter((item) => item.id !== popup.id));
+    }, 900);
+  };
+
+  return (
+    <section className="luck-coin-test" aria-label="新版幸运币测试">
+      <button
+        className={`luck-coin-test-card tone-${tier.tone} ${lastPoints >= 3 ? "rare" : ""}`}
+        key={flipTick}
+        type="button"
+        onClick={testDraw}
+      >
+        <span className="luck-coin-test-title">新版幸运币</span>
+        <strong>{score}</strong>
+        <span className="luck-coin-test-stars">{tier.star}/5 星</span>
+        <span className="luck-coin-test-progress" style={{ "--luck-coin-progress": `${Math.min(1, Math.max(0, nextProgress))}` } as CSSProperties} />
+        <span className="luck-coin-test-last" aria-live="polite">{lastPoints > 0 ? `+${lastPoints}` : "0"}</span>
+        <span className="luck-coin-test-popups" aria-hidden="true">
+          {luckCoinPopups.map((popup) => (
+            <span className={`luck-coin-test-popup ${popup.points >= 3 ? "rare" : ""}`} key={popup.id}>
+              +{popup.points}
+            </span>
+          ))}
+        </span>
+      </button>
     </section>
   );
 }

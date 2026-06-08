@@ -3,6 +3,12 @@ export type MultiplayerDirection = "left" | "right" | "none";
 export type GameStateStatus = "playing" | "failed" | "finished";
 export type GameStateGravity = "normal" | "light" | "heavy";
 
+export type FallDownFragileState = {
+  id: number;
+  steppedAt: number | null;
+  broken: boolean;
+};
+
 export type SelfGameState = {
   matchId?: string;
   progress: number;
@@ -40,6 +46,7 @@ export type SelfGameState = {
   animSeq?: number;
   receivedAt?: number;
   remoteTimeOffsetMs?: number;
+  fragileStates?: FallDownFragileState[];
   usedPlatformIds?: number[];
   knifeInsertedAngles?: number[];
   knifeFailedAngles?: number[];

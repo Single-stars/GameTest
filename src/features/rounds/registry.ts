@@ -53,20 +53,20 @@ export const ROUND_DEFINITIONS: RoundDefinition[] = [
     advanced: { type: "native", componentId: "advanced-aim" },
   },
   {
-    id: "search",
-    ...ROUND_DISPLAY_BY_ID.search,
-    rule: "长按左右屏幕可以控制小方块移动",
-    action: "到达终点前小心不要掉下去哦。",
-    base: { type: "mini-game", gameId: "doodle" },
-    advanced: { type: "mini-game", gameId: "doodle" },
-  },
-  {
     id: "stroop",
     ...ROUND_DISPLAY_BY_ID.stroop,
     rule: "长按左右屏幕可以控制小方块移动",
     action: "千万不要掉出屏幕外了！",
     base: { type: "mini-game", gameId: "fall-down" },
     advanced: { type: "mini-game", gameId: "fall-down" },
+  },
+  {
+    id: "search",
+    ...ROUND_DISPLAY_BY_ID.search,
+    rule: "长按左右屏幕可以控制小方块移动",
+    action: "到达终点前小心不要掉下去哦。",
+    base: { type: "mini-game", gameId: "doodle" },
+    advanced: { type: "mini-game", gameId: "doodle" },
   },
   {
     id: "rhythm",

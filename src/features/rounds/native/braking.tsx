@@ -92,6 +92,7 @@ const ENDLESS_BIG_LUCK_HAZARD_FREQUENCY_MULTIPLIER = 3.2;
 const ENDLESS_BIG_LUCK_RECOVERY_EVENT_DELAY_MS = 1300;
 const ENDLESS_BRAKING_CLEAR_SPAWN_LOCK_MS = 1000;
 const ENDLESS_BRAKING_LEVEL_10_REACTION_WINDOW_MS = 420;
+const ENDLESS_BRAKING_MAX_RAMP_DISTANCE = 30 * 110;
 const ENDLESS_BRAKING_RULE_ZONE_MIN_DIFFICULTY = 0.48;
 const ENDLESS_BRAKING_RULE_PORTAL_DISTANCE = 118;
 const ENDLESS_BRAKING_RULE_ZONE_DISTANCE = 520;
@@ -324,7 +325,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
   const config = advancedConfig!;
 
-  const endlessDifficulty = endless ? Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: endless.score }), endless.debugDifficulty) : 0;
+  const endlessDifficulty = endless ? Math.max(getEndlessDifficulty({ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: endless.score }), endless.debugDifficulty) : 0;
 
   const initialLaneCount = resolveAdvancedBrakingLaneCount(config);
 
@@ -530,6 +531,18 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     setHolding(false);
   }, []);
 
+  function shouldAdvancedBrakingRequireRuleDanger(level: number) {
+    return level === 10 || (level !== 9 && level % 3 === 0);
+  }
+
+  const canCompleteAdvancedBrakingRun = useCallback(function canCompleteAdvancedBrakingRun() {
+    return (
+      hazardIndexRef.current >= activeEventCountTarget &&
+      (!allowGray || fakeEventUsedRef.current) &&
+      (!shouldAdvancedBrakingRequireRuleDanger(config.level) || ruleDangerEventUsedRef.current)
+    );
+  }, [activeEventCountTarget, allowGray, config.level]);
+
 
 
   const resetEventTimer = useCallback(() => {
@@ -594,6 +607,29 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     [clearTimers, onComplete, releaseAdvancedBrakingPointerCapture],
 
   );
+
+  const completeAdvancedBrakingFinish = useCallback((extra: TrialEvent) => {
+    if (!canCompleteAdvancedBrakingRun()) return;
+    finish(extra);
+  }, [canCompleteAdvancedBrakingRun, finish]);
+
+  const completeAdvancedNoDangerStop = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    finish(
+      trial("braking", hazardIndexRef.current, {
+        shownAt: now(),
+        responseAt: now(),
+        correct: false,
+        errorType: "early_stop",
+        pointerType: pointerKind(event.pointerType),
+        value: {
+          collision: false,
+          earlyStop: true,
+          fakeStop: false,
+          exited: false,
+        },
+      }),
+    );
+  }, [finish]);
 
 
 
@@ -799,7 +835,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     const endlessRuntime = endlessRef.current;
     const endlessDistance = endlessRuntime ? Math.max(endlessRuntime.score, endlessDistanceRef.current) : 0;
     const activeDifficulty = endlessRuntime
-      ? Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: endlessDistance }), endlessRuntime.debugDifficulty)
+      ? Math.max(getEndlessDifficulty({ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: endlessDistance }), endlessRuntime.debugDifficulty)
       : 0;
     const activeConfig = getAdvancedBrakingRuleZoneConfig({
       brakingRuleZoneState: brakingRuleZoneStateRef.current,
@@ -1034,7 +1070,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
         const activeEndless = endlessRef.current;
         const activeDistance = activeEndless ? Math.max(endlessDistanceRef.current, activeEndless.score) : 0;
         const activeDifficulty = activeEndless
-          ? Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: activeDistance }), activeEndless.debugDifficulty)
+          ? Math.max(getEndlessDifficulty({ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: activeDistance }), activeEndless.debugDifficulty)
           : 0;
         const activeBrake = activeEndless ? getEndlessBrakingConfig({ distance: activeDistance }) : null;
         const activeSpeedMultiplier = getAdvancedBrakingSpeedMultiplier(activeEndless?.getActiveSkill());
@@ -1047,7 +1083,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
         if (activeEndless) {
           distanceDelta = (delta * activeSpeedPerSecond) / 1000;
           endlessDistanceRef.current = activeDistance + distanceDelta;
-          activeEndless.reportDifficulty(getEndlessDifficulty({ maxRamp: 36 * 110, progress: endlessDistanceRef.current }));
+          activeEndless.reportDifficulty(getEndlessDifficulty({ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: endlessDistanceRef.current }));
           syncEndlessWaveParallax(endlessDistanceRef.current);
         }
 
@@ -1164,11 +1200,20 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
           }
         }
 
+        if (!activeEndless && !hazardRef.current && !rulePortalRef.current && !canCompleteAdvancedBrakingRun()) {
+          eventTimerRef.current = 0;
+          startHazard();
+        }
+
         if (!activeEndless && getAdvancedBrakeHasReachedFinish({ runnerLeftPercent: next, runnerWidthPercent })) {
+          if (!canCompleteAdvancedBrakingRun()) {
+            frameRef.current = requestAnimationFrame(tick);
+            return;
+          }
 
           showAdvancedFeedback("success", true);
 
-          finish(
+          completeAdvancedBrakingFinish(
 
             trial("braking", hazardIndexRef.current, {
 
@@ -1249,6 +1294,8 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     clearTimers,
 
     activeEventCountTarget,
+    canCompleteAdvancedBrakingRun,
+    completeAdvancedBrakingFinish,
     config,
 
     isBigLuckSkillActive,
@@ -1322,6 +1369,9 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
           finishedRef.current = true;
           clearTimers();
         }
+      }
+      if (!activeEndless) {
+        completeAdvancedNoDangerStop(event);
       }
       return;
     }
@@ -1399,7 +1449,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     const activeReactionWindowMs = activeEndless
       ? resolveEndlessBrakingReactionWindowMs(
           activeBrake?.reactionWindowMs ?? reactionWindowMs,
-          Math.max(getEndlessDifficulty({ maxRamp: 36 * 110, progress: Math.max(activeEndless.score, endlessDistanceRef.current) }), activeEndless.debugDifficulty),
+          Math.max(getEndlessDifficulty({ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: Math.max(activeEndless.score, endlessDistanceRef.current) }), activeEndless.debugDifficulty),
           releaseSpeedMultiplier,
         )
       : resolveAdvancedBrakingReactionWindowMs(activeBrake?.reactionWindowMs ?? reactionWindowMs, releaseSpeedMultiplier);
@@ -1563,7 +1613,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
 }
 
-const DINO_TRIAL_COUNT = 5;
+const DINO_TRIAL_COUNT = 3;
 const DINO_SPEED_PER_SECOND = 26;
 const DINO_FAILURE_FEEDBACK_MS = 820;
 

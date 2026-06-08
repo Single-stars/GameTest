@@ -1,6 +1,7 @@
 import type {
   GameResult,
   GameStateStatus,
+  FallDownFragileState,
   MultiplayerDirection,
   SelfGameState,
 } from "@/features/game-sync/types";
@@ -18,6 +19,7 @@ import type {
 export type {
   GameResult,
   GameStateStatus,
+  FallDownFragileState,
   MultiplayerDirection,
   SelfGameState,
 } from "@/features/game-sync/types";
@@ -149,6 +151,7 @@ export type NetStateMessage = {
   elapsedMs?: number;
   seq?: number;
   sentAt?: number;
+  fragileStates?: FallDownFragileState[];
   usedPlatformIds?: number[];
   knifeInsertedAngles?: number[];
   knifeFailedAngles?: number[];

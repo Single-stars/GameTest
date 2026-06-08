@@ -6,6 +6,7 @@ import type { RoundId } from "./scoring.ts";
 export const ENDLESS_MODE_LEVEL = 0;
 export const ENDLESS_STARTING_REVIVES = 3;
 export const ENDLESS_REACTION_THRESHOLD_MS = 500;
+const ENDLESS_FLAPPY_MAX_RAMP = 180;
 export const ENDLESS_SUPPORTED_ROUND_IDS = [
   "reaction",
   "aim",
@@ -208,7 +209,7 @@ export function getEndlessRoundDifficultyState({
   roundId: RoundId;
   score: number;
 }) {
-  const maxRamp = roundId === "aim" ? 150 : roundId === "braking" ? 36 * 110 : 90;
+  const maxRamp = roundId === "aim" ? 150 : roundId === "braking" ? 30 * 110 : 90;
   const difficulty = Math.max(
     getEndlessDifficulty({ maxRamp, progress: score }),
     clamp(debugDifficulty, 0, 1),
@@ -289,7 +290,7 @@ export function getEndlessJourneyConfig({ roundId, score }: { roundId: RoundId; 
 }
 
 export function getEndlessFlappyConfig({ gateIndex }: { gateIndex: number }): EndlessFlappyConfig {
-  const difficulty = getEndlessDifficulty({ progress: gateIndex, maxRamp: 140 });
+  const difficulty = getEndlessDifficulty({ progress: gateIndex, maxRamp: ENDLESS_FLAPPY_MAX_RAMP });
   return {
     collectibleChance: chanceAfter(difficulty, 0.2, 0.55),
     gapSize: Math.round(lerp(190, 152, difficulty)),
@@ -310,7 +311,7 @@ export function getEndlessMiniGameStageConfig({
   miniGameId: MiniGameId | string;
   progress: number;
 }): EndlessMiniGameStageConfig {
-  const maxRamp = miniGameId === "flappy" ? 140 : 90;
+  const maxRamp = miniGameId === "flappy" ? ENDLESS_FLAPPY_MAX_RAMP : 90;
   const difficulty = Math.max(
     getEndlessDifficulty({ progress, maxRamp }),
     clamp(debugDifficulty, 0, 1),
@@ -433,7 +434,7 @@ export function getEndlessMiniGameStageConfig({
 }
 
 export function getEndlessBrakingConfig({ distance }: { distance: number }): EndlessBrakingConfig {
-  const difficulty = getEndlessDifficulty({ progress: distance, maxRamp: 36 * 110 });
+  const difficulty = getEndlessDifficulty({ progress: distance, maxRamp: 30 * 110 });
   return {
     dualLaneChance: chanceAfter(difficulty, 0.48, 0.34),
     dualLaneTransition: "warn-then-split",

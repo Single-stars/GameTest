@@ -236,6 +236,16 @@ test("knife shot geometry is derived from fire point to disc center", () => {
   assert.equal(Math.round(geometry.impactPoint.y), 272);
 });
 
+test("knife flight animation lands at the computed impact edge without overshoot pullback", () => {
+  const runtimeSource = readFileSync(new URL("../../features/mini-games/knife.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../../app/styles/mini-games/knife.css", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /"--knife-impact-y": `\$\{stageSize\.height - knifeGeometry\.launcherBottom - knifeGeometry\.flightDistance\}px`/);
+  assert.match(runtimeSource, /"--knife-launcher-y": `\$\{stageSize\.height - knifeGeometry\.launcherBottom\}px`/);
+  assert.match(cssSource, /translateY\(calc\(var\(--knife-impact-y, 272px\) - var\(--knife-launcher-y, 548px\)\)\)/);
+  assert.doesNotMatch(cssSource, /calc\(-1 \* var\(--knife-flight-distance/);
+});
+
 test("knife shot outcome keeps the impact angle for success and failures", () => {
   assert.deepEqual(
     resolveKnifeShotOutcome({

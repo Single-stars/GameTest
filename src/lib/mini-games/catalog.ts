@@ -798,9 +798,9 @@ const aimLevels: MiniGameLevelConfig[] = [
     requiredHits: 8,
     route: "incoming",
     failOnFlyOut: true,
-    spawnIntervalMs: 760,
+    spawnIntervalMs: 790,
     targetSize: 48,
-    targetSpeed: 0.12,
+    targetSpeed: 0.112,
   }),
   level("aim", 6, "6-6", "干扰靶Ⅱ", "普通", "干扰靶", "干扰靶数量增加，误伤会明显拖慢成绩。", "命中 8 个目标靶", {
     ...aimBaseParams,
@@ -829,9 +829,9 @@ const aimLevels: MiniGameLevelConfig[] = [
     requiredHits: 8,
     route: "incoming",
     failOnFlyOut: true,
-    spawnIntervalMs: 620,
+    spawnIntervalMs: 650,
     targetSize: 42,
-    targetSpeed: 0.15,
+    targetSpeed: 0.14,
   }),
   level("aim", 9, "6-9", "干扰靶Ⅲ", "困难", "干扰靶", "多个干扰靶混入，识别错误会被罚时。", "命中 8 个目标靶", {
     ...aimBaseParams,

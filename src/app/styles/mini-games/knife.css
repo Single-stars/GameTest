@@ -163,11 +163,11 @@
 .knife-launcher {
   z-index: 8;
   left: 50%;
-  top: auto;
-  bottom: var(--knife-launcher-bottom, 92px);
+  top: var(--knife-launcher-y, calc(100% - var(--knife-launcher-bottom, 92px)));
+  bottom: auto;
   width: 8px;
   height: 62px;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(-100%);
 }
 
 .knife-launcher.flying {
@@ -249,11 +249,11 @@
 
 @keyframes prototype-knife-fire {
   from {
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(-100%) translateY(0);
   }
 
   to {
-    transform: translateX(-50%) translateY(calc(-1 * var(--knife-flight-distance, 276px)));
+    transform: translateX(-50%) translateY(-100%) translateY(calc(var(--knife-impact-y, 272px) - var(--knife-launcher-y, 548px)));
   }
 }
 

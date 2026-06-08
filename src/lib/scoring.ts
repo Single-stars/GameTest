@@ -241,7 +241,7 @@ export function buildPerfectTrials(roundId: RoundId): TrialEvent[] {
         }),
       ];
     case "braking":
-      return Array.from({ length: 5 }, (_, index) =>
+      return Array.from({ length: 3 }, (_, index) =>
         perfectTrial("braking", index, {
           responseAt: index * 1000 + 180,
           value: {
@@ -532,7 +532,7 @@ export function deriveMetrics(trials: TrialEvent[]): DerivedMetrics {
     fallDownMiniScore !== null,
     squareJumpMiniScore !== null,
     memoryMiniScore !== null || memoryTrials.length >= 3,
-    brakingTrials.length >= 5,
+    brakingTrials.length >= 3,
     patienceTrial !== undefined,
   ].filter(Boolean).length;
 

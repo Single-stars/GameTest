@@ -236,13 +236,13 @@ function AdvancedPauseDialog({
       <div className="advanced-pause-dialog" role="dialog" aria-modal="true" aria-labelledby="advanced-pause-title">
         <h2 id="advanced-pause-title">暂停</h2>
         <div className="advanced-pause-actions">
-          <button type="button" onPointerDown={onSettleExit}>
+          <button type="button" onClick={onSettleExit}>
             结算退出
           </button>
-          <button type="button" onPointerDown={onRestart}>
+          <button type="button" onClick={onRestart}>
             重新开始
           </button>
-          <button type="button" onPointerDown={onContinue}>
+          <button type="button" onClick={onContinue}>
             继续游戏
           </button>
         </div>
@@ -372,17 +372,17 @@ function AdvancedResultCard({
         ) : null}
         <div className={`advanced-actions advanced-actions-${completionActions.length}`}>
           {completionActions.includes("retry") ? (
-            <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level)}>
+            <button className="secondary-button" type="button" onClick={() => onStartLevel(challenge.level)}>
               重试
             </button>
           ) : null}
           {completionActions.includes("next") ? (
-            <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(challenge.level + 1)}>
+            <button className="secondary-button" type="button" onClick={() => onStartLevel(challenge.level + 1)}>
               下一阶
             </button>
           ) : null}
           {completionActions.includes("back") ? (
-            <button className="primary-button" type="button" onPointerDown={onBack}>
+            <button className="primary-button" type="button" onClick={onBack}>
               返回
             </button>
           ) : null}
@@ -391,7 +391,7 @@ function AdvancedResultCard({
       {challenge.passed && challenge.gained ? (
         <div className="advanced-luck-coin-card" aria-live="polite">
           <strong>获得【幸运币】*1</strong>
-          <button className="advanced-reward-luck-link" type="button" onPointerDown={onOpenLuckDraw}>
+          <button className="advanced-reward-luck-link" type="button" onClick={onOpenLuckDraw}>
             前往抽奖
           </button>
         </div>
@@ -462,10 +462,10 @@ function EndlessResultCard({
         })}
       </div>
       <div className="advanced-actions advanced-actions-endless-share">
-        <button className="primary-button" type="button" onPointerDown={() => onShareChallenge(challenge.snapshot)}>
+        <button className="primary-button" type="button" onClick={() => onShareChallenge(challenge.snapshot)}>
           来挑战我
         </button>
-        <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
+        <button className="secondary-button" type="button" onClick={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
           再来一次
         </button>
       </div>
@@ -523,10 +523,10 @@ function EndlessChallengeResultCard({
         })}
       </div>
       <div className="advanced-actions">
-        <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
+        <button className="secondary-button" type="button" onClick={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
           再挑战一次
         </button>
-        <button className="primary-button" type="button" onPointerDown={onBack}>
+        <button className="primary-button" type="button" onClick={onBack}>
           返回
         </button>
       </div>
@@ -571,6 +571,7 @@ function AdvancedLevelSelectionPanel({
   const [sliderTravelPx, setSliderTravelPx] = React.useState(0);
   const [lockedEndlessNoticeVisible, setLockedEndlessNoticeVisible] = React.useState(false);
   const [endlessShake, setEndlessShake] = React.useState(false);
+  const [endlessShakeStyle, setEndlessShakeStyle] = React.useState<React.CSSProperties>({});
   const levelItems = getAdvancedLobbyLevelItems({ currentLevel, selectedLevel });
   const selectedItem = levelItems.find((item) => item.position === "selected");
   const selectedIsEndless = selectedLevel === ENDLESS_MODE_LEVEL;
@@ -644,6 +645,10 @@ function AdvancedLevelSelectionPanel({
   const handleLockedEndlessAttempt = React.useCallback(() => {
     setLockedEndlessNoticeVisible(true);
     setEndlessShake(false);
+    setEndlessShakeStyle({
+      "--advanced-endless-shake-x": `${Math.random() < 0.5 ? -1 : 1}px`,
+      "--advanced-endless-shake-y": `${Math.random() < 0.5 ? -1 : 1}px`,
+    } as React.CSSProperties);
     if (lockedEndlessNoticeTimerRef.current !== null) {
       window.clearTimeout(lockedEndlessNoticeTimerRef.current);
     }
@@ -826,6 +831,7 @@ function AdvancedLevelSelectionPanel({
                   data-level={item.level}
                   disabled={!item.selectable && !isEndlessItem}
                   key={item.level}
+                  style={endlessShakeStyle}
                   type="button"
                   onClick={(event) => handleLevelButtonClick(event, item.level)}
                 >
@@ -852,7 +858,7 @@ function AdvancedLevelSelectionPanel({
                     ✓
                   </span>
                 ) : null}
-                <strong>{`第 ${item.level} 关`}</strong>
+                <strong>{`进阶${item.level}`}</strong>
                 <small>{statusLabel}</small>
               </button>
             );
@@ -865,6 +871,7 @@ function AdvancedLevelSelectionPanel({
           aria-disabled={!endlessUnlocked}
           aria-label={`无尽模式${getAdvancedEndlessStatusLabel(endlessState)}`}
           className={`advanced-endless-slider-button ${endlessState} ${selectedIsEndless ? "selected" : ""} ${endlessShake ? "shake" : ""}`}
+          style={endlessShakeStyle}
           type="button"
           onClick={handleEndlessButtonClick}
         >
@@ -898,6 +905,17 @@ function AdvancedLevelSelectionPanel({
         </div>
       ) : null}
 
+      <div className={`advanced-lobby-actions ${selectedIsEndless ? "advanced-lobby-actions-endless" : ""}`}>
+        {selectedIsEndless ? null : (
+          <button className="secondary-button" disabled={selectedState === "locked"} type="button" onClick={() => onRestartBaseRound(selectedLevel)}>
+            重新挑战基础关
+          </button>
+        )}
+        <button className="primary-button" disabled={selectedState === "locked"} type="button" onClick={() => onStartLevel(selectedLevel)}>
+          开始挑战
+        </button>
+      </div>
+
       <div className="advanced-goal-card">
         <div className="advanced-goal-heading">
           <h2>{activeTitle}</h2>
@@ -911,17 +929,6 @@ function AdvancedLevelSelectionPanel({
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className={`advanced-lobby-actions ${selectedIsEndless ? "advanced-lobby-actions-endless" : ""}`}>
-        {selectedIsEndless ? null : (
-          <button className="secondary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onRestartBaseRound(selectedLevel)}>
-            重新挑战基础关
-          </button>
-        )}
-        <button className="primary-button" disabled={selectedState === "locked"} type="button" onPointerDown={() => onStartLevel(selectedLevel)}>
-          开始挑战
-        </button>
       </div>
     </div>
   );
@@ -979,7 +986,7 @@ function AdvancedLobbyContent({
   return (
     <section className="advanced-screen">
       <header className="advanced-topbar">
-        <button className="advanced-back-button" type="button" onPointerDown={onBack}>
+        <button className="advanced-back-button" type="button" onClick={onBack}>
           返回
         </button>
         <span>{round.measure}</span>
@@ -1160,11 +1167,11 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={openAdvancedPauseDialog}>
+            <button className="advanced-back-button" type="button" onClick={openAdvancedPauseDialog}>
               暂停
             </button>
             {shouldShowPerfectClearShortcut({ debugToolsVisible }) ? (
-              <button className="advanced-back-button" type="button" onPointerDown={() => onCompleteRound(onBuildPerfectTrials(playingConfig))}>
+              <button className="advanced-back-button" type="button" onClick={() => onCompleteRound(onBuildPerfectTrials(playingConfig))}>
                 一键满分过关
               </button>
             ) : null}
@@ -1220,7 +1227,7 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={openEndlessPauseDialog}>
+            <button className="advanced-back-button" type="button" onClick={openEndlessPauseDialog}>
               暂停
             </button>
           </div>
@@ -1250,7 +1257,7 @@ export function AdvancedChallengeScreen({
             })}
           />
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={openEndlessPauseDialog}>
+            <button className="advanced-back-button" type="button" onClick={openEndlessPauseDialog}>
               暂停
             </button>
           </div>
@@ -1279,7 +1286,7 @@ export function AdvancedChallengeScreen({
             <h1>{round.title}</h1>
           </div>
           <div className="advanced-header-actions">
-            <button className="advanced-back-button" type="button" onPointerDown={openBasePauseDialog}>
+            <button className="advanced-back-button" type="button" onClick={openBasePauseDialog}>
               暂停
             </button>
           </div>

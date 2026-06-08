@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -289,7 +290,7 @@ test("fall down maps its player visuals through the shared avatar without warnin
   const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownPlatformKind"), componentSource.indexOf("function makeDoodleWorld"));
   const avatarStateSource = fallDownSource.slice(
     fallDownSource.indexOf("function resolveFallDownPlayerAvatarView"),
-    fallDownSource.indexOf("function makeFallDownNoisePoints"),
+    fallDownSource.indexOf("function resolveFallDownRemoteSkin"),
   );
   const renderSource = fallDownSource.slice(
     fallDownSource.indexOf("className={`fall-down-player-shell"),
@@ -491,6 +492,32 @@ test("fall down adds falling hazards and L platforms without more than two conse
   assert.match(fallDownSource, /top: `-\$\{FALL_DOWN_LEDGE_HEIGHT - 2\}px`/);
   assert.doesNotMatch(fallDownSource, /top: "2px"/);
 });
+
+test("fall down multiplayer spectator sync carries fragile platform state", () => {
+  const componentSource = readMiniGameRuntimeSource();
+  const syncTypesSource = readFileSync(new URL("../../features/game-sync/types.ts", import.meta.url), "utf8");
+  const fallDownSource = componentSource.slice(componentSource.indexOf("type FallDownRuntime"), componentSource.indexOf("export function FallDownPrototype"));
+  const renderSource = componentSource.slice(componentSource.indexOf("export function FallDownPrototype"), componentSource.indexOf("export function DoodleJumpPrototype"));
+  const cssSource = readAppCssSource();
+
+  assert.match(componentSource, /import type \{ FallDownFragileState, SelfGameState \}/);
+  assert.match(syncTypesSource, /export type FallDownFragileState = \{[\s\S]*id: number;[\s\S]*steppedAt: number \| null;[\s\S]*broken: boolean;/);
+  assert.match(fallDownSource, /fragileStates: FallDownFragileState\[\];/);
+  assert.match(fallDownSource, /function collectFallDownFragileStates\(runtime: FallDownRuntime\)/);
+  assert.match(fallDownSource, /platform\.kind === "fragile" && \(platform\.steppedAt !== null \|\| platform\.broken\)/);
+  assert.match(fallDownSource, /fragileStates: collectFallDownFragileStates\(runtime\)/);
+  assert.match(fallDownSource, /function applyFallDownFragileStates\(/);
+  assert.match(fallDownSource, /platform\.steppedAt = fragileState\.steppedAt;/);
+  assert.match(fallDownSource, /platform\.broken = fragileState\.broken;/);
+  assert.match(fallDownSource, /applyFallDownFragileStates\(current, authoritativeState\.fragileStates\)/);
+  assert.match(renderSource, /applyFallDownFragileStates\(current, spectatorState\.fragileStates\)/);
+  assert.match(renderSource, /restoreFallDownSpectatorPlatforms\(current, level, runSeed, logicStageSize, spectatorState\.cameraY, spectatorState\.fragileStates\)/);
+  assert.match(renderSource, /className="movement-control-backdrop"/);
+  assert.match(cssSource, /\.movement-control-backdrop\s*{[\s\S]*pointer-events:\s*none;/);
+  assert.match(cssSource, /\.movement-control-backdrop\s*{[\s\S]*z-index:\s*1;/);
+  assert.match(cssSource, /\.movement-control-backdrop::before\s*{[\s\S]*border-left:\s*2px dashed/);
+}
+);
 
 test("fall down endless removes finite finish platforms so green to blue segment boundaries stay normal sized", () => {
   const componentSource = readMiniGameRuntimeSource();

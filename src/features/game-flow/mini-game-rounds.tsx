@@ -106,7 +106,7 @@ export function miniGameIdForBaseRound(round: RoundId): MiniGameId | null {
 export type MiniAdvancedStageConfig = AdvancedStageConfig & { params: AdvancedStageConfig["params"] & { miniGameId: MiniGameId; miniLevelId: string } };
 
 export function isMiniGameAdvancedConfig(config?: AdvancedStageConfig): config is MiniAdvancedStageConfig {
-  const miniGameIds: MiniGameId[] = ["doodle", "flappy", "knife", "square-jump", "fall-down"];
+  const miniGameIds: MiniGameId[] = ["fall-down", "doodle", "flappy", "knife", "square-jump"];
   return (
     typeof config?.params.miniGameId === "string" &&
     miniGameIds.includes(config.params.miniGameId as MiniGameId) &&

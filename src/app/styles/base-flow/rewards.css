@@ -121,7 +121,7 @@ button.reward-overlay-card {
   width: min(100%, 620px);
   aspect-ratio: auto;
   min-height: 0;
-  gap: 4px;
+  gap: 0;
   border: 0;
   border-radius: 0;
   padding: 0 14px;
@@ -147,7 +147,7 @@ button.reward-overlay-card {
 
 .reward-rank-switch {
   width: 100%;
-  min-height: clamp(96px, 20vw, 132px);
+  min-height: clamp(72px, 15vw, 104px);
   position: relative;
   display: grid;
   place-items: center;
@@ -221,6 +221,20 @@ button.reward-overlay-card {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.reward-endless-action {
+  position: relative;
+  z-index: 2;
+  margin-top: 12px;
+  border: 1px solid rgba(255, 253, 248, 0.72);
+  border-radius: 8px;
+  padding: 10px 18px;
+  background: rgba(255, 253, 248, 0.94);
+  color: #4a3210;
+  font-size: 15px;
+  font-weight: 950;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
 }
 
 .reward-endless-card.is-settled .reward-endless-unlock-label,

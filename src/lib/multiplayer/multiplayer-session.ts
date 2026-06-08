@@ -353,6 +353,7 @@ export class MultiplayerSession {
         exitingPlatformOffsetY: sequencedState.exitingPlatformOffsetY,
         elapsedMs: sequencedState.elapsedMs,
         failures: sequencedState.failures,
+        fragileStates: sequencedState.fragileStates,
         gravity: sequencedState.gravity,
         nextPlatformIndex: sequencedState.nextPlatformIndex,
         nextPlatformOffsetY: sequencedState.nextPlatformOffsetY,
@@ -703,6 +704,7 @@ export class MultiplayerSession {
             exitingPlatformOffsetY: message.exitingPlatformOffsetY,
             elapsedMs: message.elapsedMs,
             failures: message.failures,
+            fragileStates: message.fragileStates,
             gravity: message.gravity,
             nextPlatformIndex: message.nextPlatformIndex,
             nextPlatformOffsetY: message.nextPlatformOffsetY,
@@ -925,6 +927,7 @@ export class MultiplayerSession {
     const currentHomeworldState = this.snapshot.homeworldState;
     const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
     const currentLevelSelectState = this.snapshot.levelSelectState;
+    const currentRoomScore = this.snapshot.roomScore;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopSelfStateSnapshotTimer();
@@ -958,7 +961,7 @@ export class MultiplayerSession {
       levelSelectState: currentLevelSelectState,
       selfLevelSelectPresence: currentLevelSelectPresence,
       opponentLevelSelectPresence: null,
-      roomScore: null,
+      roomScore: currentRoomScore,
     });
   }
 

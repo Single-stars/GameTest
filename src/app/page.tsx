@@ -230,6 +230,7 @@ function createEndlessRewardItem(previousProgress: AdvancedProgress, nextProgres
   return {
     id: `${source}-endless-${roundId}`,
     kind: "endless",
+    roundId,
     roundTitle,
   };
 }
@@ -374,6 +375,13 @@ export default function Home() {
   const dismissRewardItem = useCallback(() => {
     setRewardQueue((current) => current.slice(1));
   }, []);
+
+  const startUnlockedEndlessChallenge = useCallback((roundId: RoundId) => {
+    if (!isEndlessModeUnlocked(advancedProgressRef.current, roundId)) return;
+    setRewardQueue((current) => current.slice(1));
+    setAdvancedChallenge({ mode: "intro", roundId, level: ENDLESS_MODE_LEVEL });
+    void transitionToStage("advanced");
+  }, [transitionToStage]);
 
   const revealPendingLuckRewards = useCallback((_outcome: LuckDrawOutcome) => {
     void _outcome;
@@ -1524,10 +1532,10 @@ export default function Home() {
               <strong>{pendingEndlessChallengeRoundTitle} · {pendingEndlessChallenge.target.score} 分</strong>
             </h2>
             <div className="advanced-actions">
-              <button className="primary-button" type="button" onPointerDown={acceptEndlessChallenge}>
+              <button className="primary-button" type="button" onClick={acceptEndlessChallenge}>
                 接受挑战
               </button>
-              <button className="secondary-button" type="button" onPointerDown={declineEndlessChallenge}>
+              <button className="secondary-button" type="button" onClick={declineEndlessChallenge}>
                 放弃挑战
               </button>
             </div>
@@ -1538,6 +1546,7 @@ export default function Home() {
         item={activeRewardItem}
         onDismiss={dismissRewardItem}
         onOpenAvatarLabSkin={openAvatarLabWithSkin}
+        onStartEndlessChallenge={startUnlockedEndlessChallenge}
       />
       <ModeTransitionOverlay state={transitionState} />
       <PlayerAvatar

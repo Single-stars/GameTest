@@ -1300,6 +1300,9 @@ export function DoodleJumpPrototype({
         onPointerUp={stopDoodleDirection}
       >
         <DifficultyWaveBackdrop />
+        <div className="movement-control-backdrop" aria-hidden="true">
+          长按左右屏幕操控方向
+        </div>
         <MiniGameFpsBadge fps={fps} />
         <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="doodle-world-layer" style={worldLayerStyle}>

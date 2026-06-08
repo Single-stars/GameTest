@@ -6,17 +6,14 @@
 }
 
 .app-shell.app-shell-play {
-  width: 100%;
+  position: fixed;
+  inset: 0;
+  width: var(--game-viewport-width, 100dvw);
   max-width: none;
-  height: 100vh;
-  min-height: 100vh;
-  height: 100svh;
-  min-height: 100svh;
-  height: 100dvh;
-  min-height: 100dvh;
   height: var(--game-viewport-height, 100dvh);
   min-height: var(--game-viewport-height, 100dvh);
   max-height: var(--game-viewport-height, 100dvh);
+  margin: 0;
   padding: 0;
   overflow: hidden;
 }

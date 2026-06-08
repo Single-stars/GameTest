@@ -380,6 +380,7 @@ test("square jump stage gravity only changes wave speed while platform gravity c
   assert.match(componentSource, /const platformMark = squarePlatformMark\(platform\)/);
   assert.match(componentSource, /\{platformMark \? <span className=\{platformMark\} aria-hidden="true" \/> : null\}/);
   assert.match(componentSource, /function squarePlatformMark\(platform: SquareJumpBasePlatform\): string \| null/);
+  assert.match(componentSource, /if \(platform\.finish\) return null;/);
   assert.doesNotMatch(componentSource, /if \(platform\.finish\) return "⚑"/);
   assert.doesNotMatch(componentSource, /if \(platform\.moving\) return "↔"/);
   assert.match(squareJumpCss, /\.square-jump-base-platform\.moving::before/);
@@ -453,6 +454,22 @@ test("square jump active gravity persists by default but can expire after a jump
   assert.deepEqual(lightAfterThree, { gravity: "normal", remainingJumps: null });
 });
 
+test("square jump finish platforms do not carry visible gravity markers", () => {
+  const gravityLevels = getMiniGameLevels("square-jump" as MiniGameId).filter((level) => level.params.gravityChallenge === true);
+
+  for (const level of gravityLevels) {
+    const platforms = generateSquareJumpPlatformSequence(level, `finish-gravity-${level.levelId}`, {
+      count: Number(level.params.jumpsRequired) + 1,
+      platformY: 435,
+      startX: 120,
+    });
+    const finish = platforms.find((platform) => platform.finish);
+
+    assert.ok(finish, `${level.levelId} should generate a finish platform`);
+    assert.equal(finish?.gravity, "normal", `${level.levelId} finish platform should not show gravity icons`);
+  }
+});
+
 test("square jump gravity platforms are staggered in advanced and rare in endless", () => {
   const gravityLevels = getMiniGameLevels("square-jump" as MiniGameId).filter((level) => level.params.gravityChallenge === true);
 
@@ -464,6 +481,7 @@ test("square jump gravity platforms are staggered in advanced and rare in endles
     });
 
     for (let index = 2; index < platforms.length; index += 1) {
+      if (platforms[index].finish || platforms[index - 1].finish) continue;
       assert.notEqual(
         platforms[index].gravity,
         platforms[index - 1].gravity,

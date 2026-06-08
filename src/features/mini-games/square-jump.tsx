@@ -126,6 +126,7 @@ function squareGravityIconClass(gravity: SquareGravityState) {
 }
 
 function squarePlatformMark(platform: SquareJumpBasePlatform): string | null {
+  if (platform.finish) return null;
   if (platform.gravity === "light") return squareGravityIconClass("light");
   if (platform.gravity === "heavy") return squareGravityIconClass("heavy");
   return null;

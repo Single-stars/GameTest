@@ -980,8 +980,9 @@ export function KnifeHitPrototype({
   const showLauncher = view.status === "playing" && (view.flying || view.launcherVisible) && !isEndlessWheelTransitioning;
   const showOverlay = mode === "prototype";
   const stageStyle = {
-    "--knife-flight-distance": `${knifeGeometry.flightDistance}px`,
+    "--knife-impact-y": `${stageSize.height - knifeGeometry.launcherBottom - knifeGeometry.flightDistance}px`,
     "--knife-launcher-bottom": `${knifeGeometry.launcherBottom}px`,
+    "--knife-launcher-y": `${stageSize.height - knifeGeometry.launcherBottom}px`,
     "--knife-wheel-top": `${knifeGeometry.wheelTop}px`,
   } as CSSProperties;
 

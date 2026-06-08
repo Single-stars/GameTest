@@ -48,9 +48,9 @@ export function aimConfigs() {
       targetCount: 8,
       route: "incoming",
       failOnFlyOut: true,
-      spawnIntervalMs: 760,
+      spawnIntervalMs: 790,
       targetSize: 48,
-      targetSpeed: 0.12,
+      targetSpeed: 0.112,
     }),
     config(6, "aim-decoy", "过关要求：只打高亮目标，不碰 2 个干扰靶。", {
       aimMode: "decoy",
@@ -78,9 +78,9 @@ export function aimConfigs() {
       targetCount: 8,
       route: "incoming",
       failOnFlyOut: true,
-      spawnIntervalMs: 620,
+      spawnIntervalMs: 650,
       targetSize: 42,
-      targetSpeed: 0.15,
+      targetSpeed: 0.14,
     }),
     config(9, "aim-decoy", "过关要求：只打高亮目标，不碰 3 个干扰靶。", {
       aimMode: "decoy",

@@ -1,15 +1,11 @@
 .play-screen {
-  width: min(100%, 920px);
-  height: 100vh;
-  min-height: 100vh;
-  height: 100svh;
-  min-height: 100svh;
-  height: 100dvh;
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  width: var(--game-viewport-width, 100dvw);
   height: var(--game-viewport-height, 100dvh);
   min-height: var(--game-viewport-height, 100dvh);
   max-height: var(--game-viewport-height, 100dvh);
-  margin: 0 auto;
+  margin: 0;
   display: grid;
   grid-template-rows: auto 4px minmax(0, 1fr);
   gap: 8px;
@@ -19,6 +15,19 @@
     calc(env(safe-area-inset-bottom) + var(--play-pad-y))
     max(10px, env(safe-area-inset-left));
   overflow: hidden;
+}
+
+.intro-card {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.intro-rules {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .round-header {

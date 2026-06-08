@@ -26,7 +26,7 @@ export function ShareImageScreen({
   return (
     <section className="share-image-screen">
       <div className="share-image-header">
-        <button className="secondary-button compact-button" type="button" onPointerDown={onBack}>
+        <button className="secondary-button compact-button" type="button" onClick={onBack}>
           返回
         </button>
         <div>

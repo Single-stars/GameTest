@@ -436,6 +436,43 @@ test("advanced base replay uses a two-row play layout so the round is playable",
   assert.match(cssSource, /\.advanced-base-play-screen\s*{[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
 });
 
+test("advanced level cards use advanced numbering and keep start actions above scrollable requirements", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const panelSource = screenSource.slice(
+    screenSource.indexOf("function AdvancedLevelSelectionPanel"),
+    screenSource.indexOf("function AdvancedLobbyContent"),
+  );
+  const panelRule = cssRule(cssSource, ".advanced-lobby-panel");
+  const goalRule = cssRule(cssSource, ".advanced-goal-card");
+  const actionsRule = cssRule(cssSource, ".advanced-lobby-actions");
+
+  assert.match(panelSource, /<strong>\{`进阶\$\{item\.level\}`\}<\/strong>/);
+  assert.doesNotMatch(panelSource, /第 \$\{item\.level\} 关/);
+  assert.equal(panelSource.indexOf('className="advanced-lobby-slider-row"') < panelSource.indexOf("advanced-lobby-actions"), true);
+  assert.equal(panelSource.indexOf("advanced-lobby-actions") < panelSource.indexOf("advanced-goal-card"), true);
+  assert.match(panelRule, /grid-template-rows:[\s\S]*auto[\s\S]*auto[\s\S]*minmax\(0,\s*1fr\)/);
+  assert.match(goalRule, /min-height:\s*0;/);
+  assert.match(goalRule, /overflow-y:\s*auto;/);
+  assert.match(goalRule, /-webkit-overflow-scrolling:\s*touch;/);
+  assert.match(actionsRule, /position:\s*relative;/);
+  assert.match(actionsRule, /z-index:\s*4;/);
+});
+
+test("locked endless shake randomizes direction with CSS variables", () => {
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(screenSource, /endlessShakeStyle/);
+  assert.match(screenSource, /setEndlessShakeStyle\(\{[\s\S]*"--advanced-endless-shake-x"/);
+  assert.match(screenSource, /"--advanced-endless-shake-y"/);
+  assert.match(screenSource, /style=\{endlessShakeStyle\}/);
+  const shakeKeyframes = cssSource.match(/@keyframes advanced-endless-shake\s*{[\s\S]*?\n}/)?.[0] ?? "";
+  assert.match(shakeKeyframes, /translate3d\(var\(--advanced-endless-shake-x/);
+  assert.match(shakeKeyframes, /var\(--advanced-endless-shake-y/);
+  assert.doesNotMatch(shakeKeyframes, /translateY\(-1px\)/);
+});
+
 test("advanced lobby hero keeps the same frame height when endless title is selected", () => {
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
 

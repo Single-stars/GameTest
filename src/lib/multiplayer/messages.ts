@@ -59,6 +59,18 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(isNumber);
 }
 
+function isFallDownFragileStateArray(value: unknown) {
+  return (
+    Array.isArray(value) &&
+    value.every((item) =>
+      isRecord(item) &&
+      isNumber(item.id) &&
+      (item.steppedAt === null || isNumber(item.steppedAt)) &&
+      isBoolean(item.broken),
+    )
+  );
+}
+
 function isBreakdownUnit(value: unknown) {
   return value === "ms" || value === "point" || value === "count" || value === "note";
 }
@@ -219,6 +231,7 @@ function isStateMessage(value: unknown): value is NetStateMessage {
   if (value.elapsedMs !== undefined && !isNumber(value.elapsedMs)) return false;
   if (value.seq !== undefined && !isNumber(value.seq)) return false;
   if (value.sentAt !== undefined && !isNumber(value.sentAt)) return false;
+  if (value.fragileStates !== undefined && !isFallDownFragileStateArray(value.fragileStates)) return false;
   if (value.usedPlatformIds !== undefined && !isNumberArray(value.usedPlatformIds)) return false;
   if (value.knifeInsertedAngles !== undefined && !isNumberArray(value.knifeInsertedAngles)) return false;
   if (value.knifeFailedAngles !== undefined && !isNumberArray(value.knifeFailedAngles)) return false;
@@ -448,6 +461,7 @@ export function createStateMessage(data: Omit<NetStateMessage, "v" | "kind" | "t
     elapsedMs: data.elapsedMs,
     seq: data.seq,
     sentAt: data.sentAt,
+    fragileStates: data.fragileStates,
     usedPlatformIds: data.usedPlatformIds,
     knifeInsertedAngles: data.knifeInsertedAngles,
     knifeFailedAngles: data.knifeFailedAngles,

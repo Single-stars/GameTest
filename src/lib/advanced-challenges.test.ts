@@ -377,6 +377,36 @@ test("advanced braking rule-tale levels force the relevant true-danger event bef
   assert.equal(isAdvancedBrakeRuleDangerEvent(10, level10Forced), true);
 });
 
+test("incoming aim second and third variants are slightly easier without becoming trivial", () => {
+  const secondIncoming = getAdvancedStageConfig("aim", 5);
+  const thirdIncoming = getAdvancedStageConfig("aim", 8);
+
+  assert.equal(secondIncoming.params.aimMode, "incoming");
+  assert.equal(thirdIncoming.params.aimMode, "incoming");
+  assert.equal(secondIncoming.params.targetSpeed, 0.112);
+  assert.equal(thirdIncoming.params.targetSpeed, 0.14);
+  assert.equal(secondIncoming.params.spawnIntervalMs, 790);
+  assert.equal(thirdIncoming.params.spawnIntervalMs, 650);
+});
+
+test("advanced braking cannot finish before hazards and required fake/rule events are complete", () => {
+  const brakingSource = readSource("../features/rounds/native/braking.tsx");
+  const advancedBrakingSource = brakingSource.slice(
+    brakingSource.indexOf("export function AdvancedBrakingRound"),
+    brakingSource.indexOf("const DINO_TRIAL_COUNT"),
+  );
+
+  assert.match(advancedBrakingSource, /function canCompleteAdvancedBrakingRun/);
+  assert.match(advancedBrakingSource, /hazardIndexRef\.current >= activeEventCountTarget/);
+  assert.match(advancedBrakingSource, /!allowGray \|\| fakeEventUsedRef\.current/);
+  assert.match(advancedBrakingSource, /!shouldAdvancedBrakingRequireRuleDanger\(config\.level\) \|\| ruleDangerEventUsedRef\.current/);
+  assert.match(advancedBrakingSource, /if \(!canCompleteAdvancedBrakingRun\(\)\) return;/);
+  assert.match(advancedBrakingSource, /if \(!activeEndless && !hazardRef\.current && !rulePortalRef\.current && !canCompleteAdvancedBrakingRun\(\)\)/);
+  assert.match(advancedBrakingSource, /completeAdvancedNoDangerStop/);
+  assert.match(advancedBrakingSource, /errorType:\s*"early_stop"/);
+  assert.doesNotMatch(advancedBrakingSource, /if \(progressRef\.current >= 100\) \{[\s\S]{0,180}finish\(\);/);
+});
+
 test("advanced braking exposes in-round rule hints for rule-tale variants", () => {
   assert.equal(getAdvancedBrakeRuleHint(1, undefined), null);
   assert.equal(getAdvancedBrakeRuleHint(3, "single-red-stop"), "两个红色危险同时出现是安全的");
@@ -538,6 +568,13 @@ test("endless green-light lane count changes use a readable buffer instead of in
   assert.match(reactionSource, /setActiveLaneCount\(targetLaneCount\)/);
   assert.match(reactionSource, /advanced-reaction-grid cells-\$\{lanes\} \$\{laneTransitioning \? "lane-transitioning" : ""\}/);
   assert.match(cssSource, /\.advanced-reaction-grid\.lane-transitioning/);
+});
+
+test("four-cell green-light grids render the missing vertical divider for a complete 2x2 split", () => {
+  const cssSource = readSource("../app/styles/base-flow/native-reaction.css");
+  const cells4Rule = cssRule(cssSource, ".advanced-reaction-grid.cells-4 .advanced-reaction-cell:nth-child(2n)");
+
+  assert.match(cells4Rule, /border-left:\s*2px solid/);
 });
 
 test("advanced braking endless runner uses a lightweight background parallax instead of in-track scenery posts", () => {

@@ -187,6 +187,11 @@ export function MultiplayerLevelSelectRoom({
     [onReadyChange, publishPresence],
   );
 
+  const confirmReadyFromGuide = useCallback(() => {
+    if (!readyGuideVisible) return;
+    updateReady(true);
+  }, [readyGuideVisible, updateReady]);
+
   const setInputDirection = useCallback((nextDirection: "left" | "right" | "none") => {
     inputDirectionRef.current = nextDirection;
     setMoving(nextDirection !== "none");
@@ -332,9 +337,9 @@ export function MultiplayerLevelSelectRoom({
       tabIndex={0}
     >
       {showGuides ? (
-        <div className="multiplayer-level-room-guides" aria-hidden="true">
-          <div className="multiplayer-level-guide left">{leftExitLabel}</div>
-          {readyGuideVisible ? <div className="multiplayer-level-guide right">{rightReadyLabel}</div> : null}
+        <div className="multiplayer-level-room-guides">
+          <button className="multiplayer-level-guide left" type="button" onClick={onBackToRoom}>{leftExitLabel}</button>
+          {readyGuideVisible ? <button className="multiplayer-level-guide right" type="button" onClick={confirmReadyFromGuide}>{rightReadyLabel}</button> : null}
         </div>
       ) : null}
 

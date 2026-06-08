@@ -417,7 +417,7 @@ test("homeworld room entry uses compact side-by-side actions and a join-code dia
   assert.match(homeworldScreenSource, /handleConfirmJoinRoom/);
   assert.match(homeworldScreenSource, /className="homeworld-room-invite"/);
   assert.match(homeworldScreenSource, /aria-label="家园联机房间码"/);
-  assert.match(homeworldScreenSource, /onPointerDown=\{onCopyRoomCode\}/);
+  assert.match(homeworldScreenSource, /onClick=\{onCopyRoomCode\}/);
   assert.match(homeworldScreenSource, /roomCodeCopyStatus === "copied" \? "已复制" : "复制码"/);
   assert.match(homeworldScreenSource, /复制链接/);
   assert.match(homeworldScreenSource, /aria-label=\{`复制家园联机邀请链接 \$\{inviteLink\}`\}/);

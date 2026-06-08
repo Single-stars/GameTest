@@ -5,13 +5,24 @@
   margin: 0 auto;
 }
 
-.advanced-screen,
-.luck-screen {
-  min-height: min(760px, var(--game-viewport-height, 100svh));
+.advanced-screen, .luck-screen {
+  position: fixed;
+  inset: 0;
+  width: var(--game-viewport-width, 100dvw);
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
   display: grid;
+  grid-template-columns: minmax(0, min(100%, 760px));
   align-content: start;
+  justify-content: center;
   gap: 14px;
-  padding-block: 8px;
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
+  overflow: hidden;
 }
 
 .advanced-topbar {
@@ -192,6 +203,7 @@
 
 .advanced-lobby-panel {
   gap: 18px;
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   position: relative;
 }
@@ -547,13 +559,13 @@
 @keyframes advanced-endless-shake {
   0%,
   100% {
-    transform: translateY(0) scale(var(--advanced-lobby-level-scale, 1));
+    transform: translate3d(0, 0, 0) scale(var(--advanced-lobby-level-scale, 1));
   }
   24% {
-    transform: translateY(-1px) scale(var(--advanced-lobby-level-scale, 1));
+    transform: translate3d(var(--advanced-endless-shake-x, 1px), var(--advanced-endless-shake-y, -1px), 0) scale(var(--advanced-lobby-level-scale, 1));
   }
   54% {
-    transform: translateY(1px) scale(var(--advanced-lobby-level-scale, 1));
+    transform: translate3d(calc(var(--advanced-endless-shake-x, 1px) * -1), calc(var(--advanced-endless-shake-y, -1px) * -1), 0) scale(var(--advanced-lobby-level-scale, 1));
   }
 }
 
@@ -688,11 +700,14 @@
 }
 
 .advanced-goal-card {
+  min-height: 0;
   display: grid;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: rgba(255, 250, 241, 0.58);
 }
 
@@ -770,6 +785,8 @@
 }
 
 .advanced-lobby-actions {
+  position: relative;
+  z-index: 4;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -1318,11 +1335,11 @@
   background: #14b8a6;
 }
 
-.endless-energy-console.energy-gain .endless-energy-meter {
+.endless-energy-console.energy-gain .endless-energy-segments {
   animation: endless-energy-meter-gain 440ms cubic-bezier(0.2, 1.45, 0.34, 1) both;
 }
 
-.endless-energy-console.energy-loss .endless-energy-meter {
+.endless-energy-console.energy-loss .endless-energy-segments {
   animation: endless-energy-meter-loss 380ms ease-out both;
 }
 
@@ -1700,8 +1717,8 @@
   .endless-heart-token.heart-loss .endless-heart,
   .endless-heart-token.heart-gain .endless-heart,
   .endless-heart-token.danger-heart .endless-heart,
-  .endless-energy-console.energy-gain .endless-energy-meter,
-  .endless-energy-console.energy-loss .endless-energy-meter,
+  .endless-energy-console.energy-gain .endless-energy-segments,
+  .endless-energy-console.energy-loss .endless-energy-segments,
   .endless-energy-cell.energy-cell-pop,
   .endless-energy-cell.energy-cell-drain,
   .endless-score-readout strong.score-pop,

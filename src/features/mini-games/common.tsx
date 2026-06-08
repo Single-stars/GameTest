@@ -446,10 +446,10 @@ export function PrototypeEndOverlay({
       <h2>{status === "passed" ? "閫氬叧" : "澶辫触"}</h2>
       <small>{reason}</small>
       <div className="advanced-actions">
-        <button className="secondary-button" type="button" onPointerDown={onRestart}>
+        <button className="secondary-button" type="button" onClick={onRestart}>
           閲嶆柊寮€濮?
         </button>
-        <button className="primary-button" type="button" onPointerDown={onBackToSelect}>
+        <button className="primary-button" type="button" onClick={onBackToSelect}>
           杩斿洖鍏冲崱閫夋嫨
         </button>
       </div>

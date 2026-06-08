@@ -390,16 +390,16 @@ export function ResultScreen({
       detail: aimMisses !== null ? `未命中 ${aimMisses}` : "不足",
     },
     {
-      roundId: "search",
-      label: ROUND_DISPLAY_BY_ID.search.label,
-      score: result.scores.search,
-      detail: result.metrics.searchMeanCountError !== null ? `失误 ${result.metrics.searchMeanCountError.toFixed(0)}` : "不足",
-    },
-    {
       roundId: "stroop",
       label: ROUND_DISPLAY_BY_ID.stroop.label,
       score: result.scores.interference,
       detail: stroopFailures !== null ? `失误 ${stroopFailures}` : "不足",
+    },
+    {
+      roundId: "search",
+      label: ROUND_DISPLAY_BY_ID.search.label,
+      score: result.scores.search,
+      detail: result.metrics.searchMeanCountError !== null ? `失误 ${result.metrics.searchMeanCountError.toFixed(0)}` : "不足",
     },
     {
       roundId: "rhythm",

@@ -10,7 +10,7 @@ import {
 test("formal round registry preserves official order and base implementations", () => {
   assert.deepEqual(
     ROUND_DEFINITIONS.map((round) => round.id),
-    ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"],
+    ["reaction", "aim", "stroop", "search", "rhythm", "memory", "braking", "patience"],
   );
 
   assert.deepEqual(
@@ -18,8 +18,8 @@ test("formal round registry preserves official order and base implementations", 
     [
       ["reaction", { type: "native", componentId: "reaction" }],
       ["aim", { type: "native", componentId: "aim" }],
-      ["search", { type: "mini-game", gameId: "doodle" }],
       ["stroop", { type: "mini-game", gameId: "fall-down" }],
+      ["search", { type: "mini-game", gameId: "doodle" }],
       ["rhythm", { type: "mini-game", gameId: "square-jump" }],
       ["memory", { type: "mini-game", gameId: "flappy" }],
       ["braking", { type: "native", componentId: "braking" }],
@@ -32,8 +32,8 @@ test("formal round registry preserves official order and base implementations", 
     [
       ["reaction", { type: "native", componentId: "advanced-reaction" }],
       ["aim", { type: "native", componentId: "advanced-aim" }],
-      ["search", { type: "mini-game", gameId: "doodle" }],
       ["stroop", { type: "mini-game", gameId: "fall-down" }],
+      ["search", { type: "mini-game", gameId: "doodle" }],
       ["rhythm", { type: "mini-game", gameId: "square-jump" }],
       ["memory", { type: "mini-game", gameId: "flappy" }],
       ["braking", { type: "native", componentId: "advanced-braking" }],
@@ -46,8 +46,8 @@ test("formal round registry preserves official order and base implementations", 
     [
       ["reaction", "绿灯行", "反应"],
       ["aim", "移动靶", "精准"],
-      ["search", "一路向上", "走位"],
       ["stroop", "一路向下", "专注"],
+      ["search", "一路向上", "走位"],
       ["rhythm", "跳一跳", "手感"],
       ["memory", "一路向前", "协调"],
       ["braking", "停下来", "控制"],
@@ -86,6 +86,17 @@ test("base round rendering reads formal implementations from the round registry"
   assert.doesNotMatch(baseMappingSource, /if \(round === "rhythm"\) return "square-jump";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "memory"\) return "flappy";/);
   assert.doesNotMatch(baseMappingSource, /if \(round === "patience"\) return "knife";/);
+});
+
+test("result screen card order follows the base round order with fall-down before doodle", () => {
+  const resultScreenSource = readFileSync(new URL("../features/results/result-screen.tsx", import.meta.url), "utf8");
+  const rowsSource = resultScreenSource.slice(
+    resultScreenSource.indexOf("const rows = ["),
+    resultScreenSource.indexOf("] as const satisfies", resultScreenSource.indexOf("const rows = [")),
+  );
+
+  assert.equal(rowsSource.indexOf('roundId: "stroop"') < rowsSource.indexOf('roundId: "search"'), true);
+  assert.equal(rowsSource.indexOf("ROUND_DISPLAY_BY_ID.stroop.label") < rowsSource.indexOf("ROUND_DISPLAY_BY_ID.search.label"), true);
 });
 
 test("advanced round rendering reads formal implementations from the round registry", () => {

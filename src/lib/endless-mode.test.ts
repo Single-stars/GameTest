@@ -245,8 +245,8 @@ test("endless pause dialog replaces restart and back actions while freezing live
   assert.match(screenSource, /结算退出/);
   assert.match(screenSource, /重新开始/);
   assert.match(screenSource, /继续游戏/);
-  assert.match(screenSource, /onPointerDown=\{openEndlessPauseDialog\}/);
-  assert.match(screenSource, /onPointerDown=\{openBasePauseDialog\}/);
+  assert.match(screenSource, /onClick=\{openEndlessPauseDialog\}/);
+  assert.match(screenSource, /onClick=\{openBasePauseDialog\}/);
   assert.match(screenSource, />\s*暂停\s*<\/button>/);
   assert.doesNotMatch(screenSource, /endless-playing[\s\S]{0,700}>返回<\/button>[\s\S]{0,220}>重试<\/button>/);
   assert.doesNotMatch(screenSource, /base-playing[\s\S]{0,700}>返回<\/button>[\s\S]{0,220}>重试<\/button>/);
@@ -380,7 +380,9 @@ test("endless aim keeps one shootable target, paces distractors, and restores en
   assert.match(aimSource, /countAdvancedAimShootableTargets\(nextTargets\) < maxActiveEndlessTargets/);
   assert.match(aimSource, /Math\.random\(\) < ENDLESS_AIM_ENERGY_TARGET_SPAWN_CHANCE/);
   assert.match(aimSource, /makeEndlessAimShootableTarget\(\{/);
-  assert.match(aimSource, /if \(!shotPenaltyBlocked\) showAimFeedback\("bad"\);/);
+  assert.match(aimSource, /function settleEndlessAimFailure|const settleEndlessAimFailure/);
+  assert.match(aimSource, /if \(!penaltyBlocked\) showAimFeedback\("bad"\);/);
+  assert.match(aimSource, /finish\(\);/);
   assert.match(aimSource, /if \(!shotPenaltyBlocked\) showAimFeedback\("good"\);/);
   assert.match(aimSource, /advanced-aim-incoming-warning side-\$\{target\.incomingSide\} \$\{target\.kind === "energy" \? "energy" : ""\}/);
   assert.match(cssSource, /\.advanced-aim-target\.energy/);
@@ -444,7 +446,10 @@ test("endless HUD animates resource changes and highlights new records", () => {
   assert.match(cssSource, /\.endless-heart-token\.heart-loss \.endless-heart/);
   assert.match(cssSource, /\.endless-heart-token\.heart-gain \.endless-heart/);
   assert.match(cssSource, /\.endless-heart-token\.danger-heart \.endless-heart/);
-  assert.match(cssSource, /\.endless-energy-console\.energy-gain \.endless-energy-meter/);
+  assert.match(cssSource, /\.endless-energy-console\.energy-gain \.endless-energy-segments/);
+  assert.match(cssSource, /\.endless-energy-console\.energy-loss \.endless-energy-segments/);
+  assert.doesNotMatch(cssSource, /\.endless-energy-console\.energy-gain \.endless-energy-meter\s*{/);
+  assert.doesNotMatch(cssSource, /\.endless-energy-console\.energy-loss \.endless-energy-meter\s*{/);
   assert.match(cssSource, /\.endless-energy-cell\.energy-cell-pop/);
   assert.match(cssSource, /\.endless-energy-cell\.energy-cell-drain/);
   assert.match(cssSource, /\.endless-score-readout\.new-record/);
@@ -615,7 +620,7 @@ test("endless route mini-games generate future content from current progress", (
   const fallLate = getEndlessMiniGameStageConfig({ miniGameId: "fall-down", progress: 90 });
   const flappyEarly = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 0 });
   const flappyLate = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 90 });
-  const flappyGold = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 });
+  const flappyGold = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 180 });
 
   assert.equal(doodleEarly.sourceAdvancedLevel, 1);
   assert.equal(doodleLate.sourceAdvancedLevel, 10);
@@ -654,12 +659,12 @@ test("endless route mini-games generate future content from current progress", (
   assert.equal(Number(fallLate.params.dangerPlatformCount) > Number(fallEarly.params.dangerPlatformCount), true);
 
   assert.equal(flappyLate.sourceAdvancedLevel < 10, true);
-  assert.equal(getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 }).sourceAdvancedLevel, 10);
+  assert.equal(getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 180 }).sourceAdvancedLevel, 10);
   assert.equal(Number(flappyLate.params.movingGateRatio) > Number(flappyEarly.params.movingGateRatio), true);
   assert.equal(Number(flappyEarly.params.collectibleCount) >= 4, true);
   assert.equal(Number(flappyGold.params.collectibleCount) >= 14, true);
   assert.equal(flappyGold.params.collectibleCount, flappyGold.params.gateCount);
-  assert.equal(Number(flappyLate.params.movingGateSpeed) >= 3, true);
+  assert.equal(Number(flappyGold.params.movingGateSpeed) >= 3, true);
   assert.equal(Number(flappyLate.params.gapSize) < Number(flappyEarly.params.gapSize), true);
 });
 
@@ -897,6 +902,27 @@ test("advanced screen and app route endless mode through a real runtime with com
   assert.match(runtimeSource, /levelOverride/);
   assert.doesNotMatch(runtimeSource, /EndlessReactionGame|EndlessAimGame|EndlessFlappyGame|EndlessKnifeGame/);
   assert.doesNotMatch(cssSource, /\.endless-stage\s*{/);
+});
+
+test("endless ramps are tuned per round instead of sharing one generic ramp", () => {
+  const endlessSource = readFileSync(new URL("./endless-mode.ts", import.meta.url), "utf8");
+  const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
+  const getEndlessMiniGameStageConfig = (endlessMode as typeof endlessMode & {
+    getEndlessMiniGameStageConfig?: (input: { debugDifficulty?: number; miniGameId: string; progress: number }) => {
+      sourceAdvancedLevel: number;
+    };
+  }).getEndlessMiniGameStageConfig;
+  assert.equal(typeof getEndlessMiniGameStageConfig, "function");
+  const flappyEarly = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 0 });
+  const flappyAtOldRamp = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 140 });
+  const flappyLate = getEndlessMiniGameStageConfig({ miniGameId: "flappy", progress: 180 });
+
+  assert.match(endlessSource, /const ENDLESS_FLAPPY_MAX_RAMP = 180;/);
+  assert.match(brakingSource, /const ENDLESS_BRAKING_MAX_RAMP_DISTANCE = 30 \* 110;/);
+  assert.match(brakingSource, /getEndlessDifficulty\(\{ maxRamp: ENDLESS_BRAKING_MAX_RAMP_DISTANCE, progress: endless\.score \}\)/);
+  assert.equal(flappyEarly.sourceAdvancedLevel, 1);
+  assert.equal(flappyAtOldRamp.sourceAdvancedLevel < 10, true);
+  assert.equal(flappyLate.sourceAdvancedLevel, 10);
 });
 
 test("endless settlement stores run snapshots and renders current versus best rows", () => {
@@ -1173,9 +1199,11 @@ test("endless skill effects are consumed by every endless round implementation",
   assert.match(aimSource, /penaltyBlocked: boolean;/);
   assert.match(aimSource, /const shotPenaltyBlocked = endlessRef\.current\?\.getActiveSkill\(\)\?\.kind === "full-fire";/);
   assert.match(aimSource, /penaltyBlocked: shotPenaltyBlocked/);
-  assert.match(aimSource, /const shotPenaltyBlocked = arrow\.penaltyBlocked;[\s\S]*if \(!shotPenaltyBlocked && !endlessRuntime\.loseLife\("miss"\)\)/);
-  assert.match(aimSource, /if \(!arrow\.penaltyBlocked && !endlessRuntime\.loseLife\("decoy"\)\)/);
-  assert.match(aimSource, /if \(!endlessRuntime\.loseLife\("fly_out"\)\)/);
+  assert.match(aimSource, /const settleEndlessAimFailure = useCallback\(\(reason: "fly_out" \| "miss" \| "decoy", frameNow: number, penaltyBlocked = false\)/);
+  assert.match(aimSource, /const canContinue = endlessRuntime\.loseLife\(reason\);[\s\S]*if \(!canContinue\) \{[\s\S]*finish\(\);/);
+  assert.match(aimSource, /settleEndlessAimFailure\("fly_out", frameNow, shotPenaltyBlocked\)/);
+  assert.match(aimSource, /settleEndlessAimFailure\("miss", frameNow, shotPenaltyBlocked\)/);
+  assert.match(aimSource, /settleEndlessAimFailure\("decoy", frameNow, arrow\.penaltyBlocked\)/);
   assert.doesNotMatch(aimSource, /!shotPenaltyBlocked && !endlessRuntime\.loseLife\("fly_out"\)/);
   assert.match(brakingSource, /const activeSkill = endlessRef\.current\?\.getActiveSkill\(\);/);
   assert.match(brakingSource, /activeSkill\?\.kind === "big-luck"/);

@@ -145,6 +145,10 @@ test("state messages carry shared-map runtime coordinates", () => {
     nextPlatformOffsetY: 48,
     phase: "charging",
     platformIndex: 2,
+    fragileStates: [
+      { id: 4, steppedAt: 1200, broken: false },
+      { id: 7, steppedAt: 2100, broken: true },
+    ],
     usedPlatformIds: [10, 12, 14],
     knifeInsertedAngles: [24, 168],
     knifeFailedAngles: [96],
@@ -191,6 +195,10 @@ test("state messages carry shared-map runtime coordinates", () => {
   assert.equal(parsed.nextPlatformOffsetY, 48);
   assert.equal(parsed.phase, "charging");
   assert.equal(parsed.platformIndex, 2);
+  assert.deepEqual(parsed.fragileStates, [
+    { id: 4, steppedAt: 1200, broken: false },
+    { id: 7, steppedAt: 2100, broken: true },
+  ]);
   assert.deepEqual(parsed.usedPlatformIds, [10, 12, 14]);
   assert.deepEqual(parsed.knifeInsertedAngles, [24, 168]);
   assert.deepEqual(parsed.knifeFailedAngles, [96]);
