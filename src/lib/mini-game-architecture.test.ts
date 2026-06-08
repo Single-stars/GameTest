@@ -223,6 +223,12 @@ test("app page delegates result, advanced, and native round UI to feature module
   assert.match(appPageSource, /const \[exitConfirmOpen, setExitConfirmOpen\] = useState\(false\);/);
   assert.match(appPageSource, /const exitConfirmedRef = useRef\(false\);/);
   assert.match(appPageSource, /const appHistoryUserArmedRef = useRef\(false\);/);
+  assert.match(appPageSource, /const writeUserInitiatedHistoryGuard = useCallback\(\(layer: AppBackHistoryLayer\) => \{[\s\S]*writeHistoryGuard\("push", layer\);[\s\S]*appHistoryUserArmedRef\.current = true;/);
+  assert.match(appPageSource, /const beginTest = \(\) => \{[\s\S]*writeUserInitiatedHistoryGuard\(1\);[\s\S]*transitionToStage\("intro", resetCurrentRunState\);/);
+  assert.match(appPageSource, /const openAdvancedChallenge = useCallback\(\(roundId: RoundId\) => \{[\s\S]*writeUserInitiatedHistoryGuard\(1\);[\s\S]*setAdvancedChallenge\(\{ mode: "select", roundId \}\);/);
+  assert.match(appPageSource, /const openLuckDraw = useCallback\(\(\) => \{[\s\S]*writeUserInitiatedHistoryGuard\(1\);[\s\S]*transitionToStage\("luck"\);/);
+  assert.match(appPageSource, /const openHomeworld = useCallback\(\(\) => \{[\s\S]*writeUserInitiatedHistoryGuard\(1\);[\s\S]*transitionToStage\("homeworld"\);/);
+  assert.match(appPageSource, /const startAdvancedLevel = useCallback\(\(level\?: number\) => \{[\s\S]*writeUserInitiatedHistoryGuard\(2\);[\s\S]*setAdvancedChallenge\(\{/);
   assert.match(appPageSource, /const armAppHistoryGuardAfterUserGesture = \(\) => \{[\s\S]*if \(exitConfirmedRef\.current \|\| appHistoryUserArmedRef\.current\) return;[\s\S]*if \(!appHistoryActiveRef\.current \|\| appHistoryLayerRef\.current === 0\) return;[\s\S]*appHistoryUserArmedRef\.current = true;[\s\S]*writeHistoryGuard\("push", appHistoryLayerRef\.current\);/);
   assert.match(appPageSource, /window\.addEventListener\("pointerdown", armAppHistoryGuardAfterUserGesture, \{ capture: true \}\);/);
   assert.match(appPageSource, /window\.addEventListener\("touchstart", armAppHistoryGuardAfterUserGesture, \{ capture: true, passive: true \}\);/);

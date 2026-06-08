@@ -380,13 +380,6 @@ export default function Home() {
     setRewardQueue((current) => current.slice(1));
   }, []);
 
-  const startUnlockedEndlessChallenge = useCallback((roundId: RoundId) => {
-    if (!isEndlessModeUnlocked(advancedProgressRef.current, roundId)) return;
-    setRewardQueue((current) => current.slice(1));
-    setAdvancedChallenge({ mode: "intro", roundId, level: ENDLESS_MODE_LEVEL });
-    void transitionToStage("advanced");
-  }, [transitionToStage]);
-
   const revealPendingLuckRewards = useCallback((_outcome: LuckDrawOutcome) => {
     void _outcome;
     const items = pendingLuckRewardItemsRef.current;
@@ -395,12 +388,17 @@ export default function Home() {
   }, [enqueueRewardItems]);
 
   const releaseHistoryGuard = useCallback((mode: "silent" | "browser-back" = "silent") => {
-    if (!appHistoryActiveRef.current) return;
+    if (!appHistoryActiveRef.current) {
+      appHistoryUserArmedRef.current = false;
+      appHistoryLayerRef.current = 0;
+      return;
+    }
     if (mode === "browser-back" && typeof window !== "undefined") {
       skipNextPopRef.current = true;
       window.history.back();
     }
     appHistoryActiveRef.current = false;
+    appHistoryUserArmedRef.current = false;
     appHistoryLayerRef.current = 0;
   }, []);
 
@@ -415,6 +413,13 @@ export default function Home() {
     appHistoryActiveRef.current = true;
     appHistoryLayerRef.current = layer;
   }, []);
+
+  const writeUserInitiatedHistoryGuard = useCallback((layer: AppBackHistoryLayer) => {
+    if (typeof window === "undefined" || exitConfirmedRef.current || layer === 0) return;
+    if (appHistoryUserArmedRef.current && appHistoryActiveRef.current && appHistoryLayerRef.current >= layer) return;
+    writeHistoryGuard("push", layer);
+    appHistoryUserArmedRef.current = true;
+  }, [writeHistoryGuard]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -434,6 +439,14 @@ export default function Home() {
       window.removeEventListener("keydown", armAppHistoryGuardAfterUserGesture, { capture: true });
     };
   }, [writeHistoryGuard]);
+
+  const startUnlockedEndlessChallenge = useCallback((roundId: RoundId) => {
+    if (!isEndlessModeUnlocked(advancedProgressRef.current, roundId)) return;
+    writeUserInitiatedHistoryGuard(1);
+    setRewardQueue((current) => current.slice(1));
+    setAdvancedChallenge({ mode: "intro", roundId, level: ENDLESS_MODE_LEVEL });
+    void transitionToStage("advanced");
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
     const storage = getBrowserStorage();
@@ -484,6 +497,7 @@ export default function Home() {
   }, [clearShareCopyToastTimer]);
 
   const beginTest = () => {
+    writeUserInitiatedHistoryGuard(1);
     void transitionToStage("intro", resetCurrentRunState);
   };
 
@@ -499,6 +513,7 @@ export default function Home() {
     if (typeof window === "undefined") return;
     exitConfirmedRef.current = true;
     appHistoryActiveRef.current = false;
+    appHistoryUserArmedRef.current = false;
     appHistoryLayerRef.current = 0;
     skipNextPopRef.current = true;
     window.history.back();
@@ -719,6 +734,7 @@ export default function Home() {
   }, [enqueueRewardItems, persistGameState, transitionToStage]);
 
   const startCurrentRound = () => {
+    writeUserInitiatedHistoryGuard(1);
     void transitionToStage("playing", () => {
       roundCompletionLockedRef.current = false;
     });
@@ -731,6 +747,7 @@ export default function Home() {
   }, [completeRound]);
 
   const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "advanced" | "home" | "result") => {
+    writeUserInitiatedHistoryGuard(1);
     clearShareCopyToastTimer();
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
@@ -761,7 +778,7 @@ export default function Home() {
       setShareImageDataUrl(null);
       setImageShareState("failed");
     }
-  }, [captureShareAvatarDataUrl, clearShareCopyToastTimer, showShareCopyToast, transitionToStage]);
+  }, [captureShareAvatarDataUrl, clearShareCopyToastTimer, showShareCopyToast, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openCurrentShareImage = useCallback(() => {
     const rankTitle = formatResultRankTitle(result.name, getAdvancedTotalStars(advancedProgressRef.current));
@@ -791,10 +808,11 @@ export default function Home() {
   }, [clearShareCopyToastTimer, releaseHistoryGuard, scrollResultToTop, shareReturnStage, transitionToStage]);
 
   const openAdvancedChallenge = useCallback((roundId: RoundId) => {
+    writeUserInitiatedHistoryGuard(1);
     setAdvancedUnlockPulseId(0);
     setAdvancedChallenge({ mode: "select", roundId });
     void transitionToStage("advanced");
-  }, [transitionToStage]);
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const acceptEndlessChallenge = useCallback(() => {
     const challenge = pendingEndlessChallengeRef.current;
@@ -811,6 +829,7 @@ export default function Home() {
     setChallengeInviteVisible(false);
     setChallengeNoticeVisible(false);
     setAdvancedUnlockPulseId(0);
+    writeUserInitiatedHistoryGuard(2);
     setAdvancedChallenge({
       mode: "challenge-playing",
       roundId: challenge.target.roundId,
@@ -818,7 +837,7 @@ export default function Home() {
       target: challenge,
     });
     void transitionToStage("advanced");
-  }, [transitionToStage]);
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const declineEndlessChallenge = useCallback(() => {
     pendingEndlessChallengeRef.current = null;
@@ -828,36 +847,41 @@ export default function Home() {
   }, []);
 
   const openLuckDraw = useCallback(() => {
+    writeUserInitiatedHistoryGuard(1);
     setAdvancedUnlockPulseId(0);
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
     void transitionToStage("luck");
-  }, [transitionToStage]);
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openAvatarLab = useCallback(() => {
+    writeUserInitiatedHistoryGuard(1);
     setAvatarLabReturnStage("result");
     void transitionToStage("avatar-lab");
-  }, [transitionToStage]);
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openAvatarLabWithSkin = useCallback((skin: PlayerAvatarSkin) => {
     handleSelectAvatarSkin(skin);
     setAvatarLabReturnStage("result");
     setAdvancedChallenge(null);
     releaseHistoryGuard();
+    writeUserInitiatedHistoryGuard(1);
     void transitionToStage("avatar-lab");
-  }, [handleSelectAvatarSkin, releaseHistoryGuard, transitionToStage]);
+  }, [handleSelectAvatarSkin, releaseHistoryGuard, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openHomeworld = useCallback(() => {
     if (!homeworldEntryVisible) return;
     releaseHistoryGuard();
+    writeUserInitiatedHistoryGuard(1);
     void transitionToStage("homeworld");
-  }, [homeworldEntryVisible, releaseHistoryGuard, transitionToStage]);
+  }, [homeworldEntryVisible, releaseHistoryGuard, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openHomeworldAvatarLab = useCallback(() => {
+    writeUserInitiatedHistoryGuard(1);
     setHomeworldReturnPose(homeworldPlayerPoseRef.current);
     setAvatarLabReturnStage("homeworld");
     void transitionToStage("avatar-lab");
-  }, [transitionToStage]);
+  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const closeHomeworldToHome = useCallback(() => {
     void transitionToStage(trialsRef.current.length > 0 ? "result" : "home");
@@ -974,6 +998,7 @@ export default function Home() {
     const current = advancedChallengeRef.current;
     if (!current) return;
     if (current.mode === "challenge-playing" || current.mode === "challenge-complete") {
+      writeUserInitiatedHistoryGuard(2);
       setAdvancedChallenge({
         mode: "challenge-playing",
         roundId: current.roundId,
@@ -992,6 +1017,7 @@ export default function Home() {
           : current.level);
     if (selectedLevel === ENDLESS_MODE_LEVEL) {
       if (!isEndlessModeUnlocked(advancedProgressRef.current, current.roundId)) return;
+      writeUserInitiatedHistoryGuard(2);
       setAdvancedChallenge({
         mode: "endless-playing",
         roundId: current.roundId,
@@ -1000,13 +1026,14 @@ export default function Home() {
       return;
     }
     if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
+    writeUserInitiatedHistoryGuard(2);
     setAdvancedChallenge({
       mode: "playing",
       roundId: current.roundId,
       level: selectedLevel,
       attemptId: Date.now(),
     });
-  }, []);
+  }, [writeUserInitiatedHistoryGuard]);
 
   const startAdvancedBaseReplay = useCallback((level?: number) => {
     const current = advancedChallengeRef.current;
@@ -1022,13 +1049,14 @@ export default function Home() {
           : current.level);
     if (selectedLevel === ENDLESS_MODE_LEVEL) return;
     if (getAdvancedLevelState(currentLevel, selectedLevel) === "locked") return;
+    writeUserInitiatedHistoryGuard(2);
     setAdvancedChallenge({
       mode: "base-playing",
       roundId: current.roundId,
       level: selectedLevel,
       attemptId: Date.now(),
     });
-  }, []);
+  }, [writeUserInitiatedHistoryGuard]);
 
   const completeAdvancedLevel = useCallback(
     (roundTrials: TrialEvent[]) => {
@@ -1179,6 +1207,7 @@ export default function Home() {
   }, []);
 
   const openOutdoorAdventure = useCallback(() => {
+    writeUserInitiatedHistoryGuard(1);
     setHomeworldReturnPose(homeworldPlayerPoseRef.current);
     persistHomeworldState(homeworldStateRef.current);
     let nextState = outdoorAdventureStateRef.current;
@@ -1198,7 +1227,7 @@ export default function Home() {
       setOutdoorEntryGate("start");
     }
     void transitionToStage("outdoor-adventure", () => persistOutdoorAdventureState(nextState));
-  }, [persistHomeworldState, persistOutdoorAdventureState, transitionToStage]);
+  }, [persistHomeworldState, persistOutdoorAdventureState, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const updateOutdoorAdventure = useCallback((state: OutdoorAdventureState) => {
     persistOutdoorAdventureState(state);
@@ -1345,6 +1374,7 @@ export default function Home() {
     const navigation = appBackHandlerRef.current();
     if (navigation !== "guard") {
       appHistoryActiveRef.current = false;
+      appHistoryUserArmedRef.current = false;
       appHistoryLayerRef.current = 0;
     }
   }, []);
@@ -1381,6 +1411,7 @@ export default function Home() {
         appHistoryLayerRef.current = landedLayer > 0 ? landedLayer : appHistoryLayerRef.current || 1;
       } else {
         appHistoryActiveRef.current = false;
+        appHistoryUserArmedRef.current = false;
         appHistoryLayerRef.current = 0;
       }
     };
