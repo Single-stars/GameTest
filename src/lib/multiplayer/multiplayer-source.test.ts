@@ -661,6 +661,8 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   const sessionSource = readSource("./multiplayer-session.ts");
   const crownRule = cssRule(cssSource, ".multiplayer-player-crown");
   const roomScoreboardRule = cssRule(cssSource, ".multiplayer-level-scoreboard");
+  const roomScoreValueRule = cssRule(cssSource, ".multiplayer-level-score-value");
+  const readyHintsRule = cssRule(cssSource, ".multiplayer-level-ready-hints");
 
   assert.doesNotMatch(runtimeSource, /function MultiplayerPlayerOverlays/);
   assert.doesNotMatch(runtimeSource, /selfDisplayName|opponentDisplayName/);
@@ -719,6 +721,12 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.doesNotMatch(roomScoreboardRule, /border:/);
   assert.doesNotMatch(roomScoreboardRule, /border-radius:/);
   assert.doesNotMatch(roomScoreboardRule, /box-shadow:/);
+  assert.match(roomScoreValueRule, /min-height:\s*clamp\(64px,\s*12vw,\s*96px\);/);
+  assert.match(roomScoreValueRule, /border-radius:\s*8px;/);
+  assert.match(roomScoreValueRule, /background:\s*rgba\(255,\s*253,\s*248,\s*0\.56\);/);
+  assert.match(roomScoreValueRule, /box-shadow:/);
+  assert.match(readyHintsRule, /z-index:\s*35;/);
+  assert.doesNotMatch(roomSource, />\s*(?:PK|VS)\s*</);
   assert.doesNotMatch(cssSource, /\.multiplayer-level-score-names/);
   assert.match(cssSource, /\.multiplayer-level-scoreboard\.room-bar-offset/);
   assert.doesNotMatch(cssSource, /\.multiplayer-room-scoreboard/);
@@ -816,7 +824,8 @@ test("homeworld multiplayer preserves selected skin before movement and returns 
   assert.match(sessionSource, /private settleForfeit/);
   assert.match(sessionSource, /status:\s*"finished"/);
   assert.match(sessionSource, /case "forfeit":[\s\S]{0,180}settleForfeit\("opponent"\)/);
-  assert.match(cssSource, /\.multiplayer-level-ready-hints[\s\S]{0,160}top:\s*calc\(max\(14px, env\(safe-area-inset-top\)\) \+ 42px\)/);
+  assert.match(cssSource, /\.multiplayer-level-ready-hints[\s\S]{0,220}top:\s*calc\(max\(14px, env\(safe-area-inset-top\)\) \+ 42px\)/);
+  assert.match(cssSource, /\.multiplayer-level-ready-hints[\s\S]{0,220}z-index:\s*35/);
 });
 
 test("homeworld reachable furniture uses a gray bold edge highlight", () => {

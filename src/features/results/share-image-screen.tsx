@@ -44,7 +44,7 @@ export function ShareImageScreen({
       <div className="share-image-stage">
         {dataUrl ? (
           <NextImage
-            alt={`${appTitle}结果分享图`}
+            alt={`${rankTitle ?? result?.name ?? appTitle}分享图`}
             className="share-image-preview"
             height={SHARE_IMAGE_HEIGHT}
             src={dataUrl}

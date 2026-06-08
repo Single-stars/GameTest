@@ -672,9 +672,11 @@ function useEndlessRun({
 function EndlessHud({
   api,
   bestScore,
+  targetScore,
 }: {
   api: EndlessRunApi;
   bestScore: number;
+  targetScore?: number;
 }) {
   const activeEnergySegments = clamp(
     Math.round((api.energyPercent / 100) * ENDLESS_ENERGY_THRESHOLD),
@@ -688,7 +690,8 @@ function EndlessHud({
   const [energyPulse, setEnergyPulse] = React.useState<{ tone: "gain" | "loss"; from: number; to: number } | null>(null);
   const [scorePulseId, setScorePulseId] = React.useState(0);
   const lowLife = api.revives === 1;
-  const recordBreaking = api.score > bestScore;
+  const scoreReferenceText = targetScore !== undefined ? `对方成绩 ${targetScore}` : `最佳 ${bestScore}`;
+  const recordBreaking = targetScore === undefined && api.score > bestScore;
   const skillActionReady = api.energyPercent >= 100 && !api.skillActive && !api.skillEnding;
   const healActionReady = api.canHeal;
   const endlessHudClassName = [
@@ -750,7 +753,7 @@ function EndlessHud({
   return (
     <div
       className={endlessHudClassName}
-      aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}，能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}，分数 ${api.score}，最佳 ${bestScore}${recordBreaking ? "，新纪录" : ""}`}
+      aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}，能量 ${activeEnergySegments}/${ENDLESS_ENERGY_THRESHOLD}，分数 ${api.score}，${scoreReferenceText}${recordBreaking ? "，新纪录" : ""}`}
     >
       <div className="endless-hearts" aria-label={`剩余复活 ${api.revives}/${ENDLESS_STARTING_REVIVES}`}>
         {Array.from({ length: ENDLESS_STARTING_REVIVES }, (_, index) => {
@@ -789,7 +792,7 @@ function EndlessHud({
         <strong className={scorePulseId > 0 ? "score-pop" : ""} key={`score-${scorePulseId}`}>
           {api.score}
         </strong>
-        <span className="endless-score-best">最佳 {bestScore}</span>
+        <span className="endless-score-best">{scoreReferenceText}</span>
         {recordBreaking ? <span className="endless-score-record-badge">新纪录</span> : null}
         {api.bonusPopup ? (
           <span className={`endless-bonus-score-pop ${api.bonusPopup.amount > 10 ? "major" : ""}`} key={api.bonusPopup.id}>
@@ -934,6 +937,7 @@ export function EndlessRoundPlayer({
   paused = false,
   roundId,
   settleSignal = 0,
+  targetScore,
 }: {
   bestScore: number;
   debugToolsVisible: boolean;
@@ -941,6 +945,7 @@ export function EndlessRoundPlayer({
   paused?: boolean;
   roundId: RoundId;
   settleSignal?: number;
+  targetScore?: number;
 }) {
   const api = useEndlessRun({ onComplete, paused, roundId });
   const segment = useMemo(() => buildEndlessSegment(roundId), [roundId]);
@@ -967,6 +972,7 @@ export function EndlessRoundPlayer({
         <EndlessHud
           api={api}
           bestScore={bestScore}
+          targetScore={targetScore}
         />
         <div className="endless-energy-popups" aria-live="polite">
           {api.energyPopups.map((popup) => (

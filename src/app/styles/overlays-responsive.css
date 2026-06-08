@@ -87,6 +87,7 @@
 
 .share-image-preview {
   width: min(100%, 430px);
+  height: auto;
   max-height: calc(var(--game-viewport-height, 100svh) - 190px);
   object-fit: contain;
   border-radius: 12px;

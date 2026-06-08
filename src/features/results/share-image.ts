@@ -1,5 +1,10 @@
 import QRCode from "qrcode";
 
+import {
+  buildEndlessSettlementRows,
+  formatEndlessRunValue,
+  type EndlessRunSnapshot,
+} from "@/lib/endless-run-snapshot";
 import { ROUND_DISPLAY_BY_ID } from "@/lib/round-display";
 import { type GameRankResult, type ScoreAxis } from "@/lib/scoring";
 
@@ -17,6 +22,11 @@ export type ShareImageInput =
   | {
       kind: "default";
       avatarDataUrl?: string | null;
+      url: string;
+    }
+  | {
+      kind: "endless-challenge";
+      snapshot: EndlessRunSnapshot;
       url: string;
     };
 
@@ -66,7 +76,8 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
     width: 144,
   });
   const qrImage = await loadCanvasImage(qrDataUrl);
-  const avatarImage = input.avatarDataUrl ? await loadCanvasImage(input.avatarDataUrl) : null;
+  const avatarDataUrl = input.kind === "endless-challenge" ? null : input.avatarDataUrl;
+  const avatarImage = avatarDataUrl ? await loadCanvasImage(avatarDataUrl) : null;
 
   if (input.kind === "default") {
     drawCard(ctx, 24, 24, 852, 510);
@@ -79,6 +90,13 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
     return canvas.toDataURL("image/png");
   }
 
+  if (input.kind === "endless-challenge") {
+    drawEndlessChallengeDetails(ctx, input.snapshot);
+    const roundTitle = ROUND_DISPLAY_BY_ID[input.snapshot.roundId].title;
+    drawQrFooter(ctx, qrImage, 574, "扫码直接挑战", `${roundTitle} · ${input.snapshot.score} 分`);
+    return canvas.toDataURL("image/png");
+  }
+
   drawCard(ctx, 24, 24, 852, 144);
   drawFittedText(ctx, input.rankTitle, 58, 116, 640, 72, 42, "#181818");
   drawShareAvatarScreenshot(ctx, avatarImage, 696, 40, 112);
@@ -88,6 +106,38 @@ export async function createShareImage(input: ShareImageInput, tagline: string) 
   drawQrFooter(ctx, qrImage, 574, "扫码来测", tagline);
 
   return canvas.toDataURL("image/png");
+}
+
+function drawEndlessChallengeDetails(ctx: CanvasRenderingContext2D, snapshot: EndlessRunSnapshot) {
+  const roundTitle = ROUND_DISPLAY_BY_ID[snapshot.roundId].title;
+  const detailRows = buildEndlessSettlementRows(snapshot).filter((row) => row.key !== "score");
+
+  drawCard(ctx, 24, 24, 852, 522);
+  drawText(ctx, "来挑战我", 58, 82, "950 38px", "#181818");
+  drawText(ctx, `${roundTitle} · 无尽挑战`, 58, 122, "850 25px", "#236b54");
+
+  drawFittedText(ctx, String(snapshot.score), 58, 222, 310, 90, 72, "#181818");
+  drawText(ctx, "分", 360, 218, "950 36px", "#181818");
+
+  roundedRect(ctx, 560, 58, 246, 84, 8);
+  ctx.fillStyle = "rgba(35, 107, 84, 0.1)";
+  ctx.fill();
+  drawText(ctx, "无尽挑战", 592, 96, "950 26px", "#236b54");
+  drawText(ctx, `${roundTitle} · ${snapshot.score} 分`, 592, 126, "850 18px", "#665f55");
+
+  const startY = 278;
+  const rowHeight = 43;
+  drawText(ctx, "本次得分详情", 58, startY - 28, "950 25px", "#181818");
+  detailRows.forEach((row, index) => {
+    const y = startY + index * rowHeight;
+    if (index % 2 === 0) {
+      roundedRect(ctx, 58, y - 27, 748, 34, 8);
+      ctx.fillStyle = "rgba(24, 24, 24, 0.035)";
+      ctx.fill();
+    }
+    drawText(ctx, row.label, 80, y, "900 22px", "#665f55");
+    drawText(ctx, formatEndlessRunValue(row), 784, y, "950 26px", "#181818", "right");
+  });
 }
 
 function defaultShareAxis(): ScoreAxis[] {

@@ -453,6 +453,24 @@ test("endless HUD animates resource changes and highlights new records", () => {
   assert.match(cssSource, /@keyframes endless-record-badge-pop/);
 });
 
+test("endless challenge HUD shows the opponent score target", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const hudSource = sourceBetween(runtimeSource, "function EndlessHud", "function EndlessNativeRound");
+  const challengePlayingSource = sourceBetween(
+    screenSource,
+    'if (challenge.mode === "challenge-playing")',
+    'if (challenge.mode === "base-playing")',
+  );
+
+  assert.match(hudSource, /targetScore\?: number/);
+  assert.match(hudSource, /scoreReferenceText/);
+  assert.match(hudSource, /targetScore !== undefined \? `对方成绩 \$\{targetScore\}` : `最佳 \$\{bestScore\}`/);
+  assert.match(hudSource, /<span className="endless-score-best">\{scoreReferenceText\}<\/span>/);
+  assert.match(challengePlayingSource, /targetScore=\{challenge\.target\.target\.score\}/);
+  assert.doesNotMatch(challengePlayingSource, /bestScore=\{challenge\.target\.target\.score\}/);
+});
+
 test("endless difficulty ramps smoothly from progress and clamps only the difficulty value", () => {
   assert.equal(getEndlessDifficulty({ progress: -10, maxRamp: 100 }), 0);
   assert.equal(getEndlessDifficulty({ progress: 25, maxRamp: 100 }), 0.25);
@@ -968,8 +986,43 @@ test("endless challenge links open a pending challenge and keep challenge runs o
   assert.match(screenSource, /EndlessChallengeResultCard/);
   assert.match(screenSource, /onCompleteEndlessChallenge/);
   assert.match(screenSource, /TA/);
+  assert.match(pageSource, /<span>你收到了一个无尽挑战：<\/span>/);
+  assert.match(pageSource, /<strong>\{pendingEndlessChallengeRoundTitle\} · \{pendingEndlessChallenge\.target\.score\} 分<\/strong>/);
+  assert.doesNotMatch(pageSource, /<p className="eyebrow">无尽挑战<\/p>/);
   assert.match(cssSource, /\.endless-challenge-dialog-backdrop\s*{/);
+  assert.match(cssSource, /\.endless-challenge-notice\s*{[\s\S]*top:\s*calc\(env\(safe-area-inset-top\) \+ 72px\)/);
+  assert.match(cssSource, /\.endless-challenge-notice\s*{[\s\S]*pointer-events:\s*none;/);
   assert.match(cssSource, /\.endless-challenge-result-outcome\s*{/);
+});
+
+test("endless result sharing opens a QR challenge card with settlement details", () => {
+  const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const shareImageSource = readFileSync(new URL("../features/results/share-image.ts", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const responsiveCssSource = readFileSync(new URL("../app/styles/overlays-responsive.css", import.meta.url), "utf8");
+  const resultCardSource = sourceBetween(screenSource, "function EndlessResultCard", "function EndlessChallengeResultCard");
+  const challengeResultSource = sourceBetween(screenSource, "function EndlessChallengeResultCard", "function AdvancedLevelSelectionPanel");
+  const mobileAdvancedActionsCss = sourceBetween(cssSource, "@media (max-width: 430px) {", ".endless-hud {");
+  const sharePreviewCss = cssRule(responsiveCssSource, ".share-image-preview");
+
+  assert.doesNotMatch(resultCardSource, /<p className="eyebrow">/);
+  assert.doesNotMatch(challengeResultSource, /<p className="eyebrow">/);
+  assert.match(resultCardSource, />\s*来挑战我\s*</);
+  assert.doesNotMatch(resultCardSource, />\s*分享挑战\s*</);
+  assert.match(resultCardSource, /advanced-actions-endless-share/);
+  assert.doesNotMatch(resultCardSource, /onPointerDown=\{onBack\}[\s\S]{0,80}>\s*返回\s*</);
+  assert.match(pageSource, /kind: "endless-challenge"/);
+  assert.match(pageSource, /setShareImageTitle\(input\.kind === "result" \? input\.rankTitle : input\.kind === "endless-challenge" \? "来挑战我" : null\)/);
+  assert.match(pageSource, /const shareInput = input\.kind === "endless-challenge" \? input : \{ \.\.\.input, avatarDataUrl \};/);
+  assert.match(shareImageSource, /kind: "endless-challenge"/);
+  assert.match(shareImageSource, /buildEndlessSettlementRows/);
+  assert.match(shareImageSource, /drawEndlessChallengeDetails/);
+  assert.match(shareImageSource, /QRCode\.toDataURL\(input\.url/);
+  assert.match(shareImageSource, /扫码直接挑战/);
+  assert.match(cssSource, /\.advanced-actions\.advanced-actions-endless-share/);
+  assert.match(mobileAdvancedActionsCss, /\.advanced-actions\.advanced-actions-endless-share[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(sharePreviewCss, /height:\s*auto;/);
 });
 
 test("endless HUD removes strength controls and uses a ten-segment energy meter", () => {

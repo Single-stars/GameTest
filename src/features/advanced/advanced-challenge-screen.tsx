@@ -402,13 +402,11 @@ function AdvancedResultCard({
 
 function EndlessResultCard({
   challenge,
-  onBack,
   onShareChallenge,
   onStartLevel,
   shareCopyNoticeId,
 }: {
   challenge: Extract<AdvancedChallengeState, { mode: "endless-complete" }>;
-  onBack: () => void;
   onShareChallenge: (snapshot: EndlessRunSnapshot) => void;
   onStartLevel: (level: number) => void;
   shareCopyNoticeId: number;
@@ -429,7 +427,6 @@ function EndlessResultCard({
   };
   return (
     <div className="advanced-result-card advanced-endless-result passed">
-      <p className="eyebrow">{roundTitle} · 无尽结算</p>
       <div className="endless-settlement-heading">
         <strong>{challenge.score}</strong>
         <span>{improved ? "新纪录" : "本次总分"}</span>
@@ -464,15 +461,12 @@ function EndlessResultCard({
           );
         })}
       </div>
-      <div className="advanced-actions advanced-actions-3">
-        <button className="secondary-button" type="button" onPointerDown={() => onShareChallenge(challenge.snapshot)}>
-          分享挑战
+      <div className="advanced-actions advanced-actions-endless-share">
+        <button className="primary-button" type="button" onPointerDown={() => onShareChallenge(challenge.snapshot)}>
+          来挑战我
         </button>
         <button className="secondary-button" type="button" onPointerDown={() => onStartLevel(ENDLESS_MODE_LEVEL)}>
           再来一次
-        </button>
-        <button className="primary-button" type="button" onPointerDown={onBack}>
-          返回
         </button>
       </div>
       {shareCopyNoticeId > 0 ? (
@@ -500,7 +494,6 @@ function EndlessChallengeResultCard({
 
   return (
     <div className={`advanced-result-card advanced-endless-result ${outcome === "lose" ? "failed" : "passed"}`}>
-      <p className="eyebrow">{roundTitle} · 挑战结果</p>
       <div className={`endless-challenge-result-outcome ${outcome}`}>{outcomeLabel}</div>
       <div className="endless-settlement-table" role="table" aria-label={`${roundTitle}挑战结果`}>
         <div className="endless-settlement-row header" role="row">
@@ -1035,7 +1028,6 @@ function AdvancedLobbyContent({
       ) : challenge.mode === "endless-complete" ? (
         <EndlessResultCard
           challenge={challenge}
-          onBack={onBack}
           onShareChallenge={onShareEndlessChallenge}
           onStartLevel={onStartLevel}
           shareCopyNoticeId={shareCopyNoticeId}
@@ -1264,13 +1256,14 @@ export function AdvancedChallengeScreen({
           </div>
         </header>
         <EndlessRoundPlayer
-          bestScore={challenge.target.target.score}
+          bestScore={endlessBestScore}
           debugToolsVisible={debugToolsVisible}
           key={`challenge-${challenge.roundId}-${challenge.attemptId}`}
           onComplete={onCompleteEndlessChallenge}
           paused={pauseDialog?.mode === "endless"}
           roundId={challenge.roundId}
           settleSignal={endlessSettleSignal}
+          targetScore={challenge.target.target.score}
         />
         {pauseDialogNode}
       </section>

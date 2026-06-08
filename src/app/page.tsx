@@ -256,7 +256,7 @@ export default function Home() {
   const [shareImageDataUrl, setShareImageDataUrl] = useState<string | null>(null);
   const [shareImageResult, setShareImageResult] = useState<GameRankResult | null>(null);
   const [shareImageTitle, setShareImageTitle] = useState<string | null>(null);
-  const [shareReturnStage, setShareReturnStage] = useState<"home" | "result">("result");
+  const [shareReturnStage, setShareReturnStage] = useState<"advanced" | "home" | "result">("result");
   const [avatarLabReturnStage, setAvatarLabReturnStage] = useState<"result" | "homeworld">("result");
   const [homeConsentAccepted, setHomeConsentAccepted] = useState(false);
   const [shareCopyNoticeId, setShareCopyNoticeId] = useState(0);
@@ -687,18 +687,21 @@ export default function Home() {
     completeRound(buildPerfectTrials(activeRound.id));
   }, [completeRound]);
 
-  const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "home" | "result") => {
+  const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "advanced" | "home" | "result") => {
     clearShareCopyToastTimer();
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
-    setShareImageTitle(input.kind === "result" ? input.rankTitle : null);
+    setShareImageTitle(input.kind === "result" ? input.rankTitle : input.kind === "endless-challenge" ? "来挑战我" : null);
     setShareImageDataUrl(null);
     setImageShareState("sharing");
     setShareCopyNoticeId(0);
     await transitionToStage("share");
 
     try {
-      await copyTextToClipboard(buildShareText(input.kind === "result" ? input.result : null, input.url, input.kind === "result" ? input.rankTitle : undefined));
+      const copyText = input.kind === "endless-challenge"
+        ? input.url
+        : buildShareText(input.kind === "result" ? input.result : null, input.url, input.kind === "result" ? input.rankTitle : undefined);
+      await copyTextToClipboard(copyText);
       showShareCopyToast();
     } catch {
       clearShareCopyToastTimer();
@@ -706,8 +709,9 @@ export default function Home() {
     }
 
     try {
-      const avatarDataUrl = await captureShareAvatarDataUrl();
-      const dataUrl = await createShareImage({ ...input, avatarDataUrl }, APP_TAGLINE);
+      const avatarDataUrl = input.kind === "endless-challenge" ? null : await captureShareAvatarDataUrl();
+      const shareInput = input.kind === "endless-challenge" ? input : { ...input, avatarDataUrl };
+      const dataUrl = await createShareImage(shareInput, APP_TAGLINE);
       setShareImageDataUrl(dataUrl);
       setImageShareState("saved");
     } catch {
@@ -725,23 +729,15 @@ export default function Home() {
     void openShareImage({ kind: "default", url: window.location.href }, "home");
   }, [openShareImage]);
 
-  const shareEndlessChallenge = useCallback(async (snapshot: EndlessRunSnapshot) => {
+  const shareEndlessChallenge = useCallback((snapshot: EndlessRunSnapshot) => {
     if (typeof window === "undefined") return;
-    clearShareCopyToastTimer();
-    setShareCopyNoticeId(0);
     const payload = createEndlessChallengePayload({
       ownerName: playerName,
       target: snapshot,
     });
     const challengeUrl = createEndlessChallengeUrl(window.location.href, payload);
-    try {
-      await copyTextToClipboard(challengeUrl);
-      showShareCopyToast();
-    } catch {
-      clearShareCopyToastTimer();
-      setShareCopyNoticeId(0);
-    }
-  }, [clearShareCopyToastTimer, playerName, showShareCopyToast]);
+    void openShareImage({ kind: "endless-challenge", snapshot, url: challengeUrl }, "advanced");
+  }, [openShareImage, playerName]);
 
   const closeShareImage = useCallback(() => {
     clearShareCopyToastTimer();
@@ -1523,9 +1519,9 @@ export default function Home() {
       {challengeInviteVisible && pendingEndlessChallenge ? (
         <div className="endless-challenge-dialog-backdrop" role="presentation">
           <div className="endless-challenge-dialog" role="dialog" aria-modal="true" aria-labelledby="endless-challenge-dialog-title">
-            <p className="eyebrow">无尽挑战</p>
             <h2 id="endless-challenge-dialog-title">
-              你收到了一个无尽挑战：挑战 TA 的{pendingEndlessChallengeRoundTitle} {pendingEndlessChallenge.target.score} 分。
+              <span>你收到了一个无尽挑战：</span>
+              <strong>{pendingEndlessChallengeRoundTitle} · {pendingEndlessChallenge.target.score} 分</strong>
             </h2>
             <div className="advanced-actions">
               <button className="primary-button" type="button" onPointerDown={acceptEndlessChallenge}>

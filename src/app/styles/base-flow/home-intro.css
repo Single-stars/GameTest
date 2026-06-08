@@ -97,7 +97,7 @@
 
 .home-consent-toast {
   position: fixed;
-  z-index: 90;
+  z-index: 92;
   left: 50%;
   top: calc(env(safe-area-inset-top) + 72px);
   width: min(360px, calc(100vw - 32px));
