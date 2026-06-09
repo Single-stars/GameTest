@@ -6,6 +6,7 @@ import {
   buildForfeitResult,
   buildMultiplayerResultBreakdown,
   compareMultiplayerResults,
+  getMultiplayerScoreLead,
   shouldStartMultiplayerTiebreaker,
 } from "./result-breakdown.ts";
 import type { SelfGameState } from "./types.ts";
@@ -274,6 +275,70 @@ test("score settlement levels compare final score before finish time", () => {
 
   assert.equal(compareMultiplayerResults(self, opponent), -1);
   assert.equal(compareMultiplayerResults(opponent, self), 1);
+});
+
+test("multiplayer score lead counts only real point settlements", () => {
+  const scoringWinner = {
+    passed: true,
+    score: 8,
+    timeMs: 35_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 35_000,
+      knifeHits: 8,
+      knifeTimeouts: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const scoringLoser = {
+    passed: true,
+    score: 2,
+    timeMs: 20_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("knife-7"), {
+      elapsedMs: 20_000,
+      knifeHits: 2,
+      knifeTimeouts: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const timeWinner = {
+    passed: true,
+    score: 100,
+    timeMs: 12_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("doodle-1"), {
+      elapsedMs: 12_000,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const timeLoser = {
+    passed: true,
+    score: 999,
+    timeMs: 20_000,
+    breakdown: buildMultiplayerResultBreakdown(levelFor("doodle-1"), {
+      elapsedMs: 20_000,
+      failures: 0,
+      passed: true,
+      progress: 1,
+    }),
+  };
+  const forfeiter = buildForfeitResult(levelFor("knife-7"), {
+    didForfeit: true,
+    matchId: "match-forfeit",
+    state: { elapsedMs: 8_000, progress: 0.5, score: 80, status: "playing" },
+  });
+  const forfeitWinner = buildForfeitResult(levelFor("knife-7"), {
+    didForfeit: false,
+    matchId: "match-forfeit",
+    state: { elapsedMs: 8_000, progress: 0.5, score: 10, status: "playing" },
+  });
+
+  assert.equal(getMultiplayerScoreLead(scoringWinner, scoringLoser), 6);
+  assert.equal(getMultiplayerScoreLead(scoringLoser, scoringWinner), 0);
+  assert.equal(getMultiplayerScoreLead(timeWinner, timeLoser), 0);
+  assert.equal(getMultiplayerScoreLead(forfeitWinner, forfeiter), 0);
 });
 
 test("score settlement levels return a draw when final scores are identical", () => {

@@ -13,12 +13,12 @@
 
 .rank-card {
   position: relative;
-  min-height: 132px;
+  min-height: 142px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  padding: 26px 24px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 1px;
+  padding: 24px 24px 10px;
   overflow: visible;
 }
 
@@ -26,6 +26,15 @@
   z-index: 30;
   /* The shared card paint containment clips the overflow bubble. */
   contain: none;
+}
+
+.rank-card-main {
+  min-width: 0;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
 }
 
 .rank-title {
@@ -39,6 +48,26 @@
   white-space: nowrap;
   line-height: 1.02;
   font-size: clamp(28px, 9.6vw, 52px);
+}
+
+.rank-author-note {
+  all: unset;
+  position: relative;
+  top: -3px;
+  width: 100%;
+  min-height: 21px;
+  display: block;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.rank-author-note:focus-visible {
+  outline: 2px solid rgba(24, 24, 24, 0.22);
+  outline-offset: 3px;
 }
 
 .rank-avatar-menu-wrap {
@@ -976,10 +1005,16 @@
 
 @media (max-width: 640px) {
   .rank-card {
-    min-height: 116px;
+    min-height: 128px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+    padding: 18px 16px 8px;
+  }
+
+  .rank-card-main {
+    min-height: 72px;
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
-    padding: 20px 16px;
   }
 
   .rank-title {
@@ -992,11 +1027,15 @@
 
   .rank-avatar-menu-wrap {
     position: absolute;
-    top: calc(50% - 27px);
+    top: 31px;
     right: 12px;
     width: 54px;
     height: 54px;
     margin-inline-end: 0;
+  }
+
+  .rank-author-note {
+    font-size: 13px;
   }
 
   .rank-avatar-entry {
@@ -1038,7 +1077,7 @@
     right: 10px;
     width: 52px;
     height: 52px;
-    top: calc(50% - 26px);
+    top: 29px;
   }
 
   .rank-avatar-entry {

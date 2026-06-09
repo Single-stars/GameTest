@@ -143,13 +143,13 @@ function drawEndlessChallengeDetails(ctx: CanvasRenderingContext2D, snapshot: En
 function defaultShareAxis(): ScoreAxis[] {
   const axis: Array<{ key: ScoreAxis["key"]; label: ScoreAxis["label"] }> = [
     { key: "reaction", label: ROUND_DISPLAY_BY_ID.reaction.label },
-    { key: "targeting", label: ROUND_DISPLAY_BY_ID.aim.label },
-    { key: "search", label: ROUND_DISPLAY_BY_ID.search.label },
-    { key: "interference", label: ROUND_DISPLAY_BY_ID.stroop.label },
-    { key: "rhythm", label: ROUND_DISPLAY_BY_ID.rhythm.label },
-    { key: "memory", label: ROUND_DISPLAY_BY_ID.memory.label },
-    { key: "braking", label: ROUND_DISPLAY_BY_ID.braking.label },
-    { key: "waiting", label: ROUND_DISPLAY_BY_ID.patience.label },
+    { key: "precision", label: ROUND_DISPLAY_BY_ID.aim.label },
+    { key: "positioning", label: ROUND_DISPLAY_BY_ID.search.label },
+    { key: "focus", label: ROUND_DISPLAY_BY_ID.stroop.label },
+    { key: "feel", label: ROUND_DISPLAY_BY_ID.rhythm.label },
+    { key: "coordination", label: ROUND_DISPLAY_BY_ID.memory.label },
+    { key: "control", label: ROUND_DISPLAY_BY_ID.braking.label },
+    { key: "timing", label: ROUND_DISPLAY_BY_ID.patience.label },
   ];
   return axis.map((item) => ({
     ...item,

@@ -18,7 +18,9 @@
   left: -32px;
   right: -32px;
   top: 50%;
-  border-top: 1px dashed rgba(47, 128, 237, 0.32);
+  height: 1px;
+  border-top: 0;
+  background: repeating-linear-gradient(90deg, rgba(47, 128, 237, 0.28) 0 4px, transparent 4px 7px);
 }
 
 .fall-platform-top {

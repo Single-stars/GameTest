@@ -414,6 +414,92 @@
   fill: rgba(43, 43, 43, 0.42);
 }
 
+.relayGlyph {
+  opacity: 0.96;
+  fill: none;
+  transform-origin: 50% 54%;
+  filter: drop-shadow(0 2px 5px rgba(15, 68, 92, 0.18));
+}
+
+.relayPulse {
+  stroke: rgba(211, 246, 255, 0.55);
+  stroke-width: 3.2;
+}
+
+.relayEnvelope {
+  fill: rgba(248, 253, 255, 0.28);
+  stroke: rgba(230, 250, 255, 0.82);
+  stroke-width: 3.4;
+}
+
+.relayEnvelopeFold {
+  stroke: rgba(19, 86, 112, 0.36);
+  stroke-width: 3.1;
+}
+
+.relayArrow {
+  stroke: rgba(255, 236, 150, 0.88);
+  stroke-width: 4;
+}
+
+.leadGlyph {
+  opacity: 0.96;
+  fill: none;
+  transform-origin: 50% 58%;
+  filter: drop-shadow(0 2px 5px rgba(116, 74, 12, 0.2));
+}
+
+.leadTrail {
+  stroke: rgba(255, 250, 216, 0.58);
+  stroke-width: 3.4;
+}
+
+.leadStep {
+  stroke: rgba(92, 58, 11, 0.46);
+  stroke-width: 5.2;
+}
+
+.leadFlagPole {
+  stroke: rgba(92, 58, 11, 0.55);
+  stroke-width: 3.4;
+}
+
+.leadFlag {
+  fill: rgba(255, 247, 179, 0.72);
+  stroke: rgba(98, 61, 10, 0.36);
+  stroke-width: 2.2;
+}
+
+.leadSpark {
+  fill: rgba(255, 255, 229, 0.82);
+  stroke: rgba(98, 61, 10, 0.25);
+  stroke-width: 1.8;
+}
+
+.masteryGlyph {
+  opacity: 0.96;
+  fill: none;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 2px 5px rgba(12, 54, 78, 0.22));
+}
+
+.masteryLoop {
+  stroke: rgba(205, 251, 241, 0.76);
+  stroke-width: 4.2;
+}
+
+.masteryCore {
+  fill: rgba(255, 216, 95, 0.78);
+  stroke: rgba(28, 62, 72, 0.36);
+  stroke-width: 2.2;
+}
+
+.masteryNode {
+  fill: rgba(246, 253, 255, 0.86);
+  stroke: rgba(22, 82, 98, 0.34);
+  stroke-width: 1.8;
+}
+
 .sparkles::before,
 .sparkles::after {
   content: "";
@@ -794,6 +880,51 @@
   --player-avatar-texture-blend-mode: screen;
 }
 
+.root[data-skin="relay"] {
+  --player-avatar-body: #2f9ab5;
+  --player-avatar-outline: rgba(20, 84, 104, 0.66);
+  --player-avatar-ink: rgba(7, 45, 59, 0.94);
+  --player-avatar-skin-line: rgba(7, 45, 59, 0.3);
+  --player-avatar-texture:
+    radial-gradient(circle at 24% 26%, rgba(255, 255, 255, 0.24) 0 2px, transparent 3px),
+    repeating-linear-gradient(90deg, transparent 0 15px, rgba(235, 250, 255, 0.18) 15px 18px, transparent 18px 32px),
+    linear-gradient(135deg, transparent 0 34%, rgba(255, 236, 150, 0.2) 45%, transparent 56%);
+  --player-avatar-texture-opacity: 0.82;
+  --player-avatar-texture-size: 52px 46px, 70px 58px, 92px 92px;
+  --player-avatar-texture-position: 3px -6px, -12px 10px, -20px -18px;
+  --player-avatar-texture-blend-mode: screen;
+}
+
+.root[data-skin="lead"] {
+  --player-avatar-body: #f1bd4f;
+  --player-avatar-outline: rgba(126, 83, 22, 0.62);
+  --player-avatar-ink: rgba(74, 48, 12, 0.94);
+  --player-avatar-skin-line: rgba(74, 48, 12, 0.32);
+  --player-avatar-texture:
+    radial-gradient(circle at 76% 18%, rgba(255, 255, 230, 0.34) 0 3px, transparent 4px),
+    repeating-linear-gradient(135deg, rgba(116, 74, 12, 0.1) 0 4px, transparent 4px 16px),
+    linear-gradient(180deg, rgba(255, 255, 235, 0.16), transparent 58%);
+  --player-avatar-texture-opacity: 0.74;
+  --player-avatar-texture-size: 72px 60px, 54px 54px, 100% 100%;
+  --player-avatar-texture-position: -14px 5px, 0 0, center;
+}
+
+.root[data-skin="mastery"] {
+  --player-avatar-body: #3e7890;
+  --player-avatar-outline: rgba(25, 74, 88, 0.68);
+  --player-avatar-ink: rgba(11, 42, 50, 0.95);
+  --player-avatar-skin-line: rgba(11, 42, 50, 0.3);
+  --player-avatar-texture:
+    radial-gradient(circle at 50% 50%, rgba(255, 218, 102, 0.3) 0 12%, transparent 27%),
+    radial-gradient(circle at 18% 18%, rgba(203, 251, 241, 0.32) 0 2.4px, transparent 3.6px),
+    radial-gradient(circle at 82% 77%, rgba(255, 245, 196, 0.24) 0 2px, transparent 3px),
+    conic-gradient(from 22deg, rgba(203, 251, 241, 0.14), transparent 16%, rgba(255, 216, 95, 0.16) 28%, transparent 42%, rgba(203, 251, 241, 0.14));
+  --player-avatar-texture-opacity: 0.8;
+  --player-avatar-texture-size: 100% 100%, 64px 64px, 78px 78px, 100% 100%;
+  --player-avatar-texture-position: center, -8px -9px, 16px 12px, center;
+  --player-avatar-texture-blend-mode: screen;
+}
+
 .root[data-skin="custom"] {
   --player-avatar-body: #fff;
   --player-avatar-outline: var(--player-avatar-custom-outline, rgba(24, 24, 24, 0.18));
@@ -886,6 +1017,18 @@
 
 .root[data-skin="paw"] .pawGlyph {
   animation: playerAvatarPawPress 1.2s ease-in-out infinite;
+}
+
+.root[data-skin="relay"][data-expression="neutral"] .eye {
+  animation: playerAvatarRelayEyes 2.4s ease-in-out infinite;
+}
+
+.root[data-skin="lead"][data-expression="neutral"] .eye {
+  animation: playerAvatarLeadEyes 1.9s ease-in-out infinite;
+}
+
+.root[data-skin="mastery"][data-expression="neutral"] .eye {
+  animation: playerAvatarMasteryEyes 2.8s ease-in-out infinite;
 }
 
 .root[data-skin="basketball"][data-action="celebrate"] .body,
@@ -1007,6 +1150,67 @@
   100% {
     opacity: 0;
     transform: translate3d(124%, 124%, 0) translate3d(var(--starfall-offset-x), var(--starfall-offset-y), 0) rotate(var(--starfall-spin-end)) scale(var(--starfall-scale));
+  }
+}
+
+@keyframes playerAvatarRelayEyes {
+  0%,
+  100% {
+    transform: translateX(0) scaleY(1);
+  }
+
+  28% {
+    transform: translateX(16%) scaleY(0.78);
+  }
+
+  52% {
+    transform: translateX(-10%) scaleY(1);
+  }
+
+  86% {
+    transform: translateX(0) scaleY(0.18);
+  }
+}
+
+@keyframes playerAvatarLeadEyes {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+
+  34% {
+    transform: translateY(-8%) scaleY(1.12);
+  }
+
+  68% {
+    transform: translateY(5%) scaleY(0.9);
+  }
+
+  84% {
+    transform: translateY(0) scaleY(0.16);
+  }
+}
+
+@keyframes playerAvatarMasteryEyes {
+  0%,
+  100% {
+    transform: translateY(0) scaleX(1);
+  }
+
+  24% {
+    transform: translateY(-7%) scaleX(0.86);
+  }
+
+  48% {
+    transform: translateY(5%) scaleX(1.12);
+  }
+
+  72% {
+    transform: translateY(0) scaleX(1);
+  }
+
+  90% {
+    transform: translateY(0) scaleY(0.14);
   }
 }
 

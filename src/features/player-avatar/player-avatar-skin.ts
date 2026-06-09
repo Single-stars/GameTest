@@ -1,4 +1,4 @@
-import { getAdvancedDimensionLevel, getAdvancedTotalStars, type AdvancedProgress } from "../../lib/advanced-progress.ts";
+import { ADVANCED_ROUND_IDS, getAdvancedDimensionLevel, getAdvancedTotalStars, type AdvancedProgress } from "../../lib/advanced-progress.ts";
 import type { RoundId } from "../../lib/scoring.ts";
 
 export type PlayerAvatarSkin =
@@ -16,6 +16,9 @@ export type PlayerAvatarSkin =
   | "arcade"
   | "paw"
   | "blade"
+  | "relay"
+  | "lead"
+  | "mastery"
   | "custom";
 
 export const PLAYER_AVATAR_SKINS = [
@@ -33,6 +36,9 @@ export const PLAYER_AVATAR_SKINS = [
   "basketball",
   "starfall",
   "arcade",
+  "relay",
+  "lead",
+  "mastery",
   "custom",
 ] as const satisfies readonly PlayerAvatarSkin[];
 
@@ -52,6 +58,9 @@ const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
   "basketball",
   "starfall",
   "arcade",
+  "relay",
+  "lead",
+  "mastery",
 ] as const satisfies readonly PlayerAvatarSkin[];
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX = new Map(PLAYER_AVATAR_SKIN_DISPLAY_ORDER.map((skin, index) => [skin, index]));
 
@@ -67,6 +76,8 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   custom: "创意",
   cyan: "青蓝",
   ivory: "象牙",
+  lead: "胜势",
+  mastery: "全能",
   mint: "薄荷",
   paw: "猫爪",
   pig: "猪猪",
@@ -76,6 +87,7 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   slate: "石板",
   starfall: "星陨",
   target: "靶心",
+  relay: "传讯",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
@@ -85,6 +97,8 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   custom: "来自世界之外的小方块",
   cyan: "原装方块，干净耐看。",
   ivory: "成功方块，尊贵优雅",
+  lead: "比分拉开时也要稳住。",
+  mastery: "八种无尽节奏都试过。",
   mint: "清清凉凉，冰冰爽爽",
   paw: "喵~",
   pig: "作者本体",
@@ -94,6 +108,7 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   slate: "沉着稳重",
   starfall: "三百颗够吗？",
   target: "很难被打中的小方块",
+  relay: "把热闹递给下一位。",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 type PlayerAvatarSkinUnlock =
@@ -125,6 +140,18 @@ type PlayerAvatarSkinUnlock =
   | {
       kind: "luck-100";
       label: string;
+    }
+  | {
+      kind: "share-3";
+      label: string;
+    }
+  | {
+      kind: "multiplayer-five-point-lead";
+      label: string;
+    }
+  | {
+      kind: "endless-skill-all";
+      label: string;
     };
 
 export const PLAYER_AVATAR_SKIN_UNLOCKS = {
@@ -134,6 +161,8 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   custom: { kind: "donation", label: "投喂作者一次解锁" },
   cyan: { kind: "default", label: "默认解锁" },
   ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
+  lead: { kind: "multiplayer-five-point-lead", label: "（在一次联机中获得 5 点比分优势）" },
+  mastery: { kind: "endless-skill-all", label: "（在所有类型的无尽模式中使用一次技能）" },
   mint: { kind: "advanced-final", label: "通关一路向上最终试炼", roundId: "search" },
   paw: { kind: "luck-100", label: "运气达到 100" },
   pig: { kind: "king-rank", label: "达成最强王者" },
@@ -143,6 +172,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   slate: { kind: "advanced-final", label: "通关一路向下最终试炼", roundId: "stroop" },
   starfall: { kind: "legend-100", label: "传奇王者 100 星解锁" },
   target: { kind: "advanced-final", label: "通关移动靶最终试炼", roundId: "aim" },
+  relay: { kind: "share-3", label: "（累计触发分享/复制邀请 3 次）" },
 } as const satisfies Record<PlayerAvatarSkin, PlayerAvatarSkinUnlock>;
 
 export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw", "custom"] as readonly PlayerAvatarSkin[];
@@ -168,6 +198,12 @@ export function getPlayerAvatarSkinUnlockState(skin: PlayerAvatarSkin, progress:
       return { label: unlock.label, unlocked: progress.legend100SkinUnlocked === true };
     case "luck-100":
       return { label: unlock.label, unlocked: progress.luckBestScore >= 100 };
+    case "share-3":
+      return { label: unlock.label, unlocked: progress.shareInviteActionCount >= 3 };
+    case "multiplayer-five-point-lead":
+      return { label: unlock.label, unlocked: progress.multiplayerFivePointLeadSkinUnlocked === true };
+    case "endless-skill-all":
+      return { label: unlock.label, unlocked: ADVANCED_ROUND_IDS.every((roundId) => progress.endlessSkillUsedRounds[roundId] === true) };
   }
 }
 

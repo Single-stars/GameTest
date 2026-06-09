@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { getAdvancedLevelTone } from "../advanced-progress.ts";
 import {
   DEFAULT_MULTIPLAYER_LEVEL_ID,
   MULTIPLAYER_LEVEL_GROUPS,
@@ -8,6 +9,7 @@ import {
   formatMultiplayerLevelDisplay,
   getMultiplayerLevelSelectRightLimit,
   getMultiplayerLevelSelectRoomTone,
+  getMultiplayerLevelProgressionIndex,
   getNextMultiplayerLevelSelectState,
   isMultiplayerLevelSelectReadyZone,
   isDefaultMultiplayerLevelSelectState,
@@ -81,6 +83,27 @@ test("multiplayer level selection uses customer-facing names and single-player a
     primary: "最终试炼",
     secondary: "进阶10",
   });
+});
+
+test("multiplayer advanced levels use their displayed progression index for difficulty tones", () => {
+  for (const group of MULTIPLAYER_LEVEL_GROUPS) {
+    assert.deepEqual(
+      group.levels.map((level) => getMultiplayerLevelProgressionIndex(level)),
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      group.gameId,
+    );
+  }
+
+  const knifeLevels = MULTIPLAYER_LEVEL_GROUPS.find((group) => group.gameId === "knife")!.levels;
+  assert.deepEqual(
+    knifeLevels.slice(0, 4).map((level) => [level.levelId, getMultiplayerLevelProgressionIndex(level), getAdvancedLevelTone(getMultiplayerLevelProgressionIndex(level))]),
+    [
+      ["knife-1", 1, "advanced-tier-1"],
+      ["knife-4", 2, "advanced-tier-1"],
+      ["knife-7", 3, "advanced-tier-1"],
+      ["knife-2", 4, "advanced-tier-2"],
+    ],
+  );
 });
 
 test("multiplayer level selection resolves invalid ids to the default playable level", () => {

@@ -55,7 +55,7 @@ const MULTIPLAYER_PROGRESSIVE_ORDER_BY_GAME: Partial<Record<MiniGameId, readonly
   knife: MULTIPLAYER_MINI_GAME_PROGRESSION_ORDER,
 };
 
-function multiplayerProgressionIndex(level: MiniGameLevelConfig) {
+export function getMultiplayerLevelProgressionIndex(level: MiniGameLevelConfig) {
   const order = MULTIPLAYER_PROGRESSIVE_ORDER_BY_GAME[level.gameId];
   const index = order?.indexOf(level.order) ?? -1;
   return index >= 0 ? index + 1 : level.order;
@@ -64,7 +64,7 @@ function multiplayerProgressionIndex(level: MiniGameLevelConfig) {
 function sortMultiplayerLevels(gameId: MiniGameId, levels: MiniGameLevelConfig[]) {
   return levels
     .filter((level) => level.kind === "advanced")
-    .sort((left, right) => multiplayerProgressionIndex(left) - multiplayerProgressionIndex(right) || left.order - right.order);
+    .sort((left, right) => getMultiplayerLevelProgressionIndex(left) - getMultiplayerLevelProgressionIndex(right) || left.order - right.order);
 }
 
 export const MULTIPLAYER_PLAY_MODES: Array<{
@@ -280,7 +280,7 @@ export function resolveMultiplayerLevelSelection(levelId: string | null | undefi
 }
 
 export function formatMultiplayerLevelDisplay(level: MiniGameLevelConfig): MultiplayerLevelDisplay {
-  const progressionIndex = multiplayerProgressionIndex(level);
+  const progressionIndex = getMultiplayerLevelProgressionIndex(level);
   if (progressionIndex === 10) {
     return {
       primary: "最终试炼",

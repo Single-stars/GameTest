@@ -4,8 +4,11 @@ import {
   clearPersistedCurrentResult,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
+  canExchangeLuckCoinForReviveCoin,
   canUseLuckDraw,
   canUseLuckDrawBatch,
+  consumeReviveCoin,
+  exchangeLuckCoinForReviveCoin,
   formatResultRankTitle,
   getAdvancedCompletionActions,
   getAdvancedChallengeStatusLabel,
@@ -25,11 +28,15 @@ import {
   getAdvancedTotalStars,
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
+  grantReviveCoins,
   markAuthorDonated,
   readAppBackHistoryLayer,
+  recordEndlessSkillUse,
+  recordShareInviteAction,
   resolveAppBackNavigation,
   shouldGuardAppBack,
   markAdvancedUnlocked,
+  markMultiplayerFivePointLeadSkinUnlocked,
   parsePersistedGameState,
   markLegend100SkinUnlocked,
   recordAdvancedChallengeResult,
@@ -102,14 +109,68 @@ test("default advanced progress starts locked with 0 shown for every metric", ()
   assert.equal(progress.unlocked, false);
   assert.equal(progress.authorDonated, false);
   assert.equal(progress.legend100SkinUnlocked, false);
+  assert.equal(progress.multiplayerFivePointLeadSkinUnlocked, false);
+  assert.equal(progress.shareInviteActionCount, 0);
   assert.equal(getAdvancedTotalStars(progress), 0);
   assert.equal(progress.luckStars, 0);
   assert.equal(progress.luckBestScore, 0);
   assert.equal(progress.luckDrawChances, 0);
   assert.equal(progress.luckDrawCount, 0);
+  assert.equal(progress.reviveCoins, 0);
+  assert.equal(progress.reviveCoinExchangeCount, 0);
   for (const roundId of ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"] as const) {
     assert.equal(getAdvancedDimensionLevel(progress, roundId), 0);
+    assert.equal(progress.endlessSkillUsedRounds[roundId], false);
   }
+});
+
+test("avatar skin unlock progress records share actions, endless skill rounds, and multiplayer lead", () => {
+  const empty = createDefaultAdvancedProgress("2026-05-10T00:00:00.000Z");
+
+  const sharedOnce = recordShareInviteAction(empty, "2026-05-10T00:00:01.000Z");
+  const sharedTwice = recordShareInviteAction(sharedOnce, "2026-05-10T00:00:02.000Z");
+  const sharedThreeTimes = recordShareInviteAction(sharedTwice, "2026-05-10T00:00:03.000Z");
+  assert.equal(sharedOnce.shareInviteActionCount, 1);
+  assert.equal(sharedThreeTimes.shareInviteActionCount, 3);
+  assert.equal(sharedThreeTimes.updatedAt, "2026-05-10T00:00:03.000Z");
+
+  const lead = markMultiplayerFivePointLeadSkinUnlocked(empty, "2026-05-10T00:00:04.000Z");
+  assert.equal(lead.multiplayerFivePointLeadSkinUnlocked, true);
+  assert.equal(lead.updatedAt, "2026-05-10T00:00:04.000Z");
+
+  const allButLastSkill = ROUND_IDS.slice(0, -1).reduce(
+    (progress, roundId, index) => recordEndlessSkillUse(progress, roundId, `2026-05-10T00:01:0${index}.000Z`),
+    empty,
+  );
+  assert.equal(ROUND_IDS.slice(0, -1).every((roundId) => allButLastSkill.endlessSkillUsedRounds[roundId]), true);
+  assert.equal(allButLastSkill.endlessSkillUsedRounds.patience, false);
+
+  const allSkillRounds = recordEndlessSkillUse(allButLastSkill, "patience", "2026-05-10T00:01:07.000Z");
+  assert.equal(ROUND_IDS.every((roundId) => allSkillRounds.endlessSkillUsedRounds[roundId]), true);
+  assert.equal(allSkillRounds.updatedAt, "2026-05-10T00:01:07.000Z");
+
+  const parsed = parsePersistedGameState(JSON.stringify({
+    schemaVersion: 1,
+    currentResult: null,
+    advancedProgress: {
+      ...allSkillRounds,
+      multiplayerFivePointLeadSkinUnlocked: true,
+      shareInviteActionCount: 7,
+      endlessSkillUsedRounds: {
+        reaction: true,
+        aim: true,
+        search: true,
+        stroop: true,
+        rhythm: true,
+        memory: true,
+        braking: true,
+        patience: true,
+      },
+    },
+  }));
+  assert.equal(parsed.advancedProgress.multiplayerFivePointLeadSkinUnlocked, true);
+  assert.equal(parsed.advancedProgress.shareInviteActionCount, 7);
+  assert.equal(ROUND_IDS.every((roundId) => parsed.advancedProgress.endlessSkillUsedRounds[roundId]), true);
 });
 
 test("advanced challenge results award only the next successful level and preserve highest 0-10 display", () => {
@@ -382,6 +443,57 @@ test("the eightieth luck draw is guaranteed to fill luck stars", () => {
   assert.equal(result.progress.luckBestScore, 100);
   assert.equal(result.progress.luckDrawChances, 0);
   assert.equal(result.progress.luckDrawCount, 80);
+});
+
+test("revive coins use real inventory and exchange spare luck coins only after 100 luck", () => {
+  const locked = advancedProgressWithClearedLevels(5, {
+    luckStars: 19,
+    luckBestScore: 99,
+    luckDrawCount: 2,
+  });
+  assert.equal(canExchangeLuckCoinForReviveCoin(locked), false);
+
+  const blocked = exchangeLuckCoinForReviveCoin(locked, "2026-05-10T00:00:01.000Z");
+  assert.equal(blocked.exchanged, false);
+  assert.equal(blocked.progress.reviveCoins, 0);
+  assert.equal(blocked.progress.reviveCoinExchangeCount, 0);
+  assert.equal(blocked.progress.luckDrawChances, 3);
+
+  const ready = advancedProgressWithClearedLevels(5, {
+    luckStars: 20,
+    luckBestScore: 100,
+    luckDrawCount: 2,
+  });
+  assert.equal(canExchangeLuckCoinForReviveCoin(ready), true);
+
+  const exchanged = exchangeLuckCoinForReviveCoin(ready, "2026-05-10T00:00:02.000Z");
+  assert.equal(exchanged.exchanged, true);
+  assert.equal(exchanged.progress.reviveCoins, 1);
+  assert.equal(exchanged.progress.reviveCoinExchangeCount, 1);
+  assert.equal(exchanged.progress.luckDrawChances, 2);
+  assert.equal(exchanged.progress.luckDrawCount, 2);
+
+  const granted = grantReviveCoins(exchanged.progress, 2, "2026-05-10T00:00:03.000Z");
+  assert.equal(granted.reviveCoins, 3);
+  assert.equal(granted.luckDrawChances, 2);
+
+  const consumed = consumeReviveCoin(granted, "2026-05-10T00:00:04.000Z");
+  assert.equal(consumed.consumed, true);
+  assert.equal(consumed.progress.reviveCoins, 2);
+  assert.equal(consumed.progress.luckDrawChances, 2);
+
+  const empty = consumeReviveCoin(createDefaultAdvancedProgress(), "2026-05-10T00:00:05.000Z");
+  assert.equal(empty.consumed, false);
+  assert.equal(empty.progress.reviveCoins, 0);
+
+  const parsed = parsePersistedGameState(JSON.stringify({
+    schemaVersion: 1,
+    currentResult: null,
+    advancedProgress: consumed.progress,
+  }));
+  assert.equal(parsed.advancedProgress.reviveCoins, 2);
+  assert.equal(parsed.advancedProgress.reviveCoinExchangeCount, 1);
+  assert.equal(parsed.advancedProgress.luckDrawChances, 2);
 });
 
 test("luck score helpers produce display copy for locked, ready and empty states", () => {

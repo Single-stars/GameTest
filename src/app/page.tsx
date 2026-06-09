@@ -26,8 +26,10 @@ import {
 } from "@/lib/scoring";
 import {
   clearPersistedCurrentResult,
+  consumeReviveCoin,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
+  exchangeLuckCoinForReviveCoin,
   getAdvancedBackDestination,
   getAdvancedEndlessBestRun,
   getAdvancedEndlessBestScore,
@@ -37,6 +39,7 @@ import {
   getAdvancedTotalStars,
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
+  grantReviveCoins,
   markAdvancedUnlocked,
   markAuthorDonated,
   markLegend100SkinUnlocked,
@@ -44,8 +47,10 @@ import {
   readPersistedGameState,
   recordAdvancedChallengeResult,
   recordAdvancedEndlessScore,
+  recordEndlessSkillUse,
   recordLuckDraw,
   recordLuckDrawBatch,
+  recordShareInviteAction,
   removePersistedGameState,
   resolveAppBackNavigation,
   setPersistedCurrentResult,
@@ -463,6 +468,16 @@ export default function Home() {
     }
   }, []);
 
+  const persistAdvancedProgressUpdate = useCallback((updater: (progress: AdvancedProgress) => AdvancedProgress, rewardSource?: string) => {
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = updater(previousProgress);
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    if (rewardSource) enqueueRewardItems(createSkinRewardItems(previousProgress, nextProgress, rewardSource));
+    return nextProgress;
+  }, [enqueueRewardItems, persistGameState]);
+
   const persistHomeworldState = useCallback((state: HomeworldState) => {
     const storage = getBrowserStorage();
     if (!storage) return;
@@ -748,6 +763,7 @@ export default function Home() {
 
   const openShareImage = useCallback(async (input: ShareImageInput, returnStage: "advanced" | "home" | "result") => {
     writeUserInitiatedHistoryGuard(1);
+    persistAdvancedProgressUpdate((progress) => recordShareInviteAction(progress), "share-action");
     clearShareCopyToastTimer();
     setShareReturnStage(returnStage);
     setShareImageResult(input.kind === "result" ? input.result : null);
@@ -778,7 +794,7 @@ export default function Home() {
       setShareImageDataUrl(null);
       setImageShareState("failed");
     }
-  }, [captureShareAvatarDataUrl, clearShareCopyToastTimer, showShareCopyToast, transitionToStage, writeUserInitiatedHistoryGuard]);
+  }, [captureShareAvatarDataUrl, clearShareCopyToastTimer, persistAdvancedProgressUpdate, showShareCopyToast, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const openCurrentShareImage = useCallback(() => {
     const rankTitle = formatResultRankTitle(result.name, getAdvancedTotalStars(advancedProgressRef.current));
@@ -953,6 +969,36 @@ export default function Home() {
       }),
     ]);
     return outcome;
+  }, [persistGameState]);
+
+  const exchangeReviveCoin = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const result = exchangeLuckCoinForReviveCoin(previousProgress);
+    if (!result.exchanged) return false;
+    const nextProgress = result.progress;
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    return true;
+  }, [persistGameState]);
+
+  const grantReviveCoinForTest = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = grantReviveCoins(previousProgress, 1);
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+  }, [persistGameState]);
+
+  const useReviveCoin = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const result = consumeReviveCoin(previousProgress);
+    if (!result.consumed) return false;
+    const nextProgress = result.progress;
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    return true;
   }, [persistGameState]);
 
   const closeAdvancedChallenge = useCallback(() => {
@@ -1170,6 +1216,10 @@ export default function Home() {
     },
     [transitionToStage],
   );
+
+  const recordAdvancedEndlessSkillUse = useCallback((roundId: RoundId) => {
+    persistAdvancedProgressUpdate((progress) => recordEndlessSkillUse(progress, roundId), `endless-skill-${roundId}`);
+  }, [persistAdvancedProgressUpdate]);
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
     void record.trials;
@@ -1459,11 +1509,14 @@ export default function Home() {
           onBack={requestAppBack}
           onDraw={drawLuck}
           onDrawBatch={drawLuckBatch}
+          onExchangeReviveCoin={exchangeReviveCoin}
+          onGrantReviveCoinForTest={grantReviveCoinForTest}
           onRevealRewards={revealPendingLuckRewards}
         />
       ) : stage === "advanced" && advancedChallenge ? (
         <AdvancedChallengeScreen
           advancedProgress={advancedProgress}
+          avatarSkin={selectedAvatarSkin}
           challenge={advancedChallenge}
           debugToolsVisible={debugToolsVisible}
           endlessBestScore={getAdvancedEndlessBestScore(advancedProgress, advancedChallenge.roundId)}
@@ -1473,11 +1526,13 @@ export default function Home() {
           onCompleteEndlessChallenge={completeEndlessChallengeRound}
           onCompleteEndlessRound={completeAdvancedEndlessRound}
           onCompleteRound={completeAdvancedLevel}
+          onEndlessSkillUse={recordAdvancedEndlessSkillUse}
           onOpenLuckDraw={openLuckDraw}
           onPickLevel={pickAdvancedLevel}
           onRestartBaseRound={startAdvancedBaseReplay}
           onShareEndlessChallenge={shareEndlessChallenge}
           onStartLevel={startAdvancedLevel}
+          onUseReviveCoin={useReviveCoin}
           renderRound={(props) => (
             <RoundPlayer
               key={props.key}
@@ -1488,6 +1543,7 @@ export default function Home() {
               roundId={props.round}
             />
           )}
+          reviveCoins={advancedProgress.reviveCoins}
           shareCopyNoticeId={shareCopyNoticeId}
         />
       ) : stage === "outdoor-adventure" ? (

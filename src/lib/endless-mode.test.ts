@@ -18,11 +18,13 @@ import {
   getEndlessKnifeEffectiveWheelIndex,
   getEndlessLevelState,
   getEndlessScore,
+  getEndlessStartingRevives,
   getEndlessTestJumpOptions,
   getEndlessRoundDifficultyState,
   isEndlessModeUnlocked,
+  shouldKeepPigEndlessLife,
 } from "./endless-mode.ts";
-import { createDefaultAdvancedProgress, recordAdvancedChallengeResult } from "./advanced-progress.ts";
+import { createDefaultAdvancedProgress, markLegend100SkinUnlocked, recordAdvancedChallengeResult } from "./advanced-progress.ts";
 import { getMiniGameLevel } from "./mini-games/index.ts";
 
 function sourceBetween(source: string, start: string, end: string) {
@@ -72,6 +74,32 @@ test("endless scoring stays intentionally simple", () => {
   assert.equal(endlessMode.getEndlessReactionConfig({ score: 0 }).thresholdMs, 500);
 });
 
+test("endless skin hidden traits grant one starting life and pig can keep one life", () => {
+  const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
+  const searchClearedProgress = Array.from({ length: 10 }, (_, index) => index + 1).reduce(
+    (progress, level) =>
+      recordAdvancedChallengeResult(progress, {
+        completedAt: `2026-05-28T00:${String(level).padStart(2, "0")}:00.000Z`,
+        level,
+        passed: true,
+        roundId: "search",
+        score: 100,
+      }),
+    emptyProgress,
+  );
+  const starfallProgress = markLegend100SkinUnlocked(emptyProgress, "2026-05-28T02:00:00.000Z");
+
+  assert.equal(getEndlessStartingRevives(emptyProgress, "search", "mint"), 3);
+  assert.equal(getEndlessStartingRevives(searchClearedProgress, "search", "mint"), 4);
+  assert.equal(getEndlessStartingRevives(searchClearedProgress, "stroop", "mint"), 3);
+  assert.equal(getEndlessStartingRevives(starfallProgress, "aim", "starfall"), 4);
+  assert.equal(getEndlessStartingRevives(emptyProgress, "aim", "starfall"), 3);
+
+  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.099), true);
+  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.1), false);
+  assert.equal(shouldKeepPigEndlessLife("cyan", () => 0), false);
+});
+
 test("endless HUD uses manual heal, skill, and debug energy controls instead of automatic recovery", () => {
   const commonSource = readFileSync(new URL("../features/mini-games/common.tsx", import.meta.url), "utf8");
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
@@ -110,7 +138,7 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(runtimeSource, /nextEnergy >= ENDLESS_ENERGY_THRESHOLD && !activeSkillRef\.current/);
   assert.match(runtimeSource, /shieldChargesRef\.current = 1/);
   assert.match(runtimeSource, /const useHeal = useCallback/);
-  assert.match(runtimeSource, /revivesRef\.current >= ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /revivesRef\.current >= normalizedStartingRevives/);
   assert.match(runtimeSource, /energyRef\.current < ENDLESS_SKILL_COST/);
   assert.match(runtimeSource, /revivesRef\.current \+ 1/);
   assert.match(runtimeSource, /const toggleDebugEnergyLock = useCallback/);
@@ -120,7 +148,7 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(runtimeSource, /energyPercent: shieldCharges > 0 \? 100 : Math\.round/);
   assert.match(runtimeSource, /clearPassiveShield/);
   assert.match(runtimeSource, /canUseSkill: energy >= ENDLESS_SKILL_COST && !activeSkill/);
-  assert.match(runtimeSource, /canHeal: energy >= ENDLESS_SKILL_COST && revives < ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /canHeal: energy >= ENDLESS_SKILL_COST && revives < normalizedStartingRevives/);
   assert.match(runtimeSource, /debugEnergyLocked/);
   assert.match(runtimeSource, /energyRef\.current < ENDLESS_SKILL_COST/);
   assert.match(runtimeSource, /energyRef\.current - ENDLESS_SKILL_COST/);
@@ -207,6 +235,48 @@ test("endless feedback uses per-round skill names, longer colored popups, and li
   assert.match(cssSource, /\.endless-energy-popup\s*{[\s\S]*font-size:\s*clamp\(15px,\s*3vw,\s*22px\);/);
   assert.match(cssSource, /\.endless-energy-popup\s*{[\s\S]*background:\s*rgba\(255,\s*253,\s*248,\s*0\.82\);/);
   assert.match(cssSource, /\.endless-energy-popups\s*{[\s\S]*top:\s*clamp\(62px,\s*10vw,\s*88px\);[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/);
+});
+
+test("endless revive coins prompt once, spend real inventory, and restore full health and energy", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /DonateIcon/);
+  assert.match(runtimeSource, /reviveCoins: number;/);
+  assert.match(runtimeSource, /onUseReviveCoin: \(\) => boolean;/);
+  assert.match(runtimeSource, /reviveCoinsRef/);
+  assert.match(runtimeSource, /reviveCoinUsedRef/);
+  assert.match(runtimeSource, /onUseReviveCoinRef/);
+  assert.match(runtimeSource, /reviveCoinPrompt/);
+  assert.match(runtimeSource, /reviveCoinAnimationId/);
+  assert.match(runtimeSource, /const canOfferReviveCoin = reviveCoinsRef\.current > 0 && !reviveCoinUsedRef\.current;/);
+  assert.match(runtimeSource, /if \(nextRevives <= 0\) \{[\s\S]*if \(canOfferReviveCoin\) \{[\s\S]*setReviveCoinPrompt\([\s\S]*return true;/);
+  assert.match(runtimeSource, /const confirmReviveCoin = useCallback/);
+  assert.match(runtimeSource, /if \(!onUseReviveCoinRef\.current\(\)\) \{/);
+  assert.match(runtimeSource, /reviveCoinUsedRef\.current = true;/);
+  assert.match(runtimeSource, /setReviveCoinUsed\(true\);/);
+  assert.match(runtimeSource, /revivesRef\.current = normalizedStartingRevives;/);
+  assert.match(runtimeSource, /setRevives\(normalizedStartingRevives\);/);
+  assert.match(runtimeSource, /energyRef\.current = ENDLESS_ENERGY_THRESHOLD;/);
+  assert.match(runtimeSource, /setEnergy\(ENDLESS_ENERGY_THRESHOLD\);/);
+  assert.match(runtimeSource, /syncPassiveShieldFromEnergy\(ENDLESS_ENERGY_THRESHOLD\);/);
+  assert.match(runtimeSource, /const cancelReviveCoin = useCallback/);
+  assert.match(runtimeSource, /finish\(reviveCoinPrompt\.reason\);/);
+  assert.match(runtimeSource, /className="endless-revive-bank"/);
+  assert.match(runtimeSource, /className="endless-revive-used"/);
+  assert.match(runtimeSource, /className="endless-revive-prompt-backdrop"/);
+  assert.match(runtimeSource, /className="endless-revive-totem-burst"/);
+  assert.doesNotMatch(runtimeSource, /reviveCoins\s*=\s*999|testReviveCoins|temporaryRevive/);
+  assert.match(screenSource, /reviveCoins=\{reviveCoins\}/);
+  assert.match(screenSource, /onUseReviveCoin=\{onUseReviveCoin\}/);
+  assert.match(cssSource, /\.endless-revive-bank\s*{/);
+  assert.match(cssSource, /\.endless-revive-used\s*{/);
+  assert.match(cssSource, /\.endless-revive-prompt-backdrop\s*{/);
+  assert.match(cssSource, /\.endless-revive-prompt\s*{/);
+  assert.match(cssSource, /\.endless-revive-totem-burst\s*{/);
+  assert.match(cssSource, /@keyframes endless-revive-coin-fly/);
+  assert.match(cssSource, /@keyframes endless-revive-coin-flip/);
 });
 
 test("endless damage invincibility flickers only the player avatar shells", () => {
@@ -909,11 +979,16 @@ test("advanced screen and app route endless mode through a real runtime with com
   assert.match(screenSource, /mode: "endless-playing"/);
   assert.match(screenSource, /mode: "endless-complete"/);
   assert.match(screenSource, /EndlessRoundPlayer/);
+  assert.match(screenSource, /getEndlessStartingRevives/);
+  assert.match(screenSource, /avatarSkin:\s*PlayerAvatarSkin;/);
   assert.match(screenSource, /endless-play-screen/);
   assert.match(pageSource, /isEndlessModeUnlocked/);
   assert.match(pageSource, /recordAdvancedEndlessScore/);
+  assert.match(pageSource, /avatarSkin=\{selectedAvatarSkin\}/);
   assert.match(pageSource, /completeAdvancedEndlessRound/);
   assert.match(runtimeSource, /ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /startingRevives = ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /shouldKeepPigEndlessLife\(avatarSkin\)/);
   assert.match(runtimeSource, /endless-hearts/);
   assert.match(runtimeSource, /endless-heart-token/);
   assert.match(runtimeSource, /getEndlessRoundDifficultyState/);
@@ -1109,7 +1184,7 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.match(shellSource, /<div className=\{`endless-game-host \$\{api\.skillActive \? "skill-active" : ""\} \$\{api\.skillEnding \? "skill-ending" : ""\}`\}/);
   assert.match(runtimeSource, /const avatarEffect = getEndlessAvatarEffect\(api\.getActiveSkill\(\)\);/);
   assert.match(runtimeSource, /const shielded = avatarEffect === "shield" \|\| api\.shieldCharges > 0;/);
-  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{shielded\} avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\} paused=\{paused\} \/>/);
+  assert.match(shellSource, /<EndlessGameByRound api=\{api\} runSeed=\{runSeed\} segment=\{segment\} shielded=\{shielded\} avatarEffect=\{avatarEffect === "shield" \? "none" : avatarEffect\} paused=\{api\.paused\} \/>/);
   assert.doesNotMatch(shellSource, /api\.damageInvincible\}/);
   assert.doesNotMatch(shellSource, /<EndlessHud[\s\S]*<div className="endless-game-host"/);
   assert.match(hudCss, /position:\s*absolute;/);

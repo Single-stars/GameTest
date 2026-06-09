@@ -27,21 +27,18 @@ export function buildAdvancedPerfectTrials(config: AdvancedStageConfig): TrialEv
     getParamNumber(config, "roundCount", 0) ||
     getParamNumber(config, "hazardCount", 0) ||
     1;
+  const valueForTrial = (index: number): NonNullable<TrialEvent["value"]> => {
+    if (config.dimension === "reaction") return { signalColor: "green" };
+    if (config.dimension === "braking") return { exited: index === count - 1, collision: false, earlyStop: false };
+    return { shotHit: true };
+  };
+
   return Array.from({ length: count }, (_, index) =>
     trial(config.dimension, index, {
       shownAt: index * 1000,
       responseAt: index * 1000 + 120,
       correct: true,
-      value:
-        config.dimension === "reaction"
-          ? { signalColor: "green" }
-          : config.dimension === "search"
-            ? { targetCount: 3, selectedCount: 3 }
-            : config.dimension === "patience"
-              ? { waitMs: getParamNumber(config, "waitMs", 6000), durationMs: getParamNumber(config, "waitMs", 6000), skipped: false }
-              : config.dimension === "braking"
-                ? { exited: index === count - 1, collision: false, earlyStop: false }
-                : { shotHit: true },
+      value: valueForTrial(index),
     }),
   );
 }

@@ -690,6 +690,7 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.match(pageSource, /opponentWins=\{matchWins\.opponent\}/);
   assert.match(pageSource, /const levelSelectSelfCustomAvatar = snapshot\.selfPlayer\?\.customAvatar \?\? \(selectedSkin === "custom" && customAvatarSyncPayload \? customAvatarSyncPayload : undefined\);/);
   assert.match(pageSource, /selfCustomAvatar=\{levelSelectSelfCustomAvatar\}/);
+  assert.match(pageSource, /const roomScoreboardVisible = standalonePeerConnected;/);
   assert.doesNotMatch(pageSource, /<MultiplayerGameShell[\s\S]{0,600}selfWins=\{matchWins\.self\}/);
   assert.doesNotMatch(pageSource, /<MultiplayerGameShell[\s\S]{0,600}opponentWins=\{matchWins\.opponent\}/);
   assert.doesNotMatch(pageSource, /<MultiplayerMatchRuntime[\s\S]{0,900}selfWins=\{matchWins\.self\}/);
@@ -701,7 +702,8 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.match(pageSource, /sessionRef\.current\?\.reportRoomScore/);
   assert.match(pageSource, /snapshot\.roomScore/);
   assert.match(pageSource, /scoreboardRoomBarOffset=\{standaloneRoomBarVisible\}/);
-  assert.match(pageSource, /scoreboardVisible=\{Boolean\(snapshot\.roomId\)\}/);
+  assert.match(pageSource, /scoreboardVisible=\{roomScoreboardVisible\}/);
+  assert.doesNotMatch(pageSource, /scoreboardVisible=\{Boolean\(snapshot\.roomId\)\}/);
   assert.match(pageSource, /if \(snapshot\.roomId !== matchWinsRoomIdRef\.current\)/);
   assert.match(pageSource, /lastValidRoomScoreRef/);
   assert.match(pageSource, /roomScoreToLocalWins\(lastValidRoomScoreRef\.current\.score, snapshot\.role\)/);
@@ -1013,6 +1015,26 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
   assert.match(hostRoomSource, /房间已失效，已刷新房间码和邀请链接。/);
 });
 
+test("multiplayer invite actions and five point score leads persist avatar unlock progress", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const linkCopySource = pageSource.slice(pageSource.indexOf("const handleCopyLink"), pageSource.indexOf("const handleCopyRoomCode"));
+  const codeCopySource = pageSource.slice(pageSource.indexOf("const handleCopyRoomCode"), pageSource.indexOf("const handleExitHomeworldRoom"));
+  const finishedEffectSource = pageSource.slice(
+    pageSource.indexOf('if (activePlayMode !== "versus") return;'),
+    pageSource.indexOf("useEffect(() => {", pageSource.indexOf('if (activePlayMode !== "versus") return;') + 1),
+  );
+
+  assert.match(pageSource, /writePersistedGameState/);
+  assert.match(pageSource, /recordShareInviteAction/);
+  assert.match(pageSource, /markMultiplayerFivePointLeadSkinUnlocked/);
+  assert.match(pageSource, /getMultiplayerScoreLead/);
+  assert.match(linkCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\)\)/);
+  assert.match(codeCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\)\)/);
+  assert.match(finishedEffectSource, /const scoreLead = getMultiplayerScoreLead\(snapshot\.selfResult, snapshot\.opponentResult\);/);
+  assert.match(finishedEffectSource, /if \(comparison < 0 && scoreLead >= 5\) \{/);
+  assert.match(finishedEffectSource, /persistAdvancedProgress\(\(progress\) => markMultiplayerFivePointLeadSkinUnlocked\(progress\)\);/);
+});
+
 test("multiplayer host room shows balanced room code and truncated invite link", () => {
   const hostRoomSource = readSource("../../features/multiplayer/host-room.tsx");
 
@@ -1280,15 +1302,33 @@ test("standalone multiplayer room controls hide after peer connection and ready 
 
   assert.match(pageSource, /const standalonePeerConnected = snapshot\.connectionState === "connected" && snapshot\.status === "connected" && Boolean\(snapshot\.opponentPlayer\);/);
   assert.match(pageSource, /const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;/);
+  assert.match(pageSource, /const roomScoreboardVisible = standalonePeerConnected;/);
   assert.match(pageSource, /const standaloneRoomBarVisible = !standalonePeerConnected;/);
   assert.match(pageSource, /\{standaloneRoomBarVisible \? \(/);
   assert.match(pageSource, /standaloneReadyAvailable \? <button className="ready" type="button" onClick=\{requestStandaloneReadyAutoMove\}>/);
   assert.match(pageSource, /onClick=\{requestStandaloneExitAutoMove\}>\{standaloneLeftExitLabel\}/);
   assert.match(pageSource, /readyAvailable=\{standaloneReadyAvailable\}/);
   assert.match(pageSource, /autoMoveRequest=\{standaloneLevelSelectAutoMoveRequest\}/);
+  assert.match(pageSource, /onAutoMoveRequestConsumed=\{handleStandaloneAutoMoveRequestConsumed\}/);
   assert.match(roomSource, /readyAvailable = true/);
+  assert.match(roomSource, /onAutoMoveRequestConsumed\?: \(id: number\) => void;/);
   assert.match(roomSource, /const readyGuideVisible = readyAvailable && complete;/);
   assert.match(roomSource, /const nextReady = readyAvailable && autoMoveTaskRef\.current === null && isMultiplayerLevelSelectReadyZone\(selection, clamped\);/);
+});
+
+test("standalone level-select auto-move requests are consumed so remounts do not replay exit", () => {
+  const pageSource = readSource("../../app/multiplayer/page.tsx");
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+
+  assert.match(pageSource, /const handleStandaloneAutoMoveRequestConsumed = useCallback\(\(id: number\) => \{/);
+  assert.match(pageSource, /const standaloneLevelSelectAutoMoveRequestIdRef = useRef\(0\);/);
+  assert.match(pageSource, /standaloneLevelSelectAutoMoveRequestIdRef\.current \+= 1/);
+  assert.doesNotMatch(pageSource, /setStandaloneLevelSelectAutoMoveRequest\(\(current\) => \(\{ action: "ready", id: \(current\?\.id \?\? 0\) \+ 1 \}\)\)/);
+  assert.doesNotMatch(pageSource, /setStandaloneLevelSelectAutoMoveRequest\(\(current\) => \(\{ action: "exit", id: \(current\?\.id \?\? 0\) \+ 1 \}\)\)/);
+  assert.match(pageSource, /setStandaloneLevelSelectAutoMoveRequest\(\(current\) => current\?\.id === id \? null : current\)/);
+  assert.match(pageSource, /if \(showGameShell && standaloneLevelSelectAutoMoveRequest !== null\) \{[\s\S]{0,120}setStandaloneLevelSelectAutoMoveRequest\(null\);/);
+  assert.match(pageSource, /setStandaloneLevelSelectAutoMoveRequest\(null\);[\s\S]{0,120}setStandaloneExitConfirmOpen\(false\);/);
+  assert.match(roomSource, /onAutoMoveRequestConsumed\?\.\(autoMoveRequest\.id\);/);
 });
 
 test("multiplayer level select click actions auto-move before ready or exit and release player input afterward", () => {
@@ -1308,6 +1348,12 @@ test("multiplayer level select click actions auto-move before ready or exit and 
   assert.match(roomSource, /inputDirectionRef\.current = "none";[\s\S]{0,220}setMoving\(false\);/);
   assert.match(roomSource, /if \(task === "ready"\)[\s\S]{0,120}updateReady\(true\);/);
   assert.match(roomSource, /if \(task === "exit"\)[\s\S]{0,240}window\.setTimeout\(onBackToRoom, 0\);/);
+  assert.match(roomSource, /const clearLevelSelectInputRefs = useCallback/);
+  assert.match(roomSource, /const releaseLevelSelectInput = useCallback/);
+  assert.match(roomSource, /window\.addEventListener\("blur", releaseLevelSelectInput\);/);
+  assert.match(roomSource, /window\.addEventListener\("pagehide", releaseLevelSelectInput\);/);
+  assert.match(roomSource, /document\.addEventListener\("visibilitychange", releaseOnHidden\);/);
+  assert.match(roomSource, /document\.visibilityState === "hidden"/);
   assert.match(roomSource, /onKeyDown=\{\(event\) => \{[\s\S]{0,120}if \(autoMoveTaskRef\.current\) return;/);
   assert.match(roomSource, /onKeyUp=\{\(event\) => \{[\s\S]{0,120}if \(autoMoveTaskRef\.current\) return;/);
   assert.match(pageSource, /requestStandaloneReadyAutoMove/);
@@ -1315,12 +1361,14 @@ test("multiplayer level select click actions auto-move before ready or exit and 
   assert.match(cssSource, /\.multiplayer-level-guide\s*\{[\s\S]*min-height:\s*44px;/);
 });
 
-test("multiplayer level select floor buttons are click-driven instead of distance-gated", () => {
+test("multiplayer level select floor buttons require the player to stand near the slot", () => {
   const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
 
+  assert.match(roomSource, /const MULTIPLAYER_LEVEL_SLOT_TOO_FAR_TEXT = "距离太远了";/);
+  assert.match(roomSource, /if \(selectionAvailable && slot !== reachableSlot\) \{[\s\S]{0,120}onUnavailablePlayMode\?\.\(MULTIPLAYER_LEVEL_SLOT_TOO_FAR_TEXT\);[\s\S]{0,60}return;/);
   assert.match(roomSource, /onClick=\{\(\) => interactWithSlot\(slot\)\}/);
   assert.doesNotMatch(roomSource, /disabled=\{selectionLocked \|\| \(selectionAvailable && reachableSlot !== slot\)\}/);
-  assert.doesNotMatch(roomSource, /interactWithSlot\(!selectionAvailable \? slot : reachableSlot === slot \? slot : null\)/);
+  assert.doesNotMatch(roomSource, /onUnavailablePlayMode\?\.\("距离太远了"\);[\s\S]{0,80}onSelectionChange/);
 });
 
 test("multiplayer level select scoreboard stacks names above avatars with crown next to the name", () => {

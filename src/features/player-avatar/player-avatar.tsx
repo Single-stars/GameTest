@@ -267,6 +267,48 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
     );
   }
 
+  if (skin === "relay") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.relayGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <path className={styles.relayPulse} d="M13 18 Q7 32 13 46" />
+        <path className={styles.relayPulse} d="M51 18 Q57 32 51 46" />
+        <path className={styles.relayEnvelope} d="M17 23 H47 V45 H17 Z" />
+        <path className={styles.relayEnvelopeFold} d="M18 24 L32 36 L46 24 M18 44 L28 34 M46 44 L36 34" />
+        <path className={styles.relayArrow} d="M39 15 H50 M46 11 L50 15 L46 19" />
+      </svg>
+    );
+  }
+
+  if (skin === "lead") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.leadGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <path className={styles.leadTrail} d="M13 47 H22 M10 38 H26 M13 29 H21" />
+        <path className={styles.leadStep} d="M24 46 V38 H34 V30 H44 V21 H53" />
+        <path className={styles.leadFlagPole} d="M44 16 V41" />
+        <path className={styles.leadFlag} d="M44 17 Q51 13 56 18 Q51 24 44 21 Z" />
+        <path className={styles.leadSpark} d="M22 16 L25 21 L20 21 Z" />
+      </svg>
+    );
+  }
+
+  if (skin === "mastery") {
+    return (
+      <svg className={`${styles.skinSvg} ${styles.masteryGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
+        <path className={styles.masteryLoop} d="M16 33 C22 20 29 20 32 32 C35 44 42 44 48 31" />
+        <path className={styles.masteryLoop} d="M16 31 C22 44 29 44 32 32 C35 20 42 20 48 33" />
+        <circle className={styles.masteryCore} cx="32" cy="32" r="7" />
+        <circle className={styles.masteryNode} cx="32" cy="11" r="3.1" />
+        <circle className={styles.masteryNode} cx="47" cy="17" r="3.1" />
+        <circle className={styles.masteryNode} cx="53" cy="32" r="3.1" />
+        <circle className={styles.masteryNode} cx="47" cy="47" r="3.1" />
+        <circle className={styles.masteryNode} cx="32" cy="53" r="3.1" />
+        <circle className={styles.masteryNode} cx="17" cy="47" r="3.1" />
+        <circle className={styles.masteryNode} cx="11" cy="32" r="3.1" />
+        <circle className={styles.masteryNode} cx="17" cy="17" r="3.1" />
+      </svg>
+    );
+  }
+
   if (skin === "paw") {
     return (
       <svg className={`${styles.skinSvg} ${styles.pawGlyph}`} viewBox="0 0 64 64" aria-hidden="true">

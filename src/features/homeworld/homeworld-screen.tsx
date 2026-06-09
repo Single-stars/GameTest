@@ -303,6 +303,22 @@ export function HomeworldScreen({
       : current);
   }, []);
 
+  const clearHomeworldInputRefs = useCallback(() => {
+    inputDirectionRef.current = "none";
+    inputPointerIdRef.current = null;
+  }, []);
+
+  const releaseHomeworldInput = useCallback(() => {
+    clearHomeworldInputRefs();
+    setPlayer((current) => current.action === "move"
+      ? {
+          ...current,
+          action: "idle",
+          expression: "neutral",
+        }
+      : current);
+  }, [clearHomeworldInputRefs]);
+
   const setInputDirection = useCallback((direction: HomeworldPresenceDirection) => {
     inputDirectionRef.current = direction;
     if (direction !== "none") {
@@ -330,12 +346,11 @@ export function HomeworldScreen({
 
   const stopHomeworldDirection = useCallback((event?: PointerEvent<HTMLDivElement>) => {
     if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
-    inputDirectionRef.current = "none";
-    inputPointerIdRef.current = null;
+    releaseHomeworldInput();
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  }, []);
+  }, [releaseHomeworldInput]);
 
   const transferFloor = useCallback(() => {
     setPlayer((current) => {
@@ -655,6 +670,21 @@ export function HomeworldScreen({
       window.removeEventListener("keyup", onKeyUp);
     };
   }, [setInputDirection]);
+
+  useEffect(() => {
+    const releaseOnHidden = () => {
+      if (document.visibilityState === "hidden") releaseHomeworldInput();
+    };
+    window.addEventListener("blur", releaseHomeworldInput);
+    window.addEventListener("pagehide", releaseHomeworldInput);
+    document.addEventListener("visibilitychange", releaseOnHidden);
+    return () => {
+      clearHomeworldInputRefs();
+      window.removeEventListener("blur", releaseHomeworldInput);
+      window.removeEventListener("pagehide", releaseHomeworldInput);
+      document.removeEventListener("visibilitychange", releaseOnHidden);
+    };
+  }, [clearHomeworldInputRefs, releaseHomeworldInput]);
 
   const remoteAvatar = useMemo(() => {
     if (!remotePresence || remoteLevelSelectInRoom) return null;

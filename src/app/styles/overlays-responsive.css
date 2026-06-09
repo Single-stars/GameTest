@@ -351,8 +351,8 @@
   }
 
   .rank-card {
-    min-height: 118px;
-    padding: 22px 96px 22px 20px;
+    min-height: 128px;
+    padding: 18px 16px 8px;
   }
 
   .result-card h1 {

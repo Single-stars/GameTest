@@ -101,12 +101,10 @@ function strongBaseline(): TrialEvent[] {
         value: { tapErrorPx: 8 },
       }),
     ),
-    ...Array.from({ length: 6 }, (_, index) =>
-      trial("search", index, {
-        responseAt: index * 1000 + 620,
-        target: { x: 180, y: 300, size: 40, distance: 0, difficulty: 1, setSize: 24 + index * 4 },
-      }),
-    ),
+    trial("search", 0, {
+      responseAt: 1800,
+      value: { mode: "mini-doodle-base", miniGameId: "doodle", score: 96, failures: 0, progressPercent: 100, elapsedMs: 1800 },
+    }),
     trial("stroop", 0, {
       responseAt: 1700,
       value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 96, failures: 0, progressPercent: 100, elapsedMs: 1700 },
@@ -115,12 +113,10 @@ function strongBaseline(): TrialEvent[] {
       responseAt: 1800,
       value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 95, failures: 0, progressPercent: 100, elapsedMs: 1800 },
     }),
-    ...Array.from({ length: 4 }, (_, index) =>
-      trial("memory", index, {
-        responseAt: index * 1000 + 780,
-        value: { setSize: 4, color: "blue", targetIndex: index },
-      }),
-    ),
+    trial("memory", 0, {
+      responseAt: 1700,
+      value: { mode: "mini-flappy-base", miniGameId: "flappy", score: 95, failures: 0, passedGates: 6, elapsedMs: 1700 },
+    }),
     ...Array.from({ length: 12 }, (_, index) =>
       trial("braking", index, {
         responseAt: index % 3 === 1 ? null : index * 1000 + 300,
@@ -130,31 +126,11 @@ function strongBaseline(): TrialEvent[] {
     ),
     trial("patience", 0, {
       shownAt: 0,
-      responseAt: 8200,
+      responseAt: 1800,
       correct: true,
-      value: { waitMs: 8200, durationMs: 9000, skipped: false },
+      value: { mode: "mini-knife-base", miniGameId: "knife", score: 95, hits: 6, failures: 0, shotCount: 6, elapsedMs: 1800 },
     }),
   ];
-}
-
-function searchCountTrials(
-  rounds: Array<{ targetCount: number; selectedCount: number; decisionMs: number; difficulty: number; totalDots: number }>,
-): TrialEvent[] {
-  return rounds.map((item, index) =>
-    trial("search", index, {
-      responseAt: index * 1000 + item.decisionMs,
-      correct: item.targetCount === item.selectedCount,
-      errorType: item.targetCount === item.selectedCount ? undefined : "wrong",
-      target: { x: 0, y: 0, size: 0, difficulty: item.difficulty, setSize: item.totalDots },
-      value: {
-        targetCount: item.targetCount,
-        selectedCount: item.selectedCount,
-        countError: Math.abs(item.targetCount - item.selectedCount),
-        difficulty: item.difficulty,
-        totalDots: item.totalDots,
-      },
-    }),
-  );
 }
 
 function arrowAimTrials(shots: Array<{ hit: boolean; errorPx: number; targetSize: number; speed: number }>): TrialEvent[] {
@@ -201,19 +177,19 @@ function scoreForRound(scores: ScoreSummary, roundId: RoundId) {
     case "reaction":
       return scores.reaction;
     case "aim":
-      return scores.targeting;
+      return scores.precision;
     case "search":
-      return scores.search;
+      return scores.positioning;
     case "stroop":
-      return scores.interference;
+      return scores.focus;
     case "rhythm":
-      return scores.rhythm;
+      return scores.feel;
     case "memory":
-      return scores.memory;
+      return scores.coordination;
     case "braking":
-      return scores.braking;
+      return scores.control;
     case "patience":
-      return scores.waiting;
+      return scores.timing;
   }
 }
 
@@ -221,15 +197,15 @@ test("calculateScores turns trial-level data into finite 0-100 scores and confid
   const scores = calculateScores(strongBaseline());
 
   assert.deepEqual(Object.keys(scores).sort(), [
-    "braking",
     "confidence",
-    "interference",
-    "memory",
+    "control",
+    "coordination",
+    "feel",
+    "focus",
+    "positioning",
+    "precision",
     "reaction",
-    "rhythm",
-    "search",
-    "targeting",
-    "waiting",
+    "timing",
   ]);
 
   for (const score of Object.values(scores)) {
@@ -251,22 +227,22 @@ test("complete strong data can reach the top rank only without obvious weaknesse
 test("rank score lowers the reaction axis base weight", () => {
   const reactionHigh = {
     reaction: 100,
-    targeting: 60,
-    search: 70,
-    interference: 70,
-    rhythm: 70,
-    memory: 70,
-    braking: 70,
-    waiting: 70,
+    precision: 60,
+    positioning: 70,
+    focus: 70,
+    feel: 70,
+    coordination: 70,
+    control: 70,
+    timing: 70,
     confidence: 100,
   };
-  const targetingHigh = {
+  const precisionHigh = {
     ...reactionHigh,
     reaction: 60,
-    targeting: 100,
+    precision: 100,
   };
 
-  assert.ok(calculateRankScore(targetingHigh) > calculateRankScore(reactionHigh));
+  assert.ok(calculateRankScore(precisionHigh) > calculateRankScore(reactionHigh));
 });
 
 test("solid base reaction timings can still display a full score", () => {
@@ -279,14 +255,12 @@ test("solid base reaction timings can still display a full score", () => {
   assert.equal(scores.reaction, 100);
 });
 
-test("perfect normal all-correct rounds can display 100", () => {
+test("perfect normal mini-game rounds can display 100", () => {
   const scores = calculateScores([
-    ...searchCountTrials([
-      { targetCount: 3, selectedCount: 3, decisionMs: 850, difficulty: 1, totalDots: 18 },
-      { targetCount: 4, selectedCount: 4, decisionMs: 900, difficulty: 2, totalDots: 22 },
-      { targetCount: 5, selectedCount: 5, decisionMs: 950, difficulty: 3, totalDots: 26 },
-      { targetCount: 4, selectedCount: 4, decisionMs: 980, difficulty: 4, totalDots: 30 },
-    ]),
+    trial("search", 0, {
+      responseAt: 1800,
+      value: { mode: "mini-doodle-base", miniGameId: "doodle", score: 100, failures: 0, progressPercent: 100, elapsedMs: 1800 },
+    }),
     trial("stroop", 0, {
       responseAt: 1700,
       value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 100, failures: 0, progressPercent: 100, elapsedMs: 1700 },
@@ -295,27 +269,25 @@ test("perfect normal all-correct rounds can display 100", () => {
       responseAt: 1800,
       value: { mode: "mini-square-jump-base", miniGameId: "square-jump", score: 100, failures: 0, progressPercent: 100, elapsedMs: 1800 },
     }),
-    ...Array.from({ length: 3 }, (_, index) =>
-      trial("memory", index, {
-        responseAt: index * 1000 + 820,
-        value: { setSize: 4, color: "blue", targetIndex: index },
-      }),
-    ),
+    trial("memory", 0, {
+      responseAt: 1700,
+      value: { mode: "mini-flappy-base", miniGameId: "flappy", score: 100, failures: 0, passedGates: 6, elapsedMs: 1700 },
+    }),
     ...dinoBrakeTrials(Array.from({ length: 8 }, () => ({ safeStop: true, stopLatencyMs: 210 }))),
     trial("patience", 0, {
       shownAt: 0,
-      responseAt: 9000,
+      responseAt: 1800,
       correct: true,
-      value: { waitMs: 9000, durationMs: 9000, skipped: false },
+      value: { mode: "mini-knife-base", miniGameId: "knife", score: 100, hits: 6, failures: 0, shotCount: 6, elapsedMs: 1800 },
     }),
   ]);
 
-  assert.equal(scores.search, 100);
-  assert.equal(scores.interference, 100);
-  assert.equal(scores.rhythm, 100);
-  assert.equal(scores.memory, 100);
-  assert.equal(scores.braking, 100);
-  assert.equal(scores.waiting, 100);
+  assert.equal(scores.positioning, 100);
+  assert.equal(scores.focus, 100);
+  assert.equal(scores.feel, 100);
+  assert.equal(scores.coordination, 100);
+  assert.equal(scores.control, 100);
+  assert.equal(scores.timing, 100);
 });
 
 test("perfect skip trial data produces a full score for every round", () => {
@@ -331,7 +303,7 @@ test("perfect skip trial data produces a full score for every round", () => {
   }
 });
 
-test("mini-game base trial scores replace the old search memory and waiting dimensions", () => {
+test("mini-game base trial scores drive positioning coordination and timing dimensions", () => {
   const perfectMiniTrials = [
     trial("search", 0, {
       correct: true,
@@ -367,19 +339,19 @@ test("mini-game base trial scores replace the old search memory and waiting dime
   const perfectScores = calculateScores(perfectMiniTrials);
   const messyScores = calculateScores(messyMiniTrials);
 
-  assert.equal(perfectScores.search, 96);
-  assert.equal(perfectScores.memory, 92);
-  assert.equal(perfectScores.waiting, 88);
-  assert.equal(messyScores.search, 42);
-  assert.equal(messyScores.memory, 38);
-  assert.equal(messyScores.waiting, 34);
+  assert.equal(perfectScores.positioning, 96);
+  assert.equal(perfectScores.coordination, 92);
+  assert.equal(perfectScores.timing, 88);
+  assert.equal(messyScores.positioning, 42);
+  assert.equal(messyScores.coordination, 38);
+  assert.equal(messyScores.timing, 34);
   assert.equal(perfectScores.confidence, 38);
-  assert.equal(messyScores.search < perfectScores.search, true);
-  assert.equal(messyScores.memory < perfectScores.memory, true);
-  assert.equal(messyScores.waiting < perfectScores.waiting, true);
+  assert.equal(messyScores.positioning < perfectScores.positioning, true);
+  assert.equal(messyScores.coordination < perfectScores.coordination, true);
+  assert.equal(messyScores.timing < perfectScores.timing, true);
 });
 
-test("new square jump and fall down base trials score rhythm and interference dimensions", () => {
+test("square jump and fall down base trials score feel and focus dimensions", () => {
   const scores = calculateScores([
     trial("stroop", 0, {
       correct: true,
@@ -391,8 +363,8 @@ test("new square jump and fall down base trials score rhythm and interference di
     }),
   ]);
 
-  assert.equal(scores.interference, 87);
-  assert.equal(scores.rhythm, 93);
+  assert.equal(scores.focus, 87);
+  assert.equal(scores.feel, 93);
   assert.equal(scores.confidence, 25);
 
   const stroopPerfect = buildPerfectTrials("stroop")[0];
@@ -403,41 +375,37 @@ test("new square jump and fall down base trials score rhythm and interference di
   assert.equal(rhythmPerfect.value?.miniGameId, "square-jump");
 });
 
-test("very slow all-correct decisions and lower mini-game scores can lose a small amount", () => {
+test("lower mini-game scores can lose a small amount", () => {
   const scores = calculateScores([
-    ...searchCountTrials([
-      { targetCount: 3, selectedCount: 3, decisionMs: 4200, difficulty: 1, totalDots: 18 },
-      { targetCount: 4, selectedCount: 4, decisionMs: 4300, difficulty: 2, totalDots: 22 },
-      { targetCount: 5, selectedCount: 5, decisionMs: 4400, difficulty: 3, totalDots: 26 },
-      { targetCount: 4, selectedCount: 4, decisionMs: 4500, difficulty: 4, totalDots: 30 },
-    ]),
+    trial("search", 0, {
+      responseAt: 2600,
+      value: { mode: "mini-doodle-base", miniGameId: "doodle", score: 92, failures: 1, progressPercent: 92, elapsedMs: 2600 },
+    }),
     trial("stroop", 0, {
       responseAt: 2400,
       value: { mode: "mini-fall-down-base", miniGameId: "fall-down", score: 92, failures: 1, progressPercent: 92, elapsedMs: 2400 },
     }),
-    ...Array.from({ length: 3 }, (_, index) =>
-      trial("memory", index, {
-        responseAt: index * 1000 + 2900,
-        value: { setSize: 4, color: "blue", targetIndex: index },
-      }),
-    ),
+    trial("memory", 0, {
+      responseAt: 2600,
+      value: { mode: "mini-flappy-base", miniGameId: "flappy", score: 92, failures: 1, passedGates: 5, elapsedMs: 2600 },
+    }),
     ...dinoBrakeTrials(Array.from({ length: 8 }, () => ({ safeStop: true, stopLatencyMs: 320 }))),
   ]);
 
-  assert.equal(scores.search < 100 && scores.search >= 88, true);
-  assert.equal(scores.interference < 100 && scores.interference >= 88, true);
-  assert.equal(scores.memory < 100 && scores.memory >= 88, true);
-  assert.equal(scores.braking < 100 && scores.braking >= 88, true);
+  assert.equal(scores.positioning < 100 && scores.positioning >= 88, true);
+  assert.equal(scores.focus < 100 && scores.focus >= 88, true);
+  assert.equal(scores.coordination < 100 && scores.coordination >= 88, true);
+  assert.equal(scores.control < 100 && scores.control >= 88, true);
 });
 
 test("arrow precision scores primarily by hits out of eight", () => {
-  const perfect = calculateScores(arrowAimTrials(Array.from({ length: 8 }, () => ({ hit: true, errorPx: 14, targetSize: 54, speed: 1.2 })))).targeting;
+  const perfect = calculateScores(arrowAimTrials(Array.from({ length: 8 }, () => ({ hit: true, errorPx: 14, targetSize: 54, speed: 1.2 })))).precision;
   const sixHits = calculateScores(
     arrowAimTrials([
       ...Array.from({ length: 6 }, () => ({ hit: true, errorPx: 16, targetSize: 54, speed: 1.2 })),
       ...Array.from({ length: 2 }, () => ({ hit: false, errorPx: 80, targetSize: 48, speed: 1.6 })),
     ]),
-  ).targeting;
+  ).precision;
 
   assert.equal(perfect, 100);
   assert.equal(sixHits, 75);
@@ -453,7 +421,7 @@ test("base arrow aim with unlimited arrows scores by attempts needed for eight h
 
   assert.equal(result.metrics.aimHits, 8);
   assert.equal(result.metrics.aimTotal, 12);
-  assert.equal(result.scores.targeting, 67);
+  assert.equal(result.scores.precision, 67);
 });
 
 test("arrow precision ignores the practice shot", () => {
@@ -475,7 +443,7 @@ test("arrow precision ignores the practice shot", () => {
     ...arrowAimTrials(Array.from({ length: 8 }, () => ({ hit: true, errorPx: 14, targetSize: 54, speed: 1.2 }))),
   ]);
 
-  assert.equal(result.scores.targeting, 100);
+  assert.equal(result.scores.precision, 100);
   assert.equal(result.metrics.aimHits, 8);
   assert.equal(result.metrics.aimTotal, 8);
 });
@@ -804,8 +772,8 @@ test("replaced dimensions require mini-game trials to count as completed", () =>
 
   const legacyScores = calculateScores(legacyReplaced);
 
-  assert.equal(legacyScores.interference, 0);
-  assert.equal(legacyScores.rhythm, 0);
+  assert.equal(legacyScores.focus, 0);
+  assert.equal(legacyScores.feel, 0);
   assert.equal(legacyScores.confidence, 75);
   assert.equal(calculateScores(strongBaseline()).confidence, 100);
 });
@@ -829,55 +797,27 @@ test("fall-down and square-jump mini-game scores directly drive replaced dimensi
 
   const scores = calculateScores(lowerMiniScores);
 
-  assert.equal(scores.interference, 62);
-  assert.equal(scores.rhythm, 58);
+  assert.equal(scores.focus, 62);
+  assert.equal(scores.feel, 58);
   assert.equal(scores.confidence, 100);
 });
 
-test("search scoring treats near count errors better than large count errors", () => {
-  const exact = searchCountTrials([
-    { targetCount: 3, selectedCount: 3, decisionMs: 900, difficulty: 1, totalDots: 18 },
-    { targetCount: 4, selectedCount: 4, decisionMs: 950, difficulty: 2, totalDots: 22 },
-    { targetCount: 5, selectedCount: 5, decisionMs: 1020, difficulty: 3, totalDots: 26 },
-    { targetCount: 4, selectedCount: 4, decisionMs: 1100, difficulty: 4, totalDots: 30 },
-  ]);
-  const near = searchCountTrials([
-    { targetCount: 3, selectedCount: 4, decisionMs: 900, difficulty: 1, totalDots: 18 },
-    { targetCount: 4, selectedCount: 3, decisionMs: 950, difficulty: 2, totalDots: 22 },
-    { targetCount: 5, selectedCount: 6, decisionMs: 1020, difficulty: 3, totalDots: 26 },
-    { targetCount: 4, selectedCount: 5, decisionMs: 1100, difficulty: 4, totalDots: 30 },
-  ]);
-  const far = searchCountTrials([
-    { targetCount: 3, selectedCount: 7, decisionMs: 900, difficulty: 1, totalDots: 18 },
-    { targetCount: 4, selectedCount: 0, decisionMs: 950, difficulty: 2, totalDots: 22 },
-    { targetCount: 5, selectedCount: 1, decisionMs: 1020, difficulty: 3, totalDots: 26 },
-    { targetCount: 4, selectedCount: 8, decisionMs: 1100, difficulty: 4, totalDots: 30 },
+test("positioning metrics expose mini-game failures and progress instead of old count totals", () => {
+  const metrics = deriveMetrics([
+    trial("search", 0, {
+      correct: false,
+      errorType: "collision",
+      value: { mode: "mini-doodle-base", miniGameId: "doodle", score: 62, failures: 3, progressPercent: 70, elapsedMs: 2600 },
+    }),
   ]);
 
-  const exactScore = calculateScores(exact).search;
-  const nearScore = calculateScores(near).search;
-  const farScore = calculateScores(far).search;
-
-  assert.equal(exactScore > nearScore, true);
-  assert.equal(nearScore > farScore, true);
-  assert.equal(exactScore >= 88, true);
-  assert.equal(farScore <= 35, true);
-});
-
-test("search count metrics expose target totals, selected totals and mean count error", () => {
-  const metrics = deriveMetrics(
-    searchCountTrials([
-      { targetCount: 3, selectedCount: 3, decisionMs: 900, difficulty: 1, totalDots: 18 },
-      { targetCount: 4, selectedCount: 3, decisionMs: 950, difficulty: 2, totalDots: 22 },
-      { targetCount: 5, selectedCount: 7, decisionMs: 1020, difficulty: 3, totalDots: 26 },
-      { targetCount: 4, selectedCount: 4, decisionMs: 1100, difficulty: 4, totalDots: 30 },
-    ]),
-  );
-
-  assert.equal(metrics.searchTargetTotal, 16);
-  assert.equal(metrics.searchSelectedTotal, 17);
-  assert.equal(metrics.searchMeanCountError, 0.75);
-  assert.equal(metrics.searchAvgMs, 992.5);
+  assert.equal(metrics.positioningAccuracy, 0.62);
+  assert.equal(metrics.positioningAvgMs, 2600);
+  assert.equal(metrics.positioningFailures, 3);
+  assert.equal(metrics.positioningProgressPercent, 70);
+  assert.equal("searchTargetTotal" in metrics, false);
+  assert.equal("searchSelectedTotal" in metrics, false);
+  assert.equal("searchMeanCountError" in metrics, false);
 });
 
 test("insufficient data lowers confidence and returns the lowest rank", () => {

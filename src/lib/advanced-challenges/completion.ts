@@ -62,30 +62,6 @@ function toScore(correctCount: number, requiredCorrect: number) {
   return Math.max(0, Math.min(99, Math.round((correctCount / Math.max(1, requiredCorrect)) * 100)));
 }
 
-function baseEvaluation(config: AdvancedStageConfig, requiredCorrect: number): AdvancedCompletionEvaluation {
-  return {
-    level: config.level,
-    score: 0,
-    minScore: 100,
-    passed: false,
-    correctCount: 0,
-    requiredCorrect,
-    reason: "失败：未全部完成",
-  };
-}
-
-function pass(config: AdvancedStageConfig, correctCount: number, requiredCorrect: number): AdvancedCompletionEvaluation {
-  return {
-    level: config.level,
-    score: 100,
-    minScore: 100,
-    passed: true,
-    correctCount,
-    requiredCorrect,
-    reason: "通过",
-  };
-}
-
 function fail(
   config: AdvancedStageConfig,
   correctCount: number,
@@ -306,21 +282,7 @@ function evaluateMiniGameChallenge(config: AdvancedStageConfig, trials: TrialEve
 
 function evaluateSearch(config: AdvancedStageConfig, trials: TrialEvent[]) {
   if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
-  const required = numberParam(config, "roundCount", 3);
-  for (const item of trials) {
-    const target = Number(item.value?.targetCount);
-    const selected = Number(item.value?.selectedCount);
-    if (Number.isFinite(target) && Number.isFinite(selected) && target !== selected) {
-      const delta = Math.abs(target - selected);
-      return fail(config, trials.filter((trial) => trial.correct === true).length, required, `失败：${selected < target ? "少" : "多"}数了 ${delta} 个目标`);
-    }
-    if (item.correct === false) {
-      return fail(config, trials.filter((trial) => trial.correct === true).length, required, "失败：计数错误");
-    }
-  }
-  const correct = trials.filter((trial) => trial.correct === true).length;
-  if (correct < required) return fail(config, correct, required, `失败：少完成 ${required - correct} 轮`);
-  return pass(config, correct, required);
+  return fail(config, 0, 1, "失败：走位维度缺少 Doodle 小游戏结果");
 }
 
 function evaluateStroop(config: AdvancedStageConfig, trials: TrialEvent[]) {
@@ -335,11 +297,7 @@ function evaluateRhythm(config: AdvancedStageConfig, trials: TrialEvent[]) {
 
 function evaluateMemory(config: AdvancedStageConfig, trials: TrialEvent[]) {
   if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
-  const required = numberParam(config, "roundCount", 3);
-  const correct = trials.filter((trial) => trial.correct === true).length;
-  if (trials.some((trial) => trial.correct === false)) return fail(config, correct, required, "失败：选错颜色");
-  if (correct < required) return fail(config, correct, required, `失败：少完成 ${required - correct} 轮`);
-  return pass(config, correct, required);
+  return fail(config, 0, 1, "失败：协调维度缺少 Flappy 小游戏结果");
 }
 
 function evaluateBraking(config: AdvancedStageConfig, trials: TrialEvent[]) {
@@ -367,7 +325,7 @@ function evaluateBraking(config: AdvancedStageConfig, trials: TrialEvent[]) {
   if (collision) {
     reason = "失败：撞上危险";
   } else if (early) {
-    reason = "失败：等待中断";
+    reason = "失败：提前松手";
   } else if (falseStop) {
     reason = "失败：假危险松手";
   } else if (!reachedFinish) {
@@ -392,14 +350,7 @@ function evaluateBraking(config: AdvancedStageConfig, trials: TrialEvent[]) {
 
 function evaluatePatience(config: AdvancedStageConfig, trials: TrialEvent[]) {
   if (isMiniGameConfig(config)) return evaluateMiniGameChallenge(config, trials);
-  const requiredWaitMs = numberParam(config, "waitMs", 6000);
-  const item = trials[0];
-  if (!item) return baseEvaluation(config, 1);
-  const waitMs = Number(item.value?.waitMs);
-  if (item.errorType === "skip" || item.value?.skipped === true || item.correct === false || waitMs < requiredWaitMs) {
-    return fail(config, 0, 1, "失败：等待中断");
-  }
-  return pass(config, 1, 1);
+  return fail(config, 0, 1, "失败：时机维度缺少 Knife 小游戏结果");
 }
 
 export function evaluateAdvancedChallengeCompletion(

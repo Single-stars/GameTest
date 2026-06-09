@@ -1,5 +1,6 @@
 import { getAdvancedStageConfig, type AdvancedStageConfig } from "./advanced-challenges.ts";
 import { getAdvancedDimensionLevel, type AdvancedLevelState, type AdvancedProgress } from "./advanced-progress.ts";
+import type { PlayerAvatarSkin } from "../features/player-avatar/player-avatar-skin.ts";
 import type { MiniGameId, MiniGameParams } from "./mini-games/shared.ts";
 import type { RoundId } from "./scoring.ts";
 
@@ -17,6 +18,17 @@ export const ENDLESS_SUPPORTED_ROUND_IDS = [
   "braking",
   "patience",
 ] as const satisfies readonly RoundId[];
+
+const ADVANCED_FINAL_SKIN_ROUNDS: Partial<Record<PlayerAvatarSkin, RoundId>> = {
+  blade: "patience",
+  ivory: "braking",
+  mint: "search",
+  pine: "memory",
+  sand: "rhythm",
+  signal: "reaction",
+  slate: "stroop",
+  target: "aim",
+};
 
 export type EndlessLevelState = Extract<AdvancedLevelState, "current" | "locked">;
 
@@ -153,6 +165,19 @@ export function getEndlessReusableStageConfig({
 
 export function isEndlessModeUnlocked(progress: AdvancedProgress, roundId: RoundId) {
   return getAdvancedDimensionLevel(progress, roundId) >= 3;
+}
+
+export function getEndlessStartingRevives(progress: AdvancedProgress, roundId: RoundId, skin: PlayerAvatarSkin) {
+  if (skin === "starfall" && progress.legend100SkinUnlocked === true) return ENDLESS_STARTING_REVIVES + 1;
+  const matchingRoundId = ADVANCED_FINAL_SKIN_ROUNDS[skin];
+  if (matchingRoundId === roundId && getAdvancedDimensionLevel(progress, matchingRoundId) >= 10) {
+    return ENDLESS_STARTING_REVIVES + 1;
+  }
+  return ENDLESS_STARTING_REVIVES;
+}
+
+export function shouldKeepPigEndlessLife(skin: PlayerAvatarSkin, random: () => number = Math.random) {
+  return skin === "pig" && random() < 0.1;
 }
 
 export function getEndlessLevelState(currentLevel: number): EndlessLevelState {

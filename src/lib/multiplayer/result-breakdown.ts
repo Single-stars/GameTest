@@ -406,6 +406,20 @@ function compareBreakdownFinal(selfResult: GameResult, opponentResult: GameResul
   );
 }
 
+function isNormalPointScoreResult(result: GameResult) {
+  const breakdown = result.breakdown;
+  if (!breakdown) return false;
+  if (breakdown.kind !== "score" || breakdown.final.unit !== "point") return false;
+  if (breakdown.outcome === "forfeit" || breakdown.outcome === "opponent-forfeit") return false;
+  if (breakdown.outcome === "overtime-win" || breakdown.outcome === "overtime-loss") return false;
+  return true;
+}
+
+export function getMultiplayerScoreLead(selfResult: GameResult, opponentResult: GameResult) {
+  if (!isNormalPointScoreResult(selfResult) || !isNormalPointScoreResult(opponentResult)) return 0;
+  return Math.max(0, selfResult.breakdown!.final.value - opponentResult.breakdown!.final.value);
+}
+
 export function compareMultiplayerResults(selfResult: GameResult, opponentResult: GameResult) {
   const selfSignal = outcomeSignal(selfResult);
   const opponentSignal = outcomeSignal(opponentResult);

@@ -471,7 +471,9 @@ test("advanced, endless, and multiplayer play surfaces share neutral wave backgr
   assert.match(advancedScreenSource, /data-difficulty-tone=\{getAdvancedLevelTone\(challenge\.level\)\}/);
   assert.match(endlessSource, /const difficultyTone = getAdvancedLevelTone\(difficultyState\.sourceAdvancedLevel\);/);
   assert.match(endlessSource, /data-difficulty-tone=\{difficultyTone\}/);
-  assert.match(multiplayerPageSource, /const battleDifficultyTone = getAdvancedLevelTone\(battleLevel\.order\);/);
+  assert.match(multiplayerPageSource, /getMultiplayerLevelProgressionIndex/);
+  assert.match(multiplayerPageSource, /const battleDifficultyTone = getAdvancedLevelTone\(getMultiplayerLevelProgressionIndex\(battleLevel\)\);/);
+  assert.doesNotMatch(multiplayerPageSource, /const battleDifficultyTone = getAdvancedLevelTone\(battleLevel\.order\);/);
   assert.match(multiplayerPageSource, /difficultyTone=\{battleDifficultyTone\}/);
   assert.match(multiplayerShellSource, /difficultyTone\?: AdvancedLevelTone;/);
   assert.match(multiplayerShellSource, /data-difficulty-tone=\{difficultyTone\}/);

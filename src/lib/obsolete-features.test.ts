@@ -172,6 +172,20 @@ test("legacy search memory and patience fallback rounds are removed after mini-g
   }
 });
 
+test("perfect trial builder cannot recreate old search and patience fallback payloads", () => {
+  const perfectTrialsSource = readFileSync(new URL("../features/rounds/perfect-trials.ts", import.meta.url), "utf8");
+
+  for (const term of [
+    'config.dimension === "search"',
+    'config.dimension === "patience"',
+    "selectedCount",
+    "waitMs",
+    "skipped: false",
+  ]) {
+    assert.equal(perfectTrialsSource.includes(term), false, term);
+  }
+});
+
 test("replaced stroop and rhythm gameplay implementations are removed", () => {
   const appPage = new URL("../app/page.tsx", import.meta.url);
   const advancedStroop = new URL("advanced-stroop.ts", import.meta.url);
@@ -238,5 +252,30 @@ test("legacy stroop and rhythm scoring fallbacks are removed", () => {
     "wrongLane",
   ]) {
     assert.equal(advancedChallengeSource.includes(term), false, term);
+  }
+});
+
+test("legacy search memory and waiting fallback copy cannot return to production guidance", () => {
+  const scoringSource = readFileSync(new URL("scoring.ts", import.meta.url), "utf8");
+  const advancedCompletionSource = readFileSync(new URL("advanced-challenges/completion.ts", import.meta.url), "utf8");
+  const advancedViewSource = readFileSync(new URL("advanced-challenge-view.ts", import.meta.url), "utf8");
+
+  for (const term of [
+    "少数了",
+    "多数了",
+    "计数错误",
+    "选错颜色",
+    "等待期间不能中断",
+    "等待中不可中断",
+    "失败：等待中断",
+    "searchTargetTotal",
+    "searchSelectedTotal",
+    "searchMeanCountError",
+    "searchCountQuality",
+    "patiencePct",
+  ]) {
+    assert.equal(scoringSource.includes(term), false, term);
+    assert.equal(advancedCompletionSource.includes(term), false, term);
+    assert.equal(advancedViewSource.includes(term), false, term);
   }
 });

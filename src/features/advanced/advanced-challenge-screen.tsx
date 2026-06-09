@@ -21,7 +21,7 @@ import {
   getAdvancedLevelToneForState,
   type AdvancedProgress,
 } from "@/lib/advanced-progress";
-import { ENDLESS_MODE_LEVEL, getAdvancedEndlessStatusLabel, getEndlessLevelState } from "@/lib/endless-mode";
+import { ENDLESS_MODE_LEVEL, getAdvancedEndlessStatusLabel, getEndlessLevelState, getEndlessStartingRevives } from "@/lib/endless-mode";
 import {
   buildEndlessSettlementRows,
   compareEndlessSettlementValues,
@@ -37,6 +37,7 @@ import {
 import { type RoundId, type TrialEvent } from "@/lib/scoring";
 import { EndlessRoundPlayer, type EndlessRoundCompletion } from "@/features/endless/endless-round-player";
 import { rounds } from "@/features/game-flow/round-config";
+import { type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
 
 export type AdvancedChallengeState =
   | { mode: "select"; roundId: RoundId }
@@ -1076,6 +1077,7 @@ function AdvancedLobbyContent({
 
 export function AdvancedChallengeScreen({
   advancedProgress,
+  avatarSkin,
   challenge,
   debugToolsVisible,
   endlessBestScore,
@@ -1085,15 +1087,19 @@ export function AdvancedChallengeScreen({
   onCompleteEndlessChallenge,
   onCompleteEndlessRound,
   onCompleteRound,
+  onEndlessSkillUse,
   onOpenLuckDraw,
   onPickLevel,
   onRestartBaseRound,
   onShareEndlessChallenge,
   onStartLevel,
+  onUseReviveCoin,
   renderRound,
+  reviveCoins,
   shareCopyNoticeId,
 }: {
   advancedProgress: AdvancedProgress;
+  avatarSkin: PlayerAvatarSkin;
   challenge: AdvancedChallengeState;
   debugToolsVisible: boolean;
   endlessBestScore: number;
@@ -1103,17 +1109,21 @@ export function AdvancedChallengeScreen({
   onCompleteEndlessChallenge: (completion: EndlessRoundCompletion) => void;
   onCompleteEndlessRound: (completion: EndlessRoundCompletion) => void;
   onCompleteRound: (trials: TrialEvent[]) => void;
+  onEndlessSkillUse: (roundId: RoundId) => void;
   onOpenLuckDraw: () => void;
   onPickLevel: (level: number) => void;
   onRestartBaseRound: (level: number) => void;
   onShareEndlessChallenge: (snapshot: EndlessRunSnapshot) => void;
   onStartLevel: (level: number) => void;
+  onUseReviveCoin: () => boolean;
   renderRound: (props: AdvancedRoundRenderProps) => React.ReactNode;
+  reviveCoins: number;
   shareCopyNoticeId: number;
 }) {
   const round = getRoundConfig(challenge.roundId);
   const currentLevel = getAdvancedDimensionLevel(advancedProgress, challenge.roundId);
   const unlockedLevel = getAdvancedLobbyUnlockedLevel(currentLevel);
+  const endlessStartingRevives = getEndlessStartingRevives(advancedProgress, challenge.roundId, avatarSkin);
   const [dismissedAdvancedTutorialKey, setDismissedAdvancedTutorialKey] = React.useState("");
   const [pauseDialog, setPauseDialog] = React.useState<AdvancedPauseDialogState | null>(null);
   const [endlessSettleSignal, setEndlessSettleSignal] = React.useState(0);
@@ -1267,13 +1277,18 @@ export function AdvancedChallengeScreen({
           </div>
         </header>
         <EndlessRoundPlayer
+          avatarSkin={avatarSkin}
           bestScore={endlessBestScore}
           debugToolsVisible={debugToolsVisible}
           key={`endless-${challenge.roundId}-${challenge.attemptId}`}
           onComplete={onCompleteEndlessRound}
+          onSkillUse={onEndlessSkillUse}
+          onUseReviveCoin={onUseReviveCoin}
           paused={pauseDialog?.mode === "endless"}
+          reviveCoins={reviveCoins}
           roundId={challenge.roundId}
           settleSignal={endlessSettleSignal}
+          startingRevives={endlessStartingRevives}
         />
         {pauseDialogNode}
       </section>
@@ -1297,13 +1312,18 @@ export function AdvancedChallengeScreen({
           </div>
         </header>
         <EndlessRoundPlayer
+          avatarSkin={avatarSkin}
           bestScore={endlessBestScore}
           debugToolsVisible={debugToolsVisible}
           key={`challenge-${challenge.roundId}-${challenge.attemptId}`}
           onComplete={onCompleteEndlessChallenge}
+          onSkillUse={onEndlessSkillUse}
+          onUseReviveCoin={onUseReviveCoin}
           paused={pauseDialog?.mode === "endless"}
+          reviveCoins={reviveCoins}
           roundId={challenge.roundId}
           settleSignal={endlessSettleSignal}
+          startingRevives={endlessStartingRevives}
           targetScore={challenge.target.target.score}
         />
         {pauseDialogNode}

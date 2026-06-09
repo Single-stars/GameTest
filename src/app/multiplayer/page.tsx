@@ -26,7 +26,15 @@ import {
   writePersistedPlayerName,
 } from "@/features/player-avatar/player-avatar-storage";
 import { HomeworldScreen } from "@/features/homeworld/homeworld-screen";
-import { createDefaultAdvancedProgress, getAdvancedLevelTone, readPersistedGameState, type AdvancedProgress } from "@/lib/advanced-progress";
+import {
+  createDefaultAdvancedProgress,
+  getAdvancedLevelTone,
+  markMultiplayerFivePointLeadSkinUnlocked,
+  readPersistedGameState,
+  recordShareInviteAction,
+  writePersistedGameState,
+  type AdvancedProgress,
+} from "@/lib/advanced-progress";
 import {
   HOMEWORLD_INITIAL_PLAYER,
   createDefaultHomeworldState,
@@ -43,13 +51,14 @@ import {
   MULTIPLAYER_COOP_UNAVAILABLE_TEXT,
   areMultiplayerLevelSelectSlotsConfirmed,
   createDefaultMultiplayerLevelSelectState,
+  getMultiplayerLevelProgressionIndex,
   isDefaultMultiplayerLevelSelectState,
   resolveMultiplayerLevelSelection,
   type MultiplayerLevelSelectState,
   type MultiplayerPlayMode,
 } from "@/lib/multiplayer/level-select";
 import { resolveMultiplayerWinnerText } from "@/lib/multiplayer/match-result";
-import { compareMultiplayerResults } from "@/lib/multiplayer/result-breakdown";
+import { compareMultiplayerResults, getMultiplayerScoreLead } from "@/lib/multiplayer/result-breakdown";
 import { getMultiplayerLevelRules } from "@/lib/multiplayer/rules";
 import {
   buildInitialSnapshot,
@@ -365,10 +374,12 @@ function MultiplayerPageContent() {
   const [skinHydrated, setSkinHydrated] = useState(false);
   const { customAvatarImageUrl, customAvatarOutlineColor, customAvatarSyncPayload, saveCustomAvatarImage } = useCustomAvatarImage();
   const sessionRef = useRef<MultiplayerSession | null>(null);
+  const standaloneLevelSelectAutoMoveRequestIdRef = useRef(0);
   const homeworldPlayerPoseRef = useRef<HomeworldPlayerPoseState | null>(null);
   const latestHomeworldPresenceRef = useRef<HomeworldPresence | null>(null);
   const nicknamePromptRef = useRef<Promise<string | null> | null>(null);
   const nicknameResolveRef = useRef<((name: string | null) => void) | null>(null);
+  const advancedProgressRef = useRef(advancedProgress);
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
   const lastScoredMatchIdRef = useRef<string | null>(null);
   const matchWinsRoomIdRef = useRef<string | null>(null);
@@ -400,15 +411,34 @@ function MultiplayerPageContent() {
     [runModeTransition],
   );
 
+  const persistAdvancedProgress = useCallback((updater: (progress: AdvancedProgress) => AdvancedProgress) => {
+    const nextProgress = updater(advancedProgressRef.current);
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    const storage = getBrowserStorage();
+    if (!storage) return nextProgress;
+    try {
+      const currentState = readPersistedGameState(storage);
+      writePersistedGameState(storage, {
+        ...currentState,
+        advancedProgress: nextProgress,
+      });
+    } catch {
+      // Storage can be blocked; keep the visible multiplayer session state alive.
+    }
+    return nextProgress;
+  }, []);
+
   const battleLevel = useMemo(
     () => resolveMultiplayerLevelSelection(snapshot.match?.levelId ?? hostSelectedLevelId),
     [hostSelectedLevelId, snapshot.match?.levelId],
   );
-  const battleDifficultyTone = getAdvancedLevelTone(battleLevel.order);
+  const battleDifficultyTone = getAdvancedLevelTone(getMultiplayerLevelProgressionIndex(battleLevel));
   const activePlayMode = snapshot.match?.playMode ?? hostPlayMode;
   const activeLevelSelectState = snapshot.levelSelectState ?? levelSelectState;
   const levelSelectSlotsConfirmed = areMultiplayerLevelSelectSlotsConfirmed(activeLevelSelectState);
   const standalonePeerConnected = snapshot.connectionState === "connected" && snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);
+  const roomScoreboardVisible = standalonePeerConnected;
   const standaloneReadyAvailable = standalonePeerConnected && levelSelectSlotsConfirmed;
   const standaloneConnectionErrorText = standaloneErrorText(snapshot.errorMessage);
   const standaloneRoomBarVisible = !standalonePeerConnected;
@@ -473,6 +503,7 @@ function MultiplayerPageContent() {
       setLevelSelectOpen(false);
       setLevelSelectStartCountdownEndsAt(null);
       setStandaloneExitConfirmOpen(false);
+      setStandaloneLevelSelectAutoMoveRequest(null);
       setStandaloneJoinDialogOpen(false);
       setCopyStatus("idle");
       setRoomCodeCopyStatus("idle");
@@ -681,6 +712,7 @@ function MultiplayerPageContent() {
     if (!activeRoomLink) return;
     const fallbackCopied = copyRoomLinkWithFallback(activeRoomLink);
     if (!(await ensureShareRoomIsLive())) return;
+    persistAdvancedProgress((progress) => recordShareInviteAction(progress));
     if (fallbackCopied) {
       setTransientCopyStatus("copied");
       return;
@@ -696,12 +728,13 @@ function MultiplayerPageContent() {
       clipboardCopied = false;
     }
     setTransientCopyStatus(clipboardCopied ? "copied" : "manual");
-  }, [activeRoomLink, ensureShareRoomIsLive, setTransientCopyStatus]);
+  }, [activeRoomLink, ensureShareRoomIsLive, persistAdvancedProgress, setTransientCopyStatus]);
 
   const handleCopyRoomCode = useCallback(async () => {
     if (!snapshot.roomId) return;
     const fallbackCopied = copyRoomLinkWithFallback(snapshot.roomId);
     if (!(await ensureShareRoomIsLive())) return;
+    persistAdvancedProgress((progress) => recordShareInviteAction(progress));
     if (fallbackCopied) {
       setTransientRoomCodeCopyStatus("copied");
       return;
@@ -717,7 +750,7 @@ function MultiplayerPageContent() {
       clipboardCopied = false;
     }
     setTransientRoomCodeCopyStatus(clipboardCopied ? "copied" : "manual");
-  }, [ensureShareRoomIsLive, setTransientRoomCodeCopyStatus, snapshot.roomId]);
+  }, [ensureShareRoomIsLive, persistAdvancedProgress, setTransientRoomCodeCopyStatus, snapshot.roomId]);
 
   const handleExitHomeworldRoom = useCallback(() => {
     const leaveReason = snapshot.role === "host" ? "host-disbanded-room" : "peer-left-room";
@@ -779,6 +812,7 @@ function MultiplayerPageContent() {
   }, [transitionInPage]);
 
   const confirmStandaloneLevelSelectExit = useCallback(async () => {
+    setStandaloneLevelSelectAutoMoveRequest(null);
     setStandaloneExitConfirmOpen(false);
     if (!snapshot.role) {
       void transitionToRoute("/");
@@ -811,14 +845,21 @@ function MultiplayerPageContent() {
   }, [confirmStandaloneLevelSelectExit, snapshot.role]);
 
   const requestStandaloneReadyAutoMove = useCallback(() => {
-    setStandaloneLevelSelectAutoMoveRequest((current) => ({ action: "ready", id: (current?.id ?? 0) + 1 }));
+    standaloneLevelSelectAutoMoveRequestIdRef.current += 1;
+    setStandaloneLevelSelectAutoMoveRequest({ action: "ready", id: standaloneLevelSelectAutoMoveRequestIdRef.current });
   }, []);
 
   const requestStandaloneExitAutoMove = useCallback(() => {
-    setStandaloneLevelSelectAutoMoveRequest((current) => ({ action: "exit", id: (current?.id ?? 0) + 1 }));
+    standaloneLevelSelectAutoMoveRequestIdRef.current += 1;
+    setStandaloneLevelSelectAutoMoveRequest({ action: "exit", id: standaloneLevelSelectAutoMoveRequestIdRef.current });
+  }, []);
+
+  const handleStandaloneAutoMoveRequestConsumed = useCallback((id: number) => {
+    setStandaloneLevelSelectAutoMoveRequest((current) => current?.id === id ? null : current);
   }, []);
 
   const cancelStandaloneLevelSelectExit = useCallback(() => {
+    setStandaloneLevelSelectAutoMoveRequest(null);
     setStandaloneExitConfirmOpen(false);
   }, []);
 
@@ -883,7 +924,9 @@ function MultiplayerPageContent() {
     setPlayerName(readPersistedPlayerName());
     const storage = getBrowserStorage();
     if (storage) {
-      setAdvancedProgress(readPersistedGameState(storage).advancedProgress);
+      const storedProgress = readPersistedGameState(storage).advancedProgress;
+      advancedProgressRef.current = storedProgress;
+      setAdvancedProgress(storedProgress);
       setHomeworldState(readPersistedHomeworldState(storage));
     }
     setSkinHydrated(true);
@@ -898,6 +941,10 @@ function MultiplayerPageContent() {
   useEffect(() => {
     selectedSkinRef.current = selectedSkin;
   }, [selectedSkin]);
+
+  useEffect(() => {
+    advancedProgressRef.current = advancedProgress;
+  }, [advancedProgress]);
 
   const handleSelectAvatarSkin = useCallback((skin: PlayerAvatarSkin) => {
     if (!isPlayerAvatarSkinUnlocked(skin, advancedProgress)) return;
@@ -1044,6 +1091,12 @@ function MultiplayerPageContent() {
     if (!showGameShell || !levelSelectOpen) return;
     setLevelSelectOpen(false);
   }, [isHomeworldRoute, levelSelectOpen, showGameShell]);
+
+  useEffect(() => {
+    if (showGameShell && standaloneLevelSelectAutoMoveRequest !== null) {
+      setStandaloneLevelSelectAutoMoveRequest(null);
+    }
+  }, [showGameShell, standaloneLevelSelectAutoMoveRequest]);
 
   useEffect(() => {
     if (!isHomeworldRoute) return;
@@ -1292,6 +1345,10 @@ function MultiplayerPageContent() {
     if (!snapshot.selfResult || !snapshot.opponentResult) return;
     lastScoredMatchIdRef.current = matchId;
     const comparison = compareMultiplayerResults(snapshot.selfResult, snapshot.opponentResult);
+    const scoreLead = getMultiplayerScoreLead(snapshot.selfResult, snapshot.opponentResult);
+    if (comparison < 0 && scoreLead >= 5) {
+      persistAdvancedProgress((progress) => markMultiplayerFivePointLeadSkinUnlocked(progress));
+    }
     if (comparison < 0) {
       const next = { ...matchWins, self: matchWins.self + 1 };
       setMatchWins(next);
@@ -1303,7 +1360,7 @@ function MultiplayerPageContent() {
       setMatchWins(next);
       sessionRef.current?.reportRoomScore(localWinsToRoomScore(next, snapshot.role, matchId));
     }
-  }, [activePlayMode, matchWins, snapshot.match?.matchId, snapshot.opponentResult, snapshot.role, snapshot.selfResult, snapshot.status]);
+  }, [activePlayMode, matchWins, persistAdvancedProgress, snapshot.match?.matchId, snapshot.opponentResult, snapshot.role, snapshot.selfResult, snapshot.status]);
 
   useEffect(() => {
     if (snapshot.roomId !== matchWinsRoomIdRef.current) {
@@ -1417,10 +1474,11 @@ function MultiplayerPageContent() {
               opponentReady={snapshot.opponentReady}
               opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
               opponentWins={matchWins.opponent}
+              onAutoMoveRequestConsumed={handleStandaloneAutoMoveRequestConsumed}
               readyAvailable={standaloneReadyAvailable}
               rightReadyLabel={standaloneReadyAvailable ? "准备开始 →" : ""}
               scoreboardRoomBarOffset={standaloneRoomBarVisible}
-              scoreboardVisible={Boolean(snapshot.roomId)}
+              scoreboardVisible={roomScoreboardVisible}
               selfCustomAvatar={levelSelectSelfCustomAvatar}
               selfName={snapshot.selfPlayer?.name ?? playerName}
               selfReady={snapshot.selfReady}
@@ -1632,7 +1690,7 @@ function MultiplayerPageContent() {
               opponentSkin={resolvePlayerAvatarSkin(snapshot.opponentPlayer?.skinId)}
               opponentWins={matchWins.opponent}
               readyAvailable={levelSelectReadyAvailable}
-              scoreboardVisible={Boolean(snapshot.roomId)}
+              scoreboardVisible={roomScoreboardVisible}
               selfCustomAvatar={levelSelectSelfCustomAvatar}
               selfName={snapshot.selfPlayer?.name ?? playerName}
               selfReady={snapshot.selfReady}

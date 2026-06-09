@@ -532,7 +532,7 @@ test("fall down endless removes finite finish platforms so green to blue segment
   assert.doesNotMatch(fallDownSource, /\.filter\(\(platform\) => platform\.kind !== "finish"\)\s*\.slice\(1\)/);
 });
 
-test("fall down and doodle movement guides are large base-only background affordances", () => {
+test("fall down and doodle movement guides are softer base-only background affordances", () => {
   const fallDownSource = readFileSync(new URL("../../features/mini-games/fall-down.tsx", import.meta.url), "utf8");
   const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
   const cssSource = readAppCssSource();
@@ -547,14 +547,25 @@ test("fall down and doodle movement guides are large base-only background afford
   assert.match(doodleSource, /长按左右屏幕移动/);
 
   const guideBeforeRule = cssSource.match(/\.prototype-stage\.base-guided \.movement-control-backdrop::before\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+  const guideRule = cssSource.match(/\.movement-control-backdrop\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+  const guideTextRule = cssSource.match(/\.movement-control-backdrop > span\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+  const fallTrackRule = cssSource.match(/\.fall-platform-track\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop\s*\{/);
+  assert.match(guideRule, /color:\s*rgba\(36,\s*46,\s*62,\s*0\.16\);/);
+  assert.match(guideRule, /font-size:\s*clamp\(22px,\s*5\.8vw,\s*34px\);/);
   assert.match(guideBeforeRule, /top:\s*0;[\s\S]*bottom:\s*0;/);
-  assert.match(guideBeforeRule, /width:\s*10px;/);
+  assert.match(guideBeforeRule, /width:\s*6px;/);
   assert.match(guideBeforeRule, /background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(guideBeforeRule, /background-size:\s*10px 66px;/);
+  assert.match(guideBeforeRule, /background-size:\s*6px 42px;/);
   assert.match(guideBeforeRule, /background-repeat:\s*repeat-y;/);
+  assert.match(guideBeforeRule, /opacity:\s*0\.58;/);
   assert.doesNotMatch(guideBeforeRule, /repeating-linear-gradient/);
   assert.match(cssSource, /\.prototype-stage\.base-guided \.movement-control-backdrop::after\s*\{/);
-  assert.match(cssSource, /\.movement-control-backdrop > span\s*\{/);
+  assert.match(guideTextRule, /max-width:\s*min\(76%,\s*260px\);/);
+  assert.match(guideTextRule, /transform:\s*translateY\(-36px\);/);
+  assert.match(fallTrackRule, /height:\s*1px;/);
+  assert.match(fallTrackRule, /border-top:\s*0;/);
+  assert.match(fallTrackRule, /repeating-linear-gradient\(90deg/);
+  assert.match(fallTrackRule, /0 4px,\s*transparent 4px 7px/);
   assert.doesNotMatch(cssSource, /\.prototype-stage:not\(\.base-guided\) \.movement-control-backdrop/);
 });

@@ -938,6 +938,9 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
     "basketball",
     "starfall",
     "arcade",
+    "relay",
+    "lead",
+    "mastery",
     "custom",
   ] as const;
   const removedSkins = ["amber", "rose", "aqua", "cocoa", "jade", "coral", "plum", "olive", "navy", "lilac", "smoke", "brick"] as const;
@@ -961,6 +964,9 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /skin === "signal"[\s\S]*styles\.signalGlyph[\s\S]*styles\.signalDot/);
   assert.match(componentSource, /skin === "target"[\s\S]*styles\.targetGlyph[\s\S]*styles\.targetRing/);
   assert.match(componentSource, /skin === "blade"[\s\S]*styles\.bladeGlyph[\s\S]*styles\.bladeSlash/);
+  assert.match(componentSource, /skin === "relay"[\s\S]*styles\.relayGlyph/);
+  assert.match(componentSource, /skin === "lead"[\s\S]*styles\.leadGlyph/);
+  assert.match(componentSource, /skin === "mastery"[\s\S]*styles\.masteryGlyph/);
   const skinArrayMatch = skinSource.match(/export const PLAYER_AVATAR_SKINS = \[([\s\S]*?)\] as const/);
   assert.notEqual(skinArrayMatch, null);
   assert.equal((skinArrayMatch?.[1].match(/"/g)?.length ?? 0) / 2, expectedSkins.length);
@@ -985,6 +991,9 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(skinSource, /basketball:\s*\{\s*kind:\s*"legend-50"/);
   assert.match(skinSource, /starfall:\s*\{\s*kind:\s*"legend-100"/);
   assert.match(skinSource, /paw:\s*\{\s*kind:\s*"luck-100"/);
+  assert.match(skinSource, /relay:\s*\{\s*kind:\s*"share-3"/);
+  assert.match(skinSource, /lead:\s*\{\s*kind:\s*"multiplayer-five-point-lead"/);
+  assert.match(skinSource, /mastery:\s*\{\s*kind:\s*"endless-skill-all"/);
   assert.match(skinSource, /signal:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"reaction"/);
   assert.match(skinSource, /target:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"aim"/);
   assert.match(skinSource, /mint:\s*\{\s*kind:\s*"advanced-final"[\s\S]*roundId:\s*"search"/);
@@ -993,6 +1002,12 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.signalDot\s*\{[\s\S]*fill:/);
   assert.match(cssSource, /\.targetRing\s*\{[\s\S]*stroke:/);
   assert.match(cssSource, /\.bladeSlash\s*\{[\s\S]*stroke:/);
+  assert.match(cssSource, /\.relayGlyph/);
+  assert.match(cssSource, /\.leadGlyph/);
+  assert.match(cssSource, /\.masteryGlyph/);
+  assert.match(cssSource, /@keyframes playerAvatarRelayEyes/);
+  assert.match(cssSource, /@keyframes playerAvatarLeadEyes/);
+  assert.match(cssSource, /@keyframes playerAvatarMasteryEyes/);
   assert.match(cssSource, /\.root\[data-skin="sand"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*42px 39px,\s*57px 51px,\s*68px 44px;/);
   assert.match(cssSource, /\.root\[data-skin="arcade"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*58px 54px,\s*74px 63px,\s*92px 81px;[\s\S]*--player-avatar-texture-inset:\s*-34%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
   assert.match(cssSource, /\.root\[data-skin="starfall"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*118px 110px,\s*96px 92px,\s*142px 130px,\s*160px 146px;[\s\S]*--player-avatar-texture-inset:\s*-46%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);
@@ -1359,6 +1374,12 @@ test("base flow CSS is split into ordered focused chunks", () => {
   assert.match(homeworldScreenSource, /if \(inputPointerIdRef\.current !== event\.pointerId\) return;/);
   assert.match(homeworldScreenSource, /inputPointerIdRef\.current = event\.pointerId;/);
   assert.match(homeworldScreenSource, /const stopHomeworldDirection = useCallback/);
+  assert.match(homeworldScreenSource, /const clearHomeworldInputRefs = useCallback/);
+  assert.match(homeworldScreenSource, /const releaseHomeworldInput = useCallback/);
+  assert.match(homeworldScreenSource, /window\.addEventListener\("blur", releaseHomeworldInput\);/);
+  assert.match(homeworldScreenSource, /window\.addEventListener\("pagehide", releaseHomeworldInput\);/);
+  assert.match(homeworldScreenSource, /document\.addEventListener\("visibilitychange", releaseOnHidden\);/);
+  assert.match(homeworldScreenSource, /document\.visibilityState === "hidden"/);
   assert.match(homeworldScreenSource, /onPointerDown=\{beginHomeworldDirection\}/);
   assert.match(homeworldScreenSource, /onPointerMove=\{updateHomeworldDirection\}/);
   assert.match(homeworldScreenSource, /onPointerUp=\{stopHomeworldDirection\}/);

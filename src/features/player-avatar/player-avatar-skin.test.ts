@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   createDefaultAdvancedProgress,
+  markMultiplayerFivePointLeadSkinUnlocked,
   markLegend100SkinUnlocked,
   markAuthorDonated,
+  recordEndlessSkillUse,
+  recordShareInviteAction,
   recordAdvancedChallengeResult,
 } from "../../lib/advanced-progress.ts";
 import {
@@ -33,6 +36,8 @@ test("avatar skin copy matches the playful unlock list", () => {
     custom: "创意",
     cyan: "青蓝",
     ivory: "象牙",
+    lead: "胜势",
+    mastery: "全能",
     mint: "薄荷",
     paw: "猫爪",
     pig: "猪猪",
@@ -42,6 +47,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     slate: "石板",
     starfall: "星陨",
     target: "靶心",
+    relay: "传讯",
   });
 
   assert.deepEqual(PLAYER_AVATAR_SKIN_DESCRIPTIONS, {
@@ -51,6 +57,8 @@ test("avatar skin copy matches the playful unlock list", () => {
     custom: "来自世界之外的小方块",
     cyan: "原装方块，干净耐看。",
     ivory: "成功方块，尊贵优雅",
+    lead: "比分拉开时也要稳住。",
+    mastery: "八种无尽节奏都试过。",
     mint: "清清凉凉，冰冰爽爽",
     paw: "喵~",
     pig: "作者本体",
@@ -60,6 +68,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     slate: "沉着稳重",
     starfall: "三百颗够吗？",
     target: "很难被打中的小方块",
+    relay: "把热闹递给下一位。",
   });
 
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.arcade.label, "投喂作者一次解锁");
@@ -68,6 +77,8 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.custom.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.cyan.label, "默认解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.ivory.label, "通关停下来最终试炼");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.lead.label, "（在一次联机中获得 5 点比分优势）");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mastery.label, "（在所有类型的无尽模式中使用一次技能）");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mint.label, "通关一路向上最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.paw.label, "运气达到 100");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.pig.label, "达成最强王者");
@@ -77,6 +88,7 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.slate.label, "通关一路向下最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.starfall.label, "传奇王者 100 星解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.target.label, "通关移动靶最终试炼");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.relay.label, "（累计触发分享/复制邀请 3 次）");
 });
 
 test("avatar skins unlock from completed final advanced challenges", () => {
@@ -93,6 +105,9 @@ test("avatar skins unlock from completed final advanced challenges", () => {
   assert.equal(getPlayerAvatarSkinUnlockState("custom", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("pig", emptyProgress).unlocked, false);
   assert.equal(getPlayerAvatarSkinUnlockState("paw", emptyProgress).unlocked, false);
+  assert.equal(getPlayerAvatarSkinUnlockState("relay", emptyProgress).unlocked, false);
+  assert.equal(getPlayerAvatarSkinUnlockState("lead", emptyProgress).unlocked, false);
+  assert.equal(getPlayerAvatarSkinUnlockState("mastery", emptyProgress).unlocked, false);
 
   const clearedSearchFinal = Array.from({ length: 10 }, (_, index) => index + 1).reduce(
     (progress, level) =>
@@ -158,6 +173,26 @@ test("special avatar skins unlock from donation, king rank, legend stars, and lu
   assert.equal(getPlayerAvatarSkinUnlockState("paw", luckyProgress).unlocked, true);
 });
 
+test("new avatar skins unlock from share actions, multiplayer lead, and all endless skill usage", () => {
+  const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
+  const sharedTwice = recordShareInviteAction(
+    recordShareInviteAction(emptyProgress, "2026-05-28T00:01:00.000Z"),
+    "2026-05-28T00:02:00.000Z",
+  );
+  const sharedThreeTimes = recordShareInviteAction(sharedTwice, "2026-05-28T00:03:00.000Z");
+  const leadProgress = markMultiplayerFivePointLeadSkinUnlocked(emptyProgress, "2026-05-28T00:04:00.000Z");
+  const allSkillProgress = (["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"] as const).reduce(
+    (progress, roundId, index) => recordEndlessSkillUse(progress, roundId, `2026-05-28T00:1${index}:00.000Z`),
+    emptyProgress,
+  );
+
+  assert.equal(getPlayerAvatarSkinUnlockState("relay", sharedTwice).unlocked, false);
+  assert.equal(getPlayerAvatarSkinUnlockState("relay", sharedThreeTimes).unlocked, true);
+  assert.equal(getPlayerAvatarSkinUnlockState("lead", leadProgress).unlocked, true);
+  assert.equal(getPlayerAvatarSkinUnlockState("mastery", allSkillProgress).unlocked, true);
+  assert.equal(getPlayerAvatarSkinUnlockState("mastery", recordEndlessSkillUse(emptyProgress, "reaction")).unlocked, false);
+});
+
 test("avatar skin diff reports every newly unlocked skin and excludes already-owned skins", async () => {
   const skinModule = await import("./player-avatar-skin.ts");
   const getNewlyUnlockedPlayerAvatarSkins = skinModule.getNewlyUnlockedPlayerAvatarSkins as (
@@ -194,11 +229,11 @@ test("avatar skin display keeps unlocked skins first and preserves the configure
 
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(emptyProgress).map((item) => item.skin),
-    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "arcade", "custom"],
+    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "arcade", "relay", "lead", "mastery", "custom"],
   );
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(searchClearedProgress).map((item) => item.skin),
-    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "arcade", "custom"],
+    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "arcade", "relay", "lead", "mastery", "custom"],
   );
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(markAuthorDonated(emptyProgress)).map((item) => item.skin).slice(0, 3),

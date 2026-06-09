@@ -139,7 +139,7 @@ function getNativeRuleItems(config: AdvancedStageConfig) {
     if (config.params.allowGray === true) return ruleItems("红色松手，灰色继续按住");
     return ruleItems("红色危险出现时松手");
   }
-  if (config.dimension === "patience") return ruleItems("等待期间不能中断");
+  if (config.dimension === "patience") return ruleItems("丢飞刀配置缺少小游戏规则");
   return ruleItems(stripRuleDescription(config.passText));
 }
 
@@ -184,15 +184,6 @@ function getBrakingGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem
     { icon: "ban", text: "不能提前松手" },
     { icon: "bolt", text: "遵守规则" },
     { icon: "flag", text: "走到终点" },
-  ];
-}
-
-function getPatienceGoals(config: AdvancedStageConfig): AdvancedChallengeGoalItem[] {
-  const waitMs = numberParam(config, "waitMs");
-  if (waitMs === null) return [];
-  return [
-    { icon: "target", text: `等待 ${Math.round(waitMs / 1000)} 秒` },
-    { icon: "ban", text: "等待中不可中断" },
   ];
 }
 
@@ -345,11 +336,9 @@ export function getAdvancedChallengeGoalItems(config: AdvancedStageConfig): Adva
       ? getReactionGoals(config)
       : config.dimension === "aim"
         ? getAimGoals(config)
-        : config.dimension === "braking"
-          ? getBrakingGoals(config)
-          : config.dimension === "patience"
-            ? getPatienceGoals(config)
-            : [];
+      : config.dimension === "braking"
+        ? getBrakingGoals(config)
+        : [];
 
   return goals.length > 0 ? goals : fallbackGoal(config);
 }

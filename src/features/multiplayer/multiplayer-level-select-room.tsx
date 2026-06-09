@@ -25,6 +25,7 @@ const MOVE_SPEED = 42;
 const AUTO_MOVE_SPEED = 72;
 const EXIT_LEFT = -9;
 const LEVEL_SELECT_PRESENCE_SYNC_MS = 90;
+const MULTIPLAYER_LEVEL_SLOT_TOO_FAR_TEXT = "距离太远了";
 
 type LevelSelectAutoMoveTask = "ready" | "exit";
 type LevelSelectAutoMoveRequest = {
@@ -58,6 +59,7 @@ type LevelSelectRoomProps = {
   unavailableModeHintKey?: number;
   autoMoveRequest?: LevelSelectAutoMoveRequest | null;
   onBackToRoom: () => void;
+  onAutoMoveRequestConsumed?: (id: number) => void;
   onUnavailablePlayMode?: (message: string) => void;
   onPresenceChange: (presence: MultiplayerLevelSelectPresence) => void;
   onReadyChange: (ready: boolean) => void;
@@ -127,6 +129,7 @@ export function MultiplayerLevelSelectRoom({
   unavailableModeHintKey = 0,
   autoMoveRequest = null,
   onBackToRoom,
+  onAutoMoveRequestConsumed,
   onUnavailablePlayMode,
   onPresenceChange,
   onReadyChange,
@@ -163,6 +166,10 @@ export function MultiplayerLevelSelectRoom({
   const interactWithSlot = useCallback(
     (slot: MultiplayerLevelSelectSlot | null = reachableSlot) => {
       if (!slot || selectionLocked) return;
+      if (selectionAvailable && slot !== reachableSlot) {
+        onUnavailablePlayMode?.(MULTIPLAYER_LEVEL_SLOT_TOO_FAR_TEXT);
+        return;
+      }
       if (!selectionAvailable) {
         onUnavailablePlayMode?.(selectionUnavailableMessage);
         return;
@@ -199,6 +206,11 @@ export function MultiplayerLevelSelectRoom({
     },
     [onReadyChange, publishPresence],
   );
+
+  const clearLevelSelectInputRefs = useCallback(() => {
+    inputDirectionRef.current = "none";
+    inputPointerIdRef.current = null;
+  }, []);
 
   const cancelAutoMove = useCallback(() => {
     if (!autoMoveTaskRef.current) return;
@@ -266,6 +278,16 @@ export function MultiplayerLevelSelectRoom({
     publishPresence(playerXRef.current, nextDirection);
   }, [publishPresence]);
 
+  const releaseLevelSelectInput = useCallback(() => {
+    if (autoMoveTaskRef.current) {
+      cancelAutoMove();
+      return;
+    }
+    clearLevelSelectInputRefs();
+    setMoving(false);
+    publishPresence(playerXRef.current, "none");
+  }, [cancelAutoMove, clearLevelSelectInputRefs, publishPresence]);
+
   const chooseDirection = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return event.clientX < rect.left + rect.width / 2 ? "left" : "right";
@@ -294,14 +316,11 @@ export function MultiplayerLevelSelectRoom({
   const stopMove = useCallback((event?: PointerEvent<HTMLElement>) => {
     if (autoMoveTaskRef.current) return;
     if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
-    inputDirectionRef.current = "none";
-    setMoving(false);
-    inputPointerIdRef.current = null;
-    publishPresence(playerXRef.current, "none");
+    releaseLevelSelectInput();
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  }, [publishPresence]);
+  }, [releaseLevelSelectInput]);
 
   useEffect(() => {
     readyRef.current = selfReady;
@@ -324,7 +343,23 @@ export function MultiplayerLevelSelectRoom({
     if (lastAutoMoveRequestIdRef.current === autoMoveRequest.id) return;
     lastAutoMoveRequestIdRef.current = autoMoveRequest.id;
     startAutoMove(autoMoveRequest.action);
-  }, [autoMoveRequest, startAutoMove]);
+    onAutoMoveRequestConsumed?.(autoMoveRequest.id);
+  }, [autoMoveRequest, onAutoMoveRequestConsumed, startAutoMove]);
+
+  useEffect(() => {
+    const releaseOnHidden = () => {
+      if (document.visibilityState === "hidden") releaseLevelSelectInput();
+    };
+    window.addEventListener("blur", releaseLevelSelectInput);
+    window.addEventListener("pagehide", releaseLevelSelectInput);
+    document.addEventListener("visibilitychange", releaseOnHidden);
+    return () => {
+      clearLevelSelectInputRefs();
+      window.removeEventListener("blur", releaseLevelSelectInput);
+      window.removeEventListener("pagehide", releaseLevelSelectInput);
+      document.removeEventListener("visibilitychange", releaseOnHidden);
+    };
+  }, [clearLevelSelectInputRefs, releaseLevelSelectInput]);
 
   useEffect(() => {
     let frameId = 0;

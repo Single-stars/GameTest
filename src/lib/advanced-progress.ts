@@ -49,6 +49,9 @@ export type AdvancedProgress = {
   unlocked: boolean;
   authorDonated: boolean;
   legend100SkinUnlocked: boolean;
+  multiplayerFivePointLeadSkinUnlocked: boolean;
+  shareInviteActionCount: number;
+  endlessSkillUsedRounds: Record<RoundId, boolean>;
   dimensions: Record<RoundId, AdvancedDimensionProgress>;
   endlessBestScores: Record<RoundId, number>;
   endlessBestRuns: Record<RoundId, EndlessRunSnapshot | null>;
@@ -56,6 +59,8 @@ export type AdvancedProgress = {
   luckBestScore: number;
   luckDrawChances: number;
   luckDrawCount: number;
+  reviveCoins: number;
+  reviveCoinExchangeCount: number;
   updatedAt: string;
 };
 
@@ -133,6 +138,16 @@ export type LuckDrawOutcome = {
 export type LuckDrawResult = {
   progress: AdvancedProgress;
   outcome: LuckDrawOutcome | null;
+};
+
+export type ReviveCoinExchangeResult = {
+  exchanged: boolean;
+  progress: AdvancedProgress;
+};
+
+export type ReviveCoinConsumeResult = {
+  consumed: boolean;
+  progress: AdvancedProgress;
 };
 
 const ADVANCED_LEVEL_COUNT = ADVANCED_STAR_LIMITS.levelsPerDimension;
@@ -233,6 +248,11 @@ function sanitizeEndlessBestRuns(value: unknown): Record<RoundId, EndlessRunSnap
   ) as Record<RoundId, EndlessRunSnapshot | null>;
 }
 
+function sanitizeEndlessSkillUsedRounds(value: unknown): Record<RoundId, boolean> {
+  const source = typeof value === "object" && value !== null ? (value as Partial<Record<RoundId, unknown>>) : {};
+  return Object.fromEntries(ADVANCED_ROUND_IDS.map((roundId) => [roundId, source[roundId] === true])) as Record<RoundId, boolean>;
+}
+
 function countClearedAdvancedLevels(dimensions: Record<RoundId, AdvancedDimensionProgress>) {
   return ADVANCED_ROUND_IDS.reduce((sum, roundId) => sum + dimensions[roundId].clearedLevels.filter(Boolean).length, 0);
 }
@@ -261,19 +281,29 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repai
     ? estimateLuckScoreFromDrawCount(luckDrawCount)
     : clampInteger(source.luckBestScore, Math.min(100, sourceLuckStars * 5), 100);
   const luckStars = shouldRepairLegacyLuckScore ? getLuckStarsFromScore(luckBestScore) : sourceLuckStars;
+  const reviveCoinExchangeCount = clampInteger(
+    source.reviveCoinExchangeCount,
+    0,
+    Math.max(0, completedChallengeCount - luckDrawCount),
+  );
 
   return {
     schemaVersion: GAME_STATE_SCHEMA_VERSION,
     unlocked: source.unlocked === true,
     authorDonated: source.authorDonated === true,
     legend100SkinUnlocked: source.legend100SkinUnlocked === true,
+    multiplayerFivePointLeadSkinUnlocked: source.multiplayerFivePointLeadSkinUnlocked === true,
+    shareInviteActionCount: clampInteger(source.shareInviteActionCount, 0, Number.MAX_SAFE_INTEGER),
+    endlessSkillUsedRounds: sanitizeEndlessSkillUsedRounds(source.endlessSkillUsedRounds),
     dimensions,
     endlessBestScores: sanitizeEndlessBestScores(source.endlessBestScores),
     endlessBestRuns: sanitizeEndlessBestRuns(source.endlessBestRuns),
     luckStars,
     luckBestScore,
-    luckDrawChances: completedChallengeCount - luckDrawCount,
+    luckDrawChances: completedChallengeCount - luckDrawCount - reviveCoinExchangeCount,
     luckDrawCount,
+    reviveCoins: clampInteger(source.reviveCoins, 0, Number.MAX_SAFE_INTEGER),
+    reviveCoinExchangeCount,
     updatedAt: typeof source.updatedAt === "string" && source.updatedAt ? source.updatedAt : updatedAt,
   };
 }
@@ -308,6 +338,9 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
     unlocked: false,
     authorDonated: false,
     legend100SkinUnlocked: false,
+    multiplayerFivePointLeadSkinUnlocked: false,
+    shareInviteActionCount: 0,
+    endlessSkillUsedRounds: sanitizeEndlessSkillUsedRounds(null),
     dimensions: Object.fromEntries(ADVANCED_ROUND_IDS.map((roundId) => [roundId, createDefaultDimensionProgress()])) as Record<
       RoundId,
       AdvancedDimensionProgress
@@ -318,6 +351,8 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
     luckBestScore: 0,
     luckDrawChances: 0,
     luckDrawCount: 0,
+    reviveCoins: 0,
+    reviveCoinExchangeCount: 0,
     updatedAt,
   };
 }
@@ -390,6 +425,35 @@ export function markLegend100SkinUnlocked(progress: AdvancedProgress, updatedAt 
   return {
     ...sanitizeAdvancedProgress(progress, updatedAt),
     legend100SkinUnlocked: true,
+    updatedAt,
+  };
+}
+
+export function markMultiplayerFivePointLeadSkinUnlocked(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  return {
+    ...sanitizeAdvancedProgress(progress, updatedAt),
+    multiplayerFivePointLeadSkinUnlocked: true,
+    updatedAt,
+  };
+}
+
+export function recordShareInviteAction(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  return {
+    ...sanitized,
+    shareInviteActionCount: Math.min(Number.MAX_SAFE_INTEGER, sanitized.shareInviteActionCount + 1),
+    updatedAt,
+  };
+}
+
+export function recordEndlessSkillUse(progress: AdvancedProgress, roundId: RoundId, updatedAt = timestamp()): AdvancedProgress {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  return {
+    ...sanitized,
+    endlessSkillUsedRounds: {
+      ...sanitized.endlessSkillUsedRounds,
+      [roundId]: true,
+    },
     updatedAt,
   };
 }
@@ -678,6 +742,56 @@ export function canUseLuckDraw(unlocked: boolean, progress: AdvancedProgress) {
 export function canUseLuckDrawBatch(unlocked: boolean, progress: AdvancedProgress, count = 10) {
   const sanitized = sanitizeAdvancedProgress(progress);
   return unlocked && sanitized.luckDrawChances >= clampInteger(count, 1, 10) && sanitized.luckStars < ADVANCED_STAR_LIMITS.luckStars && sanitized.luckBestScore < 100;
+}
+
+export function canExchangeLuckCoinForReviveCoin(progress: AdvancedProgress) {
+  const sanitized = sanitizeAdvancedProgress(progress);
+  return sanitized.luckBestScore >= 100 && sanitized.luckDrawChances > 0;
+}
+
+export function exchangeLuckCoinForReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()): ReviveCoinExchangeResult {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  if (!canExchangeLuckCoinForReviveCoin(sanitized)) {
+    return { exchanged: false, progress: sanitized };
+  }
+
+  return {
+    exchanged: true,
+    progress: {
+      ...sanitized,
+      luckDrawChances: Math.max(0, sanitized.luckDrawChances - 1),
+      reviveCoins: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoins + 1),
+      reviveCoinExchangeCount: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoinExchangeCount + 1),
+      updatedAt,
+    },
+  };
+}
+
+export function grantReviveCoins(progress: AdvancedProgress, amount = 1, updatedAt = timestamp()) {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  const safeAmount = clampInteger(amount, 0, Number.MAX_SAFE_INTEGER);
+  if (safeAmount <= 0) return sanitized;
+  return {
+    ...sanitized,
+    reviveCoins: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoins + safeAmount),
+    updatedAt,
+  };
+}
+
+export function consumeReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()): ReviveCoinConsumeResult {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  if (sanitized.reviveCoins <= 0) {
+    return { consumed: false, progress: sanitized };
+  }
+
+  return {
+    consumed: true,
+    progress: {
+      ...sanitized,
+      reviveCoins: Math.max(0, sanitized.reviveCoins - 1),
+      updatedAt,
+    },
+  };
 }
 
 export function formatLuckDrawOutcomeText(outcome: LuckDrawOutcome) {

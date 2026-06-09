@@ -102,8 +102,9 @@ test("luck coin production card uses real progress and hides the legacy slot mac
   const testCardStart = screenSource.indexOf("function LuckCoinTestCard");
   const testCardDrawStart = screenSource.indexOf("  const draw = () => {", testCardStart);
   const testCardSource = screenSource.slice(testCardStart, screenSource.indexOf("  return (", testCardDrawStart));
-  const testCardRenderSource = screenSource.slice(screenSource.indexOf("<section className=\"luck-coin-test\""), screenSource.indexOf("</section>", screenSource.indexOf("<section className=\"luck-coin-test\"")));
-  const scoreButtonSource = screenSource.slice(screenSource.indexOf("<button", screenSource.indexOf("<section className=\"luck-coin-test\"")), screenSource.indexOf("</button>", screenSource.indexOf("<section className=\"luck-coin-test\"")));
+  const testCardRenderStart = screenSource.indexOf("<section className={`luck-coin-test");
+  const testCardRenderSource = screenSource.slice(testCardRenderStart, screenSource.indexOf("</section>", testCardRenderStart));
+  const scoreButtonSource = screenSource.slice(screenSource.indexOf("<button", testCardRenderStart), screenSource.indexOf("</button>", testCardRenderStart));
   const productionSource = screenSource.slice(screenSource.indexOf("return ("), screenSource.indexOf("function LegacyLuckSlotMachine"));
   const statCardRule = cssRuleAfter(cssSource, ".luck-coin-test-stat-card", ".luck-coin-test-side {");
   const statLabelRule = cssRule(cssSource, ".luck-coin-test-stat-card span");
@@ -179,6 +180,121 @@ test("luck coin production card uses real progress and hides the legacy slot mac
   assert.doesNotMatch(cssSource, /\.luck-coin-test-progress/);
   assert.doesNotMatch(cssSource, /@keyframes luck-coin-number-pop/);
   assert.doesNotMatch(cssSource, /luck-coin-rare-glow/);
+});
+
+test("luck coin first visit guide blocks all clicks and labels the score", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const testCardStart = screenSource.indexOf("function LuckCoinTestCard");
+  const testCardEnd = screenSource.indexOf("function LegacyLuckSlotMachine");
+  const testCardSource = screenSource.slice(testCardStart, testCardEnd);
+  const testCardRenderSource = screenSource.slice(screenSource.indexOf("<section className={`luck-coin-test"), testCardEnd);
+  const layoutRule = cssRule(cssSource, ".luck-coin-test-layout");
+  const guideShadeRule = cssRule(cssSource, ".luck-coin-test-guide-shade");
+  const guideTapRule = cssRule(cssSource, ".luck-coin-test-guide-tap-target");
+  const guideTextRule = cssRule(cssSource, ".luck-coin-test-guide-text");
+  const guideScoreTextRule = cssRule(cssSource, ".luck-coin-test.is-guiding.guide-score .luck-coin-test-guide-text");
+  const guideCoinTextRule = cssRule(cssSource, ".luck-coin-test.is-guiding.guide-coin .luck-coin-test-guide-text");
+  const scoreLabelRule = cssRule(cssSource, ".luck-coin-test-score-label");
+  const mobileRule = cssSource.slice(cssSource.indexOf("@media (max-width: 420px)"));
+
+  assert.match(screenSource, /LUCK_COIN_GUIDE_STORAGE_KEY = "luckCoinGuideSeen"/);
+  assert.match(testCardSource, /useState<"score" \| "coin" \| null>\(null\)/);
+  assert.match(testCardSource, /localStorage\.getItem\(LUCK_COIN_GUIDE_STORAGE_KEY\)/);
+  assert.match(testCardSource, /localStorage\.setItem\(LUCK_COIN_GUIDE_STORAGE_KEY, "1"\)/);
+  assert.match(testCardSource, /const guideText = guideStep === "score"[\s\S]*消耗幸运币点击按钮可以获得幸运值[\s\S]*首次通过进阶关可以获得幸运币/);
+  assert.match(testCardSource, /current === "score"[\s\S]*return "coin"/);
+  assert.match(testCardRenderSource, /className=\{`luck-coin-test\$\{guideStep \? ` is-guiding guide-\$\{guideStep\}` : ""\}`\}/);
+  assert.match(testCardRenderSource, /className="luck-coin-test-stat-card coin-focus"/);
+  assert.match(testCardRenderSource, /\{drawCount\}<small>\/80<\/small>[\s\S]*className="luck-coin-test-stat-card coin-focus"[\s\S]*\{coinBalance\}/);
+  assert.match(testCardRenderSource, /className="luck-coin-test-score-label">幸运值<\/span>/);
+  assert.match(testCardRenderSource, /luck-coin-test-guide-shade/);
+  assert.match(testCardRenderSource, /luck-coin-test-guide-text/);
+  assert.match(testCardRenderSource, /luck-coin-test-guide-tap-target/);
+  assert.ok(testCardRenderSource.indexOf("luck-coin-test-guide-text") < testCardRenderSource.indexOf("luck-coin-test-guide-shade"));
+  assert.doesNotMatch(testCardRenderSource, /onPointerDown=/);
+  assert.match(testCardRenderSource, /onClick=\{advanceLuckCoinGuide\}/);
+  assert.ok(testCardRenderSource.indexOf("luck-coin-test-guide-tap-target") > testCardRenderSource.indexOf("luck-coin-test-score-card"));
+
+  assert.match(layoutRule, /position:\s*relative;/);
+  assert.match(cssSource, /\.luck-coin-test\.is-guiding\.guide-score\s+\.luck-coin-test-score-card/);
+  assert.match(cssSource, /\.luck-coin-test\.is-guiding\.guide-coin\s+\.luck-coin-test-stat-card\.coin-focus/);
+  assert.match(guideShadeRule, /position:\s*fixed;/);
+  assert.match(guideShadeRule, /inset:\s*0;/);
+  assert.match(guideShadeRule, /background:\s*rgba\(0,\s*0,\s*0,\s*0\.58\);/);
+  assert.match(guideTapRule, /position:\s*fixed;/);
+  assert.match(guideTapRule, /inset:\s*0;/);
+  assert.match(guideTapRule, /background:\s*transparent;/);
+  assert.match(guideTapRule, /z-index:\s*80;/);
+  assert.match(guideTextRule, /position:\s*absolute;/);
+  assert.doesNotMatch(guideTextRule, /bottom:\s*max|position:\s*fixed/);
+  assert.match(guideScoreTextRule, /grid-column:\s*2;/);
+  assert.match(guideScoreTextRule, /align-self:\s*end;/);
+  assert.match(guideScoreTextRule, /transform:\s*translateY\(calc\(100% \+ 16px\)\);/);
+  assert.match(guideCoinTextRule, /grid-column:\s*1;/);
+  assert.match(guideCoinTextRule, /align-self:\s*end;/);
+  assert.match(guideCoinTextRule, /transform:\s*translateY\(calc\(100% \+ 16px\)\);/);
+  assert.match(cssSource, /\.luck-coin-test\.is-guiding\s+\.luck-coin-test-caption\s*\{[\s\S]*visibility:\s*hidden;/);
+  assert.doesNotMatch(guideTextRule, /background|border|box-shadow|border-radius/);
+  assert.match(scoreLabelRule, /position:\s*absolute;/);
+  assert.match(scoreLabelRule, /left:\s*16px;/);
+  assert.match(scoreLabelRule, /top:\s*16px;/);
+  assert.match(mobileRule, /\.luck-coin-test-score-label\s*\{[\s\S]*font-size:\s*13px;/);
+});
+
+test("luck screen keeps revive coin exchange and test cards visible under the luck button", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const productionSource = screenSource.slice(screenSource.indexOf("<LuckCoinTestCard"), screenSource.indexOf("{SHOW_LEGACY_LUCK_SLOT"));
+  const exchangeCardSource = screenSource.slice(screenSource.indexOf("function ReviveCoinExchangeCards"), screenSource.indexOf("function LegacyLuckSlotMachine"));
+
+  assert.match(screenSource, /onExchangeReviveCoin/);
+  assert.match(screenSource, /onGrantReviveCoinForTest/);
+  assert.ok(productionSource.indexOf("LuckCoinTestCard") < productionSource.indexOf("ReviveCoinExchangeCards"));
+  assert.match(productionSource, /<ReviveCoinExchangeCards[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*onExchangeReviveCoin=\{onExchangeReviveCoin\}[\s\S]*onGrantReviveCoinForTest=\{onGrantReviveCoinForTest\}[\s\S]*\/>/);
+  assert.match(exchangeCardSource, /const exchangeUnlocked = advancedProgress\.luckBestScore >= 100;/);
+  assert.match(exchangeCardSource, /const canExchange = exchangeUnlocked && advancedProgress\.luckDrawChances > 0;/);
+  assert.match(exchangeCardSource, /if \(!canExchange\) return;/);
+  assert.match(exchangeCardSource, /onExchangeReviveCoin\(\);/);
+  assert.match(exchangeCardSource, /onGrantReviveCoinForTest\(\);/);
+  assert.match(exchangeCardSource, /advancedProgress\.reviveCoins/);
+  assert.match(exchangeCardSource, /className="luck-revive-exchange-list"/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-card exchange \$\{exchangeUnlocked \? "unlocked" : "locked"\}`\}/);
+  assert.match(exchangeCardSource, /aria-disabled=\{!canExchange \? true : undefined\}/);
+  assert.doesNotMatch(exchangeCardSource, /blockedNotice|triggerBlockedNotice|setBlockedNotice/);
+
+  assert.match(cssSource, /\.luck-revive-exchange-list\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-card\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-card\.locked\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-card\.test\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-action\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-icon\s*{/);
+  assert.doesNotMatch(cssSource, /luck-revive-exchange-toast|luck-revive-exchange-popup/);
+});
+
+test("app page persists revive coin exchange, test grants, and endless consumption", () => {
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const advancedScreenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
+
+  assert.match(appPageSource, /exchangeLuckCoinForReviveCoin/);
+  assert.match(appPageSource, /grantReviveCoins/);
+  assert.match(appPageSource, /consumeReviveCoin/);
+  assert.match(appPageSource, /const exchangeReviveCoin = useCallback/);
+  assert.match(appPageSource, /exchangeLuckCoinForReviveCoin\(previousProgress\)/);
+  assert.match(appPageSource, /if \(!result\.exchanged\) return false;/);
+  assert.match(appPageSource, /const grantReviveCoinForTest = useCallback/);
+  assert.match(appPageSource, /grantReviveCoins\(previousProgress, 1\)/);
+  assert.match(appPageSource, /const useReviveCoin = useCallback/);
+  assert.match(appPageSource, /consumeReviveCoin\(previousProgress\)/);
+  assert.match(appPageSource, /if \(!result\.consumed\) return false;/);
+  assert.match(appPageSource, /onExchangeReviveCoin=\{exchangeReviveCoin\}/);
+  assert.match(appPageSource, /onGrantReviveCoinForTest=\{grantReviveCoinForTest\}/);
+  assert.match(appPageSource, /reviveCoins=\{advancedProgress\.reviveCoins\}/);
+  assert.match(appPageSource, /onUseReviveCoin=\{useReviveCoin\}/);
+  assert.match(advancedScreenSource, /reviveCoins: number;/);
+  assert.match(advancedScreenSource, /onUseReviveCoin: \(\) => boolean;/);
+  assert.match(advancedScreenSource, /reviveCoins=\{reviveCoins\}/);
+  assert.match(advancedScreenSource, /onUseReviveCoin=\{onUseReviveCoin\}/);
 });
 
 test("luck coin card keeps the score button inside narrow mobile screens", () => {

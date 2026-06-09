@@ -37,9 +37,68 @@ type AvatarMenuItem = {
   disabled?: boolean;
   danger?: boolean;
 };
+type ResultAuthorNoteTrigger =
+  | "always"
+  | "not-king"
+  | "first-king"
+  | "king"
+  | "endless-unlocked"
+  | "endless-played"
+  | "luck-maxed"
+  | "rare";
+type ResultAuthorNote = {
+  id: string;
+  text: string;
+  trigger: ResultAuthorNoteTrigger;
+  priority?: number;
+};
+type ResultAuthorNoteContext = {
+  advancedUnlocked: boolean;
+  endlessPlayed: boolean;
+  endlessUnlocked: boolean;
+  firstKingUnlock: boolean;
+  isKingRank: boolean;
+  luckMaxed: boolean;
+  rareEnabled: boolean;
+};
+type ResultAuthorNoteSelection = { contextKey: string; includeRare: boolean; noteId: string | null };
 
 const AVATAR_LAB_ENTRY_ANIMATION_MS = 560;
 const FEEDBACK_CONTENT_MAX_LENGTH = 250;
+const AUTHOR_NOTE_TYPE_INTERVAL_MS = 82;
+const AUTHOR_NOTE_TYPE_START_DELAY_MS = 100;
+const resultAuthorNoteHistoryByContext = new Map<string, string>();
+const RESULT_AUTHOR_NOTES: ReadonlyArray<ResultAuthorNote> = [
+  { id: "retry-after-non-king", text: "点击右侧的小方块可以重新测试~", trigger: "not-king", priority: 100 },
+  { id: "share-game", text: "帮忙分享这个游戏让更多人看到吧~", trigger: "always" },
+  { id: "feedback-record", text: "如果哪里做的不好，请在反馈里记录下来", trigger: "always" },
+  { id: "multiplayer-friends", text: "想和朋友一起玩的话，点击小方块的联机功能", trigger: "always" },
+  { id: "king-start", text: "最强王者只是起点", trigger: "first-king", priority: 120 },
+  { id: "score-card-advanced", text: "点击分数卡片，可以进入对应进阶关", trigger: "king", priority: 80 },
+  { id: "new-advanced-luck-coin", text: "第一次通过新的进阶关会获得一枚幸运币", trigger: "king" },
+  { id: "replay-no-coin", text: "重玩已通关的进阶关不会重复获得幸运币", trigger: "king" },
+  { id: "all-challenges-rare", text: "听说可以完成所有挑战的玩家不足万分之一", trigger: "always" },
+  { id: "switch-stuck-stage", text: "克服卡关的秘诀是换一关接着打", trigger: "king" },
+  { id: "unlock-endless", text: "通过进阶前三关后将解锁无尽模式", trigger: "king" },
+  { id: "endless-special-skill", text: "无尽模式的特殊技能有什么作用呢...", trigger: "endless-unlocked" },
+  { id: "green-light-predict", text: "在绿灯行的无尽模式预判点击的话...", trigger: "endless-unlocked" },
+  { id: "share-endless-challenge", text: "分享无尽成绩后其他人就可以挑战你", trigger: "endless-played" },
+  { id: "author-not-cleared", text: "作者其实没有通关过这个游戏", trigger: "endless-unlocked" },
+  { id: "luck-is-power", text: "运气也是实力的一部分", trigger: "king" },
+  { id: "extra-luck-coins", text: "运气达到最大值后，多余的幸运币也许有大用", trigger: "luck-maxed", priority: 70 },
+  { id: "two-hand-square-jump", text: "小技巧：双手操控在一路向上关有奇效", trigger: "always" },
+  { id: "aim-leading", text: "小技巧：射靶子时计算提前量是必要的", trigger: "always" },
+  { id: "invincible-frames", text: "受伤后的无敌帧是否可以利用呢？", trigger: "always" },
+  { id: "full-fire", text: "火力全开意味着可以随便发射", trigger: "always" },
+  { id: "creative-skin", text: "皮肤【创意】可以制作你想要的任何皮肤", trigger: "always" },
+  { id: "not-pig-favorite", text: "作者最喜欢的皮肤真的不是【猪猪】", trigger: "always" },
+  { id: "easter-egg", text: "这是个彩蛋嘻嘻^_^", trigger: "rare" },
+  { id: "thanks-playing", text: "谢谢你玩我的游戏", trigger: "always" },
+  { id: "more-players", text: "如果有更多人玩的话...", trigger: "always" },
+  { id: "happy-you-played", text: "你能玩到这里，我真的很开心", trigger: "rare" },
+  { id: "rank-not-you", text: "段位只是游戏，不代表你哦", trigger: "always" },
+  { id: "share-thanks", text: "如果你愿意把这个游戏发给别人，我会非常感谢", trigger: "always" },
+];
 const DONATION_FEED_OPTIONS = [
   {
     id: "mixue",
@@ -79,6 +138,66 @@ const FEEDBACK_TYPES = [
   { id: "chat", label: "和作者聊聊天" },
 ] as const satisfies ReadonlyArray<{ id: FeedbackCategory; label: string }>;
 const FEEDBACK_RATINGS = [1, 2, 3, 4, 5] as const;
+
+function canShowResultAuthorNote(note: ResultAuthorNote, context: ResultAuthorNoteContext) {
+  switch (note.trigger) {
+    case "not-king":
+      return !context.isKingRank;
+    case "first-king":
+      return context.firstKingUnlock;
+    case "king":
+      return context.advancedUnlocked;
+    case "endless-unlocked":
+      return context.endlessUnlocked;
+    case "endless-played":
+      return context.endlessPlayed;
+    case "luck-maxed":
+      return context.luckMaxed;
+    case "rare":
+      return context.rareEnabled;
+    case "always":
+      return true;
+  }
+}
+
+function getEligibleResultAuthorNotes(context: ResultAuthorNoteContext) {
+  return RESULT_AUTHOR_NOTES.filter((note) => canShowResultAuthorNote(note, context));
+}
+
+function getDefaultResultAuthorNote(context: ResultAuthorNoteContext) {
+  const eligibleNotes = getEligibleResultAuthorNotes(context);
+  if (eligibleNotes.length === 0) return RESULT_AUTHOR_NOTES[0];
+  return [...eligibleNotes].sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))[0];
+}
+
+function getResultAuthorNote(context: ResultAuthorNoteContext, noteId: string | null) {
+  const eligibleNotes = RESULT_AUTHOR_NOTES.filter((note) => canShowResultAuthorNote(note, context));
+  if (eligibleNotes.length === 0) return RESULT_AUTHOR_NOTES[0];
+  return eligibleNotes.find((note) => note.id === noteId) ?? getDefaultResultAuthorNote(context);
+}
+
+function getRandomResultAuthorNote(context: ResultAuthorNoteContext, currentNoteId: string | null) {
+  const eligibleNotes = getEligibleResultAuthorNotes(context);
+  if (eligibleNotes.length === 0) return RESULT_AUTHOR_NOTES[0];
+  const nextNotes = eligibleNotes.length > 1 ? eligibleNotes.filter((note) => note.id !== currentNoteId) : eligibleNotes;
+  return nextNotes[Math.floor(Math.random() * nextNotes.length)] ?? eligibleNotes[0];
+}
+
+function getInitialResultAuthorNoteSelection(contextKey: string, context: ResultAuthorNoteContext): ResultAuthorNoteSelection {
+  const previousNoteId = resultAuthorNoteHistoryByContext.get(contextKey) ?? null;
+  if (!previousNoteId) {
+    return { contextKey, includeRare: false, noteId: getDefaultResultAuthorNote(context).id };
+  }
+
+  const includeRare = Math.random() < 0.08;
+  const nextContext = { ...context, rareEnabled: includeRare };
+  const nextNote = getRandomResultAuthorNote(nextContext, previousNoteId);
+  return { contextKey, includeRare, noteId: nextNote.id };
+}
+
+function rememberResultAuthorNote(contextKey: string, noteId: string) {
+  resultAuthorNoteHistoryByContext.set(contextKey, noteId);
+}
 
 function roundFailureCount(trials: TrialEvent[], roundId: RoundId) {
   const roundTrials = trials.filter((item) => item.roundId === roundId);
@@ -127,20 +246,6 @@ export function ResultScreen({
   onShareImage: () => void;
   onRestart: () => void;
 }) {
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
-  const [donatePanelOpen, setDonatePanelOpen] = useState(false);
-  const [donateConfirmed, setDonateConfirmed] = useState(false);
-  const [donateActionReady, setDonateActionReady] = useState(false);
-  const [selectedDonationFeedId, setSelectedDonationFeedId] = useState<DonationFeedOption["id"] | null>(null);
-  const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
-  const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
-  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("idea");
-  const [feedbackContent, setFeedbackContent] = useState("");
-  const [feedbackSubmitState, setFeedbackSubmitState] = useState<FeedbackSubmitState>("idle");
-  const [feedbackError, setFeedbackError] = useState("");
-  const avatarEntryTimerRef = useRef<number | null>(null);
-  const donateSaveIntentTimerRef = useRef<number | null>(null);
   const result = getGameRankResult(trials);
   const brakingTrials = trials.filter((item) => item.roundId === "braking");
   const dinoTrials = brakingTrials.filter((item) => item.value?.mode === "dino" || item.value?.signal === "threat");
@@ -156,11 +261,96 @@ export function ResultScreen({
         ? brakingTrials.filter((item) => item.correct === false).length
         : null;
   const advancedUnlocked = advancedProgress.unlocked || result.name === "最强王者";
-
   const advancedStars = getAdvancedTotalStars(advancedProgress);
-
   const rankTitle = formatResultRankTitle(result.name, advancedStars);
   const luckStatus = getLuckDrawStatusText(advancedUnlocked, advancedProgress);
+  const rows = [
+    {
+      roundId: "reaction",
+      label: ROUND_DISPLAY_BY_ID.reaction.label,
+      score: result.scores.reaction,
+      detail: result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足",
+    },
+    {
+      roundId: "aim",
+      label: ROUND_DISPLAY_BY_ID.aim.label,
+      score: result.scores.precision,
+      detail: aimMisses !== null ? `未命中 ${aimMisses}` : "不足",
+    },
+    {
+      roundId: "stroop",
+      label: ROUND_DISPLAY_BY_ID.stroop.label,
+      score: result.scores.focus,
+      detail: stroopFailures !== null ? `失误 ${stroopFailures}` : "不足",
+    },
+    {
+      roundId: "search",
+      label: ROUND_DISPLAY_BY_ID.search.label,
+      score: result.scores.positioning,
+      detail: result.metrics.positioningAccuracy !== null ? `失误 ${result.metrics.positioningFailures}` : "不足",
+    },
+    {
+      roundId: "rhythm",
+      label: ROUND_DISPLAY_BY_ID.rhythm.label,
+      score: result.scores.feel,
+      detail: rhythmFailures !== null ? `失误 ${rhythmFailures}` : "不足",
+    },
+    {
+      roundId: "memory",
+      label: ROUND_DISPLAY_BY_ID.memory.label,
+      score: result.scores.coordination,
+      detail: memoryFailures !== null ? `失误 ${memoryFailures}` : "不足",
+    },
+    {
+      roundId: "braking",
+      label: ROUND_DISPLAY_BY_ID.braking.label,
+      score: result.scores.control,
+      detail: brakingFailures !== null ? `失误 ${brakingFailures}` : "不足",
+    },
+    {
+      roundId: "patience",
+      label: ROUND_DISPLAY_BY_ID.patience.label,
+      score: result.scores.timing,
+      detail: patienceFailures !== null ? `失误 ${patienceFailures}` : "不足",
+    },
+  ] as const satisfies ReadonlyArray<{ roundId: RoundId; label: string; score: number; detail: string }>;
+  const endlessUnlocked = rows.some((row) => getAdvancedDimensionLevel(advancedProgress, row.roundId) >= 3);
+  const endlessPlayed = rows.some((row) => (advancedProgress.endlessBestScores[row.roundId] ?? 0) > 0);
+  const authorNoteContextKey = [
+    advancedUnlocked,
+    endlessPlayed,
+    endlessUnlocked,
+    advancedUnlockPulseId > 0 && advancedUnlocked,
+    result.name === "最强王者",
+    advancedProgress.luckStars >= 20 || advancedProgress.luckBestScore >= 100,
+  ].join(":");
+  const baseAuthorNoteContext = {
+    advancedUnlocked,
+    endlessPlayed,
+    endlessUnlocked,
+    firstKingUnlock: advancedUnlockPulseId > 0 && advancedUnlocked,
+    isKingRank: result.name === "最强王者",
+    luckMaxed: advancedProgress.luckStars >= 20 || advancedProgress.luckBestScore >= 100,
+    rareEnabled: false,
+  } satisfies ResultAuthorNoteContext;
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [avatarMenuFeedback, setAvatarMenuFeedback] = useState(false);
+  const [donatePanelOpen, setDonatePanelOpen] = useState(false);
+  const [donateConfirmed, setDonateConfirmed] = useState(false);
+  const [donateActionReady, setDonateActionReady] = useState(false);
+  const [selectedDonationFeedId, setSelectedDonationFeedId] = useState<DonationFeedOption["id"] | null>(null);
+  const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<(typeof FEEDBACK_RATINGS)[number]>(5);
+  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("idea");
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackSubmitState, setFeedbackSubmitState] = useState<FeedbackSubmitState>("idle");
+  const [feedbackError, setFeedbackError] = useState("");
+  const [authorNoteSelection, setAuthorNoteSelection] = useState<ResultAuthorNoteSelection>(() =>
+    getInitialResultAuthorNoteSelection(authorNoteContextKey, baseAuthorNoteContext),
+  );
+  const [typedAuthorNote, setTypedAuthorNote] = useState({ length: 0, text: "" });
+  const avatarEntryTimerRef = useRef<number | null>(null);
+  const donateSaveIntentTimerRef = useRef<number | null>(null);
   const selectedDonationFeed = selectedDonationFeedId ? DONATION_FEED_OPTIONS.find((item) => item.id === selectedDonationFeedId) ?? null : null;
 
   const clearAvatarEntryTimer = useCallback(() => {
@@ -376,121 +566,140 @@ export function ResultScreen({
       : []),
   ] satisfies AvatarMenuItem[];
 
-  const rows = [
-    {
-      roundId: "reaction",
-      label: ROUND_DISPLAY_BY_ID.reaction.label,
-      score: result.scores.reaction,
-      detail: result.metrics.reactionMedianMs ? `${Math.round(result.metrics.reactionMedianMs)}ms` : "不足",
-    },
-    {
-      roundId: "aim",
-      label: ROUND_DISPLAY_BY_ID.aim.label,
-      score: result.scores.targeting,
-      detail: aimMisses !== null ? `未命中 ${aimMisses}` : "不足",
-    },
-    {
-      roundId: "stroop",
-      label: ROUND_DISPLAY_BY_ID.stroop.label,
-      score: result.scores.interference,
-      detail: stroopFailures !== null ? `失误 ${stroopFailures}` : "不足",
-    },
-    {
-      roundId: "search",
-      label: ROUND_DISPLAY_BY_ID.search.label,
-      score: result.scores.search,
-      detail: result.metrics.searchMeanCountError !== null ? `失误 ${result.metrics.searchMeanCountError.toFixed(0)}` : "不足",
-    },
-    {
-      roundId: "rhythm",
-      label: ROUND_DISPLAY_BY_ID.rhythm.label,
-      score: result.scores.rhythm,
-      detail: rhythmFailures !== null ? `失误 ${rhythmFailures}` : "不足",
-    },
-    {
-      roundId: "memory",
-      label: ROUND_DISPLAY_BY_ID.memory.label,
-      score: result.scores.memory,
-      detail: memoryFailures !== null ? `失误 ${memoryFailures}` : "不足",
-    },
-    {
-      roundId: "braking",
-      label: ROUND_DISPLAY_BY_ID.braking.label,
-      score: result.scores.braking,
-      detail: brakingFailures !== null ? `失误 ${brakingFailures}` : "不足",
-    },
-    {
-      roundId: "patience",
-      label: ROUND_DISPLAY_BY_ID.patience.label,
-      score: result.scores.waiting,
-      detail: patienceFailures !== null ? `失误 ${patienceFailures}` : "不足",
-    },
-  ] as const satisfies ReadonlyArray<{ roundId: RoundId; label: string; score: number; detail: string }>;
+  const authorNoteSelectionMatches = authorNoteSelection.contextKey === authorNoteContextKey;
+  const authorNoteContext = {
+    ...baseAuthorNoteContext,
+    rareEnabled: authorNoteSelectionMatches && authorNoteSelection.includeRare,
+  } satisfies ResultAuthorNoteContext;
+  const authorNote = getResultAuthorNote(authorNoteContext, authorNoteSelectionMatches ? authorNoteSelection.noteId : null);
+  const authorNoteText = authorNote.text;
+  const visibleAuthorNoteText =
+    typedAuthorNote.text === authorNoteText ? authorNoteText.slice(0, Math.max(1, typedAuthorNote.length)) : authorNoteText.slice(0, 1);
+  const refreshAuthorNote = () => {
+    const includeRare = Math.random() < 0.08;
+    const nextContext = { ...authorNoteContext, rareEnabled: includeRare };
+    const nextNote = getRandomResultAuthorNote(nextContext, authorNote.id);
+    rememberResultAuthorNote(authorNoteContextKey, nextNote.id);
+    setAuthorNoteSelection({ contextKey: authorNoteContextKey, includeRare, noteId: nextNote.id });
+    setTypedAuthorNote({ length: Math.min(1, nextNote.text.length), text: nextNote.text });
+  };
+
+  useEffect(() => {
+    rememberResultAuthorNote(authorNoteContextKey, authorNote.id);
+  }, [authorNoteContextKey, authorNote.id]);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      const reduceMotionTimerId = window.setTimeout(() => {
+        setTypedAuthorNote({ length: authorNoteText.length, text: authorNoteText });
+      }, 0);
+      return () => {
+        window.clearTimeout(reduceMotionTimerId);
+      };
+    }
+
+    if (authorNoteText.length <= 1) return;
+
+    let startTimerId: number | null = null;
+    let intervalId: number | null = null;
+    let currentLength = 1;
+    const typeNextCharacter = () => {
+      currentLength = Math.min(currentLength + 1, authorNoteText.length);
+      setTypedAuthorNote({ length: currentLength, text: authorNoteText });
+      if (currentLength >= authorNoteText.length && intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    startTimerId = window.setTimeout(() => {
+      typeNextCharacter();
+      if (currentLength < authorNoteText.length) {
+        intervalId = window.setInterval(typeNextCharacter, AUTHOR_NOTE_TYPE_INTERVAL_MS);
+      }
+    }, AUTHOR_NOTE_TYPE_START_DELAY_MS);
+
+    return () => {
+      if (startTimerId !== null) window.clearTimeout(startTimerId);
+      if (intervalId !== null) window.clearInterval(intervalId);
+    };
+  }, [authorNoteText]);
 
   return (
     <section className="result-screen" onPointerDownCapture={closeAvatarMenuFromOutside}>
       <div className={`result-card rank-card ${avatarMenuOpen ? "menu-open" : ""}`}>
-        <div className="rank-title">
-          <h1>{rankTitle}</h1>
-        </div>
-        <div className="rank-avatar-menu-wrap">
-          <button
-            aria-controls="rank-avatar-menu"
-            aria-expanded={avatarMenuOpen}
-            aria-haspopup="menu"
-            aria-label="打开结果操作气泡"
-            className={`rank-avatar-entry ${avatarMenuOpen ? "open" : ""} ${avatarMenuFeedback ? "playing" : ""}`}
-            data-transition-avatar-anchor
-            type="button"
-            onClick={toggleAvatarMenu}
-          >
-            <PlayerAvatar
-              action={avatarEntryAction}
-              effect={avatarEntryEffect}
-              expression={avatarEntryExpression}
-              skin={avatarSkin}
-              size={46}
-              visualScale={1.02}
-            />
-          </button>
+        <div className="rank-card-main">
+          <div className="rank-title">
+            <h1>{rankTitle}</h1>
+          </div>
+          <div className="rank-avatar-menu-wrap">
+            <button
+              aria-controls="rank-avatar-menu"
+              aria-expanded={avatarMenuOpen}
+              aria-haspopup="menu"
+              aria-label="打开结果操作气泡"
+              className={`rank-avatar-entry ${avatarMenuOpen ? "open" : ""} ${avatarMenuFeedback ? "playing" : ""}`}
+              data-transition-avatar-anchor
+              type="button"
+              onClick={toggleAvatarMenu}
+            >
+              <PlayerAvatar
+                action={avatarEntryAction}
+                effect={avatarEntryEffect}
+                expression={avatarEntryExpression}
+                skin={avatarSkin}
+                size={46}
+                visualScale={1.02}
+              />
+            </button>
 
-          {avatarMenuOpen ? (
-            <div aria-label="结果操作" className="rank-avatar-menu" id="rank-avatar-menu" role="menu">
-              <svg
-                aria-hidden="true"
-                className="rank-avatar-menu-surface"
-                focusable="false"
-                preserveAspectRatio="none"
-                viewBox="0 0 248 122"
-              >
-                <path
-                  className="rank-avatar-menu-surface-path center"
-                  d="M18 13H112L124 2L136 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
-                />
-                <path
-                  className="rank-avatar-menu-surface-path edge"
-                  d="M18 13H191L203 2L215 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
-                />
+            {avatarMenuOpen ? (
+              <div aria-label="结果操作" className="rank-avatar-menu" id="rank-avatar-menu" role="menu">
+                <svg
+                  aria-hidden="true"
+                  className="rank-avatar-menu-surface"
+                  focusable="false"
+                  preserveAspectRatio="none"
+                  viewBox="0 0 248 122"
+                >
+                  <path
+                    className="rank-avatar-menu-surface-path center"
+                    d="M18 13H112L124 2L136 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
+                  />
+                  <path
+                    className="rank-avatar-menu-surface-path edge"
+                    d="M18 13H191L203 2L215 13H230C239.39 13 247 20.61 247 30V104C247 113.39 239.39 121 230 121H18C8.61 121 1 113.39 1 104V30C1 20.61 8.61 13 18 13Z"
+                  />
               </svg>
               <div className="rank-avatar-bubble">
-                {/* eslint-disable-next-line react-hooks/refs -- Menu callbacks run from click handlers; rendering the memoized list does not read refs. */}
-                {avatarMenuItems.map((item) => (
-                  <button
-                    aria-label={item.label}
-                    className={`rank-avatar-menu-action tone-${item.tone} ${item.danger ? "danger" : ""}`}
-                    disabled={avatarMenuFeedback || item.disabled}
-                    key={item.id}
-                    role="menuitem"
-                    type="button"
-                    onClick={() => (item.id === "donate" ? item.onSelect() : runAvatarMenuAction(item.onSelect))}
-                  >
-                    {item.id === "skin" ? <AvatarLabIcon /> : item.icon}
-                  </button>
-                ))}
+                  {/* eslint-disable-next-line react-hooks/refs -- Menu callbacks run from click handlers; rendering the memoized list does not read refs. */}
+                  {avatarMenuItems.map((item) => (
+                    <button
+                      aria-label={item.label}
+                      className={`rank-avatar-menu-action tone-${item.tone} ${item.danger ? "danger" : ""}`}
+                      disabled={avatarMenuFeedback || item.disabled}
+                      key={item.id}
+                      role="menuitem"
+                      type="button"
+                      onClick={() => (item.id === "donate" ? item.onSelect() : runAvatarMenuAction(item.onSelect))}
+                    >
+                      {item.id === "skin" ? <AvatarLabIcon /> : item.icon}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
+        <button
+          className="rank-author-note"
+          type="button"
+          aria-label="刷新结果提示"
+          onClick={refreshAuthorNote}
+        >
+          {visibleAuthorNoteText}
+        </button>
       </div>
 
       {donatePanelOpen ? (
