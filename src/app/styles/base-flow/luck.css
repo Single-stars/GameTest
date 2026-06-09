@@ -254,8 +254,9 @@
 
 .luck-coin-test-layout {
   width: min(100%, 640px);
+  max-width: 100%;
   display: grid;
-  grid-template-columns: minmax(124px, 0.68fr) minmax(0, 1.32fr);
+  grid-template-columns: minmax(96px, 0.46fr) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -271,8 +272,11 @@
 
 .luck-coin-test-score-card {
   position: relative;
+  width: 100%;
+  min-width: 0;
   min-height: clamp(176px, 27vw, 210px);
   aspect-ratio: 1.42 / 1;
+  box-sizing: border-box;
   display: grid;
   place-items: center;
   align-content: center;
@@ -558,30 +562,40 @@
 }
 
 @media (max-width: 420px) {
+  .luck-coin-test {
+    padding: 14px 12px 18px;
+  }
+
   .luck-coin-test-layout {
-    grid-template-columns: minmax(108px, 0.64fr) minmax(0, 1.36fr);
-    gap: 10px;
+    grid-template-columns: minmax(88px, 0.38fr) minmax(0, 1fr);
+    gap: 8px;
   }
 
   .luck-coin-test-score-card {
-    min-height: 158px;
-    padding: 18px 14px;
+    min-height: clamp(132px, 38vw, 158px);
+    aspect-ratio: auto;
+    padding: 16px 10px;
+  }
+
+  .luck-coin-test-score-card strong {
+    font-size: clamp(50px, 17vw, 70px);
   }
 
   .luck-coin-test-side {
-    gap: 10px;
+    gap: 8px;
   }
 
   .luck-coin-test-stat-card {
-    min-height: 74px;
-    padding: 13px 12px 12px;
+    min-height: 62px;
+    gap: 8px;
+    padding: 11px 10px 10px;
   }
 
   .luck-coin-test-stat-card span {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .luck-coin-test-stat-card strong {
-    font-size: clamp(28px, 8vw, 34px);
+    font-size: clamp(26px, 7.4vw, 32px);
   }
 }

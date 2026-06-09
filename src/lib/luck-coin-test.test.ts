@@ -149,7 +149,7 @@ test("luck coin production card uses real progress and hides the legacy slot mac
 
   assert.match(cssSource, /\.luck-coin-test\s*\{[\s\S]*border:\s*1px solid var\(--line\);[\s\S]*background:\s*var\(--surface\);/);
   assert.doesNotMatch(cssSource, /\.luck-coin-test\s*\{[\s\S]*margin-top:\s*16px;/);
-  assert.match(cssSource, /\.luck-coin-test-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(124px,\s*0\.68fr\)\s*minmax\(0,\s*1\.32fr\);/);
+  assert.match(cssSource, /\.luck-coin-test-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(96px,\s*0\.46fr\)\s*minmax\(0,\s*1fr\);/);
   assert.match(cssSource, /\.luck-coin-test-score-card\.first-draw-prompt::after\s*\{[\s\S]*animation:\s*advanced-card-breath 1800ms ease-in-out infinite;/);
   assert.match(cssSource, /\.luck-coin-test-score-card\.blocked-feedback\s*\{[\s\S]*luck-coin-blocked-shake/);
   assert.match(cssSource, /\.luck-coin-test-blocked-notice\s*\{/);
@@ -179,6 +179,23 @@ test("luck coin production card uses real progress and hides the legacy slot mac
   assert.doesNotMatch(cssSource, /\.luck-coin-test-progress/);
   assert.doesNotMatch(cssSource, /@keyframes luck-coin-number-pop/);
   assert.doesNotMatch(cssSource, /luck-coin-rare-glow/);
+});
+
+test("luck coin card keeps the score button inside narrow mobile screens", () => {
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const layoutRule = cssRule(cssSource, ".luck-coin-test-layout");
+  const scoreRule = cssRule(cssSource, ".luck-coin-test-score-card");
+  const mobileRule = cssSource.slice(cssSource.indexOf("@media (max-width: 420px)"));
+
+  assert.match(layoutRule, /max-width:\s*100%;/);
+  assert.match(layoutRule, /grid-template-columns:\s*minmax\(96px,\s*0\.46fr\)\s*minmax\(0,\s*1fr\);/);
+  assert.match(scoreRule, /width:\s*100%;/);
+  assert.match(scoreRule, /min-width:\s*0;/);
+  assert.match(scoreRule, /box-sizing:\s*border-box;/);
+  assert.match(mobileRule, /\.luck-coin-test\s*\{[\s\S]*padding:\s*14px 12px 18px;/);
+  assert.match(mobileRule, /\.luck-coin-test-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(88px,\s*0\.38fr\)\s*minmax\(0,\s*1fr\);/);
+  assert.match(mobileRule, /\.luck-coin-test-score-card\s*\{[\s\S]*aspect-ratio:\s*auto;/);
+  assert.match(mobileRule, /\.luck-coin-test-score-card\s*\{[\s\S]*min-height:\s*clamp\(132px,\s*38vw,\s*158px\);/);
 });
 
 test("luck rule tooltip uses compact multi-line copy with point probabilities", () => {

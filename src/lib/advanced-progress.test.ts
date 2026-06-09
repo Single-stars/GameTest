@@ -306,6 +306,28 @@ test("luck draw chances are backfilled from completed advanced levels in old per
   assert.equal(parsed.advancedProgress.luckDrawChances + parsed.advancedProgress.luckDrawCount, 5);
 });
 
+test("legacy max luck is repaired from real draw count when loading persisted state", () => {
+  const legacyProgress = advancedProgressWithClearedLevels(47, {
+    luckStars: 20,
+    luckBestScore: 100,
+    luckDrawChances: 3,
+    luckDrawCount: 44,
+    updatedAt: "2026-05-10T00:00:00.000Z",
+  });
+  const parsed = parsePersistedGameState(
+    JSON.stringify({
+      schemaVersion: 1,
+      currentResult: null,
+      advancedProgress: legacyProgress,
+    }),
+  );
+
+  assert.equal(parsed.advancedProgress.luckDrawCount, 44);
+  assert.equal(parsed.advancedProgress.luckDrawChances, 3);
+  assert.equal(parsed.advancedProgress.luckBestScore, 55);
+  assert.equal(parsed.advancedProgress.luckStars, 11);
+});
+
 test("luck draws consume chances, map 0-100 score to 0-20 stars, and preserve the best result", () => {
   let progress = recordAdvancedChallengeResult(markAdvancedUnlocked(createDefaultAdvancedProgress()), {
     roundId: "aim",
@@ -716,11 +738,11 @@ test("persisted state parser falls back safely and clamps progress shape", () =>
   assert.equal(parsed.currentResult?.trials.length, 1);
   assert.equal(getAdvancedDimensionLevel(parsed.advancedProgress, "memory"), 10);
   assert.equal(parsed.advancedProgress.authorDonated, false);
-  assert.equal(parsed.advancedProgress.luckStars, 20);
-  assert.equal(parsed.advancedProgress.luckBestScore, 100);
+  assert.equal(parsed.advancedProgress.luckStars, 2);
+  assert.equal(parsed.advancedProgress.luckBestScore, 13);
   assert.equal(parsed.advancedProgress.luckDrawChances, 0);
   assert.equal(parsed.advancedProgress.luckDrawCount, 10);
-  assert.equal(getAdvancedTotalStars(parsed.advancedProgress), 30);
+  assert.equal(getAdvancedTotalStars(parsed.advancedProgress), 12);
   assert.equal(getAdvancedDimensionLevel(parsed.advancedProgress, "reaction"), 0);
 });
 

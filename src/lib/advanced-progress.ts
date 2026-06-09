@@ -237,7 +237,11 @@ function countClearedAdvancedLevels(dimensions: Record<RoundId, AdvancedDimensio
   return ADVANCED_ROUND_IDS.reduce((sum, roundId) => sum + dimensions[roundId].clearedLevels.filter(Boolean).length, 0);
 }
 
-function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp()): AdvancedProgress {
+function estimateLuckScoreFromDrawCount(drawCount: number) {
+  return Math.min(100, Math.max(0, Math.round((drawCount / ADVANCED_DIMENSION_STAR_LIMIT) * 100)));
+}
+
+function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repairLegacyLuckScore = false): AdvancedProgress {
   const source = typeof value === "object" && value !== null ? (value as Partial<AdvancedProgress>) : {};
   const sourceDimensions =
     typeof source.dimensions === "object" && source.dimensions !== null
@@ -246,9 +250,17 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp()): Adva
   const dimensions = Object.fromEntries(
     ADVANCED_ROUND_IDS.map((roundId) => [roundId, sanitizeDimensionProgress(sourceDimensions[roundId])]),
   ) as Record<RoundId, AdvancedDimensionProgress>;
-  const luckStars = clampInteger(source.luckStars, 0, ADVANCED_STAR_LIMITS.luckStars);
+  const sourceLuckStars = clampInteger(source.luckStars, 0, ADVANCED_STAR_LIMITS.luckStars);
   const completedChallengeCount = Math.min(ADVANCED_DIMENSION_STAR_LIMIT, countClearedAdvancedLevels(dimensions));
   const luckDrawCount = clampInteger(source.luckDrawCount, 0, completedChallengeCount);
+  const shouldRepairLegacyLuckScore =
+    repairLegacyLuckScore &&
+    luckDrawCount < ADVANCED_DIMENSION_STAR_LIMIT &&
+    (clampScore(source.luckBestScore) >= 100 || sourceLuckStars >= ADVANCED_STAR_LIMITS.luckStars);
+  const luckBestScore = shouldRepairLegacyLuckScore
+    ? estimateLuckScoreFromDrawCount(luckDrawCount)
+    : clampInteger(source.luckBestScore, Math.min(100, sourceLuckStars * 5), 100);
+  const luckStars = shouldRepairLegacyLuckScore ? getLuckStarsFromScore(luckBestScore) : sourceLuckStars;
 
   return {
     schemaVersion: GAME_STATE_SCHEMA_VERSION,
@@ -259,7 +271,7 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp()): Adva
     endlessBestScores: sanitizeEndlessBestScores(source.endlessBestScores),
     endlessBestRuns: sanitizeEndlessBestRuns(source.endlessBestRuns),
     luckStars,
-    luckBestScore: clampInteger(source.luckBestScore, Math.min(100, luckStars * 5), 100),
+    luckBestScore,
     luckDrawChances: completedChallengeCount - luckDrawCount,
     luckDrawCount,
     updatedAt: typeof source.updatedAt === "string" && source.updatedAt ? source.updatedAt : updatedAt,
@@ -286,7 +298,7 @@ function sanitizePersistedGameState(value: unknown, updatedAt = timestamp()): Pe
   return {
     schemaVersion: GAME_STATE_SCHEMA_VERSION,
     currentResult: sanitizeCurrentResult(source.currentResult, updatedAt),
-    advancedProgress: sanitizeAdvancedProgress(source.advancedProgress, updatedAt),
+    advancedProgress: sanitizeAdvancedProgress(source.advancedProgress, updatedAt, true),
   };
 }
 

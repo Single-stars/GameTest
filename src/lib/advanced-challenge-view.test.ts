@@ -451,12 +451,16 @@ test("advanced level cards use advanced numbering and keep start actions above s
   assert.doesNotMatch(panelSource, /第 \$\{item\.level\} 关/);
   assert.equal(panelSource.indexOf('className="advanced-lobby-slider-row"') < panelSource.indexOf("advanced-lobby-actions"), true);
   assert.equal(panelSource.indexOf("advanced-lobby-actions") < panelSource.indexOf("advanced-goal-card"), true);
-  assert.match(panelRule, /grid-template-rows:[\s\S]*auto[\s\S]*auto[\s\S]*minmax\(0,\s*1fr\)/);
+  assert.match(panelRule, /grid-template-rows:[\s\S]*auto[\s\S]*auto[\s\S]*auto[\s\S]*minmax\(0,\s*1fr\)/);
+  assert.match(panelRule, /min-height:\s*0;/);
+  assert.match(panelRule, /align-content:\s*stretch;/);
   assert.match(goalRule, /min-height:\s*0;/);
+  assert.match(goalRule, /max-height:\s*100%;/);
   assert.match(goalRule, /overflow-y:\s*auto;/);
   assert.match(goalRule, /-webkit-overflow-scrolling:\s*touch;/);
   assert.match(actionsRule, /position:\s*relative;/);
   assert.match(actionsRule, /z-index:\s*4;/);
+  assert.match(actionsRule, /align-self:\s*start;/);
 });
 
 test("locked endless shake randomizes direction with CSS variables", () => {
