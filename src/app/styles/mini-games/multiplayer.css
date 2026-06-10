@@ -383,8 +383,8 @@
 
 .multiplayer-select-status-text {
   position: fixed;
-  left: max(14px, calc((100vw - var(--game-viewport-width, 100vw)) / 2 + env(safe-area-inset-left) + 14px));
-  bottom: max(14px, calc((100vh - var(--game-viewport-height, 100vh)) / 2 + env(safe-area-inset-bottom) + 14px));
+  left: max(14px, calc(env(safe-area-inset-left) + 14px));
+  bottom: max(14px, calc(env(safe-area-inset-bottom) + 14px));
   z-index: 1320;
   max-width: min(420px, calc(var(--game-viewport-width, 100dvw) - 28px));
   color: rgba(35, 48, 42, 0.78);

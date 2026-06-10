@@ -255,21 +255,30 @@ test("luck screen keeps revive coin exchange and test cards visible under the lu
   assert.match(exchangeCardSource, /const exchangeUnlocked = advancedProgress\.luckBestScore >= 100;/);
   assert.match(exchangeCardSource, /const canExchange = exchangeUnlocked && advancedProgress\.luckDrawChances > 0;/);
   assert.match(exchangeCardSource, /if \(!canExchange\) return;/);
-  assert.match(exchangeCardSource, /onExchangeReviveCoin\(\);/);
+  assert.match(exchangeCardSource, /const exchangeResult = onExchangeReviveCoin\(\);/);
+  assert.match(exchangeCardSource, /showReviveCoinFeedback\("兑换成功，复活币 \+1", "exchange"\);/);
+  assert.match(exchangeCardSource, /showReviveCoinFeedback\("已领取复活币 \+1", "claim"\);/);
   assert.match(exchangeCardSource, /onGrantReviveCoinForTest\(\);/);
+  assert.match(exchangeCardSource, /const \[feedback, setFeedback\] = useState/);
   assert.match(exchangeCardSource, /advancedProgress\.reviveCoins/);
   assert.match(exchangeCardSource, /className="luck-revive-exchange-list"/);
-  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-card exchange \$\{exchangeUnlocked \? "unlocked" : "locked"\}`\}/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-card exchange \$\{exchangeUnlocked \? "unlocked" : "locked"\} \$\{feedback\?\.tone === "exchange" \? "claimed" : ""\}`\}/);
   assert.match(exchangeCardSource, /aria-disabled=\{!canExchange \? true : undefined\}/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-action \$\{feedback\?\.tone === "exchange" \? "confirmed" : ""\}`\}/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-action \$\{feedback\?\.tone === "claim" \? "confirmed" : ""\}`\}/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-toast \$\{feedback\.tone\}`\}/);
   assert.doesNotMatch(exchangeCardSource, /blockedNotice|triggerBlockedNotice|setBlockedNotice/);
 
   assert.match(cssSource, /\.luck-revive-exchange-list\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\.locked\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\.test\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-card\.claimed\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-action\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-action\.confirmed\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-icon\s*{/);
-  assert.doesNotMatch(cssSource, /luck-revive-exchange-toast|luck-revive-exchange-popup/);
+  assert.match(cssSource, /\.luck-revive-exchange-toast\s*{/);
+  assert.match(cssSource, /@keyframes luck-revive-exchange-toast-pop/);
 });
 
 test("app page persists revive coin exchange, test grants, and endless consumption", () => {

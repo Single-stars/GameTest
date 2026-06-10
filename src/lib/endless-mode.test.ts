@@ -95,8 +95,8 @@ test("endless skin hidden traits grant one starting life and pig can keep one li
   assert.equal(getEndlessStartingRevives(starfallProgress, "aim", "starfall"), 4);
   assert.equal(getEndlessStartingRevives(emptyProgress, "aim", "starfall"), 3);
 
-  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.099), true);
-  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.1), false);
+  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.249), true);
+  assert.equal(shouldKeepPigEndlessLife("pig", () => 0.25), false);
   assert.equal(shouldKeepPigEndlessLife("cyan", () => 0), false);
 });
 
@@ -249,13 +249,18 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   assert.match(runtimeSource, /reviveCoinUsedRef/);
   assert.match(runtimeSource, /onUseReviveCoinRef/);
   assert.match(runtimeSource, /reviveCoinPrompt/);
+  assert.match(runtimeSource, /reviveCoinAnimating/);
   assert.match(runtimeSource, /reviveCoinAnimationId/);
+  assert.match(runtimeSource, /ENDLESS_REVIVE_COIN_ANIMATION_MS = 1600;/);
   assert.match(runtimeSource, /const canOfferReviveCoin = reviveCoinsRef\.current > 0 && !reviveCoinUsedRef\.current;/);
+  assert.match(runtimeSource, /const runtimePaused = paused \|\| reviveCoinPrompt !== null \|\| reviveCoinAnimating;/);
   assert.match(runtimeSource, /if \(nextRevives <= 0\) \{[\s\S]*if \(canOfferReviveCoin\) \{[\s\S]*setReviveCoinPrompt\([\s\S]*return true;/);
   assert.match(runtimeSource, /const confirmReviveCoin = useCallback/);
   assert.match(runtimeSource, /if \(!onUseReviveCoinRef\.current\(\)\) \{/);
   assert.match(runtimeSource, /reviveCoinUsedRef\.current = true;/);
   assert.match(runtimeSource, /setReviveCoinUsed\(true\);/);
+  assert.match(runtimeSource, /setReviveCoinAnimating\(true\);/);
+  assert.match(runtimeSource, /window\.setTimeout\(\(\) => \{[\s\S]*setReviveCoinAnimating\(false\);[\s\S]*}, ENDLESS_REVIVE_COIN_ANIMATION_MS\)/);
   assert.match(runtimeSource, /revivesRef\.current = normalizedStartingRevives;/);
   assert.match(runtimeSource, /setRevives\(normalizedStartingRevives\);/);
   assert.match(runtimeSource, /energyRef\.current = ENDLESS_ENERGY_THRESHOLD;/);
@@ -267,16 +272,43 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   assert.match(runtimeSource, /className="endless-revive-used"/);
   assert.match(runtimeSource, /className="endless-revive-prompt-backdrop"/);
   assert.match(runtimeSource, /className="endless-revive-totem-burst"/);
+  assert.match(runtimeSource, /className="endless-revive-totem-aura"/);
+  assert.match(runtimeSource, /className="endless-revive-totem-coin main"/);
+  assert.match(runtimeSource, /className="endless-revive-totem-coin-face"/);
+  assert.match(runtimeSource, /className=\{`endless-revive-totem-spark spark-\$\{index \+ 1\}`\}/);
+  assert.doesNotMatch(runtimeSource, /className="endless-revive-totem-coin left"|className="endless-revive-totem-coin right"/);
+  assert.match(runtimeSource, /disabled=\{api\.paused \|\| !api\.canHeal\}/);
+  assert.match(runtimeSource, /disabled=\{api\.paused \|\| !api\.canUseSkill\}/);
   assert.doesNotMatch(runtimeSource, /reviveCoins\s*=\s*999|testReviveCoins|temporaryRevive/);
   assert.match(screenSource, /reviveCoins=\{reviveCoins\}/);
   assert.match(screenSource, /onUseReviveCoin=\{onUseReviveCoin\}/);
+  assert.match(cssSource, /\.endless-hearts\s*{[\s\S]*grid-auto-flow:\s*column;/);
+  assert.doesNotMatch(cssSource, /\.endless-hearts\s*{[\s\S]*grid-template-columns:\s*repeat\(3,/);
   assert.match(cssSource, /\.endless-revive-bank\s*{/);
   assert.match(cssSource, /\.endless-revive-used\s*{/);
   assert.match(cssSource, /\.endless-revive-prompt-backdrop\s*{/);
   assert.match(cssSource, /\.endless-revive-prompt\s*{/);
-  assert.match(cssSource, /\.endless-revive-totem-burst\s*{/);
-  assert.match(cssSource, /@keyframes endless-revive-coin-fly/);
-  assert.match(cssSource, /@keyframes endless-revive-coin-flip/);
+  assert.match(cssSource, /\.endless-revive-totem-burst\s*{[\s\S]*perspective:\s*760px;[\s\S]*contain:\s*layout paint;[\s\S]*overflow:\s*hidden;/);
+  assert.match(cssSource, /\.endless-revive-totem-coin\s*{[\s\S]*transform-origin:\s*50% 50%;[\s\S]*backface-visibility:\s*hidden;/);
+  assert.match(cssSource, /\.endless-revive-totem-coin\.main\s*{[\s\S]*--revive-coin-start-x:\s*clamp\(-304px,\s*-40vw,\s*-144px\);[\s\S]*--revive-coin-start-y:\s*clamp\(136px,\s*31vh,\s*288px\);[\s\S]*width:\s*clamp\(116px,\s*18vw,\s*168px\);[\s\S]*endless-revive-totem-flight 1600ms/);
+  assert.match(cssSource, /\.endless-revive-totem-aura\s*{[\s\S]*endless-revive-totem-aura 1600ms/);
+  assert.match(cssSource, /\.endless-revive-totem-spark\s*{[\s\S]*endless-revive-totem-spark 1600ms/);
+  assert.match(cssSource, /@keyframes endless-revive-totem-flight[\s\S]*rotateY\(-90deg\)[\s\S]*rotateY\(138deg\)[\s\S]*rotateY\(450deg\)/);
+  assert.match(cssSource, /@keyframes endless-revive-totem-aura/);
+  assert.match(cssSource, /@keyframes endless-revive-totem-spark/);
+  assert.doesNotMatch(cssSource, /@keyframes endless-revive-coin-flip|endless-revive-coin-fly/);
+});
+
+test("endless bonus starting life is shown after entry with the normal heart gain animation", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS = 620/);
+  assert.match(runtimeSource, /function getEndlessOpeningReviveFeedbackText\(roundId: RoundId, avatarSkin: PlayerAvatarSkin\)/);
+  assert.match(runtimeSource, /const baseStartingRevives = Math\.min\(ENDLESS_STARTING_REVIVES, normalizedStartingRevives\);/);
+  assert.match(runtimeSource, /const hasOpeningReviveBonus = normalizedStartingRevives > baseStartingRevives;/);
+  assert.match(runtimeSource, /const revivesRef = useRef\(baseStartingRevives\);/);
+  assert.match(runtimeSource, /const \[revives, setRevives\] = useState\(baseStartingRevives\);/);
+  assert.match(runtimeSource, /window\.setTimeout\(\(\) => \{[\s\S]*const nextRevives = Math\.min\(normalizedStartingRevives, revivesRef\.current \+ 1\);[\s\S]*showEnergyFeedback\(getEndlessOpeningReviveFeedbackText\(roundId, avatarSkin\), "heal"\);[\s\S]*setRevives\(nextRevives\);[\s\S]*}, ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS\)/);
 });
 
 test("endless damage invincibility flickers only the player avatar shells", () => {
@@ -1167,8 +1199,8 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.match(hudSource, /endless-skill-button/);
   assert.match(hudSource, /endless-debug-energy-button/);
   assert.match(hudSource, /api\.skillEnding \? "ending" : ""/);
-  assert.match(hudSource, /disabled=\{!api\.canUseSkill\}/);
-  assert.match(hudSource, /disabled=\{!api\.canHeal\}/);
+  assert.match(hudSource, /disabled=\{api\.paused \|\| !api\.canUseSkill\}/);
+  assert.match(hudSource, /disabled=\{api\.paused \|\| !api\.canHeal\}/);
   assert.match(hudSource, /api\.useSkill\(\)/);
   assert.match(hudSource, /api\.useHeal\(\)/);
   assert.match(hudSource, /api\.toggleDebugEnergyLock\(\)/);
@@ -1195,7 +1227,9 @@ test("endless HUD removes strength controls and uses a ten-segment energy meter"
   assert.match(hudCss, /grid-template-rows:\s*auto auto;/);
   assert.match(hudCss, /align-items:\s*start;/);
   assert.match(hudCss, /\.endless-hearts\s*\{/);
-  assert.match(hudCss, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
+  assert.match(hudCss, /grid-auto-flow:\s*column;/);
+  assert.match(hudCss, /grid-auto-columns:\s*32px;/);
+  assert.doesNotMatch(hudCss, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
   assert.match(hudCss, /\.endless-hearts\s*\{[\s\S]*gap:\s*2px;/);
   assert.match(hudCss, /\.endless-heart-token\s*\{[\s\S]*width:\s*32px;[\s\S]*height:\s*34px;/);
   assert.match(hudCss, /\.endless-heart\s*\{[\s\S]*width:\s*32px;[\s\S]*height:\s*32px;/);
@@ -1472,7 +1506,9 @@ test("endless HUD stays separate, plain, and stage-integrated", () => {
 
   assert.match(cssSource, /\.endless-hearts\s*\{/);
   assert.match(cssSource, /\.endless-heart-token\s*\{/);
-  assert.match(heartsRule, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
+  assert.match(heartsRule, /grid-auto-flow:\s*column;/);
+  assert.match(heartsRule, /grid-auto-columns:\s*32px;/);
+  assert.doesNotMatch(heartsRule, /grid-template-columns:\s*repeat\(3,\s*32px\);/);
   assert.match(heartsRule, /gap:\s*2px;/);
   assert.match(tokenRule, /width:\s*32px;/);
   assert.match(tokenRule, /height:\s*34px;/);

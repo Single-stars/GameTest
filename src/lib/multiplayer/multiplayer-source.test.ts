@@ -770,8 +770,9 @@ test("standalone multiplayer select status is fixed bottom-left and renders one 
   assert.doesNotMatch(pageSource, /snapshot\.opponentJoining \? " \/ 好友加入中"/);
   assert.doesNotMatch(pageSource, /standaloneConnectionErrorText \? ` · \$\{standaloneConnectionErrorText\}`/);
   assert.match(statusRule, /position:\s*fixed;/);
-  assert.match(statusRule, /left:\s*max\(14px,\s*calc\(\(100vw - var\(--game-viewport-width, 100vw\)\) \/ 2 \+ env\(safe-area-inset-left\) \+ 14px\)\);/);
-  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(\(100vh - var\(--game-viewport-height, 100vh\)\) \/ 2 \+ env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.match(statusRule, /left:\s*max\(14px,\s*calc\(env\(safe-area-inset-left\) \+ 14px\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.doesNotMatch(statusRule, /100vw|100vh/);
   assert.doesNotMatch(statusRule, /72px/);
 });
 
@@ -1245,7 +1246,8 @@ test("default multiplayer route reuses the level-select room with room controls"
   assert.doesNotMatch(modeHintRule, /left:\s*50%;/);
   assert.match(modeHintRule, /left:\s*max\(16px,\s*env\(safe-area-inset-left\)\);/);
   assert.match(modeHintRule, /right:\s*max\(16px,\s*env\(safe-area-inset-right\)\);/);
-  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(\(100vh - var\(--game-viewport-height, 100vh\)\) \/ 2 \+ env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(env\(safe-area-inset-bottom\) \+ 14px\)\);/);
+  assert.doesNotMatch(statusRule, /100vw|100vh/);
   assert.doesNotMatch(statusRule, /72px/);
   assert.match(dangerButtonRule, /border:\s*1px solid rgba\(122, 34, 34, 0\.34\);/);
   assert.doesNotMatch(pageSource, /联机挑战选关/);

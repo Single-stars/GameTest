@@ -76,8 +76,8 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   custom: "创意",
   cyan: "青蓝",
   ivory: "象牙",
-  lead: "胜势",
-  mastery: "全能",
+  lead: "胜利",
+  mastery: "无限",
   mint: "薄荷",
   paw: "猫爪",
   pig: "猪猪",
@@ -87,7 +87,7 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   slate: "石板",
   starfall: "星陨",
   target: "靶心",
-  relay: "传讯",
+  relay: "分享",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
@@ -97,8 +97,8 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   custom: "来自世界之外的小方块",
   cyan: "原装方块，干净耐看。",
   ivory: "成功方块，尊贵优雅",
-  lead: "比分拉开时也要稳住。",
-  mastery: "八种无尽节奏都试过。",
+  lead: "PVP高手",
+  mastery: "永远在突破自我的路上",
   mint: "清清凉凉，冰冰爽爽",
   paw: "喵~",
   pig: "作者本体",
@@ -108,7 +108,7 @@ export const PLAYER_AVATAR_SKIN_DESCRIPTIONS = {
   slate: "沉着稳重",
   starfall: "三百颗够吗？",
   target: "很难被打中的小方块",
-  relay: "把热闹递给下一位。",
+  relay: "分享快乐是唯一的信条",
 } as const satisfies Record<PlayerAvatarSkin, string>;
 
 type PlayerAvatarSkinUnlock =
@@ -161,8 +161,8 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   custom: { kind: "donation", label: "投喂作者一次解锁" },
   cyan: { kind: "default", label: "默认解锁" },
   ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
-  lead: { kind: "multiplayer-five-point-lead", label: "（在一次联机中获得 5 点比分优势）" },
-  mastery: { kind: "endless-skill-all", label: "（在所有类型的无尽模式中使用一次技能）" },
+  lead: { kind: "multiplayer-five-point-lead", label: "在一次联机游戏中比分领先5点" },
+  mastery: { kind: "endless-skill-all", label: "在所有类型的无尽模式中使用一次技能" },
   mint: { kind: "advanced-final", label: "通关一路向上最终试炼", roundId: "search" },
   paw: { kind: "luck-100", label: "运气达到 100" },
   pig: { kind: "king-rank", label: "达成最强王者" },
@@ -172,7 +172,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   slate: { kind: "advanced-final", label: "通关一路向下最终试炼", roundId: "stroop" },
   starfall: { kind: "legend-100", label: "传奇王者 100 星解锁" },
   target: { kind: "advanced-final", label: "通关移动靶最终试炼", roundId: "aim" },
-  relay: { kind: "share-3", label: "（累计触发分享/复制邀请 3 次）" },
+  relay: { kind: "share-3", label: "累计3次分享游戏解锁" },
 } as const satisfies Record<PlayerAvatarSkin, PlayerAvatarSkinUnlock>;
 
 export const PLAYER_AVATAR_FACELESS_SKINS = ["basketball", "pig", "paw", "custom"] as readonly PlayerAvatarSkin[];

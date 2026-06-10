@@ -177,7 +177,7 @@ export function getEndlessStartingRevives(progress: AdvancedProgress, roundId: R
 }
 
 export function shouldKeepPigEndlessLife(skin: PlayerAvatarSkin, random: () => number = Math.random) {
-  return skin === "pig" && random() < 0.1;
+  return skin === "pig" && random() < 0.25;
 }
 
 export function getEndlessLevelState(currentLevel: number): EndlessLevelState {

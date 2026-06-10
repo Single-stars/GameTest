@@ -257,11 +257,8 @@ function countClearedAdvancedLevels(dimensions: Record<RoundId, AdvancedDimensio
   return ADVANCED_ROUND_IDS.reduce((sum, roundId) => sum + dimensions[roundId].clearedLevels.filter(Boolean).length, 0);
 }
 
-function estimateLuckScoreFromDrawCount(drawCount: number) {
-  return Math.min(100, Math.max(0, Math.round((drawCount / ADVANCED_DIMENSION_STAR_LIMIT) * 100)));
-}
-
 function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repairLegacyLuckScore = false): AdvancedProgress {
+  void repairLegacyLuckScore;
   const source = typeof value === "object" && value !== null ? (value as Partial<AdvancedProgress>) : {};
   const sourceDimensions =
     typeof source.dimensions === "object" && source.dimensions !== null
@@ -270,17 +267,10 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repai
   const dimensions = Object.fromEntries(
     ADVANCED_ROUND_IDS.map((roundId) => [roundId, sanitizeDimensionProgress(sourceDimensions[roundId])]),
   ) as Record<RoundId, AdvancedDimensionProgress>;
-  const sourceLuckStars = clampInteger(source.luckStars, 0, ADVANCED_STAR_LIMITS.luckStars);
   const completedChallengeCount = Math.min(ADVANCED_DIMENSION_STAR_LIMIT, countClearedAdvancedLevels(dimensions));
   const luckDrawCount = clampInteger(source.luckDrawCount, 0, completedChallengeCount);
-  const shouldRepairLegacyLuckScore =
-    repairLegacyLuckScore &&
-    luckDrawCount < ADVANCED_DIMENSION_STAR_LIMIT &&
-    (clampScore(source.luckBestScore) >= 100 || sourceLuckStars >= ADVANCED_STAR_LIMITS.luckStars);
-  const luckBestScore = shouldRepairLegacyLuckScore
-    ? estimateLuckScoreFromDrawCount(luckDrawCount)
-    : clampInteger(source.luckBestScore, Math.min(100, sourceLuckStars * 5), 100);
-  const luckStars = shouldRepairLegacyLuckScore ? getLuckStarsFromScore(luckBestScore) : sourceLuckStars;
+  const luckBestScore = clampScore(source.luckBestScore);
+  const luckStars = getLuckStarsFromScore(luckBestScore);
   const reviveCoinExchangeCount = clampInteger(
     source.reviveCoinExchangeCount,
     0,
@@ -300,7 +290,7 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repai
     endlessBestRuns: sanitizeEndlessBestRuns(source.endlessBestRuns),
     luckStars,
     luckBestScore,
-    luckDrawChances: completedChallengeCount - luckDrawCount - reviveCoinExchangeCount,
+    luckDrawChances: Math.max(0, completedChallengeCount - luckDrawCount - reviveCoinExchangeCount),
     luckDrawCount,
     reviveCoins: clampInteger(source.reviveCoins, 0, Number.MAX_SAFE_INTEGER),
     reviveCoinExchangeCount,
@@ -503,7 +493,7 @@ export function recordAdvancedChallengeResult(progress: AdvancedProgress, record
   return {
     ...sanitized,
     dimensions: nextDimensions,
-    luckDrawChances: nextCompletedChallengeCount - sanitized.luckDrawCount,
+    luckDrawChances: Math.max(0, nextCompletedChallengeCount - sanitized.luckDrawCount - sanitized.reviveCoinExchangeCount),
     updatedAt: record.completedAt ?? timestamp(),
   };
 }

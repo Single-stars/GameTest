@@ -1286,10 +1286,12 @@
   grid-column: 1;
   grid-row: 1;
   display: grid;
-  grid-template-columns: repeat(3, 32px);
+  grid-auto-flow: column;
+  grid-auto-columns: 32px;
   gap: 2px;
   align-items: center;
   justify-content: start;
+  width: fit-content;
 }
 
 .endless-heart-token {
@@ -1803,7 +1805,7 @@
   }
 
   .endless-hearts {
-    grid-template-columns: repeat(3, 28px);
+    grid-auto-columns: 28px;
     gap: 2px;
   }
 
@@ -1976,17 +1978,16 @@
   z-index: 25;
   left: clamp(8px, 1.8vw, 14px);
   bottom: clamp(8px, 1.8vw, 14px);
-  min-height: 34px;
-  display: inline-grid;
-  grid-auto-flow: column;
+  min-height: 0;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(36, 46, 62, 0.12);
-  border-radius: 8px;
-  padding: 5px 8px;
-  background: rgba(255, 253, 248, 0.82);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   color: #5a3b0a;
-  box-shadow: 0 10px 24px rgba(24, 24, 24, 0.1);
+  box-shadow: none;
   pointer-events: none;
 }
 
@@ -2029,13 +2030,13 @@
 }
 
 .endless-revive-prompt {
-  width: min(100%, 300px);
+  width: min(100%, 336px);
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 20px;
+  padding: 22px 20px 20px;
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 24px 70px rgba(24, 24, 24, 0.22);
@@ -2043,8 +2044,8 @@
 }
 
 .endless-revive-prompt-icon {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -2053,13 +2054,13 @@
 }
 
 .endless-revive-prompt-icon svg {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
 }
 
 .endless-revive-prompt h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1.05;
 }
 
@@ -2088,85 +2089,251 @@
   inset: 0;
   display: grid;
   place-items: center;
+  perspective: 760px;
+  contain: layout paint;
+  isolation: isolate;
+  overflow: hidden;
+  transform-style: preserve-3d;
   pointer-events: none;
 }
 
 .endless-revive-totem-coin {
   position: absolute;
-  width: 64px;
-  height: 64px;
   display: grid;
   place-items: center;
+  transform-origin: 50% 50%;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.endless-revive-totem-coin.main {
+  --revive-coin-start-x: clamp(-304px, -40vw, -144px);
+  --revive-coin-start-y: clamp(136px, 31vh, 288px);
+  width: clamp(116px, 18vw, 168px);
+  height: clamp(116px, 18vw, 168px);
   color: #d8a221;
-  filter: drop-shadow(0 12px 18px rgba(90, 59, 10, 0.22));
-  animation:
-    endless-revive-coin-fly 920ms cubic-bezier(0.16, 1, 0.3, 1) both,
-    endless-revive-coin-flip 620ms linear both;
+  filter: drop-shadow(0 16px 22px rgba(90, 59, 10, 0.24));
+  animation: endless-revive-totem-flight 1600ms cubic-bezier(0.18, 0.82, 0.2, 1) both;
 }
 
-.endless-revive-totem-coin svg {
-  width: 64px;
-  height: 64px;
+.endless-revive-totem-coin-face {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
-.endless-revive-totem-coin.left {
-  width: 38px;
-  height: 38px;
-  color: #14b8a6;
-  animation-delay: 70ms, 70ms;
-  --endless-revive-fly-x: -92px;
-  --endless-revive-fly-y: -48px;
+.endless-revive-totem-coin.main svg {
+  width: 100%;
+  height: 100%;
 }
 
-.endless-revive-totem-coin.right {
-  width: 38px;
-  height: 38px;
-  color: #e84d5b;
-  animation-delay: 110ms, 110ms;
-  --endless-revive-fly-x: 92px;
-  --endless-revive-fly-y: -44px;
+.endless-revive-totem-aura {
+  --revive-coin-start-x: clamp(-304px, -40vw, -144px);
+  --revive-coin-start-y: clamp(136px, 31vh, 288px);
+  position: absolute;
+  width: clamp(128px, 24vw, 224px);
+  height: clamp(128px, 24vw, 224px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 246, 184, 0.5) 0 16%, rgba(255, 215, 96, 0.22) 32%, rgba(20, 184, 166, 0.08) 48%, transparent 68%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: endless-revive-totem-aura 1600ms ease-out both;
 }
 
-.endless-revive-totem-coin.left svg,
-.endless-revive-totem-coin.right svg {
-  width: 38px;
-  height: 38px;
+.endless-revive-totem-spark {
+  --spark-start-x: clamp(-304px, -40vw, -144px);
+  --spark-start-y: clamp(136px, 31vh, 288px);
+  --spark-mid-x: 0px;
+  --spark-mid-y: -42px;
+  --spark-end-x: 0px;
+  --spark-end-y: -118px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #ffe38a;
+  box-shadow:
+    0 0 6px rgba(255, 227, 138, 0.7),
+    0 0 12px rgba(20, 184, 166, 0.26);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: endless-revive-totem-spark 1600ms ease-out both;
 }
 
-@keyframes endless-revive-coin-fly {
+.endless-revive-totem-spark.spark-1 {
+  --spark-mid-x: -54px;
+  --spark-mid-y: -28px;
+  --spark-end-x: -96px;
+  --spark-end-y: -122px;
+}
+
+.endless-revive-totem-spark.spark-2 {
+  --spark-mid-x: -30px;
+  --spark-mid-y: -66px;
+  --spark-end-x: -58px;
+  --spark-end-y: -156px;
+  background: #14b8a6;
+}
+
+.endless-revive-totem-spark.spark-3 {
+  --spark-mid-x: 34px;
+  --spark-mid-y: -58px;
+  --spark-end-x: 76px;
+  --spark-end-y: -146px;
+}
+
+.endless-revive-totem-spark.spark-4 {
+  --spark-mid-x: 62px;
+  --spark-mid-y: -16px;
+  --spark-end-x: 112px;
+  --spark-end-y: -104px;
+  background: #14b8a6;
+}
+
+.endless-revive-totem-spark.spark-5 {
+  --spark-mid-x: -12px;
+  --spark-mid-y: 22px;
+  --spark-end-x: -24px;
+  --spark-end-y: -82px;
+}
+
+.endless-revive-totem-spark.spark-6 {
+  --spark-mid-x: 18px;
+  --spark-mid-y: 18px;
+  --spark-end-x: 44px;
+  --spark-end-y: -86px;
+  width: 7px;
+  height: 7px;
+}
+
+.endless-revive-totem-spark.spark-7 {
+  --spark-mid-x: -72px;
+  --spark-mid-y: 12px;
+  --spark-end-x: -132px;
+  --spark-end-y: -72px;
+  width: 7px;
+  height: 7px;
+}
+
+@keyframes endless-revive-totem-flight {
   0% {
     opacity: 0;
-    transform: translate3d(0, 36px, 0) scale(0.52);
+    transform: translate3d(var(--revive-coin-start-x), var(--revive-coin-start-y), -180px) rotateZ(-14deg) rotateY(-90deg) scale(0.2);
+  }
+
+  16% {
+    opacity: 0.18;
+    transform: translate3d(clamp(-244px, -34vw, -132px), clamp(170px, 28vh, 244px), -140px) rotateZ(-12deg) rotateY(-60deg) scale(0.32);
+  }
+
+  34% {
+    opacity: 0.62;
+    transform: translate3d(clamp(-170px, -24vw, -92px), clamp(118px, 20vh, 184px), -92px) rotateZ(-8deg) rotateY(-12deg) scale(0.54);
+  }
+
+  50% {
+    opacity: 0.94;
+    transform: translate3d(clamp(-96px, -14vw, -50px), clamp(66px, 12vh, 112px), -42px) rotateZ(-5deg) rotateY(42deg) scale(0.8);
+  }
+
+  64% {
+    opacity: 1;
+    transform: translate3d(clamp(-18px, -3vw, -4px), clamp(18px, 4vh, 48px), 0) rotateZ(-2deg) rotateY(138deg) scale(1.06);
+  }
+
+  78% {
+    opacity: 1;
+    transform: translate3d(72px, -44px, -30px) rotateZ(2deg) rotateY(264deg) scale(1.01);
+  }
+
+  90% {
+    opacity: 0.72;
+    transform: translate3d(144px, -118px, -92px) rotateZ(5deg) rotateY(384deg) scale(0.72);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(214px, -188px, -150px) rotateZ(8deg) rotateY(450deg) scale(0.18);
+  }
+}
+
+@keyframes endless-revive-totem-aura {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--revive-coin-start-x, -180px), var(--revive-coin-start-y, 180px), -120px) scale(0.24);
+  }
+
+  16% {
+    opacity: 0.12;
+    transform: translate3d(-26px, 24px, -72px) scale(0.42);
+  }
+
+  34% {
+    opacity: 0.46;
+    transform: translate3d(-12px, 10px, -24px) scale(0.72);
+  }
+
+  54% {
+    opacity: 0.7;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  74% {
+    opacity: 0.45;
+    transform: translate3d(24px, -32px, -24px) scale(1.14);
+  }
+
+  90% {
+    opacity: 0.18;
+    transform: translate3d(48px, -86px, -72px) scale(1.34);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(78px, -146px, -128px) scale(1.54);
+  }
+}
+
+@keyframes endless-revive-totem-spark {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--spark-start-x), var(--spark-start-y), -96px) scale(0.18);
   }
 
   18% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1.14);
+    opacity: 0.36;
+    transform: translate3d(-18px, 20px, -48px) scale(0.42);
   }
 
-  66% {
-    opacity: 1;
-    transform: translate3d(var(--endless-revive-fly-x, 0), var(--endless-revive-fly-y, -72px), 0) scale(1);
+  52% {
+    opacity: 0.88;
+    transform: translate3d(var(--spark-mid-x), var(--spark-mid-y), 0) scale(0.98);
+  }
+
+  76% {
+    opacity: 0.52;
+    transform: translate3d(calc(var(--spark-mid-x) * 0.6), calc(var(--spark-mid-y) * 0.6), -28px) scale(0.64);
   }
 
   100% {
     opacity: 0;
-    transform: translate3d(var(--endless-revive-fly-x, 0), calc(var(--endless-revive-fly-y, -72px) - 28px), 0) scale(0.88);
-  }
-}
-
-@keyframes endless-revive-coin-flip {
-  0% {
-    rotate: 0deg;
-  }
-
-  100% {
-    rotate: 720deg;
+    transform: translate3d(var(--spark-end-x), var(--spark-end-y), -96px) scale(0.16);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .endless-revive-totem-coin {
+  .endless-revive-totem-coin.main,
+  .endless-revive-totem-aura,
+  .endless-revive-totem-spark {
     animation-duration: 1ms;
     animation-iteration-count: 1;
   }

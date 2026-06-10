@@ -29,11 +29,15 @@ test("doodle jump moves only while pressing the left or right half of the screen
   assert.doesNotMatch(doodleSource, /current\.playerX \+ \(controlXRef\.current - current\.playerX\)/);
   assert.match(doodleSource, /const inputDirectionRef = useRef\(0\);/);
   assert.match(doodleSource, /const inputPointerIdRef = useRef<number \| null>\(null\);/);
+  assert.match(doodleSource, /const lastDoodleTurnDirectionRef = useRef\(0\);/);
   assert.match(doodleSource, /function chooseDoodleDirection\(event: ReactPointerEvent<HTMLDivElement>\)/);
+  assert.match(doodleSource, /const queueDoodleInputTurn = useCallback/);
+  assert.match(doodleSource, /current\.playerTurns \+= turnDirection;/);
   assert.match(doodleSource, /const updateDoodleDirection = useCallback/);
   assert.match(doodleSource, /if \(inputPointerIdRef\.current !== event\.pointerId\) return;/);
   assert.match(componentSource, /jumpTurnAvailable: boolean;/);
   assert.match(doodleSource, /const direction = coOpRole \? \(coOpRole === "left" \? -1 : 1\) : chooseDoodleDirection\(event\);/);
+  assert.match(doodleSource, /queueDoodleInputTurn\(direction\);/);
   assert.match(doodleSource, /inputDirectionRef\.current = direction;/);
   assert.doesNotMatch(doodleSource, /lastMoveDirectionRef/);
   assert.match(doodleSource, /inputPointerIdRef\.current = event\.pointerId;/);
@@ -52,9 +56,8 @@ test("doodle jump moves only while pressing the left or right half of the screen
   assert.match(doodleSource, /const remoteCoOpDirection = coOpInputState\?\.direction === "left" \? -1 : coOpInputState\?\.direction === "right" \? 1 : 0;/);
   assert.match(doodleSource, /return clamp\(localCoOpDirection \+ remoteCoOpDirection, -1, 1\);/);
   assert.match(doodleSource, /coOpInputStateRef\.current = coOpInputState;[\s\S]*if \(\(coOpInputState\?\.direction \?\? "none"\) !== "none"\) startDoodle\(\);/);
-  assert.match(doodleSource, /if \(inputDirection !== 0 && jumpTurnAvailable\)/);
   assert.match(doodleSource, /const turnDirection = inputDirection < 0 \? -1 : 1;/);
-  assert.match(doodleSource, /jumpTurnAvailable = false;/);
+  assert.doesNotMatch(doodleSource, /if \(inputDirection !== 0 && jumpTurnAvailable\)/);
   assert.match(doodleSource, /jumpTurnAvailable = true;/);
   assert.match(doodleSource, /current\.jumpTurnAvailable = jumpTurnAvailable;/);
   assert.doesNotMatch(doodleSource, /if \(platform\.risk\) riskHit \+= 1;[\s\S]{0,120}playerTurns \+=/);

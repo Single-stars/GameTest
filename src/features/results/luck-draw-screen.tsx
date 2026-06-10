@@ -328,19 +328,42 @@ function ReviveCoinExchangeCards({
 }) {
   const exchangeUnlocked = advancedProgress.luckBestScore >= 100;
   const canExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0;
+  const feedbackTimerRef = useRef<number | null>(null);
+  const feedbackIdRef = useRef(0);
+  const [feedback, setFeedback] = useState<{ id: number; text: string; tone: "exchange" | "claim" } | null>(null);
+
+  const showReviveCoinFeedback = useCallback((text: string, tone: "exchange" | "claim") => {
+    feedbackIdRef.current += 1;
+    const nextFeedback = { id: feedbackIdRef.current, text, tone };
+    setFeedback(nextFeedback);
+    if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = window.setTimeout(() => {
+      feedbackTimerRef.current = null;
+      setFeedback((current) => (current?.id === nextFeedback.id ? null : current));
+    }, 1280);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
+    };
+  }, []);
 
   const exchange = () => {
     if (!canExchange) return;
-    onExchangeReviveCoin();
+    const exchangeResult = onExchangeReviveCoin();
+    if (!exchangeResult) return;
+    showReviveCoinFeedback("兑换成功，复活币 +1", "exchange");
   };
 
   const claimTestCoin = () => {
     onGrantReviveCoinForTest();
+    showReviveCoinFeedback("已领取复活币 +1", "claim");
   };
 
   return (
     <section className="luck-revive-exchange-list" aria-label="复活币">
-      <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"}`}>
+      <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"} ${feedback?.tone === "exchange" ? "claimed" : ""}`}>
         <span className="luck-revive-exchange-icon" aria-hidden="true">
           <DonateIcon />
         </span>
@@ -354,14 +377,14 @@ function ReviveCoinExchangeCards({
         </div>
         <button
           aria-disabled={!canExchange ? true : undefined}
-          className="luck-revive-exchange-action"
+          className={`luck-revive-exchange-action ${feedback?.tone === "exchange" ? "confirmed" : ""}`}
           type="button"
           onClick={exchange}
         >
-          兑换
+          {feedback?.tone === "exchange" ? "已兑换" : "兑换"}
         </button>
       </article>
-      <article className="luck-revive-exchange-card test">
+      <article className={`luck-revive-exchange-card test ${feedback?.tone === "claim" ? "claimed" : ""}`}>
         <span className="luck-revive-exchange-icon" aria-hidden="true">
           <DonateIcon />
         </span>
@@ -373,10 +396,15 @@ function ReviveCoinExchangeCards({
           <span>持有</span>
           <strong>{advancedProgress.reviveCoins}</strong>
         </div>
-        <button className="luck-revive-exchange-action" type="button" onClick={claimTestCoin}>
-          领取
+        <button className={`luck-revive-exchange-action ${feedback?.tone === "claim" ? "confirmed" : ""}`} type="button" onClick={claimTestCoin}>
+          {feedback?.tone === "claim" ? "已领取" : "领取"}
         </button>
       </article>
+      {feedback ? (
+        <div className={`luck-revive-exchange-toast ${feedback.tone}`} role="status" aria-live="polite">
+          {feedback.text}
+        </div>
+      ) : null}
     </section>
   );
 }

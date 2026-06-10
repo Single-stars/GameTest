@@ -85,6 +85,15 @@ test("advanced clears show lucky coin rewards while rank changes use the full-sc
   assert.match(pageSource, /createRankRewardItem/);
   assert.match(pageSource, /getNewlyUnlockedPlayerAvatarSkins/);
   assert.match(pageSource, /openAvatarLabWithSkin/);
+  assert.match(pageSource, /pendingEndlessSkillRewardItemsRef/);
+  assert.match(pageSource, /const recordAdvancedEndlessSkillUse = useCallback\(\(roundId: RoundId\) => \{/);
+  assert.match(pageSource, /const previousProgress = advancedProgressRef\.current;/);
+  assert.match(pageSource, /const nextProgress = persistAdvancedProgressUpdate\(\(progress\) => recordEndlessSkillUse\(progress, roundId\)\);/);
+  assert.match(pageSource, /pendingEndlessSkillRewardItemsRef\.current = compactRewardItems\(\[/);
+  assert.match(pageSource, /const flushPendingEndlessSkillRewards = useCallback/);
+  assert.match(pageSource, /transitionToStageThenRun\("advanced", flushPendingEndlessSkillRewards\)/);
+  assert.match(pageSource, /completeAdvancedEndlessRound/);
+  assert.match(pageSource, /completeEndlessChallengeRound/);
 
   assert.match(skinSource, /export function getNewlyUnlockedPlayerAvatarSkins/);
   assert.match(advancedCss, /\.advanced-luck-coin-card/);

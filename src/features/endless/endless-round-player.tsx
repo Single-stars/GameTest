@@ -49,6 +49,9 @@ const ENDLESS_SPECIAL_BONUS_SCORE = 2;
 const ENDLESS_BONUS_POPUP_MS = 1500;
 const ENDLESS_FEEDBACK_POPUP_MS = 1400;
 const ENDLESS_DAMAGE_PROTECTION_MS = 500;
+const ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS = 620;
+const ENDLESS_REVIVE_COIN_ANIMATION_MS = 1600;
+const ENDLESS_REVIVE_TOTEM_SPARKS = Array.from({ length: 3 }, (_, index) => index);
 
 export type EndlessRoundCompletion = {
   bonusActions: number;
@@ -72,6 +75,7 @@ type EndlessRunApi = EndlessMiniGameRuntime & {
   paused: boolean;
   reportedDifficulty: number;
   reviveCoinAnimationId: number;
+  reviveCoinAnimating: boolean;
   reviveCoinPrompt: EndlessReviveCoinPrompt | null;
   reviveCoinUsed: boolean;
   reviveCoins: number;
@@ -106,6 +110,21 @@ type EndlessSegment = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
+}
+
+function getEndlessOpeningReviveFeedbackText(roundId: RoundId, avatarSkin: PlayerAvatarSkin) {
+  if (avatarSkin === "starfall") return "传说精通！";
+  const labels: Record<RoundId, string> = {
+    aim: "精准精通",
+    braking: "刹停精通",
+    memory: "记忆精通",
+    patience: "耐心精通",
+    reaction: "反应精通",
+    rhythm: "节奏精通",
+    search: "走位精通",
+    stroop: "识别精通",
+  };
+  return `${labels[roundId] ?? "无尽精通"}！`;
 }
 
 function updateStageParams(config: AdvancedStageConfig, patch: MiniGameParams): AdvancedStageConfig {
@@ -251,6 +270,8 @@ function useEndlessRun({
   startingRevives?: number;
 }): EndlessRunApi {
   const normalizedStartingRevives = Math.max(1, Math.floor(Number.isFinite(startingRevives) ? startingRevives : ENDLESS_STARTING_REVIVES));
+  const baseStartingRevives = Math.min(ENDLESS_STARTING_REVIVES, normalizedStartingRevives);
+  const hasOpeningReviveBonus = normalizedStartingRevives > baseStartingRevives;
   const startedAtRef = useRef(0);
   const completedRef = useRef(false);
   const pausedRef = useRef(paused);
@@ -265,10 +286,11 @@ function useEndlessRun({
   const bonusPopupTimerRef = useRef<number | null>(null);
   const finishTimerRef = useRef<number | null>(null);
   const metricsRef = useRef<Record<string, number>>({});
-  const revivesRef = useRef(normalizedStartingRevives);
+  const revivesRef = useRef(baseStartingRevives);
   const reviveCoinsRef = useRef(reviveCoins);
   const reviveCoinUsedRef = useRef(false);
   const reviveCoinPromptIdRef = useRef(0);
+  const openingReviveBonusAppliedRef = useRef(false);
   const onUseReviveCoinRef = useRef(onUseReviveCoin);
   const onSkillUseRef = useRef(onSkillUse);
   const shieldChargesRef = useRef(0);
@@ -276,6 +298,8 @@ function useEndlessRun({
   const activeSkillRef = useRef<EndlessActiveSkill | null>(null);
   const skillTimerRef = useRef<number | null>(null);
   const skillEndingTimerRef = useRef<number | null>(null);
+  const reviveCoinAnimationTimerRef = useRef<number | null>(null);
+  const openingReviveBonusTimerRef = useRef<number | null>(null);
   const onSkillEndRef = useRef<((skill: EndlessActiveSkill) => void) | null>(null);
   const damageInvincibleUntilRef = useRef(0);
   const damageInvincibleTimerRef = useRef<number | null>(null);
@@ -284,9 +308,10 @@ function useEndlessRun({
   const [coreActions, setCoreActions] = useState(0);
   const [energy, setEnergy] = useState(0);
   const [energyPopups, setEnergyPopups] = useState<EndlessEnergyPopup[]>([]);
-  const [revives, setRevives] = useState(normalizedStartingRevives);
+  const [revives, setRevives] = useState(baseStartingRevives);
   const [reviveCoinPrompt, setReviveCoinPrompt] = useState<EndlessReviveCoinPrompt | null>(null);
   const [reviveCoinUsed, setReviveCoinUsed] = useState(false);
+  const [reviveCoinAnimating, setReviveCoinAnimating] = useState(false);
   const [reviveCoinAnimationId, setReviveCoinAnimationId] = useState(0);
   const [shieldCharges, setShieldCharges] = useState(0);
   const [debugEnergyLocked, setDebugEnergyLocked] = useState(false);
@@ -393,6 +418,25 @@ function useEndlessRun({
     energyPopupTimersRef.current.push(timer);
   }, []);
 
+  React.useEffect(() => {
+    if (!hasOpeningReviveBonus || openingReviveBonusAppliedRef.current || completedRef.current) return;
+    if (openingReviveBonusTimerRef.current !== null) window.clearTimeout(openingReviveBonusTimerRef.current);
+    openingReviveBonusTimerRef.current = window.setTimeout(() => {
+      openingReviveBonusTimerRef.current = null;
+      if (completedRef.current || openingReviveBonusAppliedRef.current || revivesRef.current >= normalizedStartingRevives) return;
+      openingReviveBonusAppliedRef.current = true;
+      const nextRevives = Math.min(normalizedStartingRevives, revivesRef.current + 1);
+      if (nextRevives <= revivesRef.current) return;
+      showEnergyFeedback(getEndlessOpeningReviveFeedbackText(roundId, avatarSkin), "heal");
+      revivesRef.current = nextRevives;
+      setRevives(nextRevives);
+    }, ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS);
+    return () => {
+      if (openingReviveBonusTimerRef.current !== null) window.clearTimeout(openingReviveBonusTimerRef.current);
+      openingReviveBonusTimerRef.current = null;
+    };
+  }, [avatarSkin, hasOpeningReviveBonus, normalizedStartingRevives, roundId, showEnergyFeedback]);
+
   const showBonusFeedback = useCallback((label: string, amount: number) => {
     const popup = {
       amount,
@@ -455,7 +499,7 @@ function useEndlessRun({
     skillTimerRef.current = window.setTimeout(endSkill, remainingMs);
   }, [clearSkillTimers, endSkill]);
 
-  const runtimePaused = paused || reviveCoinPrompt !== null;
+  const runtimePaused = paused || reviveCoinPrompt !== null || reviveCoinAnimating;
 
   React.useEffect(() => {
     if (runtimePaused === pausedRef.current) return;
@@ -603,6 +647,12 @@ function useEndlessRun({
     setEnergy(ENDLESS_ENERGY_THRESHOLD);
     syncPassiveShieldFromEnergy(ENDLESS_ENERGY_THRESHOLD);
     setDamageInvincibleUntil(performance.now() + ENDLESS_DAMAGE_PROTECTION_MS);
+    setReviveCoinAnimating(true);
+    if (reviveCoinAnimationTimerRef.current !== null) window.clearTimeout(reviveCoinAnimationTimerRef.current);
+    reviveCoinAnimationTimerRef.current = window.setTimeout(() => {
+      reviveCoinAnimationTimerRef.current = null;
+      setReviveCoinAnimating(false);
+    }, ENDLESS_REVIVE_COIN_ANIMATION_MS);
     setReviveCoinAnimationId((current) => current + 1);
     setReviveCoinPrompt(null);
     showEnergyFeedback("复活", "heal");
@@ -646,7 +696,7 @@ function useEndlessRun({
       setDamageInvincibleUntil(nowMs + ENDLESS_DAMAGE_PROTECTION_MS);
       incrementMetric("damageTaken");
       endSkill();
-      if (revivesRef.current <= 1 && shouldKeepPigEndlessLife(avatarSkin)) {
+      if (!reviveCoinUsedRef.current && revivesRef.current <= 1 && shouldKeepPigEndlessLife(avatarSkin)) {
         revivesRef.current = 1;
         setRevives(1);
         showEnergyFeedback("猪猪保命！", "heal");
@@ -682,6 +732,8 @@ function useEndlessRun({
       if (finishTimerRef.current !== null) window.clearTimeout(finishTimerRef.current);
       clearSkillTimers();
       if (damageInvincibleTimerRef.current !== null) window.clearTimeout(damageInvincibleTimerRef.current);
+      if (reviveCoinAnimationTimerRef.current !== null) window.clearTimeout(reviveCoinAnimationTimerRef.current);
+      if (openingReviveBonusTimerRef.current !== null) window.clearTimeout(openingReviveBonusTimerRef.current);
       if (bonusPopupTimerRef.current !== null) window.clearTimeout(bonusPopupTimerRef.current);
       bonusPopupTimerRef.current = null;
       for (const timer of energyPopupTimersRef.current) window.clearTimeout(timer);
@@ -745,6 +797,7 @@ function useEndlessRun({
     reportDifficulty,
     reportedDifficulty,
     reviveCoinAnimationId,
+    reviveCoinAnimating,
     reviveCoinPrompt,
     reviveCoinUsed,
     reviveCoins,
@@ -904,7 +957,7 @@ function EndlessHud({
         <button
           className={`endless-action-button endless-heal-button ${healActionReady ? "" : "hidden"}`}
           type="button"
-          disabled={!api.canHeal}
+          disabled={api.paused || !api.canHeal}
           aria-hidden={!healActionReady}
           aria-label="Use full energy to heal"
           onPointerDown={(event) => {
@@ -918,7 +971,7 @@ function EndlessHud({
         <button
           className={`endless-action-button endless-skill-button ${skillActionReady ? "" : "hidden"} ${api.skillActive ? "active" : ""} ${api.skillEnding ? "ending" : ""}`}
           type="button"
-          disabled={!api.canUseSkill}
+          disabled={api.paused || !api.canUseSkill}
           aria-hidden={!skillActionReady}
           aria-pressed={api.skillActive}
           aria-label={api.skillActive ? "Skill active" : `Use skill for ${ENDLESS_SKILL_COST} energy`}
@@ -987,14 +1040,14 @@ function EndlessReviveCoinAnimation({ animationId }: { animationId: number }) {
   if (animationId <= 0) return null;
   return (
     <div className="endless-revive-totem-burst" key={animationId} aria-hidden="true">
+      <span className="endless-revive-totem-aura" />
+      {ENDLESS_REVIVE_TOTEM_SPARKS.map((index) => (
+        <span className={`endless-revive-totem-spark spark-${index + 1}`} key={index} />
+      ))}
       <span className="endless-revive-totem-coin main">
-        <DonateIcon />
-      </span>
-      <span className="endless-revive-totem-coin left">
-        <DonateIcon />
-      </span>
-      <span className="endless-revive-totem-coin right">
-        <DonateIcon />
+        <span className="endless-revive-totem-coin-face">
+          <DonateIcon />
+        </span>
       </span>
     </div>
   );
@@ -1138,7 +1191,7 @@ export function EndlessRoundPlayer({
         />
         <EndlessReviveCoinBank api={api} />
         <EndlessReviveCoinPrompt api={api} />
-        <EndlessReviveCoinAnimation animationId={api.reviveCoinAnimationId} />
+        <EndlessReviveCoinAnimation key={api.reviveCoinAnimationId} animationId={api.reviveCoinAnimationId} />
         <div className="endless-energy-popups" aria-live="polite">
           {api.energyPopups.map((popup) => (
             <span className={`endless-energy-popup ${popup.tone}`} key={popup.id}>

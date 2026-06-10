@@ -622,6 +622,7 @@ export function DoodleJumpPrototype({
     return runtime;
   }, [isEndlessRun, logicStageWidth, world]);
   const inputDirectionRef = useRef(0);
+  const lastDoodleTurnDirectionRef = useRef(0);
   const inputPointerIdRef = useRef<number | null>(null);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
   const remotePlayerShellRef = useRef<HTMLDivElement | null>(null);
@@ -795,13 +796,31 @@ export function DoodleJumpPrototype({
     return event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
   }
 
+  const queueDoodleInputTurn = useCallback((inputDirection: number) => {
+    if (inputDirection === 0) {
+      lastDoodleTurnDirectionRef.current = 0;
+      return;
+    }
+    const turnDirection = inputDirection < 0 ? -1 : 1;
+    if (lastDoodleTurnDirectionRef.current === turnDirection) return;
+    lastDoodleTurnDirectionRef.current = turnDirection;
+    if (authoritativePlayback) return;
+    const current = runtimeRef.current;
+    if (current.status !== "playing") return;
+    current.playerTurns += turnDirection;
+    current.jumpTurnAvailable = false;
+    syncDoodleView();
+    syncDoodleRuntimeState(performance.now(), true);
+  }, [authoritativePlayback, syncDoodleRuntimeState, syncDoodleView]);
+
   const updateDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (inputPointerIdRef.current !== event.pointerId) return;
     const direction = coOpRole ? (coOpRole === "left" ? -1 : 1) : chooseDoodleDirection(event);
     inputDirectionRef.current = direction;
+    queueDoodleInputTurn(direction);
     if (authoritativePlayback) syncDoodleRuntimeState(performance.now(), true);
-  }, [authoritativePlayback, coOpRole, syncDoodleRuntimeState]);
+  }, [authoritativePlayback, coOpRole, queueDoodleInputTurn, syncDoodleRuntimeState]);
 
   const beginDoodleDirection = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -814,13 +833,15 @@ export function DoodleJumpPrototype({
       return;
     }
     startDoodle();
-  }, [authoritativePlayback, coOpRole, startDoodle, syncDoodleRuntimeState]);
+    queueDoodleInputTurn(direction);
+  }, [authoritativePlayback, coOpRole, queueDoodleInputTurn, startDoodle, syncDoodleRuntimeState]);
 
   const stopDoodleDirection = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
     event?.preventDefault();
     if (event && inputPointerIdRef.current !== null && inputPointerIdRef.current !== event.pointerId) return;
     inputPointerIdRef.current = null;
     inputDirectionRef.current = 0;
+    lastDoodleTurnDirectionRef.current = 0;
     syncDoodleRuntimeState(performance.now(), true);
   }, [syncDoodleRuntimeState]);
 
@@ -1010,19 +1031,12 @@ export function DoodleJumpPrototype({
       let nextY = current.playerY + nextVy * delta;
       let riskHit = current.riskHit;
       let highEnergyStreak = current.highEnergyStreak;
-      let playerTurns = current.playerTurns;
+      const playerTurns = current.playerTurns;
       let jumpTurnAvailable = current.jumpTurnAvailable;
       let eventChanged = false;
       let landedFinishPlatform = false;
       let reason = "";
       let status: PrototypeStatus = "playing";
-
-      if (inputDirection !== 0 && jumpTurnAvailable) {
-        const turnDirection = inputDirection < 0 ? -1 : 1;
-        playerTurns += turnDirection;
-        jumpTurnAvailable = false;
-        eventChanged = true;
-      }
 
       if (nextVy < 0) {
         const minY = Math.min(previousY, nextY) - PLAYER_SIZE;

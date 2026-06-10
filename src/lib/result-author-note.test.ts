@@ -63,7 +63,9 @@ test("result author note stays below the unchanged rank row", () => {
   assert.doesNotMatch(noteRule, /background|border|box-shadow/);
   assert.match(noteRule, /text-align:\s*left;/);
   assert.match(noteRule, /position:\s*relative;/);
-  assert.match(noteRule, /top:\s*-3px;/);
+  assert.match(noteRule, /top:\s*-5px;/);
+  assert.match(noteRule, /font-weight:\s*900;/);
+  assert.match(noteRule, /margin-left:\s*2px;/);
   assert.doesNotMatch(resultCss, /\.rank-author-note:(hover|active)/);
 });
 

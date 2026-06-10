@@ -282,32 +282,16 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
   if (skin === "lead") {
     return (
       <svg className={`${styles.skinSvg} ${styles.leadGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
-        <path className={styles.leadTrail} d="M13 47 H22 M10 38 H26 M13 29 H21" />
-        <path className={styles.leadStep} d="M24 46 V38 H34 V30 H44 V21 H53" />
-        <path className={styles.leadFlagPole} d="M44 16 V41" />
-        <path className={styles.leadFlag} d="M44 17 Q51 13 56 18 Q51 24 44 21 Z" />
-        <path className={styles.leadSpark} d="M22 16 L25 21 L20 21 Z" />
+        <path className={styles.leadLaurel} d="M16 45 C11 36 13 27 20 20 M48 45 C53 36 51 27 44 20" />
+        <path className={styles.leadLaurel} d="M19 39 L13 38 M20 33 L14 31 M23 27 L18 24 M45 39 L51 38 M44 33 L50 31 M41 27 L46 24" />
+        <path className={styles.leadMedal} d="M23 29 H41 L38 47 H26 Z" />
+        <path className={styles.leadCrown} d="M19 26 L25 15 L32 24 L39 15 L45 26 Z" />
+        <path className={styles.leadCheck} d="M25 37 L30 42 L40 31" />
       </svg>
     );
   }
 
-  if (skin === "mastery") {
-    return (
-      <svg className={`${styles.skinSvg} ${styles.masteryGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
-        <path className={styles.masteryLoop} d="M16 33 C22 20 29 20 32 32 C35 44 42 44 48 31" />
-        <path className={styles.masteryLoop} d="M16 31 C22 44 29 44 32 32 C35 20 42 20 48 33" />
-        <circle className={styles.masteryCore} cx="32" cy="32" r="7" />
-        <circle className={styles.masteryNode} cx="32" cy="11" r="3.1" />
-        <circle className={styles.masteryNode} cx="47" cy="17" r="3.1" />
-        <circle className={styles.masteryNode} cx="53" cy="32" r="3.1" />
-        <circle className={styles.masteryNode} cx="47" cy="47" r="3.1" />
-        <circle className={styles.masteryNode} cx="32" cy="53" r="3.1" />
-        <circle className={styles.masteryNode} cx="17" cy="47" r="3.1" />
-        <circle className={styles.masteryNode} cx="11" cy="32" r="3.1" />
-        <circle className={styles.masteryNode} cx="17" cy="17" r="3.1" />
-      </svg>
-    );
-  }
+  if (skin === "mastery") return null;
 
   if (skin === "paw") {
     return (

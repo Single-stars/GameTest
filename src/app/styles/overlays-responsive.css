@@ -200,16 +200,15 @@
   .intro-screen,
   .play-screen,
   .result-screen,
-  .share-image-screen,
-  .advanced-screen,
-  .luck-screen {
+  .share-image-screen {
     min-height: calc(var(--game-viewport-height, 100svh) - 24px);
   }
 
   .advanced-screen,
   .luck-screen {
-    height: calc(var(--game-viewport-height, 100svh) - 24px);
-    max-height: calc(var(--game-viewport-height, 100svh) - 24px);
+    min-height: var(--game-viewport-height, 100svh);
+    height: var(--game-viewport-height, 100svh);
+    max-height: var(--game-viewport-height, 100svh);
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;

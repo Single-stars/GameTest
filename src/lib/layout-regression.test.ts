@@ -34,6 +34,28 @@ test("main page roots use the locked game viewport instead of uncontrolled viewp
   }
 });
 
+test("mobile advanced and luck screens keep the full locked viewport without subtracting page padding", () => {
+  const responsiveCss = read("../app/styles/overlays-responsive.css");
+  const mobileBlock = responsiveCss.slice(
+    responsiveCss.indexOf("@media (max-width: 760px)"),
+    responsiveCss.indexOf("@media (max-width: 430px)"),
+  );
+
+  assert.match(mobileBlock, /\.advanced-screen,\s*\.luck-screen\s*{[\s\S]*min-height:\s*var\(--game-viewport-height,\s*100svh\);/);
+  assert.match(mobileBlock, /\.advanced-screen,\s*\.luck-screen\s*{[\s\S]*height:\s*var\(--game-viewport-height,\s*100svh\);/);
+  assert.match(mobileBlock, /\.advanced-screen,\s*\.luck-screen\s*{[\s\S]*max-height:\s*var\(--game-viewport-height,\s*100svh\);/);
+  assert.doesNotMatch(mobileBlock, /\.advanced-screen,\s*\.luck-screen\s*{[\s\S]*calc\(var\(--game-viewport-height,\s*100svh\)\s*-\s*24px\)/);
+});
+
+test("multiplayer lobby fixed status avoids mixing raw viewport units with the locked viewport", () => {
+  const multiplayerCss = read("../app/styles/mini-games/multiplayer.css");
+  const statusRule = cssRule(multiplayerCss, ".multiplayer-select-status-text");
+
+  assert.match(statusRule, /left:\s*max\(14px,\s*calc\(env\(safe-area-inset-left\)\s*\+\s*14px\)\);/);
+  assert.match(statusRule, /bottom:\s*max\(14px,\s*calc\(env\(safe-area-inset-bottom\)\s*\+\s*14px\)\);/);
+  assert.doesNotMatch(statusRule, /100vw|100vh/);
+});
+
 test("advanced and base entry panels keep primary actions above scrollable descriptions", () => {
   const advancedCss = read("../app/styles/base-flow/advanced.css");
   const playCss = read("../app/styles/base-flow/play-frame.css");

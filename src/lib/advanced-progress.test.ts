@@ -367,8 +367,8 @@ test("luck draw chances are backfilled from completed advanced levels in old per
   assert.equal(parsed.advancedProgress.luckDrawChances + parsed.advancedProgress.luckDrawCount, 5);
 });
 
-test("legacy max luck is repaired from real draw count when loading persisted state", () => {
-  const legacyProgress = advancedProgressWithClearedLevels(47, {
+test("max luck persists from the stored click score instead of draw-count estimation", () => {
+  const storedProgress = advancedProgressWithClearedLevels(47, {
     luckStars: 20,
     luckBestScore: 100,
     luckDrawChances: 3,
@@ -379,14 +379,14 @@ test("legacy max luck is repaired from real draw count when loading persisted st
     JSON.stringify({
       schemaVersion: 1,
       currentResult: null,
-      advancedProgress: legacyProgress,
+      advancedProgress: storedProgress,
     }),
   );
 
   assert.equal(parsed.advancedProgress.luckDrawCount, 44);
   assert.equal(parsed.advancedProgress.luckDrawChances, 3);
-  assert.equal(parsed.advancedProgress.luckBestScore, 55);
-  assert.equal(parsed.advancedProgress.luckStars, 11);
+  assert.equal(parsed.advancedProgress.luckBestScore, 100);
+  assert.equal(parsed.advancedProgress.luckStars, 20);
 });
 
 test("luck draws consume chances, map 0-100 score to 0-20 stars, and preserve the best result", () => {
@@ -494,6 +494,17 @@ test("revive coins use real inventory and exchange spare luck coins only after 1
   assert.equal(parsed.advancedProgress.reviveCoins, 2);
   assert.equal(parsed.advancedProgress.reviveCoinExchangeCount, 1);
   assert.equal(parsed.advancedProgress.luckDrawChances, 2);
+
+  const afterNewClear = recordAdvancedChallengeResult(exchanged.progress, {
+    roundId: "reaction",
+    level: 6,
+    score: 95,
+    passed: true,
+    completedAt: "2026-05-10T00:00:05.000Z",
+  });
+  assert.equal(afterNewClear.luckDrawCount, 2);
+  assert.equal(afterNewClear.reviveCoinExchangeCount, 1);
+  assert.equal(afterNewClear.luckDrawChances, 3);
 });
 
 test("luck score helpers produce display copy for locked, ready and empty states", () => {
@@ -832,7 +843,7 @@ test("persisted state parser falls back safely and clamps progress shape", () =>
         schemaVersion: 1,
         unlocked: true,
         luckStars: 50,
-        luckBestScore: 200,
+        luckBestScore: 13,
         luckDrawChances: 120,
         luckDrawCount: 200,
         updatedAt: "2026-05-10T00:00:00.000Z",

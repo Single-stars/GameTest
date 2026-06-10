@@ -639,6 +639,7 @@
 }
 
 .luck-revive-exchange-list {
+  position: relative;
   width: min(100%, 640px);
   display: grid;
   gap: 10px;
@@ -666,6 +667,11 @@
 
 .luck-revive-exchange-card.test {
   border-color: rgba(47, 128, 237, 0.22);
+}
+
+.luck-revive-exchange-card.claimed {
+  border-color: rgba(47, 127, 89, 0.42);
+  box-shadow: 0 0 0 4px rgba(47, 127, 89, 0.12), 0 12px 24px rgba(24, 24, 24, 0.08);
 }
 
 .luck-revive-exchange-icon {
@@ -739,6 +745,62 @@
 .luck-revive-exchange-action[aria-disabled="true"] {
   cursor: default;
   opacity: 0.42;
+}
+
+.luck-revive-exchange-action.confirmed {
+  border-color: rgba(47, 127, 89, 0.3);
+  background: #236b54;
+  color: #fffdf8;
+  transform: translateY(1px);
+}
+
+.luck-revive-exchange-toast {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: -8px;
+  max-width: calc(100% - 20px);
+  box-sizing: border-box;
+  min-height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(47, 127, 89, 0.2);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: rgba(255, 253, 248, 0.96);
+  color: #1e654c;
+  box-shadow: 0 12px 28px rgba(24, 24, 24, 0.14);
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: luck-revive-exchange-toast-pop 1280ms ease both;
+}
+
+.luck-revive-exchange-toast.claim {
+  border-color: rgba(47, 128, 237, 0.2);
+  color: #185f93;
+}
+
+@keyframes luck-revive-exchange-toast-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -72%) scale(0.92);
+  }
+
+  18%,
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -118%) scale(0.98);
+  }
 }
 
 @media (max-width: 420px) {

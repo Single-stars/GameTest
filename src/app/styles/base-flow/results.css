@@ -53,14 +53,15 @@
 .rank-author-note {
   all: unset;
   position: relative;
-  top: -3px;
+  top: -5px;
+  margin-left: 2px;
   width: 100%;
   min-height: 21px;
   display: block;
   color: var(--muted);
   cursor: pointer;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.5;
   text-align: left;
 }

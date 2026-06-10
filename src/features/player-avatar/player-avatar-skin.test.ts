@@ -36,8 +36,8 @@ test("avatar skin copy matches the playful unlock list", () => {
     custom: "创意",
     cyan: "青蓝",
     ivory: "象牙",
-    lead: "胜势",
-    mastery: "全能",
+    lead: "胜利",
+    mastery: "无限",
     mint: "薄荷",
     paw: "猫爪",
     pig: "猪猪",
@@ -47,7 +47,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     slate: "石板",
     starfall: "星陨",
     target: "靶心",
-    relay: "传讯",
+    relay: "分享",
   });
 
   assert.deepEqual(PLAYER_AVATAR_SKIN_DESCRIPTIONS, {
@@ -57,8 +57,8 @@ test("avatar skin copy matches the playful unlock list", () => {
     custom: "来自世界之外的小方块",
     cyan: "原装方块，干净耐看。",
     ivory: "成功方块，尊贵优雅",
-    lead: "比分拉开时也要稳住。",
-    mastery: "八种无尽节奏都试过。",
+    lead: "PVP高手",
+    mastery: "永远在突破自我的路上",
     mint: "清清凉凉，冰冰爽爽",
     paw: "喵~",
     pig: "作者本体",
@@ -68,7 +68,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     slate: "沉着稳重",
     starfall: "三百颗够吗？",
     target: "很难被打中的小方块",
-    relay: "把热闹递给下一位。",
+    relay: "分享快乐是唯一的信条",
   });
 
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.arcade.label, "投喂作者一次解锁");
@@ -77,8 +77,8 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.custom.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.cyan.label, "默认解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.ivory.label, "通关停下来最终试炼");
-  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.lead.label, "（在一次联机中获得 5 点比分优势）");
-  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mastery.label, "（在所有类型的无尽模式中使用一次技能）");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.lead.label, "在一次联机游戏中比分领先5点");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mastery.label, "在所有类型的无尽模式中使用一次技能");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mint.label, "通关一路向上最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.paw.label, "运气达到 100");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.pig.label, "达成最强王者");
@@ -88,7 +88,7 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.slate.label, "通关一路向下最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.starfall.label, "传奇王者 100 星解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.target.label, "通关移动靶最终试炼");
-  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.relay.label, "（累计触发分享/复制邀请 3 次）");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.relay.label, "累计3次分享游戏解锁");
 });
 
 test("avatar skins unlock from completed final advanced challenges", () => {

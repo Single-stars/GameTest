@@ -297,6 +297,7 @@ export default function Home() {
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const pendingEndlessChallengeRef = useRef<EndlessChallengePayload | null>(null);
   const pendingLuckRewardItemsRef = useRef<RewardOverlayItem[]>([]);
+  const pendingEndlessSkillRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
@@ -389,6 +390,12 @@ export default function Home() {
     void _outcome;
     const items = pendingLuckRewardItemsRef.current;
     pendingLuckRewardItemsRef.current = [];
+    enqueueRewardItems(items);
+  }, [enqueueRewardItems]);
+
+  const flushPendingEndlessSkillRewards = useCallback(() => {
+    const items = pendingEndlessSkillRewardItemsRef.current;
+    pendingEndlessSkillRewardItemsRef.current = [];
     enqueueRewardItems(items);
   }, [enqueueRewardItems]);
 
@@ -507,6 +514,7 @@ export default function Home() {
     setChallengeNoticeVisible(false);
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
+    pendingEndlessSkillRewardItemsRef.current = [];
     setRewardQueue([]);
     roundCompletionLockedRef.current = false;
   }, [clearShareCopyToastTimer]);
@@ -1197,9 +1205,9 @@ export default function Home() {
         reason: completion.reason,
         revivesUsed: completion.revivesUsed,
       });
-      void transitionToStage("advanced");
+      void transitionToStageThenRun("advanced", flushPendingEndlessSkillRewards);
     },
-    [persistGameState, transitionToStage],
+    [flushPendingEndlessSkillRewards, persistGameState, transitionToStageThenRun],
   );
 
   const completeEndlessChallengeRound = useCallback(
@@ -1212,13 +1220,18 @@ export default function Home() {
         target: current.target,
         challenger: completion.snapshot,
       });
-      void transitionToStage("advanced");
+      void transitionToStageThenRun("advanced", flushPendingEndlessSkillRewards);
     },
-    [transitionToStage],
+    [flushPendingEndlessSkillRewards, transitionToStageThenRun],
   );
 
   const recordAdvancedEndlessSkillUse = useCallback((roundId: RoundId) => {
-    persistAdvancedProgressUpdate((progress) => recordEndlessSkillUse(progress, roundId), `endless-skill-${roundId}`);
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = persistAdvancedProgressUpdate((progress) => recordEndlessSkillUse(progress, roundId));
+    pendingEndlessSkillRewardItemsRef.current = compactRewardItems([
+      ...pendingEndlessSkillRewardItemsRef.current,
+      ...createSkinRewardItems(previousProgress, nextProgress, `endless-skill-${roundId}`),
+    ]);
   }, [persistAdvancedProgressUpdate]);
 
   const completeAdvancedBaseReplay = useCallback((record: { roundId: RoundId; level: number; trials: TrialEvent[] }) => {
