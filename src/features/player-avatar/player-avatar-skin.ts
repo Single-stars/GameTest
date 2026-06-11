@@ -43,7 +43,6 @@ export const PLAYER_AVATAR_SKINS = [
 ] as const satisfies readonly PlayerAvatarSkin[];
 
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
-  "custom",
   "cyan",
   "signal",
   "target",
@@ -57,15 +56,16 @@ const PLAYER_AVATAR_SKIN_DISPLAY_ORDER = [
   "pig",
   "basketball",
   "starfall",
-  "arcade",
   "relay",
   "lead",
   "mastery",
+  "arcade",
+  "custom",
 ] as const satisfies readonly PlayerAvatarSkin[];
 const PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX = new Map(PLAYER_AVATAR_SKIN_DISPLAY_ORDER.map((skin, index) => [skin, index]));
+const PLAYER_AVATAR_DONATION_SKINS = new Set<PlayerAvatarSkin>(["arcade", "custom"]);
 
-function getPlayerAvatarSkinDisplayIndex(skin: PlayerAvatarSkin, unlocked: boolean) {
-  if (!unlocked && skin === "custom") return 9999;
+function getPlayerAvatarSkinDisplayIndex(skin: PlayerAvatarSkin) {
   return PLAYER_AVATAR_SKIN_DISPLAY_ORDER_INDEX.get(skin) ?? 999;
 }
 
@@ -76,7 +76,7 @@ export const PLAYER_AVATAR_SKIN_LABELS = {
   custom: "创意",
   cyan: "青蓝",
   ivory: "象牙",
-  lead: "胜利",
+  lead: "玻璃心",
   mastery: "无限",
   mint: "薄荷",
   paw: "猫爪",
@@ -212,8 +212,11 @@ export function getPlayerAvatarSkinDisplayItems(progress: AdvancedProgress) {
     skin,
     unlock: getPlayerAvatarSkinUnlockState(skin, progress),
   })).sort((a, b) => {
+    const aDonationSkin = PLAYER_AVATAR_DONATION_SKINS.has(a.skin);
+    const bDonationSkin = PLAYER_AVATAR_DONATION_SKINS.has(b.skin);
+    if (aDonationSkin !== bDonationSkin) return aDonationSkin ? 1 : -1;
     if (a.unlock.unlocked !== b.unlock.unlocked) return a.unlock.unlocked ? -1 : 1;
-    return getPlayerAvatarSkinDisplayIndex(a.skin, a.unlock.unlocked) - getPlayerAvatarSkinDisplayIndex(b.skin, b.unlock.unlocked);
+    return getPlayerAvatarSkinDisplayIndex(a.skin) - getPlayerAvatarSkinDisplayIndex(b.skin);
   });
 }
 

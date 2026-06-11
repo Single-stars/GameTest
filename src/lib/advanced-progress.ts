@@ -61,6 +61,7 @@ export type AdvancedProgress = {
   luckDrawCount: number;
   reviveCoins: number;
   reviveCoinExchangeCount: number;
+  lastReviveCoinExchangeDate: string | null;
   updatedAt: string;
 };
 
@@ -156,6 +157,27 @@ const ADVANCED_DIMENSION_STAR_LIMIT = ADVANCED_STAR_LIMITS.dimensionCount * ADVA
 function timestamp() {
   return new Date().toISOString();
 }
+
+function getLocalDateKey(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getShiftedLocalDateKey(value: string, dayOffset: number) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  date.setDate(date.getDate() + dayOffset);
+  return getLocalDateKey(date.toISOString());
+}
+
+function sanitizeDateKey(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
 function clampInteger(value: unknown, min: number, max: number) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
@@ -294,6 +316,7 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repai
     luckDrawCount,
     reviveCoins: clampInteger(source.reviveCoins, 0, Number.MAX_SAFE_INTEGER),
     reviveCoinExchangeCount,
+    lastReviveCoinExchangeDate: sanitizeDateKey(source.lastReviveCoinExchangeDate),
     updatedAt: typeof source.updatedAt === "string" && source.updatedAt ? source.updatedAt : updatedAt,
   };
 }
@@ -343,6 +366,7 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
     luckDrawCount: 0,
     reviveCoins: 0,
     reviveCoinExchangeCount: 0,
+    lastReviveCoinExchangeDate: null,
     updatedAt,
   };
 }
@@ -446,6 +470,46 @@ export function recordEndlessSkillUse(progress: AdvancedProgress, roundId: Round
     },
     updatedAt,
   };
+}
+
+export function debugMoveReviveCoinExchangeToPreviousDay(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  return {
+    ...sanitized,
+    lastReviveCoinExchangeDate: getShiftedLocalDateKey(updatedAt, -1),
+    updatedAt,
+  };
+}
+
+export function debugClearAllAdvancedChallenges(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  const dimensions = Object.fromEntries(
+    ADVANCED_ROUND_IDS.map((roundId) => {
+      const dimension = sanitized.dimensions[roundId];
+      return [
+        roundId,
+        {
+          clearedLevels: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => true),
+          attempts: dimension.attempts.map((attempt) => Math.max(1, attempt)),
+          bestScores: dimension.bestScores.map((score) => Math.max(100, score)),
+          lastPassed: Array.from({ length: ADVANCED_LEVEL_COUNT }, () => true),
+          lastGoalChecks: dimension.lastGoalChecks.map((checks) => checks ?? [true]),
+          reactionLastAveragesMs: [...dimension.reactionLastAveragesMs],
+          reactionBestAveragesMs: [...dimension.reactionBestAveragesMs],
+        } satisfies AdvancedDimensionProgress,
+      ];
+    }),
+  ) as Record<RoundId, AdvancedDimensionProgress>;
+
+  return sanitizeAdvancedProgress(
+    {
+      ...sanitized,
+      unlocked: true,
+      dimensions,
+      updatedAt,
+    },
+    updatedAt,
+  );
 }
 
 export function recordAdvancedChallengeResult(progress: AdvancedProgress, record: AdvancedChallengeRecord): AdvancedProgress {
@@ -734,16 +798,23 @@ export function canUseLuckDrawBatch(unlocked: boolean, progress: AdvancedProgres
   return unlocked && sanitized.luckDrawChances >= clampInteger(count, 1, 10) && sanitized.luckStars < ADVANCED_STAR_LIMITS.luckStars && sanitized.luckBestScore < 100;
 }
 
-export function canExchangeLuckCoinForReviveCoin(progress: AdvancedProgress) {
+export function hasExchangedReviveCoinToday(progress: AdvancedProgress, updatedAt = timestamp()) {
+  const todayKey = getLocalDateKey(updatedAt);
+  if (!todayKey) return false;
+  return sanitizeAdvancedProgress(progress, updatedAt).lastReviveCoinExchangeDate === todayKey;
+}
+
+export function canExchangeLuckCoinForReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()) {
   const sanitized = sanitizeAdvancedProgress(progress);
-  return sanitized.luckBestScore >= 100 && sanitized.luckDrawChances > 0;
+  return sanitized.luckBestScore >= 100 && sanitized.luckDrawChances > 0 && !hasExchangedReviveCoinToday(sanitized, updatedAt);
 }
 
 export function exchangeLuckCoinForReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()): ReviveCoinExchangeResult {
   const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
-  if (!canExchangeLuckCoinForReviveCoin(sanitized)) {
+  if (!canExchangeLuckCoinForReviveCoin(sanitized, updatedAt)) {
     return { exchanged: false, progress: sanitized };
   }
+  const exchangeDateKey = getLocalDateKey(updatedAt);
 
   return {
     exchanged: true,
@@ -752,6 +823,7 @@ export function exchangeLuckCoinForReviveCoin(progress: AdvancedProgress, update
       luckDrawChances: Math.max(0, sanitized.luckDrawChances - 1),
       reviveCoins: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoins + 1),
       reviveCoinExchangeCount: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoinExchangeCount + 1),
+      lastReviveCoinExchangeDate: exchangeDateKey,
       updatedAt,
     },
   };

@@ -1,6 +1,6 @@
 import { getAdvancedStageConfig, type AdvancedStageConfig } from "./advanced-challenges.ts";
 import { getAdvancedDimensionLevel, type AdvancedLevelState, type AdvancedProgress } from "./advanced-progress.ts";
-import type { PlayerAvatarSkin } from "../features/player-avatar/player-avatar-skin.ts";
+import { PLAYER_AVATAR_SKIN_UNLOCKS, type PlayerAvatarSkin } from "../features/player-avatar/player-avatar-skin.ts";
 import type { MiniGameId, MiniGameParams } from "./mini-games/shared.ts";
 import type { RoundId } from "./scoring.ts";
 
@@ -18,17 +18,6 @@ export const ENDLESS_SUPPORTED_ROUND_IDS = [
   "braking",
   "patience",
 ] as const satisfies readonly RoundId[];
-
-const ADVANCED_FINAL_SKIN_ROUNDS: Partial<Record<PlayerAvatarSkin, RoundId>> = {
-  blade: "patience",
-  ivory: "braking",
-  mint: "search",
-  pine: "memory",
-  sand: "rhythm",
-  signal: "reaction",
-  slate: "stroop",
-  target: "aim",
-};
 
 export type EndlessLevelState = Extract<AdvancedLevelState, "current" | "locked">;
 
@@ -169,8 +158,8 @@ export function isEndlessModeUnlocked(progress: AdvancedProgress, roundId: Round
 
 export function getEndlessStartingRevives(progress: AdvancedProgress, roundId: RoundId, skin: PlayerAvatarSkin) {
   if (skin === "starfall" && progress.legend100SkinUnlocked === true) return ENDLESS_STARTING_REVIVES + 1;
-  const matchingRoundId = ADVANCED_FINAL_SKIN_ROUNDS[skin];
-  if (matchingRoundId === roundId && getAdvancedDimensionLevel(progress, matchingRoundId) >= 10) {
+  const unlock = PLAYER_AVATAR_SKIN_UNLOCKS[skin];
+  if (unlock.kind === "advanced-final" && unlock.roundId === roundId && getAdvancedDimensionLevel(progress, unlock.roundId) >= 10) {
     return ENDLESS_STARTING_REVIVES + 1;
   }
   return ENDLESS_STARTING_REVIVES;

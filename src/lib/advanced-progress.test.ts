@@ -8,6 +8,8 @@ import {
   canUseLuckDraw,
   canUseLuckDrawBatch,
   consumeReviveCoin,
+  debugClearAllAdvancedChallenges,
+  debugMoveReviveCoinExchangeToPreviousDay,
   exchangeLuckCoinForReviveCoin,
   formatResultRankTitle,
   getAdvancedCompletionActions,
@@ -23,6 +25,7 @@ import {
   getLuckLevelTone,
   getLuckScoreTone,
   getLuckStarsFromScore,
+  hasExchangedReviveCoinToday,
   formatLuckDrawOutcomeText,
   getAdvancedDimensionLevel,
   getAdvancedTotalStars,
@@ -118,6 +121,7 @@ test("default advanced progress starts locked with 0 shown for every metric", ()
   assert.equal(progress.luckDrawCount, 0);
   assert.equal(progress.reviveCoins, 0);
   assert.equal(progress.reviveCoinExchangeCount, 0);
+  assert.equal(progress.lastReviveCoinExchangeDate, null);
   for (const roundId of ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"] as const) {
     assert.equal(getAdvancedDimensionLevel(progress, roundId), 0);
     assert.equal(progress.endlessSkillUsedRounds[roundId], false);
@@ -464,14 +468,34 @@ test("revive coins use real inventory and exchange spare luck coins only after 1
     luckBestScore: 100,
     luckDrawCount: 2,
   });
-  assert.equal(canExchangeLuckCoinForReviveCoin(ready), true);
+  assert.equal(canExchangeLuckCoinForReviveCoin(ready, "2026-05-10T10:00:00"), true);
 
-  const exchanged = exchangeLuckCoinForReviveCoin(ready, "2026-05-10T00:00:02.000Z");
+  const exchanged = exchangeLuckCoinForReviveCoin(ready, "2026-05-10T10:00:02");
   assert.equal(exchanged.exchanged, true);
   assert.equal(exchanged.progress.reviveCoins, 1);
   assert.equal(exchanged.progress.reviveCoinExchangeCount, 1);
   assert.equal(exchanged.progress.luckDrawChances, 2);
   assert.equal(exchanged.progress.luckDrawCount, 2);
+  assert.equal(exchanged.progress.lastReviveCoinExchangeDate, "2026-05-10");
+  assert.equal(hasExchangedReviveCoinToday(exchanged.progress, "2026-05-10T23:59:59"), true);
+  assert.equal(canExchangeLuckCoinForReviveCoin(exchanged.progress, "2026-05-10T23:59:59"), false);
+
+  const sameDayBlocked = exchangeLuckCoinForReviveCoin(exchanged.progress, "2026-05-10T23:59:59");
+  assert.equal(sameDayBlocked.exchanged, false);
+  assert.equal(sameDayBlocked.progress.reviveCoins, 1);
+  assert.equal(sameDayBlocked.progress.reviveCoinExchangeCount, 1);
+  assert.equal(sameDayBlocked.progress.luckDrawChances, 2);
+  assert.equal(sameDayBlocked.progress.lastReviveCoinExchangeDate, "2026-05-10");
+
+  assert.equal(hasExchangedReviveCoinToday(exchanged.progress, "2026-05-11T00:00:00"), false);
+  assert.equal(canExchangeLuckCoinForReviveCoin(exchanged.progress, "2026-05-11T00:00:00"), true);
+
+  const nextDayExchanged = exchangeLuckCoinForReviveCoin(exchanged.progress, "2026-05-11T00:00:00");
+  assert.equal(nextDayExchanged.exchanged, true);
+  assert.equal(nextDayExchanged.progress.reviveCoins, 2);
+  assert.equal(nextDayExchanged.progress.reviveCoinExchangeCount, 2);
+  assert.equal(nextDayExchanged.progress.luckDrawChances, 1);
+  assert.equal(nextDayExchanged.progress.lastReviveCoinExchangeDate, "2026-05-11");
 
   const granted = grantReviveCoins(exchanged.progress, 2, "2026-05-10T00:00:03.000Z");
   assert.equal(granted.reviveCoins, 3);
@@ -494,6 +518,7 @@ test("revive coins use real inventory and exchange spare luck coins only after 1
   assert.equal(parsed.advancedProgress.reviveCoins, 2);
   assert.equal(parsed.advancedProgress.reviveCoinExchangeCount, 1);
   assert.equal(parsed.advancedProgress.luckDrawChances, 2);
+  assert.equal(parsed.advancedProgress.lastReviveCoinExchangeDate, "2026-05-10");
 
   const afterNewClear = recordAdvancedChallengeResult(exchanged.progress, {
     roundId: "reaction",
@@ -505,6 +530,37 @@ test("revive coins use real inventory and exchange spare luck coins only after 1
   assert.equal(afterNewClear.luckDrawCount, 2);
   assert.equal(afterNewClear.reviveCoinExchangeCount, 1);
   assert.equal(afterNewClear.luckDrawChances, 3);
+});
+
+test("debug helpers reset revive exchange day and clear every advanced challenge idempotently", () => {
+  const exchanged = exchangeLuckCoinForReviveCoin(
+    advancedProgressWithClearedLevels(5, {
+      luckStars: 20,
+      luckBestScore: 100,
+      luckDrawChances: 3,
+    }),
+    "2026-06-11T08:00:00.000Z",
+  ).progress;
+
+  assert.equal(hasExchangedReviveCoinToday(exchanged, "2026-06-11T09:00:00.000Z"), true);
+  const previousDay = debugMoveReviveCoinExchangeToPreviousDay(exchanged, "2026-06-11T09:00:00.000Z");
+  assert.equal(previousDay.lastReviveCoinExchangeDate, "2026-06-10");
+  assert.equal(hasExchangedReviveCoinToday(previousDay, "2026-06-11T09:00:00.000Z"), false);
+  assert.equal(canExchangeLuckCoinForReviveCoin(previousDay, "2026-06-11T09:00:00.000Z"), true);
+
+  const cleared = debugClearAllAdvancedChallenges(createDefaultAdvancedProgress("2026-06-11T00:00:00.000Z"), "2026-06-11T09:00:00.000Z");
+  assert.equal(cleared.unlocked, true);
+  assert.equal(getAdvancedTotalStars(cleared), 80);
+  for (const roundId of Object.keys(cleared.dimensions) as Array<keyof typeof cleared.dimensions>) {
+    assert.equal(getAdvancedDimensionLevel(cleared, roundId), 10);
+    assert.deepEqual(cleared.dimensions[roundId].clearedLevels, Array(10).fill(true));
+    assert.deepEqual(cleared.dimensions[roundId].lastPassed, Array(10).fill(true));
+  }
+  assert.equal(cleared.luckDrawChances, 80);
+
+  const repeated = debugClearAllAdvancedChallenges(cleared, "2026-06-11T09:01:00.000Z");
+  assert.equal(getAdvancedTotalStars(repeated), 80);
+  assert.equal(repeated.luckDrawChances, 80);
 });
 
 test("luck score helpers produce display copy for locked, ready and empty states", () => {

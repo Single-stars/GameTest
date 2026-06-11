@@ -29,6 +29,8 @@ import {
   consumeReviveCoin,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
+  debugClearAllAdvancedChallenges,
+  debugMoveReviveCoinExchangeToPreviousDay,
   exchangeLuckCoinForReviveCoin,
   getAdvancedBackDestination,
   getAdvancedEndlessBestRun,
@@ -297,6 +299,7 @@ export default function Home() {
   const advancedChallengeRef = useRef<AdvancedChallengeState | null>(null);
   const pendingEndlessChallengeRef = useRef<EndlessChallengePayload | null>(null);
   const pendingLuckRewardItemsRef = useRef<RewardOverlayItem[]>([]);
+  const pendingLuckRewardStartProgressRef = useRef<AdvancedProgress | null>(null);
   const pendingEndlessSkillRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
@@ -390,6 +393,7 @@ export default function Home() {
     void _outcome;
     const items = pendingLuckRewardItemsRef.current;
     pendingLuckRewardItemsRef.current = [];
+    pendingLuckRewardStartProgressRef.current = null;
     enqueueRewardItems(items);
   }, [enqueueRewardItems]);
 
@@ -514,6 +518,7 @@ export default function Home() {
     setChallengeNoticeVisible(false);
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
+    pendingLuckRewardStartProgressRef.current = null;
     pendingEndlessSkillRewardItemsRef.current = [];
     setRewardQueue([]);
     roundCompletionLockedRef.current = false;
@@ -875,6 +880,7 @@ export default function Home() {
     setAdvancedUnlockPulseId(0);
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
+    pendingLuckRewardStartProgressRef.current = null;
     void transitionToStage("luck");
   }, [transitionToStage, writeUserInitiatedHistoryGuard]);
 
@@ -920,6 +926,7 @@ export default function Home() {
   const closeLuckDraw = useCallback(() => {
     setLuckDrawOutcome(null);
     pendingLuckRewardItemsRef.current = [];
+    pendingLuckRewardStartProgressRef.current = null;
     releaseHistoryGuard();
     scrollResultToTop();
     void transitionToStage("result");
@@ -927,7 +934,9 @@ export default function Home() {
 
   const drawLuck = useCallback(() => {
     const previousProgress = advancedProgressRef.current;
-    const beforeStars = getAdvancedTotalStars(previousProgress);
+    const rewardStartProgress = pendingLuckRewardStartProgressRef.current ?? previousProgress;
+    pendingLuckRewardStartProgressRef.current = rewardStartProgress;
+    const beforeStars = getAdvancedTotalStars(rewardStartProgress);
     const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
     const luckPointGain = resolveLuckCoinTestScore(Math.random());
     const result = recordLuckDraw(
@@ -942,7 +951,7 @@ export default function Home() {
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
     setLuckDrawOutcome(result.outcome);
     pendingLuckRewardItemsRef.current = compactRewardItems([
-      ...createSkinRewardItems(previousProgress, nextProgress, "luck-draw"),
+      ...createSkinRewardItems(rewardStartProgress, nextProgress, "luck-draw"),
       createRankRewardItem({
         afterRank: formatResultRankTitle(baseRankName, afterStars),
         beforeRank: formatResultRankTitle(baseRankName, beforeStars),
@@ -954,7 +963,9 @@ export default function Home() {
 
   const drawLuckBatch = useCallback(() => {
     const previousProgress = advancedProgressRef.current;
-    const beforeStars = getAdvancedTotalStars(previousProgress);
+    const rewardStartProgress = pendingLuckRewardStartProgressRef.current ?? previousProgress;
+    pendingLuckRewardStartProgressRef.current = rewardStartProgress;
+    const beforeStars = getAdvancedTotalStars(rewardStartProgress);
     const baseRankName = trialsRef.current.length > 0 ? getGameRankResult(trialsRef.current).name : "最强王者";
     const baseDrawCount = previousProgress.luckDrawCount;
     const scores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 101));
@@ -969,7 +980,7 @@ export default function Home() {
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
     setLuckDrawOutcome(outcome);
     pendingLuckRewardItemsRef.current = compactRewardItems([
-      ...createSkinRewardItems(previousProgress, nextProgress, "luck-batch"),
+      ...createSkinRewardItems(rewardStartProgress, nextProgress, "luck-batch"),
       createRankRewardItem({
         afterRank: formatResultRankTitle(baseRankName, afterStars),
         beforeRank: formatResultRankTitle(baseRankName, beforeStars),
@@ -993,6 +1004,22 @@ export default function Home() {
   const grantReviveCoinForTest = useCallback(() => {
     const previousProgress = advancedProgressRef.current;
     const nextProgress = grantReviveCoins(previousProgress, 1);
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+  }, [persistGameState]);
+
+  const debugMoveReviveCoinExchangeDayForTest = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = debugMoveReviveCoinExchangeToPreviousDay(previousProgress);
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+  }, [persistGameState]);
+
+  const debugClearAllAdvancedChallengesForTest = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = debugClearAllAdvancedChallenges(previousProgress);
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
@@ -1518,8 +1545,11 @@ export default function Home() {
       ) : stage === "luck" ? (
         <LuckDrawScreen
           advancedProgress={advancedProgress}
+          debugToolsVisible={debugToolsVisible}
           lastOutcome={luckDrawOutcome}
           onBack={requestAppBack}
+          onDebugClearAllAdvancedChallenges={debugClearAllAdvancedChallengesForTest}
+          onDebugMoveReviveCoinExchangeToPreviousDay={debugMoveReviveCoinExchangeDayForTest}
           onDraw={drawLuck}
           onDrawBatch={drawLuckBatch}
           onExchangeReviveCoin={exchangeReviveCoin}

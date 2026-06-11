@@ -24,8 +24,9 @@ import {
   isEndlessModeUnlocked,
   shouldKeepPigEndlessLife,
 } from "./endless-mode.ts";
-import { createDefaultAdvancedProgress, markLegend100SkinUnlocked, recordAdvancedChallengeResult } from "./advanced-progress.ts";
+import { createDefaultAdvancedProgress, markLegend100SkinUnlocked, markMultiplayerFivePointLeadSkinUnlocked, recordAdvancedChallengeResult } from "./advanced-progress.ts";
 import { getMiniGameLevel } from "./mini-games/index.ts";
+import type { RoundId } from "./scoring.ts";
 
 function sourceBetween(source: string, start: string, end: string) {
   const normalizedSource = source.replace(/\r\n/g, "\n");
@@ -76,24 +77,44 @@ test("endless scoring stays intentionally simple", () => {
 
 test("endless skin hidden traits grant one starting life and pig can keep one life", () => {
   const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
-  const searchClearedProgress = Array.from({ length: 10 }, (_, index) => index + 1).reduce(
+  const clearAdvancedFinal = (roundId: RoundId) => Array.from({ length: 10 }, (_, index) => index + 1).reduce(
     (progress, level) =>
       recordAdvancedChallengeResult(progress, {
         completedAt: `2026-05-28T00:${String(level).padStart(2, "0")}:00.000Z`,
         level,
         passed: true,
-        roundId: "search",
+        roundId,
         score: 100,
       }),
     emptyProgress,
   );
   const starfallProgress = markLegend100SkinUnlocked(emptyProgress, "2026-05-28T02:00:00.000Z");
+  const glassHeartProgress = markMultiplayerFivePointLeadSkinUnlocked(emptyProgress, "2026-05-28T02:05:00.000Z");
+  const advancedFinalSkinCases = [
+    ["signal", "reaction"],
+    ["target", "aim"],
+    ["mint", "search"],
+    ["slate", "stroop"],
+    ["sand", "rhythm"],
+    ["pine", "memory"],
+    ["ivory", "braking"],
+    ["blade", "patience"],
+  ] as const;
+  const endlessModeSource = readFileSync(new URL("./endless-mode.ts", import.meta.url), "utf8");
 
   assert.equal(getEndlessStartingRevives(emptyProgress, "search", "mint"), 3);
-  assert.equal(getEndlessStartingRevives(searchClearedProgress, "search", "mint"), 4);
-  assert.equal(getEndlessStartingRevives(searchClearedProgress, "stroop", "mint"), 3);
+  for (const [skin, roundId] of advancedFinalSkinCases) {
+    const clearedProgress = clearAdvancedFinal(roundId);
+    const otherRoundId = roundId === "reaction" ? "aim" : "reaction";
+    assert.equal(getEndlessStartingRevives(clearedProgress, roundId, skin), 4);
+    assert.equal(getEndlessStartingRevives(clearedProgress, otherRoundId, skin), 3);
+  }
   assert.equal(getEndlessStartingRevives(starfallProgress, "aim", "starfall"), 4);
   assert.equal(getEndlessStartingRevives(emptyProgress, "aim", "starfall"), 3);
+  assert.equal(getEndlessStartingRevives(glassHeartProgress, "aim", "lead"), 3);
+  assert.equal(getEndlessStartingRevives(glassHeartProgress, "reaction", "lead"), 3);
+  assert.match(endlessModeSource, /PLAYER_AVATAR_SKIN_UNLOCKS/);
+  assert.doesNotMatch(endlessModeSource, /ADVANCED_FINAL_SKIN_ROUNDS/);
 
   assert.equal(shouldKeepPigEndlessLife("pig", () => 0.249), true);
   assert.equal(shouldKeepPigEndlessLife("pig", () => 0.25), false);
@@ -241,6 +262,7 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const screenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const reviveCoinFlightCss = sourceBetween(cssSource, "@keyframes endless-revive-totem-flight {", "@keyframes endless-revive-totem-particle {");
 
   assert.match(runtimeSource, /DonateIcon/);
   assert.match(runtimeSource, /reviveCoins: number;/);
@@ -251,7 +273,7 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   assert.match(runtimeSource, /reviveCoinPrompt/);
   assert.match(runtimeSource, /reviveCoinAnimating/);
   assert.match(runtimeSource, /reviveCoinAnimationId/);
-  assert.match(runtimeSource, /ENDLESS_REVIVE_COIN_ANIMATION_MS = 1600;/);
+  assert.match(runtimeSource, /ENDLESS_REVIVE_COIN_ANIMATION_MS = 1500;/);
   assert.match(runtimeSource, /const canOfferReviveCoin = reviveCoinsRef\.current > 0 && !reviveCoinUsedRef\.current;/);
   assert.match(runtimeSource, /const runtimePaused = paused \|\| reviveCoinPrompt !== null \|\| reviveCoinAnimating;/);
   assert.match(runtimeSource, /if \(nextRevives <= 0\) \{[\s\S]*if \(canOfferReviveCoin\) \{[\s\S]*setReviveCoinPrompt\([\s\S]*return true;/);
@@ -269,13 +291,17 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   assert.match(runtimeSource, /const cancelReviveCoin = useCallback/);
   assert.match(runtimeSource, /finish\(reviveCoinPrompt\.reason\);/);
   assert.match(runtimeSource, /className="endless-revive-bank"/);
+  assert.doesNotMatch(runtimeSource, /ref=\{sourceRef\}|reviveBankRef/);
   assert.match(runtimeSource, /className="endless-revive-used"/);
   assert.match(runtimeSource, /className="endless-revive-prompt-backdrop"/);
   assert.match(runtimeSource, /className="endless-revive-totem-burst"/);
-  assert.match(runtimeSource, /className="endless-revive-totem-aura"/);
   assert.match(runtimeSource, /className="endless-revive-totem-coin main"/);
   assert.match(runtimeSource, /className="endless-revive-totem-coin-face"/);
-  assert.match(runtimeSource, /className=\{`endless-revive-totem-spark spark-\$\{index \+ 1\}`\}/);
+  assert.doesNotMatch(runtimeSource, /sourceRef:\s*React\.RefObject<HTMLDivElement \| null>/);
+  assert.doesNotMatch(runtimeSource, /getBoundingClientRect\(\)|setOffsetStyle|offsetStyle/);
+  assert.match(runtimeSource, /className=\{`endless-revive-totem-particle particle-\$\{index \+ 1\}`\}/);
+  assert.match(runtimeSource, /className="endless-revive-totem-particle-face"/);
+  assert.doesNotMatch(runtimeSource, /endless-revive-totem-aura|endless-revive-totem-spark|ENDLESS_REVIVE_TOTEM_SPARKS/);
   assert.doesNotMatch(runtimeSource, /className="endless-revive-totem-coin left"|className="endless-revive-totem-coin right"/);
   assert.match(runtimeSource, /disabled=\{api\.paused \|\| !api\.canHeal\}/);
   assert.match(runtimeSource, /disabled=\{api\.paused \|\| !api\.canUseSkill\}/);
@@ -288,27 +314,34 @@ test("endless revive coins prompt once, spend real inventory, and restore full h
   assert.match(cssSource, /\.endless-revive-used\s*{/);
   assert.match(cssSource, /\.endless-revive-prompt-backdrop\s*{/);
   assert.match(cssSource, /\.endless-revive-prompt\s*{/);
-  assert.match(cssSource, /\.endless-revive-totem-burst\s*{[\s\S]*perspective:\s*760px;[\s\S]*contain:\s*layout paint;[\s\S]*overflow:\s*hidden;/);
+  assert.match(cssSource, /\.endless-revive-totem-burst\s*{[\s\S]*--revive-coin-start-x:[\s\S]*--revive-coin-start-y:[\s\S]*--revive-coin-exit-x:[\s\S]*--revive-coin-exit-y:[\s\S]*contain:\s*layout paint;[\s\S]*overflow:\s*hidden;/);
+  assert.doesNotMatch(cssSource, /--revive-coin-mid-x|--revive-coin-mid-y/);
   assert.match(cssSource, /\.endless-revive-totem-coin\s*{[\s\S]*transform-origin:\s*50% 50%;[\s\S]*backface-visibility:\s*hidden;/);
-  assert.match(cssSource, /\.endless-revive-totem-coin\.main\s*{[\s\S]*--revive-coin-start-x:\s*clamp\(-304px,\s*-40vw,\s*-144px\);[\s\S]*--revive-coin-start-y:\s*clamp\(136px,\s*31vh,\s*288px\);[\s\S]*width:\s*clamp\(116px,\s*18vw,\s*168px\);[\s\S]*endless-revive-totem-flight 1600ms/);
-  assert.match(cssSource, /\.endless-revive-totem-aura\s*{[\s\S]*endless-revive-totem-aura 1600ms/);
-  assert.match(cssSource, /\.endless-revive-totem-spark\s*{[\s\S]*endless-revive-totem-spark 1600ms/);
-  assert.match(cssSource, /@keyframes endless-revive-totem-flight[\s\S]*rotateY\(-90deg\)[\s\S]*rotateY\(138deg\)[\s\S]*rotateY\(450deg\)/);
-  assert.match(cssSource, /@keyframes endless-revive-totem-aura/);
-  assert.match(cssSource, /@keyframes endless-revive-totem-spark/);
+  assert.match(cssSource, /\.endless-revive-totem-coin\.main\s*{[\s\S]*width:\s*clamp\(104px,\s*18vw,\s*156px\);[\s\S]*animation:\s*endless-revive-totem-flight 1500ms/);
+  assert.match(cssSource, /\.endless-revive-totem-particle\s*{[\s\S]*width:\s*clamp\(16px,\s*3vw,\s*24px\);[\s\S]*animation:\s*endless-revive-totem-particle 1500ms/);
+  assert.match(cssSource, /\.endless-revive-totem-particle-face\s*{/);
+  assert.match(reviveCoinFlightCss, /0%[\s\S]*var\(--revive-coin-start-x\)[\s\S]*scale\(0\.38\)[\s\S]*62%[\s\S]*translate3d\(0,\s*0,\s*0\) rotate\(720deg\) scale\(1\.62\)[\s\S]*76%[\s\S]*translate3d\(0,\s*0,\s*0\) rotate\(720deg\) scale\(1\.62\)[\s\S]*100%[\s\S]*var\(--revive-coin-exit-x\)[\s\S]*var\(--revive-coin-exit-y\)[\s\S]*scale\(0\.78\)/);
+  assert.doesNotMatch(reviveCoinFlightCss, /\n\s*(6%|34%)\s*\{/);
+  assert.doesNotMatch(reviveCoinFlightCss, /calc\(var\(--revive-coin-start-x\) \* 0\./);
+  assert.match(cssSource, /@keyframes endless-revive-totem-particle[\s\S]*62%[\s\S]*var\(--particle-x\)[\s\S]*var\(--particle-y\)/);
+  assert.doesNotMatch(cssSource, /12%[\s\S]*42%[\s\S]*66%[\s\S]*84%/);
+  assert.doesNotMatch(cssSource, /@keyframes endless-revive-totem-aura|@keyframes endless-revive-totem-spark/);
   assert.doesNotMatch(cssSource, /@keyframes endless-revive-coin-flip|endless-revive-coin-fly/);
 });
 
-test("endless bonus starting life is shown after entry with the normal heart gain animation", () => {
+test("endless bonus starting lives render immediately without a heart gain animation", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
 
   assert.match(runtimeSource, /ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS = 620/);
   assert.match(runtimeSource, /function getEndlessOpeningReviveFeedbackText\(roundId: RoundId, avatarSkin: PlayerAvatarSkin\)/);
-  assert.match(runtimeSource, /const baseStartingRevives = Math\.min\(ENDLESS_STARTING_REVIVES, normalizedStartingRevives\);/);
-  assert.match(runtimeSource, /const hasOpeningReviveBonus = normalizedStartingRevives > baseStartingRevives;/);
+  assert.match(runtimeSource, /const startsWithFullBonusRevives = normalizedStartingRevives > ENDLESS_STARTING_REVIVES;/);
+  assert.doesNotMatch(runtimeSource, /avatarSkin === "starfall" && normalizedStartingRevives > ENDLESS_STARTING_REVIVES/);
+  assert.match(runtimeSource, /const baseStartingRevives = startsWithFullBonusRevives \? normalizedStartingRevives : Math\.min\(ENDLESS_STARTING_REVIVES, normalizedStartingRevives\);/);
+  assert.match(runtimeSource, /const shouldShowOpeningReviveBonusFeedback = !startsWithFullBonusRevives && normalizedStartingRevives > baseStartingRevives;/);
   assert.match(runtimeSource, /const revivesRef = useRef\(baseStartingRevives\);/);
   assert.match(runtimeSource, /const \[revives, setRevives\] = useState\(baseStartingRevives\);/);
-  assert.match(runtimeSource, /window\.setTimeout\(\(\) => \{[\s\S]*const nextRevives = Math\.min\(normalizedStartingRevives, revivesRef\.current \+ 1\);[\s\S]*showEnergyFeedback\(getEndlessOpeningReviveFeedbackText\(roundId, avatarSkin\), "heal"\);[\s\S]*setRevives\(nextRevives\);[\s\S]*}, ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS\)/);
+  assert.doesNotMatch(runtimeSource, /showEnergyFeedback\(getEndlessOpeningReviveFeedbackText\(roundId, avatarSkin\), "heal"\);[\s\S]*if \(startsWithFullBonusRevives\) return/);
+  assert.match(runtimeSource, /window\.setTimeout\(\(\) => \{[\s\S]*showEnergyFeedback\(getEndlessOpeningReviveFeedbackText\(roundId, avatarSkin\), "heal"\);[\s\S]*const nextRevives = Math\.min\(normalizedStartingRevives, revivesRef\.current \+ 1\);[\s\S]*setRevives\(nextRevives\);[\s\S]*}, ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS\)/);
 });
 
 test("endless damage invincibility flickers only the player avatar shells", () => {

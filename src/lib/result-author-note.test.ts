@@ -27,7 +27,11 @@ test("result author note stays below the unchanged rank row", () => {
   assert.match(resultSource, /resultAuthorNoteHistoryByContext/);
   assert.match(resultSource, /getInitialResultAuthorNoteSelection/);
   assert.match(resultSource, /rememberResultAuthorNote/);
-  assert.match(resultSource, /resultAuthorNoteHistoryByContext\.get\(contextKey\)/);
+  assert.match(
+    resultSource,
+    /function getInitialResultAuthorNoteSelection[\s\S]*return \{ contextKey, includeRare: false, noteId: getDefaultResultAuthorNote\(context\)\.id \};[\s\S]*}/,
+  );
+  assert.match(resultSource, /resultAuthorNoteHistoryByContext\.get\(authorNoteContextKey\) \?\? authorNote\.id/);
   assert.match(resultSource, /getRandomResultAuthorNote\(nextContext,\s*previousNoteId\)/);
   assert.match(resultSource, /useState<ResultAuthorNoteSelection>\(\(\) =>\s*getInitialResultAuthorNoteSelection/);
   assert.match(resultSource, /Math\.random/);
@@ -73,6 +77,8 @@ test("result author note copy includes the approved trigger set", () => {
   const resultSource = readSource("../features/results/result-screen.tsx");
 
   assert.match(resultSource, /点击右侧的小方块可以重新测试~/);
+  assert.match(resultSource, /达到最强王者后开启进阶百星挑战/);
+  assert.match(resultSource, /最强王者只是起点，进阶百星挑战已开启/);
   assert.match(resultSource, /帮忙分享这个游戏让更多人看到吧~/);
   assert.match(resultSource, /如果哪里做的不好，请在反馈里记录下来/);
   assert.match(resultSource, /想和朋友一起玩的话，点击小方块的联机功能/);
@@ -103,11 +109,49 @@ test("result author note copy includes the approved trigger set", () => {
   assert.match(resultSource, /如果你愿意把这个游戏发给别人，我会非常感谢/);
 
   assert.match(resultSource, /trigger:\s*"not-king"/);
-  assert.match(resultSource, /trigger:\s*"first-king"/);
-  assert.match(resultSource, /trigger:\s*"king"/);
+  assert.match(resultSource, /trigger:\s*"king-entry"/);
+  assert.match(resultSource, /trigger:\s*"advanced-active"/);
+  assert.match(resultSource, /trigger:\s*"advanced-complete"/);
   assert.match(resultSource, /trigger:\s*"endless-unlocked"/);
   assert.match(resultSource, /trigger:\s*"endless-played"/);
   assert.match(resultSource, /trigger:\s*"luck-maxed"/);
   assert.match(resultSource, /trigger:\s*"rare"/);
   assert.match(resultSource, /trigger:\s*"always"/);
+});
+
+test("result author note defaults reuse restart copy before non-king evergreen tips", () => {
+  const resultSource = readSource("../features/results/result-screen.tsx");
+
+  assert.match(
+    resultSource,
+    /id:\s*"retry-after-non-king",\s*text:\s*"点击右侧的小方块可以重新测试~",\s*trigger:\s*"not-king",\s*priority:\s*160/,
+  );
+  assert.match(
+    resultSource,
+    /id:\s*"advanced-after-non-king",\s*text:\s*"达到最强王者后开启进阶百星挑战",\s*trigger:\s*"not-king",\s*priority:\s*150/,
+  );
+  assert.match(
+    resultSource,
+    /id:\s*"king-start",\s*text:\s*"最强王者只是起点，进阶百星挑战已开启",\s*trigger:\s*"king-entry",\s*priority:\s*140/,
+  );
+});
+
+test("result author note categories keep 100-star completion copy out of early king guidance", () => {
+  const resultSource = readSource("../features/results/result-screen.tsx");
+
+  assert.match(resultSource, /advancedStars >= 100/);
+  assert.match(resultSource, /advancedStars > 0 && advancedStars < 100/);
+  assert.match(resultSource, /advancedStars === 0/);
+  assert.match(resultSource, /advancedComplete: advancedStars >= 100/);
+  assert.match(resultSource, /advancedActive:\s*result\.name === "最强王者" && advancedStars > 0 && advancedStars < 100/);
+  assert.match(resultSource, /kingEntry: result\.name === "最强王者" && advancedStars === 0/);
+  assert.match(
+    resultSource,
+    /id:\s*"advanced-complete",\s*text:\s*"传奇王者达成，百星挑战已完成",\s*trigger:\s*"advanced-complete",\s*priority:\s*180/,
+  );
+  assert.match(resultSource, /case "king-entry":[\s\S]*return context\.kingEntry;/);
+  assert.match(resultSource, /case "advanced-active":[\s\S]*return context\.advancedActive;/);
+  assert.match(resultSource, /case "advanced-complete":[\s\S]*return context\.advancedComplete;/);
+  assert.match(resultSource, /case "endless-unlocked":[\s\S]*return context\.endlessUnlocked && !context\.advancedComplete;/);
+  assert.doesNotMatch(resultSource, /text:\s*"最强王者只是起点，进阶百星挑战已开启",\s*trigger:\s*"advanced-complete"/);
 });

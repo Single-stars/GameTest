@@ -965,7 +965,7 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(componentSource, /skin === "target"[\s\S]*styles\.targetGlyph[\s\S]*styles\.targetRing/);
   assert.match(componentSource, /skin === "blade"[\s\S]*styles\.bladeGlyph[\s\S]*styles\.bladeSlash/);
   assert.match(componentSource, /skin === "relay"[\s\S]*styles\.relayGlyph/);
-  assert.match(componentSource, /skin === "lead"[\s\S]*styles\.leadGlyph/);
+  assert.match(componentSource, /if \(skin === "lead"\) return null;/);
   assert.match(componentSource, /if \(skin === "mastery"\) return null;/);
   const skinArrayMatch = skinSource.match(/export const PLAYER_AVATAR_SKINS = \[([\s\S]*?)\] as const/);
   assert.notEqual(skinArrayMatch, null);
@@ -1003,13 +1003,12 @@ test("player avatar is a visual-only state system with transform-safe CSS", () =
   assert.match(cssSource, /\.targetRing\s*\{[\s\S]*stroke:/);
   assert.match(cssSource, /\.bladeSlash\s*\{[\s\S]*stroke:/);
   assert.match(cssSource, /\.relayGlyph/);
-  assert.match(cssSource, /\.leadGlyph/);
-  assert.match(cssSource, /\.leadCrown/);
-  assert.match(cssSource, /\.leadLaurel/);
+  assert.doesNotMatch(cssSource, /\.leadGlyph|\.leadGlassPane|\.leadGlassShine|\.leadGlassCorner/);
+  assert.doesNotMatch(cssSource, /\.leadCrown|\.leadLaurel|\.leadMedal|\.leadCheck/);
   assert.doesNotMatch(cssSource, /\.masteryGlyph|\.masteryLoop|\.masteryNode|\.masteryCore/);
   assert.match(cssSource, /@keyframes playerAvatarRelayEyes/);
   assert.doesNotMatch(cssSource, /@keyframes playerAvatarLeadEyes|@keyframes playerAvatarMasteryEyes/);
-  assert.match(cssSource, /\.root\[data-skin="lead"\]\s*\{[\s\S]*--player-avatar-ink:\s*#101010;/);
+  assert.match(cssSource, /\.root\[data-skin="lead"\]\s*\{[\s\S]*--player-avatar-body:\s*transparent;[\s\S]*--player-avatar-outline:\s*rgba\(120,\s*139,\s*158,\s*0\.18\);[\s\S]*--player-avatar-ink:\s*#5e6872;[\s\S]*--player-avatar-texture:\s*none;/);
   assert.match(cssSource, /\.root\[data-skin="mastery"\]\s*\{[\s\S]*--player-avatar-body:\s*#050505;[\s\S]*--player-avatar-ink:\s*#fffdf8;[\s\S]*--player-avatar-texture:\s*none;/);
   assert.match(cssSource, /\.root\[data-skin="sand"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*42px 39px,\s*57px 51px,\s*68px 44px;/);
   assert.match(cssSource, /\.root\[data-skin="arcade"\]\s*\{[\s\S]*--player-avatar-texture-size:\s*58px 54px,\s*74px 63px,\s*92px 81px;[\s\S]*--player-avatar-texture-inset:\s*-34%;[\s\S]*--player-avatar-texture-blend-mode:\s*screen;/);

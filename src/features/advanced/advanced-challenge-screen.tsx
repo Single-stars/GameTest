@@ -407,7 +407,7 @@ function AdvancedResultCard({
       </div>
       {challenge.passed && challenge.gained ? (
         <div className="advanced-luck-coin-card" aria-live="polite">
-          <strong>获得【幸运币】*1</strong>
+          <strong>幸运币+1</strong>
           <button className="advanced-reward-luck-link" type="button" onClick={onOpenLuckDraw}>
             前往抽奖
           </button>

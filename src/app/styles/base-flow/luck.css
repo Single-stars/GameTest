@@ -669,11 +669,6 @@
   border-color: rgba(47, 128, 237, 0.22);
 }
 
-.luck-revive-exchange-card.claimed {
-  border-color: rgba(47, 127, 89, 0.42);
-  box-shadow: 0 0 0 4px rgba(47, 127, 89, 0.12), 0 12px 24px rgba(24, 24, 24, 0.08);
-}
-
 .luck-revive-exchange-icon {
   width: 38px;
   height: 38px;
@@ -728,6 +723,7 @@
 }
 
 .luck-revive-exchange-action {
+  width: 62px;
   min-height: 38px;
   min-width: 62px;
   border: 1px solid rgba(36, 46, 62, 0.14);
@@ -747,11 +743,24 @@
   opacity: 0.42;
 }
 
-.luck-revive-exchange-action.confirmed {
-  border-color: rgba(47, 127, 89, 0.3);
-  background: #236b54;
-  color: #fffdf8;
-  transform: translateY(1px);
+.luck-revive-debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.luck-revive-debug-action {
+  min-height: 34px;
+  border: 1px solid rgba(36, 46, 62, 0.14);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fffdf8;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
 }
 
 .luck-revive-exchange-toast {
@@ -783,6 +792,11 @@
 .luck-revive-exchange-toast.claim {
   border-color: rgba(47, 128, 237, 0.2);
   color: #185f93;
+}
+
+.luck-revive-exchange-toast.limit {
+  border-color: rgba(185, 118, 38, 0.24);
+  color: #8a5a16;
 }
 
 @keyframes luck-revive-exchange-toast-pop {

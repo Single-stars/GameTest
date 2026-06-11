@@ -36,7 +36,7 @@ test("avatar skin copy matches the playful unlock list", () => {
     custom: "创意",
     cyan: "青蓝",
     ivory: "象牙",
-    lead: "胜利",
+    lead: "玻璃心",
     mastery: "无限",
     mint: "薄荷",
     paw: "猫爪",
@@ -213,7 +213,7 @@ test("avatar skin diff reports every newly unlocked skin and excludes already-ow
   assert.deepEqual(getNewlyUnlockedPlayerAvatarSkins(luckyProgress, luckyProgress), []);
 });
 
-test("avatar skin display keeps unlocked skins first and preserves the configured unlock order", () => {
+test("avatar skin display keeps donation skins together at the end", () => {
   const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
   const searchClearedProgress = Array.from({ length: 10 }, (_, index) => index + 1).reduce(
     (progress, level) =>
@@ -229,15 +229,15 @@ test("avatar skin display keeps unlocked skins first and preserves the configure
 
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(emptyProgress).map((item) => item.skin),
-    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "arcade", "relay", "lead", "mastery", "custom"],
+    ["cyan", "signal", "target", "mint", "slate", "sand", "pine", "ivory", "blade", "paw", "pig", "basketball", "starfall", "relay", "lead", "mastery", "arcade", "custom"],
   );
   assert.deepEqual(
     getPlayerAvatarSkinDisplayItems(searchClearedProgress).map((item) => item.skin),
-    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "arcade", "relay", "lead", "mastery", "custom"],
+    ["cyan", "mint", "pig", "signal", "target", "slate", "sand", "pine", "ivory", "blade", "paw", "basketball", "starfall", "relay", "lead", "mastery", "arcade", "custom"],
   );
   assert.deepEqual(
-    getPlayerAvatarSkinDisplayItems(markAuthorDonated(emptyProgress)).map((item) => item.skin).slice(0, 3),
-    ["custom", "cyan", "arcade"],
+    getPlayerAvatarSkinDisplayItems(markAuthorDonated(emptyProgress)).map((item) => item.skin).slice(-2),
+    ["arcade", "custom"],
   );
 });
 

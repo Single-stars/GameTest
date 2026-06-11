@@ -15,6 +15,7 @@ import {
   formatLuckDrawOutcomeText,
   getLuckDrawStatusText,
   getLuckScoreTone,
+  hasExchangedReviveCoinToday,
   type AdvancedProgress,
   type LuckDrawOutcome,
 } from "@/lib/advanced-progress";
@@ -28,12 +29,16 @@ const LUCK_RULE_LINES = [
 ];
 const SLOT_REEL_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 const LUCK_COIN_GUIDE_STORAGE_KEY = "luckCoinGuideSeen";
+const LUCK_REWARD_REVEAL_DEBOUNCE_MS = 420;
 const SHOW_LEGACY_LUCK_SLOT = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_SHOW_LEGACY_LUCK_SLOT === "1";
 
 export function LuckDrawScreen({
   advancedProgress,
+  debugToolsVisible,
   lastOutcome,
   onBack,
+  onDebugClearAllAdvancedChallenges,
+  onDebugMoveReviveCoinExchangeToPreviousDay,
   onDraw,
   onDrawBatch,
   onExchangeReviveCoin,
@@ -41,30 +46,33 @@ export function LuckDrawScreen({
   onRevealRewards,
 }: {
   advancedProgress: AdvancedProgress;
+  debugToolsVisible: boolean;
   lastOutcome: LuckDrawOutcome | null;
   onBack: () => void;
+  onDebugClearAllAdvancedChallenges: () => void;
+  onDebugMoveReviveCoinExchangeToPreviousDay: () => void;
   onDraw: () => LuckDrawOutcome | null;
   onDrawBatch: () => LuckDrawOutcome | null;
   onExchangeReviveCoin: () => boolean;
   onGrantReviveCoinForTest: () => void;
   onRevealRewards?: (outcome: LuckDrawOutcome) => void;
 }) {
-  const [spinning, setSpinning] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const finishDrawTimerRef = useRef<number | null>(null);
+  const rewardRevealTimerRef = useRef<number | null>(null);
+  const pendingRewardOutcomeRef = useRef<LuckDrawOutcome | null>(null);
   const ruleDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const unlocked = advancedProgress.unlocked;
-  const canDraw = canUseLuckDraw(unlocked, advancedProgress) && !spinning;
+  const canDraw = canUseLuckDraw(unlocked, advancedProgress);
 
-  const clearFinishDrawTimer = useCallback(() => {
-    if (finishDrawTimerRef.current === null) return;
-    window.clearTimeout(finishDrawTimerRef.current);
-    finishDrawTimerRef.current = null;
+  const clearRewardRevealTimer = useCallback(() => {
+    if (rewardRevealTimerRef.current === null) return;
+    window.clearTimeout(rewardRevealTimerRef.current);
+    rewardRevealTimerRef.current = null;
   }, []);
 
   useEffect(() => {
-    return () => clearFinishDrawTimer();
-  }, [clearFinishDrawTimer]);
+    return () => clearRewardRevealTimer();
+  }, [clearRewardRevealTimer]);
 
   useEffect(() => {
     if (!rulesOpen) return undefined;
@@ -77,19 +85,22 @@ export function LuckDrawScreen({
     return () => window.removeEventListener("pointerdown", closeOnOutside);
   }, [rulesOpen]);
 
+  const scheduleRewardReveal = useCallback((outcome: LuckDrawOutcome) => {
+    pendingRewardOutcomeRef.current = outcome;
+    clearRewardRevealTimer();
+    rewardRevealTimerRef.current = window.setTimeout(() => {
+      const pendingOutcome = pendingRewardOutcomeRef.current;
+      pendingRewardOutcomeRef.current = null;
+      rewardRevealTimerRef.current = null;
+      if (pendingOutcome) onRevealRewards?.(pendingOutcome);
+    }, LUCK_REWARD_REVEAL_DEBOUNCE_MS);
+  }, [clearRewardRevealTimer, onRevealRewards]);
+
   const draw = () => {
     if (!canDraw) return null;
     const outcome = onDraw();
     if (!outcome) return null;
-
-    clearFinishDrawTimer();
-    setSpinning(true);
-    finishDrawTimerRef.current = window.setTimeout(() => {
-      setSpinning(false);
-      finishDrawTimerRef.current = null;
-      onRevealRewards?.(outcome);
-    }, 260);
-
+    scheduleRewardReveal(outcome);
     return outcome;
   };
 
@@ -128,6 +139,9 @@ export function LuckDrawScreen({
       />
       <ReviveCoinExchangeCards
         advancedProgress={advancedProgress}
+        debugToolsVisible={debugToolsVisible}
+        onDebugClearAllAdvancedChallenges={onDebugClearAllAdvancedChallenges}
+        onDebugMoveReviveCoinExchangeToPreviousDay={onDebugMoveReviveCoinExchangeToPreviousDay}
         onExchangeReviveCoin={onExchangeReviveCoin}
         onGrantReviveCoinForTest={onGrantReviveCoinForTest}
       />
@@ -157,6 +171,20 @@ type LuckCoinBlockedNotice = {
   tone: "empty" | "max";
 };
 
+type LuckCoinTestState = {
+  coinBalance: number;
+  drawCount: number;
+  score: number;
+};
+
+type OptimisticLuckCoinTestState = LuckCoinTestState & {
+  sourceKey: string;
+};
+
+function getLuckCoinTestStateKey({ coinBalance, drawCount, score }: LuckCoinTestState) {
+  return `${score}:${drawCount}:${coinBalance}`;
+}
+
 function LuckCoinTestCard({
   advancedProgress,
   canDraw,
@@ -166,17 +194,30 @@ function LuckCoinTestCard({
   canDraw: boolean;
   onDraw: () => LuckDrawOutcome | null;
 }) {
-  const [flipTick, setFlipTick] = useState(0);
   const [resultPopup, setResultPopup] = useState<LuckCoinTestResultPopup | null>(null);
   const [blockedNotice, setBlockedNotice] = useState<LuckCoinBlockedNotice | null>(null);
   const [guideStep, setGuideStep] = useState<"score" | "coin" | null>(null);
+  const progressLuck = {
+    coinBalance: advancedProgress.luckDrawChances,
+    drawCount: advancedProgress.luckDrawCount,
+    score: advancedProgress.luckBestScore,
+  };
+  const progressLuckKey = getLuckCoinTestStateKey(progressLuck);
+  const [optimisticLuck, setOptimisticLuck] = useState<OptimisticLuckCoinTestState>(() => ({
+    ...progressLuck,
+    sourceKey: progressLuckKey,
+  }));
+  const latestScoreRef = useRef(advancedProgress.luckBestScore);
+  const latestCoinBalanceRef = useRef(advancedProgress.luckDrawChances);
+  const latestDrawCountRef = useRef(advancedProgress.luckDrawCount);
   const blockedNoticeTimerRef = useRef<number | null>(null);
   const guideOpenTimerRef = useRef<number | null>(null);
-  const score = advancedProgress.luckBestScore;
-  const drawCount = advancedProgress.luckDrawCount;
-  const coinBalance = advancedProgress.luckDrawChances;
+  const currentLuck = optimisticLuck.sourceKey === progressLuckKey ? optimisticLuck : progressLuck;
+  const score = currentLuck.score;
+  const drawCount = currentLuck.drawCount;
+  const coinBalance = currentLuck.coinBalance;
   const tier = getLuckCoinTestTier(score);
-  const isMaxLuck = advancedProgress.luckBestScore >= 100 || advancedProgress.luckStars >= 20;
+  const isMaxLuck = score >= 100 || advancedProgress.luckStars >= 20;
   const hasLuckCoin = coinBalance > 0;
   const isFirstLuckDrawPrompt = drawCount === 0 && coinBalance >= 1 && score === 0;
   const actionText = isMaxLuck
@@ -196,6 +237,12 @@ function LuckCoinTestCard({
   useEffect(() => {
     return () => clearBlockedNoticeTimer();
   }, [clearBlockedNoticeTimer]);
+
+  useEffect(() => {
+    latestScoreRef.current = score;
+    latestCoinBalanceRef.current = coinBalance;
+    latestDrawCountRef.current = drawCount;
+  }, [coinBalance, drawCount, score]);
 
   useEffect(() => {
     try {
@@ -253,17 +300,32 @@ function LuckCoinTestCard({
     if (!canDraw) return;
     clearBlockedNoticeTimer();
     setBlockedNotice(null);
-    const previousScore = advancedProgress.luckBestScore;
+    const previousScore = latestScoreRef.current;
     const outcome = onDraw();
-    if (!outcome) return;
+    if (!outcome) {
+      if (latestScoreRef.current >= 100) {
+        triggerBlockedNotice("幸运已达最大值", "max");
+      } else if (latestCoinBalanceRef.current <= 0) {
+        triggerBlockedNotice("幸运币不足", "empty");
+      }
+      return;
+    }
     const points = Math.max(0, outcome.score - previousScore);
+    latestScoreRef.current = outcome.score;
+    latestCoinBalanceRef.current = Math.max(0, latestCoinBalanceRef.current - 1);
+    latestDrawCountRef.current = Math.min(80, latestDrawCountRef.current + 1);
+    setOptimisticLuck({
+      coinBalance: latestCoinBalanceRef.current,
+      drawCount: latestDrawCountRef.current,
+      sourceKey: progressLuckKey,
+      score: latestScoreRef.current,
+    });
     const tone = getLuckCoinTestPointTone(Math.max(1, points));
     setResultPopup({
       points,
       tick: Date.now(),
       tone,
     });
-    setFlipTick((current) => current + 1);
   };
 
   return (
@@ -282,7 +344,6 @@ function LuckCoinTestCard({
         <button
           aria-disabled={!canDraw ? true : undefined}
           className={`luck-coin-test-score-card tone-${tier.tone} ${!canDraw ? "is-blocked" : ""} ${blockedNotice ? "blocked-feedback" : ""} ${isFirstLuckDrawPrompt ? "first-draw-prompt" : ""} ${resultPopup ? `result-tone-${resultPopup.tone}` : ""}`}
-          key={`${flipTick}-${blockedNotice?.tick ?? 0}`}
           type="button"
           onClick={draw}
         >
@@ -319,20 +380,28 @@ function LuckCoinTestCard({
 
 function ReviveCoinExchangeCards({
   advancedProgress,
+  debugToolsVisible,
+  onDebugClearAllAdvancedChallenges,
+  onDebugMoveReviveCoinExchangeToPreviousDay,
   onExchangeReviveCoin,
   onGrantReviveCoinForTest,
 }: {
   advancedProgress: AdvancedProgress;
+  debugToolsVisible: boolean;
+  onDebugClearAllAdvancedChallenges: () => void;
+  onDebugMoveReviveCoinExchangeToPreviousDay: () => void;
   onExchangeReviveCoin: () => boolean;
   onGrantReviveCoinForTest: () => void;
 }) {
   const exchangeUnlocked = advancedProgress.luckBestScore >= 100;
-  const canExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0;
+  const exchangeUsedToday = hasExchangedReviveCoinToday(advancedProgress);
+  const canExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0 && !exchangeUsedToday;
+  const canClickExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0;
   const feedbackTimerRef = useRef<number | null>(null);
   const feedbackIdRef = useRef(0);
-  const [feedback, setFeedback] = useState<{ id: number; text: string; tone: "exchange" | "claim" } | null>(null);
+  const [feedback, setFeedback] = useState<{ id: number; text: string; tone: "exchange" | "claim" | "limit" } | null>(null);
 
-  const showReviveCoinFeedback = useCallback((text: string, tone: "exchange" | "claim") => {
+  const showReviveCoinFeedback = useCallback((text: string, tone: "exchange" | "claim" | "limit") => {
     feedbackIdRef.current += 1;
     const nextFeedback = { id: feedbackIdRef.current, text, tone };
     setFeedback(nextFeedback);
@@ -350,41 +419,45 @@ function ReviveCoinExchangeCards({
   }, []);
 
   const exchange = () => {
-    if (!canExchange) return;
+    if (!canClickExchange) return;
     const exchangeResult = onExchangeReviveCoin();
-    if (!exchangeResult) return;
+    if (!exchangeResult) {
+      showReviveCoinFeedback("每日限兑换一次", "limit");
+      return;
+    }
     showReviveCoinFeedback("兑换成功，复活币 +1", "exchange");
   };
 
   const claimTestCoin = () => {
     onGrantReviveCoinForTest();
-    showReviveCoinFeedback("已领取复活币 +1", "claim");
+    showReviveCoinFeedback("领取成功，复活币 +1", "claim");
   };
 
   return (
     <section className="luck-revive-exchange-list" aria-label="复活币">
-      <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"} ${feedback?.tone === "exchange" ? "claimed" : ""}`}>
+      <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"}`}>
         <span className="luck-revive-exchange-icon" aria-hidden="true">
           <DonateIcon />
         </span>
         <div className="luck-revive-exchange-copy">
           <strong>复活币</strong>
-          <span>{exchangeUnlocked ? "1 幸运币 → 1 复活币" : "运气 100 解锁"}</span>
+          <span>{exchangeUnlocked ? "消耗一个幸运币兑换" : "运气 100 解锁"}</span>
         </div>
         <div className="luck-revive-exchange-balance">
           <span>持有</span>
           <strong>{advancedProgress.reviveCoins}</strong>
         </div>
         <button
-          aria-disabled={!canExchange ? true : undefined}
-          className={`luck-revive-exchange-action ${feedback?.tone === "exchange" ? "confirmed" : ""}`}
+          aria-label={canExchange ? "兑换复活币" : exchangeUsedToday ? "每日限兑换一次" : undefined}
+          aria-disabled={!canClickExchange ? true : undefined}
+          className="luck-revive-exchange-action"
           type="button"
           onClick={exchange}
         >
-          {feedback?.tone === "exchange" ? "已兑换" : "兑换"}
+          兑换
         </button>
       </article>
-      <article className={`luck-revive-exchange-card test ${feedback?.tone === "claim" ? "claimed" : ""}`}>
+      <article className="luck-revive-exchange-card test">
         <span className="luck-revive-exchange-icon" aria-hidden="true">
           <DonateIcon />
         </span>
@@ -396,12 +469,22 @@ function ReviveCoinExchangeCards({
           <span>持有</span>
           <strong>{advancedProgress.reviveCoins}</strong>
         </div>
-        <button className={`luck-revive-exchange-action ${feedback?.tone === "claim" ? "confirmed" : ""}`} type="button" onClick={claimTestCoin}>
-          {feedback?.tone === "claim" ? "已领取" : "领取"}
+        <button className="luck-revive-exchange-action" type="button" onClick={claimTestCoin}>
+          领取
         </button>
       </article>
+      {debugToolsVisible ? (
+        <div className="luck-revive-debug-actions" aria-label="复活币调试">
+          <button className="luck-revive-debug-action" type="button" onClick={onDebugMoveReviveCoinExchangeToPreviousDay}>
+            模拟明天
+          </button>
+          <button className="luck-revive-debug-action" type="button" onClick={onDebugClearAllAdvancedChallenges}>
+            一键通过所有进阶关
+          </button>
+        </div>
+      ) : null}
       {feedback ? (
-        <div className={`luck-revive-exchange-toast ${feedback.tone}`} role="status" aria-live="polite">
+        <div key={feedback.id} className={`luck-revive-exchange-toast ${feedback.tone}`} role="status" aria-live="polite">
           {feedback.text}
         </div>
       ) : null}

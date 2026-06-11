@@ -50,8 +50,8 @@ const ENDLESS_BONUS_POPUP_MS = 1500;
 const ENDLESS_FEEDBACK_POPUP_MS = 1400;
 const ENDLESS_DAMAGE_PROTECTION_MS = 500;
 const ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS = 620;
-const ENDLESS_REVIVE_COIN_ANIMATION_MS = 1600;
-const ENDLESS_REVIVE_TOTEM_SPARKS = Array.from({ length: 3 }, (_, index) => index);
+const ENDLESS_REVIVE_COIN_ANIMATION_MS = 1500;
+const ENDLESS_REVIVE_TOTEM_PARTICLES = Array.from({ length: 10 }, (_, index) => index);
 
 export type EndlessRoundCompletion = {
   bonusActions: number;
@@ -270,8 +270,9 @@ function useEndlessRun({
   startingRevives?: number;
 }): EndlessRunApi {
   const normalizedStartingRevives = Math.max(1, Math.floor(Number.isFinite(startingRevives) ? startingRevives : ENDLESS_STARTING_REVIVES));
-  const baseStartingRevives = Math.min(ENDLESS_STARTING_REVIVES, normalizedStartingRevives);
-  const hasOpeningReviveBonus = normalizedStartingRevives > baseStartingRevives;
+  const startsWithFullBonusRevives = normalizedStartingRevives > ENDLESS_STARTING_REVIVES;
+  const baseStartingRevives = startsWithFullBonusRevives ? normalizedStartingRevives : Math.min(ENDLESS_STARTING_REVIVES, normalizedStartingRevives);
+  const shouldShowOpeningReviveBonusFeedback = !startsWithFullBonusRevives && normalizedStartingRevives > baseStartingRevives;
   const startedAtRef = useRef(0);
   const completedRef = useRef(false);
   const pausedRef = useRef(paused);
@@ -419,15 +420,16 @@ function useEndlessRun({
   }, []);
 
   React.useEffect(() => {
-    if (!hasOpeningReviveBonus || openingReviveBonusAppliedRef.current || completedRef.current) return;
+    if (!shouldShowOpeningReviveBonusFeedback || openingReviveBonusAppliedRef.current || completedRef.current) return;
     if (openingReviveBonusTimerRef.current !== null) window.clearTimeout(openingReviveBonusTimerRef.current);
     openingReviveBonusTimerRef.current = window.setTimeout(() => {
       openingReviveBonusTimerRef.current = null;
-      if (completedRef.current || openingReviveBonusAppliedRef.current || revivesRef.current >= normalizedStartingRevives) return;
+      if (completedRef.current || openingReviveBonusAppliedRef.current) return;
       openingReviveBonusAppliedRef.current = true;
+      showEnergyFeedback(getEndlessOpeningReviveFeedbackText(roundId, avatarSkin), "heal");
+      if (revivesRef.current >= normalizedStartingRevives) return;
       const nextRevives = Math.min(normalizedStartingRevives, revivesRef.current + 1);
       if (nextRevives <= revivesRef.current) return;
-      showEnergyFeedback(getEndlessOpeningReviveFeedbackText(roundId, avatarSkin), "heal");
       revivesRef.current = nextRevives;
       setRevives(nextRevives);
     }, ENDLESS_OPENING_REVIVE_BONUS_DELAY_MS);
@@ -435,7 +437,7 @@ function useEndlessRun({
       if (openingReviveBonusTimerRef.current !== null) window.clearTimeout(openingReviveBonusTimerRef.current);
       openingReviveBonusTimerRef.current = null;
     };
-  }, [avatarSkin, hasOpeningReviveBonus, normalizedStartingRevives, roundId, showEnergyFeedback]);
+  }, [avatarSkin, normalizedStartingRevives, roundId, shouldShowOpeningReviveBonusFeedback, showEnergyFeedback]);
 
   const showBonusFeedback = useCallback((label: string, amount: number) => {
     const popup = {
@@ -1001,7 +1003,11 @@ function EndlessHud({
   );
 }
 
-function EndlessReviveCoinBank({ api }: { api: EndlessRunApi }) {
+function EndlessReviveCoinBank({
+  api,
+}: {
+  api: EndlessRunApi;
+}) {
   return (
     <div className="endless-revive-bank" aria-label={`复活币 ${api.reviveCoins}${api.reviveCoinUsed ? "，已使用" : ""}`}>
       <span className="endless-revive-bank-icon" aria-hidden="true">
@@ -1036,13 +1042,20 @@ function EndlessReviveCoinPrompt({ api }: { api: EndlessRunApi }) {
   );
 }
 
-function EndlessReviveCoinAnimation({ animationId }: { animationId: number }) {
+function EndlessReviveCoinAnimation({
+  animationId,
+}: {
+  animationId: number;
+}) {
   if (animationId <= 0) return null;
   return (
     <div className="endless-revive-totem-burst" key={animationId} aria-hidden="true">
-      <span className="endless-revive-totem-aura" />
-      {ENDLESS_REVIVE_TOTEM_SPARKS.map((index) => (
-        <span className={`endless-revive-totem-spark spark-${index + 1}`} key={index} />
+      {ENDLESS_REVIVE_TOTEM_PARTICLES.map((index) => (
+        <span className={`endless-revive-totem-particle particle-${index + 1}`} key={index}>
+          <span className="endless-revive-totem-particle-face">
+            <DonateIcon />
+          </span>
+        </span>
       ))}
       <span className="endless-revive-totem-coin main">
         <span className="endless-revive-totem-coin-face">

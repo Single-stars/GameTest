@@ -74,7 +74,7 @@ test("luck draw screen promotes the luck coin button to the production draw entr
   assert.match(screenSource, /LuckCoinTestCard/);
   assert.match(screenSource, /<LuckCoinTestCard[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*onDraw=\{draw\}[\s\S]*\/>/);
   assert.doesNotMatch(screenSource.slice(screenSource.indexOf("<LuckCoinTestCard"), screenSource.indexOf("{SHOW_LEGACY_LUCK_SLOT")), /statusText=/);
-  assert.match(screenSource, /const isMaxLuck = advancedProgress\.luckBestScore >= 100 \|\| advancedProgress\.luckStars >= 20/);
+  assert.match(screenSource, /const isMaxLuck = score >= 100 \|\| advancedProgress\.luckStars >= 20/);
   assert.match(screenSource, /const hasLuckCoin = coinBalance > 0/);
   assert.match(screenSource, /const isFirstLuckDrawPrompt = drawCount === 0 && coinBalance >= 1 && score === 0/);
   assert.match(screenSource, /const actionText = isMaxLuck[\s\S]*\? "幸运已达最大值"[\s\S]*: hasLuckCoin[\s\S]*\? "消耗一枚幸运币点击按钮"[\s\S]*: "首次通关进阶关卡获得幸运币"/);
@@ -109,9 +109,17 @@ test("luck coin production card uses real progress and hides the legacy slot mac
   const statCardRule = cssRuleAfter(cssSource, ".luck-coin-test-stat-card", ".luck-coin-test-side {");
   const statLabelRule = cssRule(cssSource, ".luck-coin-test-stat-card span");
 
-  assert.match(testCardSource, /const score = advancedProgress\.luckBestScore;/);
-  assert.match(testCardSource, /const drawCount = advancedProgress\.luckDrawCount;/);
-  assert.match(testCardSource, /const coinBalance = advancedProgress\.luckDrawChances;/);
+  assert.match(testCardSource, /const progressLuck = \{/);
+  assert.match(testCardSource, /score:\s*advancedProgress\.luckBestScore/);
+  assert.match(testCardSource, /drawCount:\s*advancedProgress\.luckDrawCount/);
+  assert.match(testCardSource, /coinBalance:\s*advancedProgress\.luckDrawChances/);
+  assert.match(testCardSource, /const progressLuckKey = getLuckCoinTestStateKey\(progressLuck\);/);
+  assert.match(testCardSource, /const \[optimisticLuck, setOptimisticLuck\] = useState/);
+  assert.match(testCardSource, /sourceKey:\s*progressLuckKey/);
+  assert.match(testCardSource, /const currentLuck = optimisticLuck\.sourceKey === progressLuckKey \? optimisticLuck : progressLuck;/);
+  assert.match(testCardSource, /const score = currentLuck\.score;/);
+  assert.match(testCardSource, /const drawCount = currentLuck\.drawCount;/);
+  assert.match(testCardSource, /const coinBalance = currentLuck\.coinBalance;/);
   assert.match(testCardSource, /const \[resultPopup, setResultPopup\] = useState/);
   assert.match(testCardSource, /const points = Math\.max\(0, outcome\.score - previousScore\);/);
   assert.match(testCardSource, /getLuckCoinTestPointTone\(Math\.max\(1, points\)\)/);
@@ -251,33 +259,50 @@ test("luck screen keeps revive coin exchange and test cards visible under the lu
   assert.match(screenSource, /onExchangeReviveCoin/);
   assert.match(screenSource, /onGrantReviveCoinForTest/);
   assert.ok(productionSource.indexOf("LuckCoinTestCard") < productionSource.indexOf("ReviveCoinExchangeCards"));
-  assert.match(productionSource, /<ReviveCoinExchangeCards[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*onExchangeReviveCoin=\{onExchangeReviveCoin\}[\s\S]*onGrantReviveCoinForTest=\{onGrantReviveCoinForTest\}[\s\S]*\/>/);
+  assert.match(productionSource, /<ReviveCoinExchangeCards[\s\S]*advancedProgress=\{advancedProgress\}[\s\S]*debugToolsVisible=\{debugToolsVisible\}[\s\S]*onDebugClearAllAdvancedChallenges=\{onDebugClearAllAdvancedChallenges\}[\s\S]*onDebugMoveReviveCoinExchangeToPreviousDay=\{onDebugMoveReviveCoinExchangeToPreviousDay\}[\s\S]*onExchangeReviveCoin=\{onExchangeReviveCoin\}[\s\S]*onGrantReviveCoinForTest=\{onGrantReviveCoinForTest\}[\s\S]*\/>/);
   assert.match(exchangeCardSource, /const exchangeUnlocked = advancedProgress\.luckBestScore >= 100;/);
-  assert.match(exchangeCardSource, /const canExchange = exchangeUnlocked && advancedProgress\.luckDrawChances > 0;/);
-  assert.match(exchangeCardSource, /if \(!canExchange\) return;/);
+  assert.match(exchangeCardSource, /const exchangeUsedToday = hasExchangedReviveCoinToday\(advancedProgress\);/);
+  assert.match(exchangeCardSource, /const canExchange = exchangeUnlocked && advancedProgress\.luckDrawChances > 0 && !exchangeUsedToday;/);
+  assert.match(exchangeCardSource, /const canClickExchange = exchangeUnlocked && advancedProgress\.luckDrawChances > 0;/);
+  assert.match(exchangeCardSource, /if \(!canClickExchange\) return;/);
   assert.match(exchangeCardSource, /const exchangeResult = onExchangeReviveCoin\(\);/);
+  assert.match(exchangeCardSource, /showReviveCoinFeedback\("每日限兑换一次", "limit"\);/);
   assert.match(exchangeCardSource, /showReviveCoinFeedback\("兑换成功，复活币 \+1", "exchange"\);/);
-  assert.match(exchangeCardSource, /showReviveCoinFeedback\("已领取复活币 \+1", "claim"\);/);
+  assert.match(exchangeCardSource, /showReviveCoinFeedback\("领取成功，复活币 \+1", "claim"\);/);
   assert.match(exchangeCardSource, /onGrantReviveCoinForTest\(\);/);
   assert.match(exchangeCardSource, /const \[feedback, setFeedback\] = useState/);
   assert.match(exchangeCardSource, /advancedProgress\.reviveCoins/);
   assert.match(exchangeCardSource, /className="luck-revive-exchange-list"/);
-  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-card exchange \$\{exchangeUnlocked \? "unlocked" : "locked"\} \$\{feedback\?\.tone === "exchange" \? "claimed" : ""\}`\}/);
-  assert.match(exchangeCardSource, /aria-disabled=\{!canExchange \? true : undefined\}/);
-  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-action \$\{feedback\?\.tone === "exchange" \? "confirmed" : ""\}`\}/);
-  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-action \$\{feedback\?\.tone === "claim" \? "confirmed" : ""\}`\}/);
-  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-toast \$\{feedback\.tone\}`\}/);
+  assert.match(exchangeCardSource, /debugToolsVisible \? \(/);
+  assert.match(exchangeCardSource, /onDebugMoveReviveCoinExchangeToPreviousDay/);
+  assert.match(exchangeCardSource, /onDebugClearAllAdvancedChallenges/);
+  assert.match(exchangeCardSource, />\s*模拟明天\s*<\/button>/);
+  assert.match(exchangeCardSource, />\s*一键通过所有进阶关\s*<\/button>/);
+  assert.match(exchangeCardSource, /className=\{`luck-revive-exchange-card exchange \$\{exchangeUnlocked \? "unlocked" : "locked"\}`\}/);
+  assert.match(exchangeCardSource, /aria-disabled=\{!canClickExchange \? true : undefined\}/);
+  assert.match(exchangeCardSource, /className="luck-revive-exchange-action"/);
+  assert.match(exchangeCardSource, />\s*兑换\s*<\/button>/);
+  assert.match(exchangeCardSource, />\s*领取\s*<\/button>/);
+  assert.doesNotMatch(exchangeCardSource, /已兑换|已领取|confirmed|claimed/);
+  assert.match(exchangeCardSource, /exchangeUnlocked \? "消耗一个幸运币兑换" : "运气 100 解锁"/);
+  assert.match(exchangeCardSource, /key=\{feedback\.id\}[\s\S]*className=\{`luck-revive-exchange-toast \$\{feedback\.tone\}`\}/);
   assert.doesNotMatch(exchangeCardSource, /blockedNotice|triggerBlockedNotice|setBlockedNotice/);
 
   assert.match(cssSource, /\.luck-revive-exchange-list\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\.locked\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-card\.test\s*{/);
-  assert.match(cssSource, /\.luck-revive-exchange-card\.claimed\s*{/);
+  assert.doesNotMatch(cssSource, /\.luck-revive-exchange-card\.claimed\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-action\s*{/);
-  assert.match(cssSource, /\.luck-revive-exchange-action\.confirmed\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-action\s*{[\s\S]*width:\s*62px;/);
+  assert.doesNotMatch(cssSource, /\.luck-revive-exchange-action\.confirmed\s*{/);
+  assert.doesNotMatch(cssSource, /0 0 0 4px rgba\(47,\s*127,\s*89/);
+  assert.doesNotMatch(cssSource, /transform:\s*translateY\(1px\)/);
   assert.match(cssSource, /\.luck-revive-exchange-icon\s*{/);
   assert.match(cssSource, /\.luck-revive-exchange-toast\s*{/);
+  assert.match(cssSource, /\.luck-revive-debug-actions\s*{/);
+  assert.match(cssSource, /\.luck-revive-debug-action\s*{/);
+  assert.match(cssSource, /\.luck-revive-exchange-toast\.limit\s*{/);
   assert.match(cssSource, /@keyframes luck-revive-exchange-toast-pop/);
 });
 
@@ -286,6 +311,8 @@ test("app page persists revive coin exchange, test grants, and endless consumpti
   const advancedScreenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");
 
   assert.match(appPageSource, /exchangeLuckCoinForReviveCoin/);
+  assert.match(appPageSource, /debugClearAllAdvancedChallenges/);
+  assert.match(appPageSource, /debugMoveReviveCoinExchangeToPreviousDay/);
   assert.match(appPageSource, /grantReviveCoins/);
   assert.match(appPageSource, /consumeReviveCoin/);
   assert.match(appPageSource, /const exchangeReviveCoin = useCallback/);
@@ -293,17 +320,26 @@ test("app page persists revive coin exchange, test grants, and endless consumpti
   assert.match(appPageSource, /if \(!result\.exchanged\) return false;/);
   assert.match(appPageSource, /const grantReviveCoinForTest = useCallback/);
   assert.match(appPageSource, /grantReviveCoins\(previousProgress, 1\)/);
+  assert.match(appPageSource, /const debugMoveReviveCoinExchangeDayForTest = useCallback/);
+  assert.match(appPageSource, /debugMoveReviveCoinExchangeToPreviousDay\(previousProgress\)/);
+  assert.match(appPageSource, /const debugClearAllAdvancedChallengesForTest = useCallback/);
+  assert.match(appPageSource, /debugClearAllAdvancedChallenges\(previousProgress\)/);
   assert.match(appPageSource, /const useReviveCoin = useCallback/);
   assert.match(appPageSource, /consumeReviveCoin\(previousProgress\)/);
   assert.match(appPageSource, /if \(!result\.consumed\) return false;/);
   assert.match(appPageSource, /onExchangeReviveCoin=\{exchangeReviveCoin\}/);
   assert.match(appPageSource, /onGrantReviveCoinForTest=\{grantReviveCoinForTest\}/);
+  assert.match(appPageSource, /debugToolsVisible=\{debugToolsVisible\}/);
+  assert.match(appPageSource, /onDebugMoveReviveCoinExchangeToPreviousDay=\{debugMoveReviveCoinExchangeDayForTest\}/);
+  assert.match(appPageSource, /onDebugClearAllAdvancedChallenges=\{debugClearAllAdvancedChallengesForTest\}/);
   assert.match(appPageSource, /reviveCoins=\{advancedProgress\.reviveCoins\}/);
   assert.match(appPageSource, /onUseReviveCoin=\{useReviveCoin\}/);
   assert.match(advancedScreenSource, /reviveCoins: number;/);
   assert.match(advancedScreenSource, /onUseReviveCoin: \(\) => boolean;/);
   assert.match(advancedScreenSource, /reviveCoins=\{reviveCoins\}/);
   assert.match(advancedScreenSource, /onUseReviveCoin=\{onUseReviveCoin\}/);
+  assert.match(advancedScreenSource, /<strong>幸运币\+1<\/strong>/);
+  assert.doesNotMatch(advancedScreenSource, /获得【幸运币】\*1/);
 });
 
 test("luck coin card keeps the score button inside narrow mobile screens", () => {
@@ -347,5 +383,34 @@ test("luck button production draw records a real 1-5 point gain", () => {
   assert.match(appPageSource, /resolveLuckCoinTestScore/);
   assert.match(drawLuckSource, /const luckPointGain = resolveLuckCoinTestScore\(Math\.random\(\)\);/);
   assert.match(drawLuckSource, /recordLuckDraw\(\s*previousProgress,\s*Math\.min\(100,\s*previousProgress\.luckBestScore \+ luckPointGain\),\s*\)/);
+  assert.match(drawLuckSource, /pendingLuckRewardStartProgressRef\.current \?\? previousProgress/);
+  assert.match(drawLuckSource, /pendingLuckRewardStartProgressRef\.current = rewardStartProgress;/);
   assert.doesNotMatch(drawLuckSource, /Math\.floor\(Math\.random\(\) \* 101\)/);
+});
+
+test("luck button supports rapid repeated clicks without remounting or immediate reward interruption", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const cardSource = screenSource.slice(screenSource.indexOf("function LuckCoinTestCard"), screenSource.indexOf("function ReviveCoinExchangeCards"));
+  const drawScreenSource = screenSource.slice(screenSource.indexOf("export function LuckDrawScreen"), screenSource.indexOf("type LuckCoinTestResultPopup"));
+  const scoreButtonSource = cardSource.slice(cardSource.indexOf("<button"), cardSource.indexOf("</button>", cardSource.indexOf("<button")));
+
+  assert.match(drawScreenSource, /LUCK_REWARD_REVEAL_DEBOUNCE_MS/);
+  assert.doesNotMatch(drawScreenSource, /const \[spinning, setSpinning\]/);
+  assert.match(drawScreenSource, /const canDraw = canUseLuckDraw\(unlocked, advancedProgress\);/);
+  assert.match(drawScreenSource, /pendingRewardOutcomeRef/);
+  assert.match(drawScreenSource, /scheduleRewardReveal/);
+  assert.match(drawScreenSource, /window\.setTimeout\([\s\S]*LUCK_REWARD_REVEAL_DEBOUNCE_MS/);
+  assert.doesNotMatch(scoreButtonSource, /key=\{`\$\{flipTick\}-/);
+  assert.match(cardSource, /latestScoreRef/);
+  assert.match(cardSource, /latestCoinBalanceRef/);
+  assert.match(cardSource, /setOptimisticLuck/);
+  assert.match(cardSource, /const currentLuck = optimisticLuck\.sourceKey === progressLuckKey \? optimisticLuck : progressLuck;/);
+  assert.match(cardSource, /const previousScore = latestScoreRef\.current;/);
+  assert.match(cardSource, /latestScoreRef\.current = outcome\.score;/);
+  assert.match(cardSource, /latestCoinBalanceRef\.current = Math\.max\(0, latestCoinBalanceRef\.current - 1\);/);
+  assert.match(cardSource, /sourceKey:\s*progressLuckKey/);
+
+  assert.match(appPageSource, /pendingLuckRewardStartProgressRef/);
+  assert.match(appPageSource, /pendingLuckRewardStartProgressRef\.current = null;/);
 });

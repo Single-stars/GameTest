@@ -279,17 +279,7 @@ function renderAvatarSkinArt(skin: PlayerAvatarSkin): ReactNode {
     );
   }
 
-  if (skin === "lead") {
-    return (
-      <svg className={`${styles.skinSvg} ${styles.leadGlyph}`} viewBox="0 0 64 64" aria-hidden="true">
-        <path className={styles.leadLaurel} d="M16 45 C11 36 13 27 20 20 M48 45 C53 36 51 27 44 20" />
-        <path className={styles.leadLaurel} d="M19 39 L13 38 M20 33 L14 31 M23 27 L18 24 M45 39 L51 38 M44 33 L50 31 M41 27 L46 24" />
-        <path className={styles.leadMedal} d="M23 29 H41 L38 47 H26 Z" />
-        <path className={styles.leadCrown} d="M19 26 L25 15 L32 24 L39 15 L45 26 Z" />
-        <path className={styles.leadCheck} d="M25 37 L30 42 L40 31" />
-      </svg>
-    );
-  }
+  if (skin === "lead") return null;
 
   if (skin === "mastery") return null;
 

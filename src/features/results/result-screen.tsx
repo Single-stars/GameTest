@@ -40,8 +40,9 @@ type AvatarMenuItem = {
 type ResultAuthorNoteTrigger =
   | "always"
   | "not-king"
-  | "first-king"
-  | "king"
+  | "king-entry"
+  | "advanced-active"
+  | "advanced-complete"
   | "endless-unlocked"
   | "endless-played"
   | "luck-maxed"
@@ -53,11 +54,12 @@ type ResultAuthorNote = {
   priority?: number;
 };
 type ResultAuthorNoteContext = {
-  advancedUnlocked: boolean;
+  advancedActive: boolean;
+  advancedComplete: boolean;
   endlessPlayed: boolean;
   endlessUnlocked: boolean;
-  firstKingUnlock: boolean;
   isKingRank: boolean;
+  kingEntry: boolean;
   luckMaxed: boolean;
   rareEnabled: boolean;
 };
@@ -69,22 +71,24 @@ const AUTHOR_NOTE_TYPE_INTERVAL_MS = 82;
 const AUTHOR_NOTE_TYPE_START_DELAY_MS = 100;
 const resultAuthorNoteHistoryByContext = new Map<string, string>();
 const RESULT_AUTHOR_NOTES: ReadonlyArray<ResultAuthorNote> = [
-  { id: "retry-after-non-king", text: "点击右侧的小方块可以重新测试~", trigger: "not-king", priority: 100 },
+  { id: "retry-after-non-king", text: "点击右侧的小方块可以重新测试~", trigger: "not-king", priority: 160 },
+  { id: "advanced-after-non-king", text: "达到最强王者后开启进阶百星挑战", trigger: "not-king", priority: 150 },
   { id: "share-game", text: "帮忙分享这个游戏让更多人看到吧~", trigger: "always" },
   { id: "feedback-record", text: "如果哪里做的不好，请在反馈里记录下来", trigger: "always" },
   { id: "multiplayer-friends", text: "想和朋友一起玩的话，点击小方块的联机功能", trigger: "always" },
-  { id: "king-start", text: "最强王者只是起点", trigger: "first-king", priority: 120 },
-  { id: "score-card-advanced", text: "点击分数卡片，可以进入对应进阶关", trigger: "king", priority: 80 },
-  { id: "new-advanced-luck-coin", text: "第一次通过新的进阶关会获得一枚幸运币", trigger: "king" },
-  { id: "replay-no-coin", text: "重玩已通关的进阶关不会重复获得幸运币", trigger: "king" },
+  { id: "king-start", text: "最强王者只是起点，进阶百星挑战已开启", trigger: "king-entry", priority: 140 },
+  { id: "advanced-complete", text: "传奇王者达成，百星挑战已完成", trigger: "advanced-complete", priority: 180 },
+  { id: "score-card-advanced", text: "点击分数卡片，可以进入对应进阶关", trigger: "advanced-active", priority: 80 },
+  { id: "new-advanced-luck-coin", text: "第一次通过新的进阶关会获得一枚幸运币", trigger: "advanced-active" },
+  { id: "replay-no-coin", text: "重玩已通关的进阶关不会重复获得幸运币", trigger: "advanced-active" },
   { id: "all-challenges-rare", text: "听说可以完成所有挑战的玩家不足万分之一", trigger: "always" },
-  { id: "switch-stuck-stage", text: "克服卡关的秘诀是换一关接着打", trigger: "king" },
-  { id: "unlock-endless", text: "通过进阶前三关后将解锁无尽模式", trigger: "king" },
+  { id: "switch-stuck-stage", text: "克服卡关的秘诀是换一关接着打", trigger: "advanced-active" },
+  { id: "unlock-endless", text: "通过进阶前三关后将解锁无尽模式", trigger: "advanced-active" },
   { id: "endless-special-skill", text: "无尽模式的特殊技能有什么作用呢...", trigger: "endless-unlocked" },
   { id: "green-light-predict", text: "在绿灯行的无尽模式预判点击的话...", trigger: "endless-unlocked" },
   { id: "share-endless-challenge", text: "分享无尽成绩后其他人就可以挑战你", trigger: "endless-played" },
   { id: "author-not-cleared", text: "作者其实没有通关过这个游戏", trigger: "endless-unlocked" },
-  { id: "luck-is-power", text: "运气也是实力的一部分", trigger: "king" },
+  { id: "luck-is-power", text: "运气也是实力的一部分", trigger: "advanced-active" },
   { id: "extra-luck-coins", text: "运气达到最大值后，多余的幸运币也许有大用", trigger: "luck-maxed", priority: 70 },
   { id: "two-hand-square-jump", text: "小技巧：双手操控在一路向上关有奇效", trigger: "always" },
   { id: "aim-leading", text: "小技巧：射靶子时计算提前量是必要的", trigger: "always" },
@@ -143,16 +147,18 @@ function canShowResultAuthorNote(note: ResultAuthorNote, context: ResultAuthorNo
   switch (note.trigger) {
     case "not-king":
       return !context.isKingRank;
-    case "first-king":
-      return context.firstKingUnlock;
-    case "king":
-      return context.advancedUnlocked;
+    case "king-entry":
+      return context.kingEntry;
+    case "advanced-active":
+      return context.advancedActive;
+    case "advanced-complete":
+      return context.advancedComplete;
     case "endless-unlocked":
-      return context.endlessUnlocked;
+      return context.endlessUnlocked && !context.advancedComplete;
     case "endless-played":
       return context.endlessPlayed;
     case "luck-maxed":
-      return context.luckMaxed;
+      return context.luckMaxed && !context.advancedComplete;
     case "rare":
       return context.rareEnabled;
     case "always":
@@ -184,15 +190,7 @@ function getRandomResultAuthorNote(context: ResultAuthorNoteContext, currentNote
 }
 
 function getInitialResultAuthorNoteSelection(contextKey: string, context: ResultAuthorNoteContext): ResultAuthorNoteSelection {
-  const previousNoteId = resultAuthorNoteHistoryByContext.get(contextKey) ?? null;
-  if (!previousNoteId) {
-    return { contextKey, includeRare: false, noteId: getDefaultResultAuthorNote(context).id };
-  }
-
-  const includeRare = Math.random() < 0.08;
-  const nextContext = { ...context, rareEnabled: includeRare };
-  const nextNote = getRandomResultAuthorNote(nextContext, previousNoteId);
-  return { contextKey, includeRare, noteId: nextNote.id };
+  return { contextKey, includeRare: false, noteId: getDefaultResultAuthorNote(context).id };
 }
 
 function rememberResultAuthorNote(contextKey: string, noteId: string) {
@@ -318,18 +316,19 @@ export function ResultScreen({
   const endlessPlayed = rows.some((row) => (advancedProgress.endlessBestScores[row.roundId] ?? 0) > 0);
   const authorNoteContextKey = [
     advancedUnlocked,
+    advancedStars,
     endlessPlayed,
     endlessUnlocked,
-    advancedUnlockPulseId > 0 && advancedUnlocked,
     result.name === "最强王者",
     advancedProgress.luckStars >= 20 || advancedProgress.luckBestScore >= 100,
   ].join(":");
   const baseAuthorNoteContext = {
-    advancedUnlocked,
+    advancedActive: result.name === "最强王者" && advancedStars > 0 && advancedStars < 100,
+    advancedComplete: advancedStars >= 100,
     endlessPlayed,
     endlessUnlocked,
-    firstKingUnlock: advancedUnlockPulseId > 0 && advancedUnlocked,
     isKingRank: result.name === "最强王者",
+    kingEntry: result.name === "最强王者" && advancedStars === 0,
     luckMaxed: advancedProgress.luckStars >= 20 || advancedProgress.luckBestScore >= 100,
     rareEnabled: false,
   } satisfies ResultAuthorNoteContext;
@@ -578,7 +577,8 @@ export function ResultScreen({
   const refreshAuthorNote = () => {
     const includeRare = Math.random() < 0.08;
     const nextContext = { ...authorNoteContext, rareEnabled: includeRare };
-    const nextNote = getRandomResultAuthorNote(nextContext, authorNote.id);
+    const previousNoteId = resultAuthorNoteHistoryByContext.get(authorNoteContextKey) ?? authorNote.id;
+    const nextNote = getRandomResultAuthorNote(nextContext, previousNoteId);
     rememberResultAuthorNote(authorNoteContextKey, nextNote.id);
     setAuthorNoteSelection({ contextKey: authorNoteContextKey, includeRare, noteId: nextNote.id });
     setTypedAuthorNote({ length: Math.min(1, nextNote.text.length), text: nextNote.text });

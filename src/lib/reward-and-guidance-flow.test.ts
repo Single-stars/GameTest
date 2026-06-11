@@ -71,7 +71,8 @@ test("advanced clears show lucky coin rewards while rank changes use the full-sc
   assert.match(advancedScreenSource, /advanced-luck-coin-card/);
   assert.match(advancedScreenSource, /<>\s*<div className=\{`advanced-result-card/);
   assert.match(advancedScreenSource, /<\/div>\s*\{challenge\.passed && challenge\.gained \? \(/);
-  assert.match(advancedScreenSource, /获得【幸运币】\*1/);
+  assert.match(advancedScreenSource, /幸运币\+1/);
+  assert.doesNotMatch(advancedScreenSource, /获得【幸运币】\*1/);
   assert.match(advancedScreenSource, /onOpenLuckDraw/);
   assert.match(advancedScreenSource, /前往抽奖/);
   assert.doesNotMatch(advancedScreenSource, /前往抽奖\s*&gt;/);

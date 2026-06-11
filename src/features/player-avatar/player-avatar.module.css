@@ -442,35 +442,6 @@
   stroke-width: 4;
 }
 
-.leadGlyph {
-  opacity: 0.96;
-  fill: none;
-  transform-origin: 50% 56%;
-  filter: drop-shadow(0 3px 7px rgba(92, 58, 11, 0.24));
-}
-
-.leadLaurel {
-  stroke: rgba(56, 42, 12, 0.5);
-  stroke-width: 3.2;
-}
-
-.leadMedal {
-  fill: rgba(255, 250, 215, 0.34);
-  stroke: rgba(56, 42, 12, 0.46);
-  stroke-width: 2.8;
-}
-
-.leadCrown {
-  fill: rgba(255, 247, 182, 0.78);
-  stroke: rgba(56, 42, 12, 0.52);
-  stroke-width: 2.5;
-}
-
-.leadCheck {
-  stroke: rgba(24, 24, 24, 0.72);
-  stroke-width: 4.2;
-}
-
 .sparkles::before,
 .sparkles::after {
   content: "";
@@ -867,16 +838,15 @@
 }
 
 .root[data-skin="lead"] {
-  --player-avatar-body: #efbd42;
-  --player-avatar-outline: rgba(84, 62, 16, 0.66);
-  --player-avatar-ink: #101010;
-  --player-avatar-skin-line: rgba(56, 42, 12, 0.34);
-  --player-avatar-texture:
-    radial-gradient(circle at 76% 18%, rgba(255, 255, 236, 0.28) 0 3px, transparent 4px),
-    linear-gradient(180deg, rgba(255, 255, 235, 0.12), transparent 58%);
-  --player-avatar-texture-opacity: 0.68;
-  --player-avatar-texture-size: 72px 60px, 100% 100%;
-  --player-avatar-texture-position: -14px 5px, center;
+  --player-avatar-body: transparent;
+  --player-avatar-outline: rgba(120, 139, 158, 0.18);
+  --player-avatar-ink: #5e6872;
+  --player-avatar-skin-line: transparent;
+  --player-avatar-texture: none;
+  --player-avatar-texture-opacity: 0;
+  --player-avatar-texture-size: 100% 100%;
+  --player-avatar-texture-position: center;
+  --player-avatar-texture-blend-mode: normal;
 }
 
 .root[data-skin="mastery"] {
