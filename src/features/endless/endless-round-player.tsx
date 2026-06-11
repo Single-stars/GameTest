@@ -1176,6 +1176,8 @@ export function EndlessRoundPlayer({
   targetScore?: number;
 }) {
   const api = useEndlessRun({ avatarSkin, onComplete, onSkillUse, onUseReviveCoin, paused, reviveCoins, roundId, startingRevives });
+  const handledSettleSignalRef = React.useRef(settleSignal);
+  const settleExit = api.settleExit;
   const segment = useMemo(() => buildEndlessSegment(roundId), [roundId]);
   const runSeed = useMemo(() => createMiniGameRunSeed(`endless-${roundId}`, roundId), [roundId]);
   const difficultyState = getEndlessRoundDifficultyState({
@@ -1189,9 +1191,14 @@ export function EndlessRoundPlayer({
   const shielded = avatarEffect === "shield" || api.shieldCharges > 0;
 
   React.useEffect(() => {
-    if (settleSignal <= 0) return;
-    api.settleExit("结算退出");
-  }, [api, settleSignal]);
+    if (settleSignal <= 0) {
+      handledSettleSignalRef.current = 0;
+      return;
+    }
+    if (settleSignal === handledSettleSignalRef.current) return;
+    handledSettleSignalRef.current = settleSignal;
+    settleExit("结算退出");
+  }, [settleExit, settleSignal]);
 
   return (
     <div className="endless-shell" data-difficulty-tone={difficultyTone}>

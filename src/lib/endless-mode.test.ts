@@ -420,6 +420,16 @@ test("endless pause dialog replaces restart and back actions while freezing live
   assert.match(cssSource, /\.advanced-pause-action-continue \.advanced-pause-action-icon\s*{[\s\S]*mask:\s*url\("\/icons\/game-icon-pack-candidates\/control-play\.svg"\) center \/ contain no-repeat;/);
 });
 
+test("endless settle signal is consumed once instead of replaying into live attempts", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+
+  assert.match(runtimeSource, /const handledSettleSignalRef = React\.useRef\(settleSignal\);/);
+  assert.match(runtimeSource, /if \(settleSignal <= 0\) \{\s*handledSettleSignalRef\.current = 0;\s*return;\s*\}/);
+  assert.match(runtimeSource, /if \(settleSignal === handledSettleSignalRef\.current\) return;/);
+  assert.match(runtimeSource, /handledSettleSignalRef\.current = settleSignal;\s*settleExit\("结算退出"\);/);
+  assert.doesNotMatch(runtimeSource, /if \(settleSignal <= 0\) return;\s*api\.settleExit\("结算退出"\);\s*}, \[api, settleSignal\]\);/);
+});
+
 test("endless braking big-luck skill ends with one shield-colored shockwave and clears hazards safely", () => {
   const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
   const brakingSource = readFileSync(new URL("../features/rounds/native/braking.tsx", import.meta.url), "utf8");
