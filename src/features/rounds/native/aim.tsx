@@ -569,6 +569,7 @@ export function AdvancedAimRound({
   const onRuntimeStateRef = useRef<typeof onRuntimeState>(onRuntimeState);
   const endlessRef = useRef(endless);
   const pausedRef = useRef(paused);
+  const loopClockNeedsResumeSyncRef = useRef(false);
 
   const publishTargets = useCallback((next: AdvancedAimMovingEntity[]) => {
     const shouldRender = advancedAimEntityRenderSignature(targetsRef.current) !== advancedAimEntityRenderSignature(next);
@@ -813,7 +814,24 @@ export function AdvancedAimRound({
     syncAimRuntimeState,
   ]);
 
-  useEffect(() => {
+  useEffect(() => {
+    const syncPausedLoopClock = (frameNow = now()) => {
+      lastFrameAtRef.current = frameNow;
+      lastSpawnAtRef.current = frameNow;
+      lastDistractorSpawnAtRef.current = frameNow;
+    };
+
+    if (paused) {
+      syncPausedLoopClock();
+      loopClockNeedsResumeSyncRef.current = true;
+      return undefined;
+    }
+
+    if (loopClockNeedsResumeSyncRef.current) {
+      syncPausedLoopClock();
+      loopClockNeedsResumeSyncRef.current = false;
+    }
+
     const loopToken = frameLoopTokenRef.current + 1;
     frameLoopTokenRef.current = loopToken;
     let cancelled = false;
@@ -831,9 +849,9 @@ export function AdvancedAimRound({
       const deltaMs = Math.min(34, frameNow - (lastFrameAtRef.current || frameNow));
       lastFrameAtRef.current = frameNow;
       if (pausedRef.current) {
-        lastSpawnAtRef.current = frameNow;
-        lastDistractorSpawnAtRef.current = frameNow;
-        frameRef.current = requestAnimationFrame(tick);
+        syncPausedLoopClock(frameNow);
+        loopClockNeedsResumeSyncRef.current = true;
+        frameRef.current = null;
         return;
       }
 
@@ -1228,6 +1246,7 @@ export function AdvancedAimRound({
     replaceTargetOnHit,
     showAimFeedback,
     syncAimRuntimeState,
+    paused,
     unlimitedArrows,
   ]);
 

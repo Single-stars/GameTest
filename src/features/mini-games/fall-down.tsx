@@ -1121,6 +1121,8 @@ export function FallDownPrototype({
   }, [authoritativePlayback, syncRuntimeState, syncView]);
 
   useEffect(() => {
+    if (paused) return undefined;
+
     let frameId = 0;
     let last = performance.now();
 
@@ -1130,7 +1132,6 @@ export function FallDownPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
-        frameId = requestAnimationFrame(tick);
         return;
       }
       const current = runtimeRef.current;
@@ -1465,6 +1466,7 @@ export function FallDownPrototype({
     topPressureSpeed,
     updateFallDownDom,
     viewStatus,
+    paused,
   ]);
 
   useEffect(() => {

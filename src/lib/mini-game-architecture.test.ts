@@ -619,6 +619,27 @@ test("app page delegates round rendering and remaining screen shells to feature 
   assert.match(shareImageScreenSource, /export function ShareImageScreen/);
 });
 
+test("paused live runtimes do not keep animation frame loops running", () => {
+  const runtimeFiles = [
+    "../features/mini-games/doodle.tsx",
+    "../features/mini-games/fall-down.tsx",
+    "../features/mini-games/flappy.tsx",
+    "../features/mini-games/knife.tsx",
+    "../features/mini-games/square-jump.tsx",
+    "../features/rounds/native/aim.tsx",
+    "../features/rounds/native/braking.tsx",
+  ];
+
+  for (const file of runtimeFiles) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(
+      source,
+      /if \(pausedRef\.current\)\s*\{\s*(?:lastSpawnAtRef\.current = frameNow;\s*)?(?:lastDistractorSpawnAtRef\.current = frameNow;\s*)?(?:frameId|frameRef\.current) = requestAnimationFrame\(tick\);\s*return;\s*\}/,
+      `${file} should cancel its RAF loop while paused instead of rescheduling an idle frame`,
+    );
+  }
+});
+
 test("mobile long-press blocking is installed once from the root layout", () => {
   const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");

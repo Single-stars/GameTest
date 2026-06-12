@@ -877,6 +877,8 @@ export function KnifeHitPrototype({
   }, [knifeFirstOwner, multiplayerRole, resolveShot, syncKnifeRuntimeState, syncKnifeView]);
 
   useEffect(() => {
+    if (paused) return undefined;
+
     let frameId = 0;
     let last = performance.now();
     const tick = (time: number) => {
@@ -884,7 +886,6 @@ export function KnifeHitPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
-        frameId = requestAnimationFrame(tick);
         return;
       }
 
@@ -971,7 +972,7 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, paused, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const isEndlessWheelTransitioning = endlessWheelTransition.phase !== "idle";
   const remaining = isEndlessWheelTransitioning ? 0 : view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);

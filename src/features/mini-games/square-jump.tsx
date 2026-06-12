@@ -1111,6 +1111,8 @@ export function SquareJumpPrototype({
   }, [applyRemoteChargeHeld, authoritativePlayback, coOpInputStateSubscription]);
 
   useEffect(() => {
+    if (paused) return undefined;
+
     let frameId = 0;
     let last = performance.now();
 
@@ -1120,7 +1122,6 @@ export function SquareJumpPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
-        frameId = requestAnimationFrame(tick);
         return;
       }
       const current = runtimeRef.current;
@@ -1331,7 +1332,7 @@ export function SquareJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, squareJumpDoubleJumpEnabled, squareJumpDoubleJumpUsesCyclingCharge, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
+  }, [advanceToNextPlatform, authoritativeStateSubscription, canRecoverSquareJumpMiss, doubleJumpEnabled, fail, flyAwayLandingCatchDepth, isEndlessRun, level, logicStageSize, mode, paused, perfEnabled, recordDebugFrame, recordPerfFrame, requiredJumps, squareJumpDoubleJumpEnabled, squareJumpDoubleJumpUsesCyclingCharge, stageHeight, stageWidth, syncRuntimeState, syncView, targetLandingPadding, triggerScreenShake, unlimitedRespawn, updateSquareJumpDom, view.status]);
 
   useEffect(() => {
     if (!onComplete || completedRef.current) return;

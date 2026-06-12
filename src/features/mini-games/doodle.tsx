@@ -874,6 +874,8 @@ export function DoodleJumpPrototype({
   }, [authoritativeStateSubscription, syncDoodleRuntimeState, syncDoodleView, world.targetHeight]);
 
   useEffect(() => {
+    if (paused) return undefined;
+
     let frameId = 0;
     let last = performance.now();
 
@@ -944,7 +946,6 @@ export function DoodleJumpPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
-        frameId = requestAnimationFrame(tick);
         return;
       }
       const paintDoodleFrame = (frame: DoodleFrame, spectatingRemote = false, sceneTime = frame.time) => {
@@ -1256,7 +1257,7 @@ export function DoodleJumpPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [authoritativeStateSubscription, awardDoodleCloseCallBonus, baseRevives, coOpRole, isEndlessRun, level, logicStageHeight, logicStageSize, logicStageWidth, mode, onBaseReviveUsed, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, runSeed, stageRef, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, visibleBuffer, world.targetHeight]);
+  }, [authoritativeStateSubscription, awardDoodleCloseCallBonus, baseRevives, coOpRole, isEndlessRun, level, logicStageHeight, logicStageSize, logicStageWidth, mode, onBaseReviveUsed, paused, perfEnabled, recordDebugFrame, recordPerfFrame, riskJumpMultiplier, riskTotal, runSeed, stageRef, syncDoodleRuntimeState, syncDoodleView, triggerScreenShake, unlimitedRespawn, view.status, visibleBuffer, world.targetHeight]);
 
   const showOverlay = mode === "prototype";
   const worldLayerStyle = {

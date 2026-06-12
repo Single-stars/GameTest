@@ -833,6 +833,8 @@ export function FlappyPrototype({
   }, [reversedGravity, syncFlappyRuntimeState, syncFlappyView]);
 
   useEffect(() => {
+    if (paused) return undefined;
+
     let frameId = 0;
     let last = performance.now();
 
@@ -963,7 +965,6 @@ export function FlappyPrototype({
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
-        frameId = requestAnimationFrame(tick);
         return;
       }
 
@@ -1282,7 +1283,7 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [avatarEffect, backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerEndlessGravityChangeIfNeeded, triggerScreenShake, unlimitedRespawn]);
+  }, [avatarEffect, backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, paused, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerEndlessGravityChangeIfNeeded, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const viewFlappyParams = isEndlessRun

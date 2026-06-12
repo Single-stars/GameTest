@@ -387,6 +387,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
   const endlessDistanceRef = useRef(0);
   const pausedRef = useRef(paused);
+  const loopClockNeedsResumeSyncRef = useRef(false);
 
   const holdingRef = useRef(false);
 
@@ -417,6 +418,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const trialsRef = useRef<TrialEvent[]>([]);
 
   const frameRef = useRef<number | null>(null);
+  const loopTickRef = useRef<(() => void) | null>(null);
 
   const lastFrameAtRef = useRef(0);
 
@@ -471,6 +473,24 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
   useEffect(() => {
     pausedRef.current = paused;
+    const frameNow = now();
+
+    if (paused) {
+      lastFrameAtRef.current = frameNow;
+      loopClockNeedsResumeSyncRef.current = true;
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      return;
+    }
+
+    if (loopClockNeedsResumeSyncRef.current) {
+      lastFrameAtRef.current = frameNow;
+      loopClockNeedsResumeSyncRef.current = false;
+    }
+
+    if (!finishedRef.current && frameRef.current === null && loopTickRef.current) {
+      frameRef.current = requestAnimationFrame(loopTickRef.current);
+    }
   }, [paused]);
 
   useEffect(() => {
@@ -1082,7 +1102,8 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
       lastFrameAtRef.current = frameNow;
       if (pausedRef.current) {
-        frameRef.current = requestAnimationFrame(tick);
+        loopClockNeedsResumeSyncRef.current = true;
+        frameRef.current = null;
         return;
       }
       const activeEndlessRuntime = endlessRef.current;
@@ -1307,9 +1328,17 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
     };
 
-    frameRef.current = requestAnimationFrame(tick);
+    loopTickRef.current = tick;
+    if (pausedRef.current) {
+      lastFrameAtRef.current = now();
+      loopClockNeedsResumeSyncRef.current = true;
+      frameRef.current = null;
+    } else {
+      frameRef.current = requestAnimationFrame(tick);
+    }
 
     return () => {
+      if (loopTickRef.current === tick) loopTickRef.current = null;
 
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
 
@@ -1699,6 +1728,7 @@ function BrakingRoundCore({
   const progressRef = useRef(8);
   const statusRef = useRef<DinoStatus>("ready");
   const pausedRef = useRef(paused);
+  const loopClockNeedsResumeSyncRef = useRef(false);
   const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
 
@@ -1772,6 +1802,16 @@ function BrakingRoundCore({
   }, [paused]);
 
   useEffect(() => {
+    if (paused) {
+      lastFrameAtRef.current = now();
+      loopClockNeedsResumeSyncRef.current = true;
+      return undefined;
+    }
+
+    if (loopClockNeedsResumeSyncRef.current) {
+      lastFrameAtRef.current = now();
+      loopClockNeedsResumeSyncRef.current = false;
+    }
 
     const tick = () => {
 
@@ -1782,7 +1822,8 @@ function BrakingRoundCore({
       const delta = frameNow - lastFrameAt;
       lastFrameAtRef.current = frameNow;
       if (pausedRef.current) {
-        frameRef.current = requestAnimationFrame(tick);
+        loopClockNeedsResumeSyncRef.current = true;
+        frameRef.current = null;
         return;
       }
       if (holdingRef.current && (statusRef.current === "running" || statusRef.current === "danger")) {
@@ -1807,7 +1848,7 @@ function BrakingRoundCore({
 
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
-  }, []);
+  }, [paused]);
 
   const scheduleDinoNext = useCallback(
     (correct: boolean) => {
