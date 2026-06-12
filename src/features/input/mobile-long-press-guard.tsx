@@ -2,9 +2,15 @@
 
 import { useEffect } from "react";
 
+const LOCAL_ONLY_BLOCKED_SURFACES =
+  process.env.NODE_ENV === "development"
+    ? [
+        ".homeworld-stage",
+      ]
+    : [];
+
 const DEFAULT_BLOCKED_SURFACES = [
   ".app-shell-play",
-  ".homeworld-stage",
   ".multiplayer-game-shell",
   ".multiplayer-level-room",
   ".play-screen",
@@ -13,6 +19,7 @@ const DEFAULT_BLOCKED_SURFACES = [
   ".game-area",
   ".braking-panel",
   ".advanced-lobby-carousel",
+  ...LOCAL_ONLY_BLOCKED_SURFACES,
 ].join(", ");
 
 const DEFAULT_ALLOWED_SURFACES = [

@@ -12,15 +12,21 @@ import {
   type GameViewportSize,
 } from "@/features/layout/game-viewport";
 
+const LOCAL_ONLY_LOCKED_GAME_SURFACE_SELECTORS =
+  process.env.NODE_ENV === "development"
+    ? [
+        ".homeworld-screen",
+        ".outdoor-adventure-room",
+        ".outdoor-round-play",
+      ]
+    : [];
+
 const LOCKED_GAME_SURFACE_SELECTOR = [
   ".app-shell-play",
   ".play-screen",
   ".advanced-screen",
   ".advanced-play-screen",
   ".endless-play-screen",
-  ".homeworld-screen",
-  ".outdoor-adventure-room",
-  ".outdoor-round-play",
   ".multiplayer-select-shell",
   ".multiplayer-level-room",
   ".multiplayer-game-shell",
@@ -29,6 +35,7 @@ const LOCKED_GAME_SURFACE_SELECTOR = [
   ".reward-overlay",
   ".base-tutorial-overlay",
   ".advanced-tutorial-overlay",
+  ...LOCAL_ONLY_LOCKED_GAME_SURFACE_SELECTORS,
 ].join(", ");
 
 const SETTLED_MEASURE_DELAYS_MS = [60, 180, 420, 900];

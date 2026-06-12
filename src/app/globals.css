@@ -1,6 +1,5 @@
 @import "./styles/base-flow.css";
 @import "./styles/mini-games.css";
-@import "./styles/outdoor-adventure.css";
 @import "./styles/overlays-responsive.css";
 
 .mode-transition-overlay {

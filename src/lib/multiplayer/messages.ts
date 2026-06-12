@@ -22,14 +22,16 @@ import type {
   MultiplayerRoomScore,
   PlayerInfo,
 } from "@/lib/multiplayer/types";
-import { resolveCustomAvatarSyncPayload } from "../../features/player-avatar/custom-avatar-storage.ts";
-import { MULTIPLAYER_PROTOCOL_VERSION } from "./protocol.ts";
+import type {
+  HomeworldPresence,
+  HomeworldState,
+} from "@/lib/homeworld/homeworld-state";
 import {
   isHomeworldPresence,
   isHomeworldState,
-  type HomeworldPresence,
-  type HomeworldState,
 } from "../homeworld/homeworld-state.ts";
+import { resolveCustomAvatarSyncPayload } from "../../features/player-avatar/custom-avatar-storage.ts";
+import { MULTIPLAYER_PROTOCOL_VERSION } from "./protocol.ts";
 import {
   isMultiplayerLevelSelectPresence,
   isMultiplayerLevelSelectState,

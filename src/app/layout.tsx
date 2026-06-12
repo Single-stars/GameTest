@@ -53,6 +53,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
+        {process.env.NODE_ENV === "development" ? (
+          <>
+            <link rel="stylesheet" href="/local-only/styles/homeworld.css" />
+            <link rel="stylesheet" href="/local-only/styles/outdoor-adventure.css" />
+          </>
+        ) : null}
         <GameViewportGuard />
         <MobileLongPressGuard />
         {children}

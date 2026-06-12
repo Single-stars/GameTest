@@ -297,7 +297,7 @@ test("homeworld multiplayer enters the host home directly through the existing r
   assert.match(pageSource, /hostHomeworldParam !== "1"/);
   assert.match(pageSource, /homeworldEntryVisible/);
   assert.match(pageSource, /homeworldRoomLink/);
-  assert.match(pageSource, /const homeworldInviteLink = snapshot\.role === "host" && snapshot\.roomId && snapshot\.status !== "idle"\s*\?\s*homeworldRoomLink\s*:\s*"";/);
+  assert.match(pageSource, /const homeworldInviteLink = isHomeworldRoute && snapshot\.role === "host" && snapshot\.roomId && snapshot\.status !== "idle"\s*\?\s*homeworldRoomLink\s*:\s*"";/);
   assert.match(pageSource, /const homeworldRoomEntryHidden = snapshot\.status === "connected" && Boolean\(snapshot\.opponentPlayer\);/);
   assert.match(pageSource, /const handleCopyRoomCode = useCallback/);
   assert.match(pageSource, /const \[roomCodeCopyStatus, setRoomCodeCopyStatus\] = useState<RoomShareCopyStatus>\("idle"\);/);
@@ -352,7 +352,8 @@ test("homeworld presence and round reset preserve profile sync after exercise ro
   assert.doesNotMatch(typesSource, /@\/features\/homeworld\/homeworld-state/);
   assert.doesNotMatch(messagesSource, /features\/homeworld\/homeworld-state/);
   assert.match(typesSource, /@\/lib\/homeworld\/homeworld-state/);
-  assert.match(messagesSource, /\.\.\/homeworld\/homeworld-state\.ts/);
+  assert.match(messagesSource, /@\/lib\/homeworld\/homeworld-state/);
+  assert.match(messagesSource, /from "\.\.\/homeworld\/homeworld-state\.ts"/);
   assert.match(featureStateSource, /\.\.\/\.\.\/lib\/homeworld\/homeworld-state\.ts/);
   assert.match(stateSource, /displayName\?: string;/);
   assert.match(stateSource, /displayName: sanitizeHomeworldDisplayName\(input\.displayName\)/);

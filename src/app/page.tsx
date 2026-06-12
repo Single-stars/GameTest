@@ -145,6 +145,7 @@ type ImageShareState = "idle" | "sharing" | "saved" | "failed";
 const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
+const DEFAULT_OUTDOOR_ADVENTURE_EVENT_ID = process.env.NODE_ENV === "development" ? "event_piggy_block" : "";
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
 
 function hasOutdoorAdventureProgress(state: OutdoorAdventureState) {
@@ -156,7 +157,7 @@ function hasOutdoorAdventureProgress(state: OutdoorAdventureState) {
   if (state.usableItems.length > 0) return true;
   if (state.relics.length !== 2) return true;
   if (state.currentNode.kind !== "event") return true;
-  return state.currentNode.eventId !== "event_piggy_block";
+  return state.currentNode.eventId !== DEFAULT_OUTDOOR_ADVENTURE_EVENT_ID;
 }
 
 const MODE_TRANSITION_STAGES = new Set<Stage>(["home", "homeworld", "outdoor-adventure", "result", "avatar-lab"]);

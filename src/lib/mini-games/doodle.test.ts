@@ -344,8 +344,9 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
 
   assert.match(componentSource, /lastSafePlatformId: number \| null;/);
   assert.match(componentSource, /function resolveDoodleLastSafePlatform/);
+  assert.match(componentSource, /function resolveDoodleLastRespawnPlatform/);
   assert.match(doodleSource, /function syncDoodleRespawnPlayerWithPlatform/);
-  assert.match(doodleSource, /const safeRespawnPlatform = resolveDoodleLastSafePlatform\(current\);/);
+  assert.match(doodleSource, /const safeRespawnPlatform = resolveDoodleLastRespawnPlatform\(current\);/);
   assert.match(doodleSource, /current\.playerX = movingPlatformX\(safeRespawnPlatform, nextTime, logicStageWidth\);/);
   assert.match(doodleSource, /current\.playerY = safeRespawnPlatform\.y \+ PLAYER_SIZE \/ 2;/);
   assert.match(doodleSource, /safeRespawnPlatform\.used = false;/);
@@ -363,7 +364,7 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.doesNotMatch(doodleSource, /current\.playerVy = DOODLE_JUMP_VELOCITY;\s*current\.jumpTurnAvailable = true;\s*const respawnCameraY/);
   assert.doesNotMatch(doodleSource, /const respawnY = cameraY \+ logicStageHeight \* 0\.34;/);
   assert.doesNotMatch(doodleSource, /current\.platforms\.unshift\(respawnPlatform\);/);
-  assert.match(endlessRecoverySource, /const safeRespawnPlatform = resolveDoodleLastSafePlatform\(current\);/);
+  assert.match(endlessRecoverySource, /const safeRespawnPlatform = resolveDoodleLastRespawnPlatform\(current\);/);
   assert.match(endlessRecoverySource, /safeRespawnPlatform\.used = false;/);
   assert.match(endlessRecoverySource, /syncDoodleRespawnPlayerWithPlatform\(current, time, stageWidth\);/);
   assert.match(endlessRecoverySource, /current\.playerVy = 0;/);
@@ -373,6 +374,16 @@ test("doodle base and multiplayer respawn on the last safe platform and ease the
   assert.doesNotMatch(endlessRecoverySource, /DOODLE_JUMP_VELOCITY/);
   assert.doesNotMatch(endlessRecoverySource, /current\.started = true/);
   assert.doesNotMatch(endlessRecoverySource, /current\.platforms\.unshift/);
+});
+
+test("endless doodle can respawn on high-energy platforms and refresh visible platforms before input", () => {
+  const doodleSource = readFileSync(new URL("../../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+
+  assert.match(doodleSource, /if \(\(!platform\.finish && isEndlessRun\) \|\| \(!platform\.risk && !platform\.finish\)\) current\.lastSafePlatformId = platform\.id;/);
+  assert.match(doodleSource, /function resolveDoodleLastRespawnPlatform/);
+  assert.match(doodleSource, /const safeRespawnPlatform = resolveDoodleLastRespawnPlatform\(current\);/);
+  assert.match(doodleSource, /const respawnViewChanged = current\.respawnAwaitingInput && current\.time <= current\.respawnCameraUntil;/);
+  assert.match(doodleSource, /if \(respawnViewChanged \|\| time - lastUiSyncRef\.current >= MINI_GAME_UI_SYNC_MS\) syncDoodleView\(time\);/);
 });
 
 test("doodle unlimited respawn race mode ignores missed risk platforms", () => {

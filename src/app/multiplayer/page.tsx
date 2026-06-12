@@ -60,6 +60,7 @@ import {
 import { resolveMultiplayerWinnerText } from "@/lib/multiplayer/match-result";
 import { compareMultiplayerResults, getMultiplayerScoreLead } from "@/lib/multiplayer/result-breakdown";
 import { getMultiplayerLevelRules } from "@/lib/multiplayer/rules";
+import { getProductionSafeMultiplayerPath } from "@/lib/local-only-production";
 import {
   buildInitialSnapshot,
   MultiplayerSession,
@@ -344,7 +345,12 @@ function MultiplayerPageContent() {
   const roomParam = (searchParams.get("room") ?? "").trim();
   const homeworldParam = searchParams.get("homeworld");
   const hostHomeworldParam = searchParams.get("host");
-  const isHomeworldRoute = homeworldParam === "1";
+  const productionSafeMultiplayerPath = getProductionSafeMultiplayerPath({
+    nodeEnv: process.env.NODE_ENV,
+    pathname: "/multiplayer",
+    search: `?${searchParams.toString()}`,
+  });
+  const isHomeworldRoute = productionSafeMultiplayerPath === null && homeworldParam === "1";
   const isStandaloneSelectRoute = !isHomeworldRoute;
   const [snapshot, setSnapshot] = useState<MultiplayerSnapshot>(() => buildInitialSnapshot());
   const [selectedSkin, setSelectedSkin] = useState<PlayerAvatarSkin>("cyan");
@@ -411,6 +417,11 @@ function MultiplayerPageContent() {
     [runModeTransition],
   );
 
+  useEffect(() => {
+    if (!productionSafeMultiplayerPath) return;
+    router.replace(productionSafeMultiplayerPath);
+  }, [productionSafeMultiplayerPath, router]);
+
   const persistAdvancedProgress = useCallback((updater: (progress: AdvancedProgress) => AdvancedProgress) => {
     const nextProgress = updater(advancedProgressRef.current);
     advancedProgressRef.current = nextProgress;
@@ -475,11 +486,12 @@ function MultiplayerPageContent() {
     return `${window.location.origin}/multiplayer?room=${query}`;
   }, [snapshot.roomId]);
   const homeworldRoomLink = useMemo(() => {
+    if (!isHomeworldRoute) return "";
     if (!snapshot.roomId || typeof window === "undefined") return "";
     const query = encodeURIComponent(snapshot.roomId);
     return `${window.location.origin}/multiplayer?homeworld=1&room=${query}`;
-  }, [snapshot.roomId]);
-  const homeworldInviteLink = snapshot.role === "host" && snapshot.roomId && snapshot.status !== "idle"
+  }, [isHomeworldRoute, snapshot.roomId]);
+  const homeworldInviteLink = isHomeworldRoute && snapshot.role === "host" && snapshot.roomId && snapshot.status !== "idle"
     ? homeworldRoomLink
     : "";
   const homeworldRoomEntryHidden = snapshot.status === "connected" && Boolean(snapshot.opponentPlayer);

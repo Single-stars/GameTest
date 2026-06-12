@@ -1,0 +1,674 @@
+.homeworld-screen {
+  min-height: 100vh;
+  height: 100vh;
+  min-height: 100svh;
+  height: 100svh;
+  min-height: 100dvh;
+  height: 100dvh;
+  min-height: var(--game-viewport-height, 100dvh);
+  height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  background: #b88755;
+}
+
+.homeworld-stage-shell {
+  min-height: 0;
+  display: grid;
+}
+
+.homeworld-stage {
+  position: relative;
+  --homeworld-backdrop-color: #b88755;
+  --homeworld-backdrop-image: url("/homeworld/skins/oak/room.png");
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(117, 77, 42, 0.26), rgba(255, 255, 255, 0) 18%, rgba(255, 255, 255, 0) 82%, rgba(93, 56, 27, 0.3)),
+    var(--homeworld-backdrop-color);
+  box-shadow: none;
+  touch-action: none;
+  isolation: isolate;
+  user-select: none;
+}
+
+.homeworld-stage::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  z-index: 0;
+  background-image: url("/homeworld/skins/oak/room.png");
+  background-image: var(--homeworld-backdrop-image);
+  background-position: center;
+  background-size: cover;
+  filter: blur(12px) saturate(0.82) contrast(1.04) sepia(0.18) hue-rotate(-5deg);
+  opacity: 0.72;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+.homeworld-scene-fixed {
+  position: absolute;
+  z-index: 3;
+  overflow: hidden;
+  contain: layout paint;
+  pointer-events: none;
+}
+
+.homeworld-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  pointer-events: none;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.homeworld-scene-background {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: saturate(0.9) contrast(1.04) sepia(0.1) hue-rotate(-4deg);
+  pointer-events: none;
+}
+
+.homeworld-furniture-slot {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.homeworld-furniture {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
+.homeworld-furniture-visual {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+
+.homeworld-furniture-door .homeworld-furniture-visual {
+  transform: scale(0.88);
+  transform-origin: center;
+}
+
+.homeworld-furniture:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.homeworld-furniture.reachable {
+  opacity: 1;
+  filter: drop-shadow(0 0 7px rgba(255, 253, 248, 0.66));
+}
+
+.homeworld-object-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter:
+    saturate(0.92) contrast(1.03) sepia(0.08) hue-rotate(-3deg)
+    drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16));
+}
+
+.homeworld-exit-door {
+  cursor: default;
+}
+
+.homeworld-exit-door.reachable {
+  cursor: pointer;
+}
+
+.homeworld-exit-door.reachable .homeworld-object-image {
+  filter:
+    drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
+    drop-shadow(0 0 12px rgba(255, 253, 248, 0.9));
+}
+
+.homeworld-furniture.reachable .homeworld-object-image {
+  filter:
+    saturate(0.92) contrast(1.03) sepia(0.08) hue-rotate(-3deg)
+    drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
+    drop-shadow(0 0 12px rgba(255, 253, 248, 0.9));
+}
+
+.homeworld-door-status-badge {
+  position: absolute;
+  left: 50%;
+  top: -54px;
+  min-width: max-content;
+  border: 1px solid rgba(54, 96, 67, 0.18);
+  border-radius: var(--radius-pill);
+  padding: 4px 9px;
+  background: rgba(222, 241, 226, 0.94);
+  color: #244932;
+  font-size: 12px;
+  font-weight: 950;
+  translate: -50% 0;
+  box-shadow: 0 8px 18px rgba(31, 74, 48, 0.16);
+}
+
+.homeworld-door-player-badge {
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(54, 96, 67, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.9);
+  translate: -50% 0;
+  box-shadow: 0 10px 20px rgba(31, 74, 48, 0.16);
+  pointer-events: none;
+}
+
+.homeworld-furniture-slot.level-select-peer-inside .homeworld-object-image {
+  filter:
+    saturate(0.95) contrast(1.03) sepia(0.05)
+    drop-shadow(0 10px 8px rgba(52, 38, 26, 0.16))
+    drop-shadow(0 0 2px rgba(112, 116, 118, 0.42));
+}
+
+.homeworld-door-menu {
+  position: absolute;
+  z-index: 9;
+  width: min(360px, calc(100vw - 20px));
+  pointer-events: auto;
+}
+
+.homeworld-door-menu-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 12px 22px rgba(72, 57, 43, 0.16);
+}
+
+.homeworld-door-menu-panel button {
+  width: 100%;
+  height: 64px;
+  min-height: 64px;
+  min-width: 0;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.homeworld-player {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 7;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.homeworld-player.remote {
+  z-index: 6;
+  opacity: 0.82;
+  filter: drop-shadow(0 8px 10px rgba(32, 73, 84, 0.18));
+  transition: transform 150ms linear;
+}
+
+.homeworld-player.transition-up {
+  animation: homeworld-floor-jump 620ms cubic-bezier(0.18, 0.72, 0.2, 1) both;
+}
+
+.homeworld-player.transition-down {
+  animation: homeworld-floor-jump 560ms cubic-bezier(0.24, 0.66, 0.24, 1) both;
+}
+
+.homeworld-remote-name {
+  position: absolute;
+  left: 50%;
+  top: -20px;
+  min-width: max-content;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 253, 248, 0.9);
+  color: #4f3420;
+  font-size: 11px;
+  font-weight: 850;
+  translate: -50% 0;
+}
+
+.homeworld-scene-title {
+  position: absolute;
+  left: max(14px, env(safe-area-inset-left));
+  top: max(12px, env(safe-area-inset-top));
+  z-index: 8;
+  display: grid;
+  gap: 3px;
+  color: #173c46;
+  pointer-events: none;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.homeworld-scene-title strong {
+  font-size: 18px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.homeworld-scene-title span {
+  max-width: min(78vw, 460px);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.homeworld-reserved-toast {
+  position: absolute;
+  left: 50%;
+  bottom: max(68px, calc(env(safe-area-inset-bottom) + 62px));
+  z-index: 9;
+  max-width: min(320px, 78vw);
+  border: 1px solid rgba(24, 24, 24, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  background: rgba(255, 253, 248, 0.9);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+  text-align: center;
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.homeworld-room-entry-shell {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 9;
+  min-height: 42px;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  transition: transform 180ms ease;
+}
+
+.homeworld-room-entry-shell.collapsed {
+  transform: translate3d(0, calc(100% + max(12px, env(safe-area-inset-bottom))), 0);
+}
+
+.homeworld-room-entry-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  border: 1px solid rgba(103, 70, 39, 0.18);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 247, 232, 0.92);
+  color: #6f4a2a;
+  font-size: 13px;
+  font-weight: 820;
+  box-shadow: 0 12px 22px rgba(72, 57, 43, 0.13);
+  opacity: 1;
+  transition: opacity 180ms ease;
+  pointer-events: auto;
+}
+
+.homeworld-room-entry-shell.collapsed .homeworld-room-entry-panel > :not(.homeworld-room-entry-toggle) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.homeworld-room-entry-choice {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.homeworld-room-entry-choice section {
+  display: contents;
+}
+
+.homeworld-room-entry-choice .primary-button,
+.homeworld-room-entry-choice .secondary-button {
+  width: 100%;
+  min-height: 58px;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border-color: rgba(24, 24, 24, 0.18);
+  border-radius: 12px;
+  background: #fffdf8;
+  color: #191919;
+  font-size: 14px;
+  font-weight: 900;
+  text-align: center;
+  box-shadow: none;
+}
+
+.homeworld-room-entry-choice .secondary-button {
+  border-color: transparent;
+}
+
+.homeworld-room-entry-toggle {
+  position: absolute;
+  left: 50%;
+  top: -58px;
+  z-index: 1;
+  width: 54px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(103, 70, 39, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.92);
+  color: #5f3b20;
+  font-size: 18px;
+  font-weight: 900;
+  translate: -50% 0;
+  box-shadow: 0 10px 20px rgba(72, 57, 43, 0.14);
+  pointer-events: auto;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.homeworld-room-invite {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.homeworld-room-invite-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid rgba(103, 70, 39, 0.12);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fffdf8;
+}
+
+.homeworld-room-invite span,
+.homeworld-room-invite-label {
+  grid-column: 1 / -1;
+  color: #6f4a2a;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.homeworld-room-invite output {
+  min-width: 0;
+  height: 36px;
+  display: grid;
+  place-items: center start;
+  border: 1px solid rgba(103, 70, 39, 0.18);
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #fffdf8;
+  color: #191919;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homeworld-room-invite output.code {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+
+.homeworld-room-invite .secondary-button {
+  min-width: 58px;
+  min-height: 44px;
+  border-color: transparent;
+  background: #191919;
+  color: #fffdf8;
+  padding-inline: 9px;
+  white-space: nowrap;
+}
+
+.homeworld-room-invite small {
+  grid-column: 1 / -1;
+}
+
+.homeworld-room-invite-alert {
+  order: -1;
+  grid-column: 1 / -1;
+  border: 1px solid rgba(154, 104, 31, 0.16);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: #fff0d8;
+  color: #8a5400;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.homeworld-room-entry-toggle.collapsed {
+  background: rgba(255, 253, 248, 0.96);
+  color: #191919;
+}
+
+.homeworld-room-entry-panel input,
+.homeworld-room-code-card input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(103, 70, 39, 0.18);
+  border-radius: 12px;
+  padding: 0 8px;
+  background: #fffdf8;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.homeworld-room-entry-panel small {
+  color: #9a681f;
+}
+
+.homeworld-room-code-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding:
+    18px
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(32, 24, 18, 0.28);
+  pointer-events: auto;
+}
+
+.homeworld-room-code-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(103, 70, 39, 0.2);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.96);
+  color: #5f3b20;
+  box-shadow: 0 18px 34px rgba(47, 34, 23, 0.22);
+}
+
+.homeworld-room-code-card input {
+  height: 52px;
+  border-radius: 16px;
+  padding: 0 14px;
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.homeworld-room-code-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.homeworld-room-code-actions button {
+  width: 100%;
+  min-height: 56px;
+}
+
+.homeworld-customization-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.9), rgba(255, 247, 232, 0.94)),
+    var(--homeworld-backdrop-color);
+  pointer-events: auto;
+}
+
+.homeworld-customization-topbar {
+  margin: 0;
+}
+
+.homeworld-customization-card {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  border: 1px solid rgba(103, 70, 39, 0.18);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 253, 248, 0.88);
+  box-shadow: 0 18px 32px rgba(72, 57, 43, 0.16);
+}
+
+.homeworld-customization-tabs,
+.homeworld-customization-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.homeworld-customization-tabs button,
+.homeworld-customization-options button {
+  border: 1px solid rgba(103, 70, 39, 0.16);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(255, 253, 248, 0.78);
+  color: #5f3b20;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.homeworld-customization-tabs button.selected,
+.homeworld-customization-options button.selected {
+  background: #f7dcae;
+  color: #3f2a18;
+}
+
+.homeworld-customization-list {
+  display: grid;
+  gap: 10px;
+}
+
+.homeworld-customization-slot {
+  display: grid;
+  gap: 6px;
+}
+
+.homeworld-customization-slot strong {
+  color: #50341e;
+  font-size: 13px;
+}
+
+.homeworld-harvest-options button {
+  opacity: 1;
+}
+
+.homeworld-harvest-item.rarity-common {
+  background: rgba(255, 253, 248, 0.88);
+}
+
+.homeworld-harvest-item.rarity-rare {
+  background: rgba(210, 220, 255, 0.92);
+  border-color: rgba(88, 83, 167, 0.28);
+}
+
+.homeworld-harvest-item.rarity-legendary {
+  background: rgba(255, 225, 132, 0.94);
+  border-color: rgba(159, 111, 25, 0.32);
+}
+
+@keyframes homeworld-floor-jump {
+  0% {
+    transform: translate3d(var(--floor-jump-x), var(--floor-jump-from-y), 0) scale(1);
+  }
+  56% {
+    transform: translate3d(var(--floor-jump-x), calc((var(--floor-jump-from-y) + var(--floor-jump-to-y)) / 2 - 58px), 0) scale(0.96, 1.06);
+  }
+  100% {
+    transform: translate3d(var(--floor-jump-x), var(--floor-jump-to-y), 0) scale(1);
+  }
+}
+
+@media (max-width: 720px) {
+  .homeworld-scene-title strong {
+    font-size: 16px;
+  }
+
+  .homeworld-room-entry-panel {
+    grid-template-columns: 1fr auto;
+  }
+
+  .homeworld-room-entry-panel span,
+  .homeworld-room-entry-panel small {
+    grid-column: 1 / -1;
+  }
+
+  .homeworld-room-invite {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,925 @@
+.outdoor-adventure-room {
+  --outdoor-ink: #172018;
+  --outdoor-muted: rgba(23, 32, 24, 0.66);
+  --outdoor-surface: rgba(255, 253, 248, 0.86);
+  --outdoor-line: rgba(23, 32, 24, 0.12);
+  --outdoor-field: #d8e4d6;
+  --outdoor-field-2: #c7d8c8;
+  --outdoor-accent: #2f6c52;
+  --outdoor-bg-top: rgba(255, 253, 248, 0.95);
+  --outdoor-bg-band: rgba(230, 240, 231, 0.92);
+  --outdoor-meta-width: min(34vw, 150px);
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
+  height: 100dvh;
+  min-height: 100svh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
+  z-index: 1250;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, var(--outdoor-bg-top) 0 40%, var(--outdoor-bg-band) 40% 45%, var(--outdoor-field) 45% 100%),
+    var(--outdoor-field);
+  color: var(--outdoor-ink);
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.outdoor-adventure-room.region-block-market {
+  --outdoor-field: #eadfca;
+  --outdoor-field-2: #ddd0b6;
+  --outdoor-accent: #8a5f2e;
+  --outdoor-bg-top: rgba(255, 251, 241, 0.95);
+  --outdoor-bg-band: rgba(241, 230, 207, 0.92);
+}
+
+.outdoor-adventure-room.region-city-corner {
+  --outdoor-field: #d9deec;
+  --outdoor-field-2: #c9d0e1;
+  --outdoor-accent: #5b6fa3;
+  --outdoor-bg-top: rgba(247, 249, 255, 0.94);
+  --outdoor-bg-band: rgba(221, 226, 239, 0.92);
+}
+
+.outdoor-adventure-room.region-far-edge {
+  --outdoor-field: #ddd6e8;
+  --outdoor-field-2: #cec4dd;
+  --outdoor-accent: #71558f;
+  --outdoor-bg-top: rgba(250, 247, 255, 0.94);
+  --outdoor-bg-band: rgba(226, 219, 236, 0.92);
+}
+
+.outdoor-status-strip {
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 6px max(14px, env(safe-area-inset-left));
+}
+
+.outdoor-status-strip > span {
+  min-width: 0;
+  border-bottom: 2px solid color-mix(in srgb, var(--outdoor-accent) 46%, transparent);
+  padding: 8px 6px 7px;
+  background: rgba(255, 253, 248, 0.64);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.outdoor-resource-meter {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 3px;
+  max-width: 100%;
+}
+
+.outdoor-resource-label,
+.outdoor-resource-value {
+  flex: 0 0 auto;
+}
+
+.outdoor-resource-delta {
+  flex: 0 0 auto;
+  min-width: 1.8em;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.outdoor-resource-delta.positive {
+  color: #16833e;
+}
+
+.outdoor-resource-delta.negative {
+  color: #c43b32;
+}
+
+.outdoor-relic-area {
+  position: relative;
+  z-index: 4;
+  min-height: 46px;
+  padding-bottom: 7px;
+}
+
+.outdoor-relic-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 0 max(14px, env(safe-area-inset-right)) 7px max(14px, env(safe-area-inset-left));
+}
+
+.outdoor-relic-row {
+  min-width: 0;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.outdoor-relic-row::-webkit-scrollbar {
+  display: none;
+}
+
+.outdoor-relic-chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 1px solid var(--outdoor-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 253, 248, 0.9);
+  color: var(--outdoor-ink);
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.outdoor-relic-chip.kind-starter,
+.outdoor-relic-chip.kind-normal,
+.outdoor-relic-chip.kind-story {
+  border-color: rgba(39, 117, 82, 0.22);
+  color: #215d47;
+  background: #ecf8f1;
+}
+
+.outdoor-relic-chip.kind-debuff {
+  border-color: rgba(150, 54, 48, 0.28);
+  color: #7b2824;
+  background: #fff0ed;
+}
+
+.outdoor-relic-chip.kind-consumable {
+  border-color: rgba(37, 94, 77, 0.22);
+  color: #1f594a;
+  background: #e8f6ef;
+}
+
+.outdoor-relic-chip.tone-gold,
+.outdoor-relic-chip.rarity-special,
+.outdoor-relic-chip.rarity-rare {
+  border-color: rgba(151, 117, 46, 0.34);
+  color: #6f5520;
+  background: #f4ecd2;
+}
+
+.outdoor-relic-chip[aria-pressed="true"] {
+  border-width: 3px;
+}
+
+.outdoor-meta-panel {
+  width: var(--outdoor-meta-width);
+  max-width: var(--outdoor-meta-width);
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+}
+
+.outdoor-day-region {
+  min-height: 18px;
+  display: grid;
+  align-items: center;
+  color: rgba(23, 32, 24, 0.72);
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.outdoor-text-speed-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--outdoor-accent) 24%, transparent);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.58);
+}
+
+.outdoor-text-speed-toggle button {
+  min-width: 30px;
+  min-height: 22px;
+  border: 0;
+  padding: 3px 8px;
+  background: transparent;
+  color: rgba(23, 32, 24, 0.62);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.outdoor-text-speed-toggle button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--outdoor-accent) 18%, rgba(255, 253, 248, 0.86));
+  color: var(--outdoor-ink);
+}
+
+.outdoor-relic-detail {
+  position: absolute;
+  left: max(14px, env(safe-area-inset-left));
+  right: calc(max(14px, env(safe-area-inset-right)) + var(--outdoor-meta-width) + 8px);
+  top: 37px;
+  z-index: 60;
+  max-width: calc(100% - max(14px, env(safe-area-inset-left)) - max(14px, env(safe-area-inset-right)) - var(--outdoor-meta-width) - 8px);
+  max-height: none;
+  overflow: hidden;
+  border-left: 3px solid var(--outdoor-accent);
+  padding: 6px 10px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  background: rgba(255, 253, 248, 0.93);
+  color: rgba(27, 38, 31, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: normal;
+  word-break: normal;
+  transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
+  pointer-events: none;
+}
+
+.outdoor-relic-detail.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.outdoor-material-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  vertical-align: baseline;
+}
+
+.outdoor-material-item {
+  font-weight: 950;
+}
+
+.outdoor-material-item.rarity-common {
+  color: #2f6c52;
+}
+
+.outdoor-material-item.rarity-rare {
+  color: #5f4f9c;
+}
+
+.outdoor-material-item.rarity-legendary {
+  color: #9b6a12;
+}
+
+.outdoor-scene-viewport {
+  z-index: 3;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  contain: layout paint;
+}
+
+.outdoor-scene-track {
+  min-width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 100%);
+  transform: translateX(-100%);
+  transition: transform 420ms cubic-bezier(0.22, 0.74, 0.25, 1);
+  will-change: transform;
+}
+
+.outdoor-scene-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(168px, 0.42fr) minmax(0, 1fr);
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.outdoor-scene-panel.region-block-market {
+  --outdoor-field: #eadfca;
+  --outdoor-field-2: #ddd0b6;
+  --outdoor-accent: #8a5f2e;
+  --outdoor-bg-top: rgba(255, 251, 241, 0.95);
+  --outdoor-bg-band: rgba(241, 230, 207, 0.92);
+}
+
+.outdoor-scene-panel.region-city-corner {
+  --outdoor-field: #d9deec;
+  --outdoor-field-2: #c9d0e1;
+  --outdoor-accent: #5b6fa3;
+  --outdoor-bg-top: rgba(247, 249, 255, 0.94);
+  --outdoor-bg-band: rgba(221, 226, 239, 0.92);
+}
+
+.outdoor-scene-panel.region-far-edge {
+  --outdoor-field: #ddd6e8;
+  --outdoor-field-2: #cec4dd;
+  --outdoor-accent: #71558f;
+  --outdoor-bg-top: rgba(250, 247, 255, 0.94);
+  --outdoor-bg-band: rgba(226, 219, 236, 0.92);
+}
+
+.outdoor-scene-panel.preview {
+  pointer-events: none;
+}
+
+.outdoor-scene-panel.preview.empty {
+  visibility: hidden;
+}
+
+.outdoor-adventure-room.scene-preparing .outdoor-scene-track,
+.outdoor-adventure-room.scene-resetting .outdoor-scene-track {
+  transform: translateX(-100%);
+  transition: none;
+}
+
+.outdoor-event-panel {
+  z-index: 3;
+  align-self: stretch;
+  display: grid;
+  align-content: center;
+  margin: 0 max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
+  padding: 8px 0 10px;
+  transition: opacity 180ms ease;
+}
+
+.outdoor-event-panel p {
+  margin: 0;
+}
+
+.outdoor-event-lines,
+.outdoor-outcome-text {
+  display: grid;
+  gap: 8px;
+}
+
+.outdoor-event-lines p {
+  min-height: 1.35em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  white-space: normal;
+  color: rgba(27, 38, 31, 0.84);
+  text-align: center;
+  font-size: clamp(16px, 4.9vw, 27px);
+  font-weight: 950;
+  line-height: 1.25;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--outdoor-event-line-fade-ms, 560ms) ease, transform var(--outdoor-event-line-fade-ms, 560ms) ease;
+}
+
+.outdoor-event-lines p.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.outdoor-event-lines p:first-child {
+  color: var(--outdoor-ink);
+  font-size: clamp(17px, 5.2vw, 29px);
+  font-weight: 950;
+}
+
+.outdoor-outcome-main {
+  min-height: 1.4em;
+  color: var(--outdoor-ink);
+  text-align: center;
+  font-size: clamp(17px, 5.1vw, 30px);
+  font-weight: 950;
+  line-height: 1.32;
+}
+
+.outdoor-outcome-main p {
+  min-height: 1.32em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  white-space: normal;
+}
+
+.outdoor-outcome-change {
+  min-height: 1.3em;
+  color: rgba(27, 38, 31, 0.76);
+  font-size: clamp(14px, 3.8vw, 18px);
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.outdoor-event-change {
+  color: rgba(27, 38, 31, 0.72);
+  font-size: clamp(13px, 3.7vw, 17px) !important;
+  text-align: left !important;
+}
+
+.outdoor-choice-room {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.18), rgba(255, 253, 248, 0)),
+    var(--outdoor-field);
+  color: var(--outdoor-ink);
+  outline: none;
+  touch-action: none;
+}
+
+.outdoor-choice-wall {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 18px 16px 126px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.18), rgba(255, 253, 248, 0.03)),
+    var(--outdoor-field);
+  color: var(--outdoor-ink);
+  text-align: center;
+  font: inherit;
+}
+
+.outdoor-choice-room.detail-align .outdoor-choice-wall {
+  grid-template-rows: minmax(1.08em, auto) 1.35em;
+  place-content: normal;
+  align-content: center;
+  justify-items: center;
+}
+
+.outdoor-choice-room.detail-align .outdoor-choice-wall strong {
+  grid-row: 1;
+}
+
+.outdoor-choice-room.detail-align .outdoor-choice-wall > span:not(.outdoor-forward-hint) {
+  grid-row: 2;
+}
+
+.outdoor-choice-wall.right {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.18), rgba(255, 253, 248, 0.03)),
+    var(--outdoor-field);
+}
+
+.outdoor-choice-wall.left {
+  border-right: 2px solid rgba(23, 32, 24, 0.12);
+}
+
+.outdoor-choice-wall.full {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+
+.outdoor-choice-wall.selectable {
+}
+
+.outdoor-choice-wall.selected {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--outdoor-accent) 14%, rgba(255, 253, 248, 0.24)), rgba(255, 253, 248, 0.06)),
+    var(--outdoor-field);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--outdoor-accent) 42%, transparent);
+}
+
+.outdoor-choice-wall.unselected {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--outdoor-field) 72%, #d8d8d8);
+  color: rgba(23, 32, 24, 0.45);
+}
+
+.outdoor-choice-wall.movement-zone {
+  cursor: default;
+}
+
+.outdoor-choice-wall.movement-zone.preferred {
+  cursor: default;
+}
+
+.outdoor-choice-wall.movement-zone.preferred.selected {
+  box-shadow: none;
+}
+
+.outdoor-choice-wall.movement-zone.preferred.selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-top: 2px solid color-mix(in srgb, var(--outdoor-accent) 42%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--outdoor-accent) 42%, transparent);
+}
+
+.outdoor-choice-wall.movement-zone.preferred.selected.left::after {
+  border-right: 2px solid color-mix(in srgb, var(--outdoor-accent) 42%, transparent);
+}
+
+.outdoor-choice-wall.movement-zone.preferred.selected.right::after {
+  border-left: 2px solid color-mix(in srgb, var(--outdoor-accent) 42%, transparent);
+}
+
+.outdoor-choice-wall.movement-zone.muted {
+  opacity: 0.72;
+}
+
+.outdoor-choice-wall strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  white-space: nowrap;
+  font-size: clamp(14px, 5.4vw, 32px);
+  line-height: 1.08;
+  font-weight: 950;
+}
+
+.outdoor-choice-wall span {
+  min-width: 0;
+  color: rgba(23, 32, 24, 0.62);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.outdoor-forward-hint {
+  position: absolute;
+  top: 18px;
+  z-index: 2;
+  color: color-mix(in srgb, var(--outdoor-accent) 72%, var(--outdoor-ink));
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0;
+  line-height: 1;
+  animation: outdoor-forward-nudge 960ms ease-in-out infinite;
+}
+
+.outdoor-forward-hint.left {
+  left: 14px;
+}
+
+.outdoor-forward-hint.right {
+  right: 14px;
+}
+
+@keyframes outdoor-forward-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: translateX(var(--forward-nudge, 4px));
+    opacity: 1;
+  }
+}
+
+.outdoor-forward-hint.left {
+  --forward-nudge: -4px;
+}
+
+.outdoor-forward-hint.right {
+  --forward-nudge: 4px;
+}
+
+.outdoor-avatar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  height: 78px;
+  pointer-events: none;
+}
+
+.outdoor-avatar {
+  position: absolute;
+  bottom: 0;
+  transition: opacity 160ms ease;
+  translate: -50% 0;
+}
+
+.outdoor-choice-room:not(.outcome-mode) .outdoor-avatar {
+  transition: left 260ms ease, opacity 160ms ease;
+}
+
+.outdoor-adventure-room.scene-preparing .outdoor-avatar,
+.outdoor-adventure-room.scene-resetting .outdoor-avatar {
+  transition: none !important;
+}
+
+.outdoor-debug-panel {
+  z-index: 8;
+  max-height: 34vh;
+  overflow: auto;
+  border-top: 1px solid rgba(27, 38, 31, 0.1);
+  padding: 8px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  background: #fffdf8;
+  color: var(--outdoor-ink);
+}
+
+.outdoor-debug-panel summary {
+  min-height: 34px;
+  display: grid;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.outdoor-debug-regions,
+.outdoor-debug-actions,
+.outdoor-debug-grid,
+.outdoor-debug-outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 7px;
+}
+
+.outdoor-debug-actions,
+.outdoor-debug-grid,
+.outdoor-debug-outcomes {
+  margin-top: 8px;
+}
+
+.outdoor-debug-panel button {
+  min-height: 46px;
+  border: 1px solid rgba(27, 38, 31, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fffdf8;
+  color: var(--outdoor-ink);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.outdoor-debug-panel button.selected {
+  background: color-mix(in srgb, var(--outdoor-accent) 18%, #fffdf8);
+}
+
+.outdoor-debug-grid button,
+.outdoor-debug-outcomes button {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  text-align: left;
+}
+
+.outdoor-debug-grid button span,
+.outdoor-debug-outcomes button span {
+  color: rgba(27, 38, 31, 0.62);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.outdoor-round-play {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100svh;
+  min-height: 100svh;
+  height: 100dvh;
+  min-height: 100svh;
+  height: var(--game-viewport-height, 100dvh);
+  min-height: var(--game-viewport-height, 100dvh);
+  max-height: var(--game-viewport-height, 100dvh);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  background: #fffdf8;
+}
+
+.outdoor-round-play .play-screen {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  justify-self: stretch;
+  margin: 0;
+  padding: 0 0 max(14px, env(safe-area-inset-bottom));
+}
+
+.outdoor-round-play .prototype-game-wrap,
+.outdoor-round-play .prototype-stage {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-radius: 0;
+}
+
+.outdoor-round-play .prototype-stage {
+  border: 0;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: none;
+}
+
+.outdoor-round-play .round-header,
+.outdoor-round-play .progress-track {
+  display: none;
+}
+
+.outdoor-round-play .outdoor-relic-area {
+  z-index: 45;
+}
+
+@media (min-width: 760px) {
+  .outdoor-adventure-room {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+
+  .outdoor-event-panel,
+  .outdoor-relic-area {
+    width: min(760px, calc(100vw - 32px));
+    justify-self: center;
+  }
+
+  .outdoor-status-strip,
+  .outdoor-relic-bar {
+    width: min(760px, calc(100vw - 32px));
+    justify-self: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .outdoor-relic-detail {
+    left: 0;
+    right: calc(var(--outdoor-meta-width) + 8px);
+    max-width: calc(100% - var(--outdoor-meta-width) - 8px);
+  }
+}
+
+@media (max-width: 420px) {
+  .outdoor-adventure-room {
+    --outdoor-meta-width: 30vw;
+  }
+
+  .outdoor-status-strip > span {
+    font-size: 11px;
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+  .outdoor-meta-panel {
+    max-width: var(--outdoor-meta-width);
+  }
+
+  .outdoor-day-region {
+    font-size: 11px;
+  }
+
+  .outdoor-text-speed-toggle button {
+    min-width: 26px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .outdoor-choice-wall {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
+.outdoor-adventure-room.scene-leaving.exit-left .outdoor-scene-track {
+  transform: translateX(0);
+}
+
+.outdoor-adventure-room.scene-leaving.exit-right .outdoor-scene-track {
+  transform: translateX(-200%);
+}
+
+.outdoor-summary-room {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  min-height: var(--game-viewport-height, 100dvh);
+  display: grid;
+  place-items: center;
+  padding: max(28px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+}
+
+.outdoor-summary-page {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 18px;
+  color: #172018;
+  text-align: left;
+}
+
+.outdoor-summary-page small {
+  color: rgba(23, 32, 24, 0.58);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.outdoor-summary-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.outdoor-summary-lines p {
+  margin: 0;
+  font-size: clamp(22px, 6vw, 34px);
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.outdoor-summary-stats,
+.outdoor-summary-materials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outdoor-summary-stats span,
+.outdoor-summary-materials span {
+  border: 1px solid rgba(47, 108, 82, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ecf8f1;
+  color: #215d47;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.outdoor-summary-page > strong {
+  color: rgba(23, 32, 24, 0.64);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.outdoor-settlement-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(10, 12, 10, 0.38);
+}
+
+.outdoor-settlement-card {
+  width: min(420px, 100%);
+  border: 2px solid rgba(23, 32, 24, 0.16);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 253, 248, 0.96);
+  color: #172018;
+  box-shadow: 0 18px 44px rgba(20, 20, 20, 0.18);
+}
+
+.outdoor-settlement-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.outdoor-settlement-card p {
+  margin: 0 0 12px;
+  color: rgba(23, 32, 24, 0.72);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.outdoor-settlement-grid,
+.outdoor-settlement-materials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.outdoor-settlement-grid span,
+.outdoor-settlement-materials span {
+  border: 1px solid rgba(47, 108, 82, 0.2);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: #ecf8f1;
+  color: #215d47;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.outdoor-settlement-card button {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: #172018;
+  color: #fffdf8;
+  font: inherit;
+  font-weight: 950;
+}

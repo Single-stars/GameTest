@@ -328,16 +328,20 @@ function resolveDoodleLastSafePlatform(frame: DoodleFrame) {
   return frame.platforms.find((platform) => platform.id === frame.lastSafePlatformId && !platform.risk && !platform.finish) ?? frame.platforms.find((platform) => platform.start) ?? frame.platforms[0];
 }
 
+function resolveDoodleLastRespawnPlatform(frame: DoodleFrame) {
+  return frame.platforms.find((platform) => platform.id === frame.lastSafePlatformId && !platform.finish) ?? resolveDoodleLastSafePlatform(frame);
+}
+
 function syncDoodleRespawnPlayerWithPlatform(frame: DoodleFrame, time: number, stageWidth: number) {
   if (!frame.respawnAwaitingInput) return;
-  const safePlatform = resolveDoodleLastSafePlatform(frame);
+  const safePlatform = resolveDoodleLastRespawnPlatform(frame);
   if (!safePlatform) return;
   frame.playerX = movingPlatformX(safePlatform, time, stageWidth);
   frame.playerY = safePlatform.y + PLAYER_SIZE / 2;
 }
 
 function recoverEndlessDoodleFailure(current: DoodleFrame, reason: string, time: number, stageWidth: number, stageHeight: number) {
-  const safeRespawnPlatform = resolveDoodleLastSafePlatform(current);
+  const safeRespawnPlatform = resolveDoodleLastRespawnPlatform(current);
   current.failures += 1;
   current.highEnergyStreak = 0;
   current.status = "playing";
@@ -996,6 +1000,7 @@ export function DoodleJumpPrototype({
       if (!current.started) {
         current.time += delta;
         syncDoodleRespawnPlayerWithPlatform(current, current.time, logicStageWidth);
+        const respawnViewChanged = current.respawnAwaitingInput && current.time <= current.respawnCameraUntil;
         if (current.respawnAwaitingInput && current.time < current.respawnCameraUntil) {
           current.cameraY = smoothDoodleRespawnCamera(
             current.respawnCameraStartY,
@@ -1005,6 +1010,7 @@ export function DoodleJumpPrototype({
           if (current.time >= current.respawnCameraUntil) current.cameraY = current.respawnCameraEndY;
         }
         paintDoodleFrame(current);
+        if (respawnViewChanged || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) syncDoodleView(time);
         syncDoodleRuntimeState(time);
         frameId = requestAnimationFrame(tick);
         return;
@@ -1054,7 +1060,7 @@ export function DoodleJumpPrototype({
             nextVy = getDoodleBounceVelocity({ risk: highEnergyJump, riskJumpMultiplier });
             platform.used = true;
             landedFinishPlatform = platform.finish === true;
-            if (!platform.risk && !platform.finish) current.lastSafePlatformId = platform.id;
+            if ((!platform.finish && isEndlessRun) || (!platform.risk && !platform.finish)) current.lastSafePlatformId = platform.id;
             if (platform.risk) riskHit += 1;
             highEnergyStreak = highEnergyJump ? highEnergyStreak + 1 : 0;
             if (isEndlessRun && highEnergyStreak >= 3) {
@@ -1204,7 +1210,7 @@ export function DoodleJumpPrototype({
         if (unlimitedRespawn || failures <= baseFailureLimit) {
           if (!unlimitedRespawn) onBaseReviveUsed?.();
           triggerScreenShake();
-          const safeRespawnPlatform = resolveDoodleLastSafePlatform(current);
+          const safeRespawnPlatform = resolveDoodleLastRespawnPlatform(current);
           safeRespawnPlatform.used = false;
           current.playerX = movingPlatformX(safeRespawnPlatform, nextTime, logicStageWidth);
           current.playerY = safeRespawnPlatform.y + PLAYER_SIZE / 2;

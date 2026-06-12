@@ -1318,7 +1318,6 @@ test("base flow CSS is split into ordered focused chunks", () => {
     '@import "./base-flow/tokens.css";',
     '@import "./base-flow/shell.css";',
     '@import "./base-flow/home-intro.css";',
-    '@import "./base-flow/homeworld.css";',
     '@import "./base-flow/shared-controls.css";',
     '@import "./base-flow/play-frame.css";',
     '@import "./base-flow/native-reaction.css";',
