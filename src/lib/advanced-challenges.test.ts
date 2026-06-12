@@ -665,7 +665,9 @@ test("advanced braking displays zero at the left edge and schedules finite event
     brakingSource.indexOf("const DINO_TRIAL_COUNT"),
   );
 
-  assert.match(advancedBrakingSource, /getAdvancedBrakeDisplayProgress\(\{ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics\.runnerWidthPercent \}\)/);
+  assert.match(advancedBrakingSource, /advancedProgressLabelRef/);
+  assert.match(advancedBrakingSource, /advancedProgressLabelRef\.current\.textContent = `\$\{getAdvancedBrakeDisplayProgress\(\{[\s\S]*runnerLeftPercent,[\s\S]*runnerWidthPercent: trackMetrics\.runnerWidthPercent,[\s\S]*\}\)\}%`;/);
+  assert.match(advancedBrakingSource, /getAdvancedBrakeDisplayProgress\(\{ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics\.runnerWidthPercent \}\)\}%/);
   assert.match(advancedBrakingSource, /const hazardLeft = getAdvancedBrakeDangerLeft\(\{/);
   assert.doesNotMatch(advancedBrakingSource, /getAdvancedBrakeRandomDangerLeft\(\{[\s\S]{0,160}randomValue: Math\.random\(\)/);
   assert.match(advancedBrakingSource, /finiteEventProgressTargetsRef\.current\[hazardIndexRef\.current\]/);

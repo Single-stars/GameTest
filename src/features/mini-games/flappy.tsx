@@ -19,6 +19,7 @@ import {
   DEBUG_MINI_GAME_FPS,
   MINI_GAME_UI_SYNC_MS,
   MiniGameFpsBadge,
+  MiniGamePerfPanel,
   PLAYER_SIZE,
   PrototypeEndOverlay,
   booleanParam,
@@ -27,6 +28,7 @@ import {
   transformPoint3d,
   useMiniGameFpsCounter,
   useMiniGameLowPowerMode,
+  useMiniGamePerfMonitor,
   useMiniGameScreenShake,
   useMiniGameStageSize,
   type MiniGameCompletion,
@@ -671,6 +673,8 @@ export function FlappyPrototype({
   const gravityFlippedRef = useRef(false);
   const gravityFlipPulseTimerRef = useRef<number | null>(null);
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const perf = useMiniGamePerfMonitor("Flappy");
+  const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const { screenShakeClassName, triggerScreenShake } = useMiniGameScreenShake();
   const [view, setView] = useState<FlappyViewFrame>(() => makeFlappyView(initialRuntime, reverseDirection, visibleBuffer, stageWidth));
   const [managedGravityFlipped, setManagedGravityFlipped] = useState(false);
@@ -680,10 +684,11 @@ export function FlappyPrototype({
   const syncFlappyView = useCallback(
     (time = performance.now()) => {
       lastUiSyncRef.current = time;
+      recordReactSync();
       const activeReverseDirection = reverseDirection;
       setView(makeFlappyView(runtimeRef.current, activeReverseDirection, visibleBuffer, stageWidth));
     },
-    [reverseDirection, stageWidth, visibleBuffer],
+    [recordReactSync, reverseDirection, stageWidth, visibleBuffer],
   );
 
   useEffect(() => {
@@ -962,11 +967,23 @@ export function FlappyPrototype({
 
     const tick = (time: number) => {
       recordFrame(time);
+      const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
         return;
       }
+      const paintFlappyFrame = (
+        frame: FlappyFrame,
+        spectatingRemote = false,
+        sceneTime = frame.time,
+        frameDelta = delta,
+      ) => {
+        const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
+        const renderStartedAt = perfEnabled ? performance.now() : 0;
+        updateDom(frame, time, spectatingRemote, sceneTime, frameDelta);
+        if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
+      };
 
       const current = runtimeRef.current;
       if (current.status !== "playing") {
@@ -979,7 +996,7 @@ export function FlappyPrototype({
           const targetDisplayProgress = activeReverseDirection ? -spectatorState.cameraX : spectatorState.cameraX;
           current.displayProgress = smoothSpectatorCamera(current.displayProgress, targetDisplayProgress, delta);
         }
-        updateDom(current, time, spectatingRemote, spectatorSceneTimeRef.current, delta);
+        paintFlappyFrame(current, spectatingRemote, spectatorSceneTimeRef.current, delta);
         if (time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
           syncFlappyView(time);
         }
@@ -993,7 +1010,7 @@ export function FlappyPrototype({
         const isRespawnCameraMoving = current.respawnProgressUntil > current.time;
         current.time += delta;
         current.displayProgress = resolveFlappyDisplayProgress(current);
-        updateDom(current, time, false, current.time, delta);
+        paintFlappyFrame(current, false, current.time, delta);
         if (isRespawnCameraMoving || time - lastUiSyncRef.current >= MINI_GAME_UI_SYNC_MS) {
           syncFlappyView(time);
         }
@@ -1181,7 +1198,7 @@ export function FlappyPrototype({
             stageWidth,
             time: nextTime,
           });
-          updateDom(current, time, false, current.time, delta);
+          paintFlappyFrame(current, false, current.time, delta);
           syncFlappyView(time);
           syncFlappyRuntimeState(time, true);
           frameId = requestAnimationFrame(tick);
@@ -1189,7 +1206,7 @@ export function FlappyPrototype({
         }
         current.status = "failed";
         current.reason = reason;
-        updateDom(current, time, false, current.time, delta);
+        paintFlappyFrame(current, false, current.time, delta);
         syncFlappyView(time);
         syncFlappyRuntimeState(time, true);
         return;
@@ -1223,7 +1240,7 @@ export function FlappyPrototype({
           current.invincibleUntil = nextTime + FLAPPY_RESPAWN_INVINCIBLE_SECONDS;
           current.status = "playing";
           current.reason = reason;
-          updateDom(current, time, false, current.time, delta);
+          paintFlappyFrame(current, false, current.time, delta);
           syncFlappyView(time);
           syncFlappyRuntimeState(time, true);
           frameId = requestAnimationFrame(tick);
@@ -1258,7 +1275,7 @@ export function FlappyPrototype({
         current.invincibleUntil = nextTime + FLAPPY_RESPAWN_INVINCIBLE_SECONDS;
         current.status = "playing";
         current.reason = reason;
-        updateDom(current, time, false, current.time, delta);
+        paintFlappyFrame(current, false, current.time, delta);
         syncFlappyView(time);
         syncFlappyRuntimeState(time, true);
         frameId = requestAnimationFrame(tick);
@@ -1268,7 +1285,7 @@ export function FlappyPrototype({
       if (status === "failed") triggerScreenShake();
       current.status = status;
       current.reason = reason;
-      updateDom(current, time, false, current.time, delta);
+      paintFlappyFrame(current, false, current.time, delta);
       if (status !== "playing" || eventChanged) {
         syncFlappyRuntimeState(time, true);
       } else {
@@ -1283,7 +1300,7 @@ export function FlappyPrototype({
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [avatarEffect, backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, paused, playerX, recordFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerEndlessGravityChangeIfNeeded, triggerScreenShake, unlimitedRespawn]);
+  }, [avatarEffect, backgroundRefs, baseRevives, collectibleCount, gapSize, gateCount, initialPlayerY, isEndlessRun, level, logicStageSize, mode, onBaseReviveUsed, paused, perfEnabled, playerX, recordFrame, recordPerfFrame, reverseDirection, reversedGravity, runSeed, speed, stageHeight, stageRef, stageWidth, syncFlappyRuntimeState, syncFlappyView, triggerEndlessGravityChangeIfNeeded, triggerScreenShake, unlimitedRespawn]);
 
   const progressPercent = clamp((view.passed / gateCount) * 100, 0, 100);
   const viewFlappyParams = isEndlessRun
@@ -1365,6 +1382,7 @@ export function FlappyPrototype({
       >
         <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
+        <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div
           className={`flappy-world ${activeViewReversedGravity ? "gravity-flipped" : ""}`}
           style={worldLayerStyle}

@@ -376,7 +376,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     [endless, maxEventDelayMs, minEventDelayMs],
   );
 
-  const [progress, setProgress] = useState(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
+  const [progress] = useState(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
 
   const [holding, setHolding] = useState(false);
 
@@ -384,7 +384,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const [bumpedHazards, setBumpedHazards] = useState<AdvancedBrakeBumpedHazard[]>([]);
   const [shockwaves, setShockwaves] = useState<AdvancedBrakingShockwave[]>([]);
 
-  const progressRef = useRef(endless ? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0);
+  const progressRef = useRef(progress);
   const endlessDistanceRef = useRef(0);
   const pausedRef = useRef(paused);
   const loopClockNeedsResumeSyncRef = useRef(false);
@@ -437,6 +437,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
   const endlessRef = useRef(endless);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const advancedRunnerRef = useRef<HTMLSpanElement | null>(null);
+  const advancedProgressLabelRef = useRef<HTMLSpanElement | null>(null);
+  const advancedHazardRefs = useRef(new Map<number, HTMLSpanElement>());
+  const advancedRulePortalRefs = useRef(new Map<number, HTMLSpanElement>());
+  const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
 
   const syncEndlessWaveParallax = useCallback((distance: number) => {
     const panel = trackRef.current?.closest(".advanced-braking") as HTMLElement | null;
@@ -446,9 +451,67 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     panel?.style.setProperty("--advanced-brake-ground-offset", `${groundOffsetPx}px`);
   }, []);
 
-  const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
+  const paintAdvancedBrakingRunner = useCallback((runnerLeftPercent: number) => {
+    if (advancedRunnerRef.current) advancedRunnerRef.current.style.left = `${runnerLeftPercent}%`;
+  }, []);
 
-  const [trackMetrics, setTrackMetrics] = useState({ runnerWidthPercent: 8, hazardWidthPercent: 6 });
+  const paintAdvancedBrakingProgressLabel = useCallback(
+    (runnerLeftPercent: number) => {
+      if (!advancedProgressLabelRef.current) return;
+      advancedProgressLabelRef.current.textContent = `${getAdvancedBrakeDisplayProgress({
+        runnerLeftPercent,
+        runnerWidthPercent: trackMetrics.runnerWidthPercent,
+      })}%`;
+    },
+    [trackMetrics.runnerWidthPercent],
+  );
+
+  const paintAdvancedBrakingHazard = useCallback((nextHazard: AdvancedBrakeHazard | null) => {
+    if (!nextHazard) return;
+    for (const node of advancedHazardRefs.current.values()) {
+      node.style.left = `${nextHazard.x}%`;
+    }
+  }, []);
+
+  const paintAdvancedBrakingRulePortal = useCallback((nextPortal: AdvancedBrakingRulePortal | null) => {
+    if (!nextPortal) return;
+    for (const node of advancedRulePortalRefs.current.values()) {
+      node.style.left = `${nextPortal.x}%`;
+    }
+  }, []);
+
+  const attachAdvancedBrakingRunner = useCallback(
+    (node: HTMLSpanElement | null) => {
+      advancedRunnerRef.current = node;
+      if (!node) return;
+      node.style.left = `${progress}%`;
+    },
+    [progress],
+  );
+
+  const attachAdvancedBrakingHazard = useCallback((lane: number, node: HTMLSpanElement | null, initialX: number) => {
+    if (!node) {
+      advancedHazardRefs.current.delete(lane);
+      return;
+    }
+    advancedHazardRefs.current.set(lane, node);
+    if (node.dataset.advancedInitialLeftPainted === "1") return;
+    node.dataset.advancedInitialLeftPainted = "1";
+    node.style.left = `${initialX}%`;
+  }, []);
+
+  const attachAdvancedBrakingRulePortal = useCallback((lane: number, node: HTMLSpanElement | null, initialX: number) => {
+    if (!node) {
+      advancedRulePortalRefs.current.delete(lane);
+      return;
+    }
+    advancedRulePortalRefs.current.set(lane, node);
+    if (node.dataset.advancedInitialLeftPainted === "1") return;
+    node.dataset.advancedInitialLeftPainted = "1";
+    node.style.left = `${initialX}%`;
+  }, []);
+
+  const [advancedFeedback, setAdvancedFeedback] = useState<AdvancedBrakingFeedback>("idle");
 
   useEffect(() => {
     if (endless || holdingRef.current || hazardIndexRef.current > 0) return;
@@ -1149,14 +1212,15 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
         progressRef.current = next;
 
-        setProgress(next);
+        paintAdvancedBrakingRunner(next);
+        paintAdvancedBrakingProgressLabel(next);
 
         if (activeEndless && distanceDelta > 0) {
           const currentPortal = rulePortalRef.current;
           if (currentPortal) {
             const movedPortal = { ...currentPortal, x: clamp(currentPortal.x - distanceDelta, -10, 100) };
             rulePortalRef.current = movedPortal;
-            setRulePortal(movedPortal);
+            paintAdvancedBrakingRulePortal(movedPortal);
             if (hasAdvancedBrakingRulePortalReachedRunner({
               portal: movedPortal,
               runnerLeftPercent: next,
@@ -1217,7 +1281,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
             x: clamp(hazard.x - distanceDelta, -10, 100),
           };
           hazardRef.current = movedHazard;
-          setHazard(movedHazard);
+          paintAdvancedBrakingHazard(movedHazard);
           if (hasAdvancedBrakingHazardReachedRunner({
             hazard: movedHazard,
             runnerLeftPercent: next,
@@ -1364,6 +1428,14 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
     forceAdvancedBrakingStopAfterFailure,
 
     getBigLuckSkill,
+
+    paintAdvancedBrakingHazard,
+
+    paintAdvancedBrakingProgressLabel,
+
+    paintAdvancedBrakingRulePortal,
+
+    paintAdvancedBrakingRunner,
 
     recordHoldSuccess,
 
@@ -1591,7 +1663,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
       {showAdvancedBrakingMiniScore ? (
       <div className="mini-score">
 
-        {!endless ? <span>{getAdvancedBrakeDisplayProgress({ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics.runnerWidthPercent })}%</span> : null}
+        {!endless ? (
+          <span ref={advancedProgressLabelRef}>
+            {getAdvancedBrakeDisplayProgress({ runnerLeftPercent: progress, runnerWidthPercent: trackMetrics.runnerWidthPercent })}%
+          </span>
+        ) : null}
         {activeRuleHint ? <span>{activeRuleHint}</span> : null}
 
       </div>
@@ -1619,7 +1695,7 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
               <span
                 className="advanced-brake-rule-portal"
                 data-target={rulePortal.targetState}
-                style={{ left: `${rulePortal.x}%` }}
+                ref={(node) => attachAdvancedBrakingRulePortal(lane, node, rulePortal.x)}
               />
             ) : null}
 
@@ -1629,7 +1705,8 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
 
                 className={`advanced-hazard ${(lane === 0 ? hazard.top : hazard.bottom) === "gray" ? "fake" : "real"}`}
 
-                style={{ left: `${hazard.x}%`, translate: "0 0" }}
+                ref={(node) => attachAdvancedBrakingHazard(lane, node, hazard.x)}
+                style={{ translate: "0 0" }}
 
               />
 
@@ -1651,7 +1728,11 @@ export function AdvancedBrakingRound({ advancedConfig, damageInvincible = false,
               );
             })}
 
-            <span className={`advanced-runner ${damageInvincible ? "damage-invincible" : ""}`} style={{ left: `${progress}%`, translate: "0 0" }}>
+            <span
+              className={`advanced-runner ${damageInvincible ? "damage-invincible" : ""}`}
+              ref={attachAdvancedBrakingRunner}
+              style={{ translate: "0 0" }}
+            >
               <PlayerAvatar
                 {...resolveAdvancedBrakingAvatarView(holding, advancedFeedback)}
                 direction={holding ? "right" : "none"}

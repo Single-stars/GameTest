@@ -341,6 +341,21 @@ test("advanced braking mirrors base stop feedback for early release, crash, and 
   assert.match(cssSource, /\.advanced-braking\.success \.advanced-runner/);
 });
 
+test("advanced braking paints moving frame positions without per-frame React state", () => {
+  const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
+  const advancedBrakingSource = sourceBetween(brakingSource, "export function AdvancedBrakingRound", "const DINO_TRIAL_COUNT");
+
+  assert.match(advancedBrakingSource, /advancedRunnerRef/);
+  assert.match(advancedBrakingSource, /advancedHazardRefs/);
+  assert.match(advancedBrakingSource, /advancedRulePortalRefs/);
+  assert.match(advancedBrakingSource, /paintAdvancedBrakingRunner\(next\)/);
+  assert.match(advancedBrakingSource, /paintAdvancedBrakingHazard\(movedHazard\)/);
+  assert.match(advancedBrakingSource, /paintAdvancedBrakingRulePortal\(movedPortal\)/);
+  assert.doesNotMatch(advancedBrakingSource, /setProgress\(next\);/);
+  assert.doesNotMatch(advancedBrakingSource, /setRulePortal\(movedPortal\);/);
+  assert.doesNotMatch(advancedBrakingSource, /setHazard\(movedHazard\);/);
+});
+
 test("advanced braking keeps finite rule hints while endless rule text starts only inside portals", () => {
   const brakingSource = read(new URL("../features/rounds/native/braking.tsx", import.meta.url));
   const advancedBrakingSource = sourceBetween(brakingSource, "type AdvancedBrakingFeedback", "const DINO_TRIAL_COUNT");

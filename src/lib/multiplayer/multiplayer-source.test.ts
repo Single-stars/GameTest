@@ -169,6 +169,17 @@ test("multiplayer game sync keeps network hot paths out of React snapshots", () 
   assert.match(runtimeSource, /new SimpleGameSync\([\s\S]*syncIntervalMs[\s\S]*keepAliveMs: inputOnlySync \? MULTIPLAYER_INPUT_KEEPALIVE_MS : undefined/);
 });
 
+test("multiplayer level-select room paints local player movement without per-frame React state", () => {
+  const roomSource = readSource("../../features/multiplayer/multiplayer-level-select-room.tsx");
+  const roomLoopSource = roomSource.slice(roomSource.indexOf("const tick = (time: number) => {"), roomSource.indexOf("const playerAction = moving || autoMoveTask"));
+
+  assert.match(roomSource, /const playerNodeRef = useRef<HTMLDivElement \| null>\(null\);/);
+  assert.match(roomSource, /paintLocalPlayerPosition\(clamped\);/);
+  assert.match(roomSource, /syncPlayerXState\(clamped\);/);
+  assert.doesNotMatch(roomLoopSource, /setPlayerX\(clamped\);/);
+  assert.match(roomSource, /ref=\{playerNodeRef\}/);
+});
+
 test("multiplayer page requests rematch without leaving or immediately resetting the P2P session", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const sessionSource = readSource("./multiplayer-session.ts");

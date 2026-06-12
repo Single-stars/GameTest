@@ -1483,6 +1483,8 @@ test("hidden mini game performance panel is URL-gated and ref-backed", () => {
   const squareJumpSource = componentSource.slice(componentSource.indexOf("function SquareJumpPrototype"), componentSource.indexOf("const FALL_DOWN_LEDGE_WIDTH"));
   const fallDownSource = componentSource.slice(componentSource.indexOf("function FallDownPrototype"), componentSource.indexOf("function makeDoodleWorld"));
   const doodleSource = readFileSync(new URL("../features/mini-games/doodle.tsx", import.meta.url), "utf8");
+  const flappySource = readFileSync(new URL("../features/mini-games/flappy.tsx", import.meta.url), "utf8");
+  const knifeSource = readFileSync(new URL("../features/mini-games/knife.tsx", import.meta.url), "utf8");
 
   assert.match(commonSource, /const MINI_GAME_PERF_PANEL_SYNC_MS = 500;/);
   assert.match(perfSource, /function isMiniGamePerfPanelEnabled\(\)/);
@@ -1501,9 +1503,13 @@ test("hidden mini game performance panel is URL-gated and ref-backed", () => {
   assert.match(squareJumpSource, /useMiniGamePerfMonitor\("Square Jump"\)/);
   assert.match(fallDownSource, /useMiniGamePerfMonitor\("Fall Down"\)/);
   assert.match(doodleSource, /useMiniGamePerfMonitor\("Doodle"\)/);
+  assert.match(flappySource, /useMiniGamePerfMonitor\("Flappy"\)/);
+  assert.match(knifeSource, /useMiniGamePerfMonitor\("Knife"\)/);
   assert.match(squareJumpSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
   assert.match(fallDownSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
   assert.match(doodleSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
+  assert.match(flappySource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
+  assert.match(knifeSource, /<MiniGamePerfPanel snapshot=\{perf\.snapshot\} \/>/);
 });
 
 test("doodle and fall down hot paths avoid pointermove sync and repeated linear DOM lookups", () => {

@@ -906,7 +906,9 @@ test("endless braking uses continuous scenery and hazards that approach the runn
   assert.doesNotMatch(brakingSource, /endlessWorldOffset/);
   assert.match(brakingSource, /ENDLESS_BRAKE_RUNNER_LEFT_PERCENT/);
   assert.match(brakingSource, /useState\(endless \? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0\)/);
-  assert.match(brakingSource, /useRef\(endless \? ENDLESS_BRAKE_RUNNER_LEFT_PERCENT : 0\)/);
+  assert.match(brakingSource, /const progressRef = useRef\(progress\);/);
+  assert.match(brakingSource, /paintAdvancedBrakingRunner\(next\);/);
+  assert.match(brakingSource, /paintAdvancedBrakingHazard\(movedHazard\);/);
   assert.match(brakingSource, /syncEndlessWaveParallax/);
   assert.match(brakingSource, /style\.setProperty\("--difficulty-wave-parallax-x"/);
   assert.match(brakingSource, /style\.setProperty\("--difficulty-wave-parallax-y"/);
@@ -965,7 +967,10 @@ test("endless braking enters and exits rule-tale lanes through road portals inst
   assert.match(brakingSource, /const showAdvancedBrakingRuleBackdrop = ruleZoneVisualActive && activeRuleHint;/);
   assert.match(brakingSource, /className="advanced-brake-rule-portal"/);
   assert.match(brakingSource, /data-target=\{rulePortal\.targetState\}/);
-  assert.match(brakingSource, /style=\{\{ left: `\$\{rulePortal\.x\}%` \}\}/);
+  assert.match(brakingSource, /advancedRulePortalRefs/);
+  assert.match(brakingSource, /attachAdvancedBrakingRulePortal/);
+  assert.match(brakingSource, /paintAdvancedBrakingRulePortal\(movedPortal\);/);
+  assert.match(brakingSource, /ref=\{\(node\) => attachAdvancedBrakingRulePortal\(lane, node, rulePortal\.x\)\}/);
   assert.match(brakingSource, /const activeConfig = getAdvancedBrakingRuleZoneConfig\(\{[\s\S]*brakingRuleZoneState: brakingRuleZoneStateRef\.current,[\s\S]*config,[\s\S]*endlessDifficulty: activeDifficulty,/);
   assert.doesNotMatch(startHazardSource, /setActiveLaneCount\(resolveAdvancedBrakingLaneCount\(activeConfig\)\);/);
   assert.doesNotMatch(startHazardSource, /setActiveRuleHint\(getAdvancedBrakeRuleHint\(activeConfig\.level, activeConfig\.params\.dualRule\)\);/);

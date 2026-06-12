@@ -18,12 +18,14 @@ import {
   DEBUG_MINI_GAME_FPS,
   MINI_GAME_TIMER_SYNC_MS,
   MiniGameFpsBadge,
+  MiniGamePerfPanel,
   PrototypeEndOverlay,
   booleanParam,
   clamp,
   numberParam,
   useMiniGameFpsCounter,
   useMiniGameLowPowerMode,
+  useMiniGamePerfMonitor,
   useMiniGameStageSize,
   type EndlessMiniGameRuntime,
   type MiniGameCompletion,
@@ -483,6 +485,8 @@ export function KnifeHitPrototype({
   const pausedRef = useRef(paused);
   const isLowPowerDevice = useMiniGameLowPowerMode();
   const { fps, recordFrame } = useMiniGameFpsCounter(DEBUG_MINI_GAME_FPS);
+  const perf = useMiniGamePerfMonitor("Knife");
+  const { enabled: perfEnabled, recordFrame: recordPerfFrame, recordReactSync } = perf;
   const [feedbackTone, setFeedbackTone] = useState<KnifeFeedbackTone>("idle");
   const [overtimeBannerVisible, setOvertimeBannerVisible] = useState(false);
   const [endlessWheelTransition, setEndlessWheelTransition] = useState<EndlessKnifeWheelTransition>({ phase: "idle", pending: null });
@@ -490,8 +494,9 @@ export function KnifeHitPrototype({
   const endlessWheelTransitionActiveRef = useRef(false);
 
   const syncKnifeView = useCallback(() => {
+    recordReactSync();
     setView(makeKnifeView(runtimeRef.current, launcherVisibleRef.current));
-  }, []);
+  }, [recordReactSync]);
 
   useEffect(() => {
     onRuntimeStateRef.current = onRuntimeState;
@@ -883,15 +888,23 @@ export function KnifeHitPrototype({
     let last = performance.now();
     const tick = (time: number) => {
       recordFrame(time);
+      const updateStartedAt = perfEnabled ? performance.now() : 0;
       const delta = clamp((time - last) / 1000, 0, 0.032);
       last = time;
       if (pausedRef.current) {
         return;
       }
 
+      const paintKnifeFrame = () => {
+        const updateMs = perfEnabled ? performance.now() - updateStartedAt : 0;
+        const renderStartedAt = perfEnabled ? performance.now() : 0;
+        if (wheelRef.current) wheelRef.current.style.transform = `rotate(${runtimeRef.current.rotation}deg)`;
+        if (perfEnabled) recordPerfFrame(time, updateMs, performance.now() - renderStartedAt);
+      };
+
       const current = runtimeRef.current;
       if (current.status !== "playing") {
-        if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
+        paintKnifeFrame();
         syncKnifeRuntimeState(time, true);
         return;
       }
@@ -902,7 +915,7 @@ export function KnifeHitPrototype({
       const nextTime = current.time + skillDelta;
       current.time = nextTime;
       current.rotation = normalizeDegrees(current.rotation + rotationSpeed * skillDelta);
-      if (wheelRef.current) wheelRef.current.style.transform = `rotate(${current.rotation}deg)`;
+      paintKnifeFrame();
 
       let shouldSync = false;
       if (current.timer !== null && !current.flying && (!multiplayerRole || isKnifeLocalTurn(current, multiplayerRole, knifeFirstOwner))) {
@@ -972,7 +985,7 @@ export function KnifeHitPrototype({
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       if (launcherReadyTimeoutRef.current !== null) window.clearTimeout(launcherReadyTimeoutRef.current);
     };
-  }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, paused, phaseDuration, recordFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
+  }, [baseRotationSpeed, continueEndlessKnifeAfterFailure, countdown, hasCountdown, isEndlessRun, knifeFirstOwner, mode, multiplayerRole, paused, perfEnabled, phaseDuration, recordFrame, recordPerfFrame, scheduleLauncherReady, shotCount, showKnifeFeedback, sineRotationEnabled, sweepPerPhase, syncKnifeRuntimeState, syncKnifeView, unlimitedRespawn]);
 
   const isEndlessWheelTransitioning = endlessWheelTransition.phase !== "idle";
   const remaining = isEndlessWheelTransitioning ? 0 : view.status === "playing" && view.shotIndex >= shotCount ? 1 : Math.max(0, shotCount - view.shotIndex);
@@ -1092,6 +1105,7 @@ export function KnifeHitPrototype({
       >
         <DifficultyWaveBackdrop />
         <MiniGameFpsBadge fps={fps} />
+        <MiniGamePerfPanel snapshot={perf.snapshot} />
         <div className="knife-wheel-wrap">
           {renderKnifeWheelPanel(view, forbiddenZones, currentWheelPanelClass, true)}
           {endlessWheelTransition.phase === "sliding" && endlessWheelTransition.pending

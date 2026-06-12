@@ -139,6 +139,9 @@ export function MultiplayerLevelSelectRoom({
   const [direction, setDirection] = useState<PlayerAvatarDirection>("right");
   const [moving, setMoving] = useState(false);
   const playerXRef = useRef(50);
+  const playerNodeRef = useRef<HTMLDivElement | null>(null);
+  const playerReachableSlotRef = useRef<MultiplayerLevelSelectSlot | null>(nearestReachableSlot(50));
+  const playerReadyZoneRef = useRef<boolean | null>(null);
   const inputDirectionRef = useRef<"left" | "right" | "none">("none");
   const inputPointerIdRef = useRef<number | null>(null);
   const autoMoveTaskRef = useRef<LevelSelectAutoMoveTask | null>(null);
@@ -197,6 +200,28 @@ export function MultiplayerLevelSelectRoom({
     [onPresenceChange, selfSkin],
   );
 
+  const paintLocalPlayerPosition = useCallback((x: number) => {
+    if (playerNodeRef.current) playerNodeRef.current.style.left = `${x}%`;
+  }, []);
+
+  const syncPlayerXState = useCallback(
+    (x: number, force = false) => {
+      const nextReachableSlot = nearestReachableSlot(x);
+      const nextReadyZone = isMultiplayerLevelSelectReadyZone(selection, x);
+      if (
+        !force &&
+        nextReachableSlot === playerReachableSlotRef.current &&
+        nextReadyZone === playerReadyZoneRef.current
+      ) {
+        return;
+      }
+      playerReachableSlotRef.current = nextReachableSlot;
+      playerReadyZoneRef.current = nextReadyZone;
+      setPlayerX(x);
+    },
+    [selection],
+  );
+
   const updateReady = useCallback(
     (ready: boolean) => {
       if (readyRef.current === ready) return;
@@ -219,8 +244,9 @@ export function MultiplayerLevelSelectRoom({
     inputDirectionRef.current = "none";
     inputPointerIdRef.current = null;
     setMoving(false);
+    syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, "none", readyRef.current);
-  }, [publishPresence]);
+  }, [publishPresence, syncPlayerXState]);
 
   const completeAutoMoveTask = useCallback(
     (task: LevelSelectAutoMoveTask) => {
@@ -229,6 +255,7 @@ export function MultiplayerLevelSelectRoom({
       inputDirectionRef.current = "none";
       inputPointerIdRef.current = null;
       setMoving(false);
+      syncPlayerXState(playerXRef.current, true);
       if (task === "ready") {
         updateReady(true);
         return;
@@ -239,7 +266,7 @@ export function MultiplayerLevelSelectRoom({
         window.setTimeout(onBackToRoom, 0);
       }
     },
-    [onBackToRoom, publishPresence, updateReady],
+    [onBackToRoom, publishPresence, syncPlayerXState, updateReady],
   );
 
   const startAutoMove = useCallback(
@@ -256,10 +283,11 @@ export function MultiplayerLevelSelectRoom({
       inputDirectionRef.current = autoDirection;
       setMoving(autoDirection !== "none");
       if (autoDirection !== "none") setDirection(autoDirection);
+      if (autoDirection === "none") syncPlayerXState(playerXRef.current, true);
       publishPresence(playerXRef.current, autoDirection, readyRef.current);
       if (autoDirection === "none") completeAutoMoveTask(task);
     },
-    [completeAutoMoveTask, publishPresence, readyGuideVisible, selection],
+    [completeAutoMoveTask, publishPresence, readyGuideVisible, selection, syncPlayerXState],
   );
 
   const requestReadyAutoMove = useCallback(() => {
@@ -275,8 +303,9 @@ export function MultiplayerLevelSelectRoom({
     inputDirectionRef.current = nextDirection;
     setMoving(nextDirection !== "none");
     if (nextDirection !== "none") setDirection(nextDirection);
+    if (nextDirection === "none") syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, nextDirection);
-  }, [publishPresence]);
+  }, [publishPresence, syncPlayerXState]);
 
   const releaseLevelSelectInput = useCallback(() => {
     if (autoMoveTaskRef.current) {
@@ -285,8 +314,9 @@ export function MultiplayerLevelSelectRoom({
     }
     clearLevelSelectInputRefs();
     setMoving(false);
+    syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, "none");
-  }, [cancelAutoMove, clearLevelSelectInputRefs, publishPresence]);
+  }, [cancelAutoMove, clearLevelSelectInputRefs, publishPresence, syncPlayerXState]);
 
   const chooseDirection = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -325,6 +355,11 @@ export function MultiplayerLevelSelectRoom({
   useEffect(() => {
     readyRef.current = selfReady;
   }, [selfReady]);
+
+  useEffect(() => {
+    paintLocalPlayerPosition(playerXRef.current);
+    syncPlayerXState(playerXRef.current, true);
+  }, [paintLocalPlayerPosition, syncPlayerXState]);
 
   useEffect(() => {
     if (autoMoveTaskRef.current) return;
@@ -390,7 +425,8 @@ export function MultiplayerLevelSelectRoom({
         const reachedAutoTarget = Boolean(activeAutoMoveTask) && (inputDirection === "right" ? next >= autoTarget : next <= autoTarget);
         const clamped = reachedAutoTarget ? autoTarget : Math.max(EXIT_LEFT, Math.min(getMultiplayerLevelSelectRightLimit(selection), next));
         playerXRef.current = clamped;
-        setPlayerX(clamped);
+        paintLocalPlayerPosition(clamped);
+        syncPlayerXState(clamped);
         const nextReady = readyAvailable && autoMoveTaskRef.current === null && isMultiplayerLevelSelectReadyZone(selection, clamped);
         updateReady(nextReady);
         if (returnedRef.current && clamped > EXIT_LEFT + 1) {
@@ -412,7 +448,7 @@ export function MultiplayerLevelSelectRoom({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [completeAutoMoveTask, onBackToRoom, publishPresence, readyAvailable, selection, updateReady]);
+  }, [completeAutoMoveTask, onBackToRoom, paintLocalPlayerPosition, publishPresence, readyAvailable, selection, syncPlayerXState, updateReady]);
 
   const playerAction = moving || autoMoveTask ? "move" : "idle";
   const wallNodes = useMemo(
@@ -561,7 +597,12 @@ export function MultiplayerLevelSelectRoom({
           />
         ))}
 
-        <div className="multiplayer-level-room-player" data-transition-avatar-anchor style={{ left: `${playerX}%` }}>
+        <div
+          className="multiplayer-level-room-player"
+          data-transition-avatar-anchor
+          ref={playerNodeRef}
+          style={{ left: `${playerX}%` }}
+        >
           <PlayerAvatar
             action={playerAction}
             direction={direction}
