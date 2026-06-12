@@ -140,6 +140,8 @@ export function MultiplayerLevelSelectRoom({
   const [moving, setMoving] = useState(false);
   const playerXRef = useRef(50);
   const playerNodeRef = useRef<HTMLDivElement | null>(null);
+  const movingRef = useRef(false);
+  const directionRef = useRef<PlayerAvatarDirection>("right");
   const playerReachableSlotRef = useRef<MultiplayerLevelSelectSlot | null>(nearestReachableSlot(50));
   const playerReadyZoneRef = useRef<boolean | null>(null);
   const inputDirectionRef = useRef<"left" | "right" | "none">("none");
@@ -204,6 +206,17 @@ export function MultiplayerLevelSelectRoom({
     if (playerNodeRef.current) playerNodeRef.current.style.left = `${x}%`;
   }, []);
 
+  const syncLocalPlayerMotionState = useCallback((nextMoving: boolean, nextDirection?: PlayerAvatarDirection) => {
+    if (movingRef.current !== nextMoving) {
+      movingRef.current = nextMoving;
+      setMoving(nextMoving);
+    }
+    if (nextDirection && directionRef.current !== nextDirection) {
+      directionRef.current = nextDirection;
+      setDirection(nextDirection);
+    }
+  }, []);
+
   const syncPlayerXState = useCallback(
     (x: number, force = false) => {
       const nextReachableSlot = nearestReachableSlot(x);
@@ -243,10 +256,10 @@ export function MultiplayerLevelSelectRoom({
     setAutoMoveTask(null);
     inputDirectionRef.current = "none";
     inputPointerIdRef.current = null;
-    setMoving(false);
+    syncLocalPlayerMotionState(false);
     syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, "none", readyRef.current);
-  }, [publishPresence, syncPlayerXState]);
+  }, [publishPresence, syncLocalPlayerMotionState, syncPlayerXState]);
 
   const completeAutoMoveTask = useCallback(
     (task: LevelSelectAutoMoveTask) => {
@@ -254,7 +267,7 @@ export function MultiplayerLevelSelectRoom({
       setAutoMoveTask(null);
       inputDirectionRef.current = "none";
       inputPointerIdRef.current = null;
-      setMoving(false);
+      syncLocalPlayerMotionState(false);
       syncPlayerXState(playerXRef.current, true);
       if (task === "ready") {
         updateReady(true);
@@ -266,7 +279,7 @@ export function MultiplayerLevelSelectRoom({
         window.setTimeout(onBackToRoom, 0);
       }
     },
-    [onBackToRoom, publishPresence, syncPlayerXState, updateReady],
+    [onBackToRoom, publishPresence, syncLocalPlayerMotionState, syncPlayerXState, updateReady],
   );
 
   const startAutoMove = useCallback(
@@ -281,13 +294,12 @@ export function MultiplayerLevelSelectRoom({
       const autoDirection: "left" | "right" | "none" =
         Math.abs(target - playerXRef.current) <= 0.5 ? "none" : target > playerXRef.current ? "right" : "left";
       inputDirectionRef.current = autoDirection;
-      setMoving(autoDirection !== "none");
-      if (autoDirection !== "none") setDirection(autoDirection);
+      syncLocalPlayerMotionState(autoDirection !== "none", autoDirection !== "none" ? autoDirection : undefined);
       if (autoDirection === "none") syncPlayerXState(playerXRef.current, true);
       publishPresence(playerXRef.current, autoDirection, readyRef.current);
       if (autoDirection === "none") completeAutoMoveTask(task);
     },
-    [completeAutoMoveTask, publishPresence, readyGuideVisible, selection, syncPlayerXState],
+    [completeAutoMoveTask, publishPresence, readyGuideVisible, selection, syncLocalPlayerMotionState, syncPlayerXState],
   );
 
   const requestReadyAutoMove = useCallback(() => {
@@ -301,11 +313,10 @@ export function MultiplayerLevelSelectRoom({
   const setInputDirection = useCallback((nextDirection: "left" | "right" | "none") => {
     if (autoMoveTaskRef.current) return;
     inputDirectionRef.current = nextDirection;
-    setMoving(nextDirection !== "none");
-    if (nextDirection !== "none") setDirection(nextDirection);
+    syncLocalPlayerMotionState(nextDirection !== "none", nextDirection !== "none" ? nextDirection : undefined);
     if (nextDirection === "none") syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, nextDirection);
-  }, [publishPresence, syncPlayerXState]);
+  }, [publishPresence, syncLocalPlayerMotionState, syncPlayerXState]);
 
   const releaseLevelSelectInput = useCallback(() => {
     if (autoMoveTaskRef.current) {
@@ -313,10 +324,10 @@ export function MultiplayerLevelSelectRoom({
       return;
     }
     clearLevelSelectInputRefs();
-    setMoving(false);
+    syncLocalPlayerMotionState(false);
     syncPlayerXState(playerXRef.current, true);
     publishPresence(playerXRef.current, "none");
-  }, [cancelAutoMove, clearLevelSelectInputRefs, publishPresence, syncPlayerXState]);
+  }, [cancelAutoMove, clearLevelSelectInputRefs, publishPresence, syncLocalPlayerMotionState, syncPlayerXState]);
 
   const chooseDirection = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -411,8 +422,7 @@ export function MultiplayerLevelSelectRoom({
       const inputDirection = activeAutoMoveTask ? autoDirection : inputDirectionRef.current;
       if (activeAutoMoveTask) {
         inputDirectionRef.current = inputDirection;
-        setMoving(inputDirection !== "none");
-        if (inputDirection !== "none") setDirection(inputDirection);
+        syncLocalPlayerMotionState(inputDirection !== "none", inputDirection !== "none" ? inputDirection : undefined);
       }
       if (activeAutoMoveTask && inputDirection === "none") {
         completeAutoMoveTask(activeAutoMoveTask);
@@ -448,7 +458,7 @@ export function MultiplayerLevelSelectRoom({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [completeAutoMoveTask, onBackToRoom, paintLocalPlayerPosition, publishPresence, readyAvailable, selection, syncPlayerXState, updateReady]);
+  }, [completeAutoMoveTask, onBackToRoom, paintLocalPlayerPosition, publishPresence, readyAvailable, selection, syncLocalPlayerMotionState, syncPlayerXState, updateReady]);
 
   const playerAction = moving || autoMoveTask ? "move" : "idle";
   const wallNodes = useMemo(

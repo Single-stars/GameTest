@@ -251,7 +251,8 @@ test("fall down moves only while pressing a side and skips landing animation", (
   assert.match(fallDownSource, /onPointerCancel=\{stopDirection\}/);
   assert.match(fallDownSource, /current\.vy = 0;/);
   assert.match(fallDownSource, /const previousTime = current\.time;/);
-  assert.match(fallDownSource, /const platformById = new Map\(current\.platforms\.map/);
+  assert.match(fallDownSource, /let platformCarryX = 0;[\s\S]{0,120}const platformById = fallPlatformLookupRef\.current;/);
+  assert.match(fallDownSource, /for \(const platform of current\.platforms\) platformById\.set\(platform\.id, platform\);/);
   assert.match(fallDownSource, /const carriedPlatform = platformById\.get\(current\.currentPlatformId\);/);
   assert.match(fallDownSource, /fallPlatformX\(carriedPlatform, current\.time, stageWidth\) - previousPlatformX/);
   assert.match(fallDownSource, /current\.playerX = clamp\(current\.playerX \+ current\.inputDirection \* fallDownPlayerSpeed \* delta/);

@@ -174,9 +174,14 @@ test("multiplayer level-select room paints local player movement without per-fra
   const roomLoopSource = roomSource.slice(roomSource.indexOf("const tick = (time: number) => {"), roomSource.indexOf("const playerAction = moving || autoMoveTask"));
 
   assert.match(roomSource, /const playerNodeRef = useRef<HTMLDivElement \| null>\(null\);/);
+  assert.match(roomSource, /const movingRef = useRef\(false\);/);
+  assert.match(roomSource, /const directionRef = useRef<PlayerAvatarDirection>\("right"\);/);
+  assert.match(roomSource, /syncLocalPlayerMotionState/);
   assert.match(roomSource, /paintLocalPlayerPosition\(clamped\);/);
   assert.match(roomSource, /syncPlayerXState\(clamped\);/);
   assert.doesNotMatch(roomLoopSource, /setPlayerX\(clamped\);/);
+  assert.doesNotMatch(roomLoopSource, /setMoving\(inputDirection !== "none"\);/);
+  assert.doesNotMatch(roomLoopSource, /setDirection\(inputDirection\);/);
   assert.match(roomSource, /ref=\{playerNodeRef\}/);
 });
 
@@ -671,6 +676,10 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   const cssSource = readSource("../../app/styles/mini-games/multiplayer.css");
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const sessionSource = readSource("./multiplayer-session.ts");
+  const resetHostWaitingSource = sessionSource.slice(
+    sessionSource.indexOf("private resetHostWaitingState"),
+    sessionSource.indexOf("private acceptStartMessage"),
+  );
   const crownRule = cssRule(cssSource, ".multiplayer-player-crown");
   const roomScoreboardRule = cssRule(cssSource, ".multiplayer-level-scoreboard");
   const roomScoreValueRule = cssRule(cssSource, ".multiplayer-level-score-value");
@@ -698,8 +707,11 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.doesNotMatch(roomSource, /multiplayer-level-score-names/);
   assert.match(roomSource, /multiplayer-player-crown/);
   assert.match(roomSource, /customImageUrl=\{selfSkin === "custom" \? selfCustomAvatar\?\.imageDataUrl : null\}/);
-  assert.match(pageSource, /selfWins=\{matchWins\.self\}/);
-  assert.match(pageSource, /opponentWins=\{matchWins\.opponent\}/);
+  assert.match(pageSource, /const activeLevelSelectOpponentPlayer = standalonePeerConnected \? snapshot\.opponentPlayer : null;/);
+  assert.match(pageSource, /const activeLevelSelectOpponentPresence = standalonePeerConnected \? snapshot\.opponentLevelSelectPresence : null;/);
+  assert.match(pageSource, /const activeRoomWins = roomScoreboardVisible \? matchWins : \{ self: 0, opponent: 0 \};/);
+  assert.match(pageSource, /selfWins=\{activeRoomWins\.self\}/);
+  assert.match(pageSource, /opponentWins=\{activeRoomWins\.opponent\}/);
   assert.match(pageSource, /const levelSelectSelfCustomAvatar = snapshot\.selfPlayer\?\.customAvatar \?\? \(selectedSkin === "custom" && customAvatarSyncPayload \? customAvatarSyncPayload : undefined\);/);
   assert.match(pageSource, /selfCustomAvatar=\{levelSelectSelfCustomAvatar\}/);
   assert.match(pageSource, /const roomScoreboardVisible = standalonePeerConnected;/);
@@ -718,9 +730,8 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.doesNotMatch(pageSource, /scoreboardVisible=\{Boolean\(snapshot\.roomId\)\}/);
   assert.match(pageSource, /if \(snapshot\.roomId !== matchWinsRoomIdRef\.current\)/);
   assert.match(pageSource, /lastValidRoomScoreRef/);
-  assert.match(pageSource, /roomScoreToLocalWins\(lastValidRoomScoreRef\.current\.score, snapshot\.role\)/);
-  assert.doesNotMatch(pageSource, /if \(snapshot\.roomId\)[\s\S]{0,220}setMatchWins\(\(current\) => \(current\.self === 0 && current\.opponent === 0 \? current : \{ self: 0, opponent: 0 \}\)\)/);
-  assert.doesNotMatch(pageSource, /if \(!snapshot\.opponentPlayer\)[\s\S]{0,180}setMatchWins/);
+  assert.match(pageSource, /if \(!showGameShell && !standalonePeerConnected\) \{[\s\S]{0,300}lastValidRoomScoreRef\.current = null;[\s\S]{0,300}setMatchWins\(\(current\) => \(current\.self === 0 && current\.opponent === 0 \? current : \{ self: 0, opponent: 0 \}\)\)/);
+  assert.doesNotMatch(pageSource, /roomScoreToLocalWins\(lastValidRoomScoreRef\.current\.score, snapshot\.role\)/);
   assert.match(pageSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};/);
   assert.match(pageSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};/);
   assert.match(pageSource, /localWinsToRoomScore\(next, snapshot\.role, matchId\)/);
@@ -730,8 +741,8 @@ test("multiplayer rooms show elegant room scores while gameplay keeps labels out
   assert.match(sessionSource, /sendCurrentRoomSnapshots[\s\S]*createRoomScoreMessage\(this\.snapshot\.roomScore\)/);
   assert.match(sessionSource, /case "bye":[\s\S]*this\.resetHostWaitingState\(\);/);
   assert.match(sessionSource, /private resetHostWaitingState[\s\S]*opponentPlayer: null,[\s\S]*opponentLevelSelectPresence: null/);
-  assert.match(sessionSource, /const currentRoomScore = this\.snapshot\.roomScore;/);
-  assert.match(sessionSource, /private resetHostWaitingState[\s\S]*roomScore: currentRoomScore/);
+  assert.doesNotMatch(resetHostWaitingSource, /const currentRoomScore = this\.snapshot\.roomScore;/);
+  assert.match(resetHostWaitingSource, /roomScore: null/);
   assert.match(crownRule, /mask:\s*url\("\/icons\/crown\.svg"\)/);
   assert.match(crownRule, /background:\s*(?:linear-gradient|#f|rgb\()/);
   assert.match(roomScoreboardRule, /background:\s*transparent;/);
@@ -1028,7 +1039,7 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
   assert.match(hostRoomSource, /房间已失效，已刷新房间码和邀请链接。/);
 });
 
-test("multiplayer invite actions and five point score leads persist avatar unlock progress", () => {
+test("multiplayer invite actions and five-point room score leads persist avatar unlock progress on return", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const linkCopySource = pageSource.slice(pageSource.indexOf("const handleCopyLink"), pageSource.indexOf("const handleCopyRoomCode"));
   const codeCopySource = pageSource.slice(pageSource.indexOf("const handleCopyRoomCode"), pageSource.indexOf("const handleExitHomeworldRoom"));
@@ -1040,12 +1051,27 @@ test("multiplayer invite actions and five point score leads persist avatar unloc
   assert.match(pageSource, /writePersistedGameState/);
   assert.match(pageSource, /recordShareInviteAction/);
   assert.match(pageSource, /markMultiplayerFivePointLeadSkinUnlocked/);
-  assert.match(pageSource, /getMultiplayerScoreLead/);
-  assert.match(linkCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\)\)/);
-  assert.match(codeCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\)\)/);
-  assert.match(finishedEffectSource, /const scoreLead = getMultiplayerScoreLead\(snapshot\.selfResult, snapshot\.opponentResult\);/);
-  assert.match(finishedEffectSource, /if \(comparison < 0 && scoreLead >= 5\) \{/);
-  assert.match(finishedEffectSource, /persistAdvancedProgress\(\(progress\) => markMultiplayerFivePointLeadSkinUnlocked\(progress\)\);/);
+  assert.match(pageSource, /RewardOverlay, type RewardOverlayItem/);
+  assert.match(pageSource, /function createSkinRewardItems/);
+  assert.match(pageSource, /getNewlyUnlockedPlayerAvatarSkins/);
+  assert.match(pageSource, /const \[rewardQueue, setRewardQueue\] = useState<RewardOverlayItem\[\]>\(\[\]\);/);
+  assert.match(pageSource, /function hasMultiplayerFivePointRoomLead\(wins: \{ self: number; opponent: number }\)/);
+  assert.doesNotMatch(pageSource, /selfWinStreak/);
+  assert.match(pageSource, /const pendingMultiplayerFivePointRoomLeadRewardRef = useRef\(false\);/);
+  assert.match(pageSource, /const activeRewardItem = rewardQueue\[0\] \?\? null;/);
+  assert.match(linkCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\), "multiplayer-link-copy"\)/);
+  assert.match(codeCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\), "multiplayer-code-copy"\)/);
+  assert.doesNotMatch(pageSource, /getMultiplayerScoreLead/);
+  assert.doesNotMatch(finishedEffectSource, /scoreLead >= 5/);
+  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(next\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
+  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(next\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
+  assert.match(finishedEffectSource, /pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(matchWins\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
+  assert.match(pageSource, /if \(!showGameShell && !standalonePeerConnected\) \{[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;/);
+  assert.doesNotMatch(pageSource, /if \(!standalonePeerConnected\) \{[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;/);
+  assert.match(pageSource, /const revealPendingMultiplayerFivePointRoomLeadReward = useCallback/);
+  assert.match(pageSource, /pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;[\s\S]{0,220}markMultiplayerFivePointLeadSkinUnlocked\(progress\), "multiplayer-five-point-room-lead"/);
+  assert.match(pageSource, /const handleReturnRoom = useCallback\(\(\) => \{[\s\S]{0,120}sessionRef\.current\?\.returnToRoom\(\);[\s\S]{0,120}revealPendingMultiplayerFivePointRoomLeadReward\(\);/);
+  assert.match(pageSource, /<RewardOverlay[\s\S]{0,180}item=\{activeRewardItem\}[\s\S]{0,180}onDismiss=\{dismissRewardItem\}[\s\S]{0,180}onOpenAvatarLabSkin=\{openAvatarLabWithSkin\}/);
 });
 
 test("multiplayer host room shows balanced room code and truncated invite link", () => {
@@ -1359,7 +1385,7 @@ test("multiplayer level select click actions auto-move before ready or exit and 
   assert.match(roomSource, /if \(autoMoveTaskRef\.current\) return;/);
   assert.match(roomSource, /publishPresence\(playerXRef\.current, autoDirection, readyRef\.current\)/);
   assert.match(roomSource, /completeAutoMoveTask\(activeAutoMoveTask\)/);
-  assert.match(roomSource, /inputDirectionRef\.current = "none";[\s\S]{0,220}setMoving\(false\);/);
+  assert.match(roomSource, /inputDirectionRef\.current = "none";[\s\S]{0,240}syncLocalPlayerMotionState\(false\);/);
   assert.match(roomSource, /if \(task === "ready"\)[\s\S]{0,120}updateReady\(true\);/);
   assert.match(roomSource, /if \(task === "exit"\)[\s\S]{0,240}window\.setTimeout\(onBackToRoom, 0\);/);
   assert.match(roomSource, /const clearLevelSelectInputRefs = useCallback/);
@@ -1591,6 +1617,7 @@ test("host clears half-open guest slots with heartbeat stale detection so rooms 
   assert.match(sessionSource, /startPeerPresence/);
   assert.match(sessionSource, /notePeerMessage/);
   assert.match(sessionSource, /case "heartbeat":/);
+  assert.match(sessionSource, /const sendHeartbeat = \(\) => \{[\s\S]{0,140}this\.send\(createHeartbeatMessage\(now\(\)\)\);[\s\S]{0,80}this\.checkPeerStale\(\);[\s\S]{0,40}\};[\s\S]{0,80}sendHeartbeat\(\);/);
   assert.doesNotMatch(sessionSource, /checkPeerStale\(\)[\s\S]{0,260}disconnectActiveConnection\(\)/);
   assert.doesNotMatch(sessionSource, /checkPeerStale\(\)[\s\S]{0,260}status:\s*"disconnected"/);
   assert.match(connectedHandlerSource, /selfReady:\s*false/);
@@ -1611,7 +1638,7 @@ test("idle multiplayer presence waits longer before showing concise reconnect co
   const sessionSource = readSource("./multiplayer-session.ts");
   const staleSource = sessionSource.slice(sessionSource.indexOf("private markPeerTemporarilyStale"), sessionSource.indexOf("private preserveRoomAfterConnectionIssue"));
 
-  assert.match(sessionSource, /const PEER_STALE_MS = 22_000;/);
+  assert.match(sessionSource, /const PEER_STALE_MS = 75_000;/);
   assert.match(protocolSource, /MULTIPLAYER_RECONNECTING_MESSAGE = "尝试重连中"/);
   assert.match(staleSource, /markPeerTemporarilyStale\(message = MULTIPLAYER_RECONNECTING_MESSAGE\)/);
   assert.match(staleSource, /errorMessage:\s*message/);
@@ -1651,10 +1678,12 @@ test("multiplayer rooms do not dissolve on transient signaling or WebRTC disconn
   assert.match(preserveSource, /selfReady:\s*false/);
   assert.match(preserveSource, /opponentReady:\s*false/);
   assert.match(preserveSource, /countdown:\s*null/);
-  assert.match(preserveSource, /status:\s*this\.snapshot\.opponentPlayer \? "connected" : this\.role === "host" \? "waiting" : "disconnected"/);
-  assert.doesNotMatch(preserveSource, /opponentPlayer:\s*null/);
+  assert.match(preserveSource, /status:\s*this\.role === "host" \? "waiting" : "disconnected"/);
+  assert.match(preserveSource, /opponentPlayer:\s*null/);
+  assert.match(preserveSource, /opponentHomeworldPresence:\s*null/);
+  assert.match(preserveSource, /opponentLevelSelectPresence:\s*null/);
+  assert.match(preserveSource, /roomScore:\s*null/);
   assert.doesNotMatch(preserveSource, /selfLevelSelectPresence:\s*null/);
-  assert.doesNotMatch(preserveSource, /opponentLevelSelectPresence:\s*null/);
   assert.doesNotMatch(pageSource, /if \(snapshot\.role !== "host"\) return;[\s\S]{0,320}cleanupSession\(\)/);
 });
 
@@ -1804,7 +1833,9 @@ test("host peer failures keep signaling alive so the displayed room code remains
   assert.match(transportSource, /if \(resetPeer\) this\.closePeerConnection\(\);/);
   assert.match(sessionSource, /this\.preserveRoomAfterConnectionIssue\(message \|\| MULTIPLAYER_DISCONNECTED_MESSAGE\)/);
   assert.match(sessionSource, /private resetHostWaitingState\(errorMessage: string \| null = null\)/);
-  assert.match(sessionSource, /status: this\.snapshot\.opponentPlayer \? "connected" : this\.role === "host" \? "waiting" : "disconnected"/);
+  assert.match(sessionSource, /status: this\.role === "host" \? "waiting" : "disconnected"/);
+  assert.match(sessionSource, /opponentPlayer:\s*null/);
+  assert.match(sessionSource, /roomScore:\s*null/);
   assert.match(sessionSource, /homeworldState: this\.snapshot\.homeworldState/);
 });
 
@@ -1888,7 +1919,7 @@ test("multiplayer room lifecycle terminates expired rooms and resets every clien
   assert.match(workerSource, /socket\.close\(4001, MULTIPLAYER_ROOM_EXPIRED_REASON\)/);
   assert.match(workerSource, /record\.type === "heartbeat"/);
   assert.match(transportSource, /getSignalingRoomStatus/);
-  assert.match(transportSource, /SIGNAL_HEARTBEAT_INTERVAL_MS/);
+  assert.match(transportSource, /SIGNAL_HEARTBEAT_INTERVAL_MS = 10_000/);
   assert.match(transportSource, /ROOM_STATUS_WATCHDOG_INTERVAL_MS/);
   assert.match(transportSource, /private signalHeartbeatTimer: number \| null = null;/);
   assert.match(transportSource, /private roomStatusWatchdogTimer: number \| null = null;/);

@@ -814,6 +814,9 @@ export function FallDownPrototype({
   const fallPlatformRefs = useRef(new Map<number, HTMLDivElement>());
   const fallHazardRefs = useRef(new Map<number, HTMLDivElement>());
   const fallEnergyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const fallPlatformLookupRef = useRef(new Map<number, FallDownPlatform>());
+  const fallHazardLookupRef = useRef(new Map<number, FallDownFallingHazard>());
+  const fallEnergyPickupLookupRef = useRef(new Map<number, FallDownEnergyPickup>());
   const energyPickupIdRef = useRef(0);
   const fallDownInputDirectionRef = useRef<FallDownRuntime["inputDirection"]>(0);
   const fallDownPointerIdRef = useRef<number | null>(null);
@@ -922,9 +925,15 @@ export function FallDownPrototype({
   const updateFallDownDom = useCallback(
     (current: FallDownRuntime, spectatingRemote = false, sceneTime = current.time) => {
       syncFallDownWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, stageWidth);
-      const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
-      const hazardById = new Map(current.fallingHazards.map((hazard) => [hazard.id, hazard]));
-      const energyPickupById = new Map(current.energyPickups.map((pickup) => [pickup.id, pickup]));
+      const platformById = fallPlatformLookupRef.current;
+      const hazardById = fallHazardLookupRef.current;
+      const energyPickupById = fallEnergyPickupLookupRef.current;
+      platformById.clear();
+      hazardById.clear();
+      energyPickupById.clear();
+      for (const platform of current.platforms) platformById.set(platform.id, platform);
+      for (const hazard of current.fallingHazards) hazardById.set(hazard.id, hazard);
+      for (const pickup of current.energyPickups) energyPickupById.set(pickup.id, pickup);
       const activeFallDownParams = isEndlessRun
         ? getEndlessMiniGameStageConfig({
             debugDifficulty: endlessRef.current?.debugDifficulty ?? 0,
@@ -1255,7 +1264,9 @@ export function FallDownPrototype({
           const activeFragileTime = numberParam(activeFallDownParams, "fragileTime", fragileTime);
           const endlessFallActive = endlessRef.current?.getActiveSkill()?.kind === "endless-fall";
           let platformCarryX = 0;
-          const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
+          const platformById = fallPlatformLookupRef.current;
+          platformById.clear();
+          for (const platform of current.platforms) platformById.set(platform.id, platform);
           const carriedPlatform = platformById.get(current.currentPlatformId);
           if (carriedPlatform && carriedPlatform.kind === "moving" && !carriedPlatform.broken) {
             const previousPlatformX = fallPlatformX(carriedPlatform, previousTime, stageWidth);

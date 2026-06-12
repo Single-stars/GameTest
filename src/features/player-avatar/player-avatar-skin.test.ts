@@ -77,7 +77,7 @@ test("avatar skin copy matches the playful unlock list", () => {
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.custom.label, "投喂作者一次解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.cyan.label, "默认解锁");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.ivory.label, "通关停下来最终试炼");
-  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.lead.label, "在一次联机游戏中比分领先5点");
+  assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.lead.label, "联机房间大比分领先5分");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mastery.label, "在所有类型的无尽模式中使用一次技能");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.mint.label, "通关一路向上最终试炼");
   assert.equal(PLAYER_AVATAR_SKIN_UNLOCKS.paw.label, "运气达到 100");
@@ -173,7 +173,7 @@ test("special avatar skins unlock from donation, king rank, legend stars, and lu
   assert.equal(getPlayerAvatarSkinUnlockState("paw", luckyProgress).unlocked, true);
 });
 
-test("new avatar skins unlock from share actions, multiplayer lead, and all endless skill usage", () => {
+test("new avatar skins unlock from share actions, multiplayer room score leads, and all endless skill usage", () => {
   const emptyProgress = createDefaultAdvancedProgress("2026-05-28T00:00:00.000Z");
   const sharedTwice = recordShareInviteAction(
     recordShareInviteAction(emptyProgress, "2026-05-28T00:01:00.000Z"),

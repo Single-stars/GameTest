@@ -653,6 +653,9 @@ export function DoodleJumpPrototype({
   const platformRefs = useRef(new Map<number, HTMLDivElement>());
   const hazardRefs = useRef(new Map<number, HTMLDivElement>());
   const energyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const platformLookupRef = useRef(new Map<number, DoodlePlatform>());
+  const hazardLookupRef = useRef(new Map<number, DoodleHazard>());
+  const energyPickupLookupRef = useRef(new Map<number, DoodleEnergyPickup>());
   const energyPickupIdRef = useRef(0);
   const runtimeRef = useRef<DoodleFrame>(initialRuntime);
   const lastUiSyncRef = useRef(0);
@@ -881,9 +884,15 @@ export function DoodleJumpPrototype({
 
     const updateDom = (current: DoodleFrame, frameTime: number, spectatingRemote = false, sceneTime = current.time) => {
       syncDoodleWaveParallax(stageRef.current, current.playerX, current.playerY, current.cameraY, logicStageWidth);
-      const platformById = new Map(current.platforms.map((platform) => [platform.id, platform]));
-      const hazardById = new Map(current.hazards.map((hazard) => [hazard.id, hazard]));
-      const energyPickupById = new Map(current.energyPickups.map((pickup) => [pickup.id, pickup]));
+      const platformById = platformLookupRef.current;
+      const hazardById = hazardLookupRef.current;
+      const energyPickupById = energyPickupLookupRef.current;
+      platformById.clear();
+      hazardById.clear();
+      energyPickupById.clear();
+      for (const platform of current.platforms) platformById.set(platform.id, platform);
+      for (const hazard of current.hazards) hazardById.set(hazard.id, hazard);
+      for (const pickup of current.energyPickups) energyPickupById.set(pickup.id, pickup);
       if (playerShellRef.current) {
         playerShellRef.current.style.display = "";
         if (!spectatingRemote) {

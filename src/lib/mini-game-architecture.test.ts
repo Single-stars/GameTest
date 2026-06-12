@@ -1525,8 +1525,16 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   assert.match(fallDownPointerMoveSource, /fallDownInputDirectionRef\.current = direction;/);
   assert.match(fallDownPointerMoveSource, /resumeFallDownInput\(current, direction\);/);
   assert.doesNotMatch(fallDownPointerMoveSource, /syncView\(/);
-  assert.match(fallDownDomSource, /const platformById = new Map\(current\.platforms\.map/);
-  assert.match(fallDownDomSource, /const hazardById = new Map\(current\.fallingHazards\.map/);
+  assert.match(fallDownSource, /const fallPlatformLookupRef = useRef\(new Map<number, FallDownPlatform>\(\)\);/);
+  assert.match(fallDownSource, /const fallHazardLookupRef = useRef\(new Map<number, FallDownFallingHazard>\(\)\);/);
+  assert.match(fallDownSource, /const fallEnergyPickupLookupRef = useRef\(new Map<number, FallDownEnergyPickup>\(\)\);/);
+  assert.match(fallDownDomSource, /const platformById = fallPlatformLookupRef\.current;[\s\S]{0,220}platformById\.clear\(\);/);
+  assert.match(fallDownDomSource, /const hazardById = fallHazardLookupRef\.current;[\s\S]{0,220}hazardById\.clear\(\);/);
+  assert.match(fallDownDomSource, /const energyPickupById = fallEnergyPickupLookupRef\.current;[\s\S]{0,220}energyPickupById\.clear\(\);/);
+  assert.match(fallDownDomSource, /for \(const platform of current\.platforms\) platformById\.set\(platform\.id, platform\);/);
+  assert.match(fallDownDomSource, /for \(const hazard of current\.fallingHazards\) hazardById\.set\(hazard\.id, hazard\);/);
+  assert.match(fallDownDomSource, /for \(const pickup of current\.energyPickups\) energyPickupById\.set\(pickup\.id, pickup\);/);
+  assert.doesNotMatch(fallDownSource, /new Map\(current\./);
   assert.doesNotMatch(fallDownDomSource, /current\.platforms\.find/);
   assert.doesNotMatch(fallDownDomSource, /current\.fallingHazards\.find/);
 
@@ -1535,8 +1543,16 @@ test("doodle and fall down hot paths avoid pointermove sync and repeated linear 
   assert.match(doodlePointerMoveSource, /inputDirectionRef\.current = direction;/);
   assert.doesNotMatch(doodlePointerMoveSource, /playerTurns|jumpTurnAvailable|syncDoodleView|setView/);
   assert.doesNotMatch(doodlePointerMoveSource, /syncDoodleView|setView/);
-  assert.match(doodleDomSource, /const platformById = new Map\(current\.platforms\.map/);
-  assert.match(doodleDomSource, /const hazardById = new Map\(current\.hazards\.map/);
+  assert.match(doodleSource, /const platformLookupRef = useRef\(new Map<number, DoodlePlatform>\(\)\);/);
+  assert.match(doodleSource, /const hazardLookupRef = useRef\(new Map<number, DoodleHazard>\(\)\);/);
+  assert.match(doodleSource, /const energyPickupLookupRef = useRef\(new Map<number, DoodleEnergyPickup>\(\)\);/);
+  assert.match(doodleDomSource, /const platformById = platformLookupRef\.current;[\s\S]{0,220}platformById\.clear\(\);/);
+  assert.match(doodleDomSource, /const hazardById = hazardLookupRef\.current;[\s\S]{0,220}hazardById\.clear\(\);/);
+  assert.match(doodleDomSource, /const energyPickupById = energyPickupLookupRef\.current;[\s\S]{0,220}energyPickupById\.clear\(\);/);
+  assert.match(doodleDomSource, /for \(const platform of current\.platforms\) platformById\.set\(platform\.id, platform\);/);
+  assert.match(doodleDomSource, /for \(const hazard of current\.hazards\) hazardById\.set\(hazard\.id, hazard\);/);
+  assert.match(doodleDomSource, /for \(const pickup of current\.energyPickups\) energyPickupById\.set\(pickup\.id, pickup\);/);
+  assert.doesNotMatch(doodleDomSource, /new Map\(current\./);
   assert.doesNotMatch(doodleDomSource, /current\.platforms\.find/);
   assert.doesNotMatch(doodleDomSource, /current\.hazards\.find/);
 });

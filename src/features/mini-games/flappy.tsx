@@ -650,6 +650,8 @@ export function FlappyPrototype({
   const gateMarkerRefs = useRef(new Map<number, HTMLDivElement>());
   const collectibleRefs = useRef(new Map<number, HTMLDivElement>());
   const energyPickupRefs = useRef(new Map<number, HTMLDivElement>());
+  const flappyGateLookupRef = useRef(new Map<number, FlappyGate>());
+  const flappyEnergyPickupLookupRef = useRef(new Map<number, FlappyEnergyPickup>());
   const energyPickupIdRef = useRef(0);
   const superDashGateStreakRef = useRef(0);
   const playerShellRef = useRef<HTMLDivElement | null>(null);
@@ -853,7 +855,12 @@ export function FlappyPrototype({
         : level.params;
       const activeGapSize = numberParam(activeFlappyParams, "gapSize", gapSize);
       const activeMovingGateSpeed = numberParam(activeFlappyParams, "movingGateSpeed", 1);
-      const gateById = new Map(current.gates.map((gate) => [gate.id, gate]));
+      const gateById = flappyGateLookupRef.current;
+      const energyPickupById = flappyEnergyPickupLookupRef.current;
+      gateById.clear();
+      energyPickupById.clear();
+      for (const gate of current.gates) gateById.set(gate.id, gate);
+      for (const pickup of current.energyPickups) energyPickupById.set(pickup.id, pickup);
       for (const ref of backgroundRefs) {
         const node = backgroundNodeRefs.current.get(ref.id);
         if (!node) continue;
@@ -906,7 +913,7 @@ export function FlappyPrototype({
 
       const activeCameraX = getFlappySignedProgress(renderProgress, activeReverseDirection);
       for (const [id, pickupNode] of energyPickupRefs.current) {
-        const pickup = current.energyPickups.find((item) => item.id === id);
+        const pickup = energyPickupById.get(id);
         if (!pickup || pickup.collected) {
           pickupNode.style.display = "none";
           continue;

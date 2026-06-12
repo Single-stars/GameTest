@@ -845,9 +845,17 @@ test("flappy gate painting avoids repeated linear gate lookups in the animation 
     "const tick = (time: number) => {",
   );
 
-  assert.match(updateDomSource, /const gateById = new Map\(current\.gates\.map\(\(gate\) => \[gate\.id, gate\]\)\);/);
+  assert.match(flappySource, /const flappyGateLookupRef = useRef\(new Map<number, FlappyGate>\(\)\);/);
+  assert.match(flappySource, /const flappyEnergyPickupLookupRef = useRef\(new Map<number, FlappyEnergyPickup>\(\)\);/);
+  assert.match(updateDomSource, /const gateById = flappyGateLookupRef\.current;[\s\S]{0,180}gateById\.clear\(\);/);
+  assert.match(updateDomSource, /const energyPickupById = flappyEnergyPickupLookupRef\.current;[\s\S]{0,180}energyPickupById\.clear\(\);/);
+  assert.match(updateDomSource, /for \(const gate of current\.gates\) gateById\.set\(gate\.id, gate\);/);
+  assert.match(updateDomSource, /for \(const pickup of current\.energyPickups\) energyPickupById\.set\(pickup\.id, pickup\);/);
   assert.match(updateDomSource, /const gate = gateById\.get\(id\);/);
+  assert.match(updateDomSource, /const pickup = energyPickupById\.get\(id\);/);
+  assert.doesNotMatch(updateDomSource, /new Map\(current\./);
   assert.doesNotMatch(updateDomSource, /current\.gates\.find/);
+  assert.doesNotMatch(updateDomSource, /current\.energyPickups\.find/);
 });
 
 test("knife has a wheel-mounted avatar, stage feedback, and advanced failure impact markers", () => {

@@ -161,7 +161,7 @@ export const PLAYER_AVATAR_SKIN_UNLOCKS = {
   custom: { kind: "donation", label: "投喂作者一次解锁" },
   cyan: { kind: "default", label: "默认解锁" },
   ivory: { kind: "advanced-final", label: "通关停下来最终试炼", roundId: "braking" },
-  lead: { kind: "multiplayer-five-point-lead", label: "在一次联机游戏中比分领先5点" },
+  lead: { kind: "multiplayer-five-point-lead", label: "联机房间大比分领先5分" },
   mastery: { kind: "endless-skill-all", label: "在所有类型的无尽模式中使用一次技能" },
   mint: { kind: "advanced-final", label: "通关一路向上最终试炼", roundId: "search" },
   paw: { kind: "luck-100", label: "运气达到 100" },

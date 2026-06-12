@@ -57,7 +57,7 @@ const OPPONENT_STATE_SNAPSHOT_SYNC_MS = 50;
 const SELF_STATE_SNAPSHOT_SYNC_MS = 50;
 const REMATCH_COUNTDOWN_MS = 3_000;
 const HEARTBEAT_INTERVAL_MS = 2_000;
-const PEER_STALE_MS = 22_000;
+const PEER_STALE_MS = 75_000;
 
 function now() {
   return Date.now();
@@ -938,7 +938,6 @@ export class MultiplayerSession {
     const currentHomeworldState = this.snapshot.homeworldState;
     const currentLevelSelectPresence = this.snapshot.selfLevelSelectPresence;
     const currentLevelSelectState = this.snapshot.levelSelectState;
-    const currentRoomScore = this.snapshot.roomScore;
     this.stopCountdown();
     this.stopOpponentStateSnapshotTimer();
     this.stopSelfStateSnapshotTimer();
@@ -972,7 +971,7 @@ export class MultiplayerSession {
       levelSelectState: currentLevelSelectState,
       selfLevelSelectPresence: currentLevelSelectPresence,
       opponentLevelSelectPresence: null,
-      roomScore: currentRoomScore,
+      roomScore: null,
     });
   }
 
@@ -1091,10 +1090,12 @@ export class MultiplayerSession {
   private startPeerPresence() {
     this.stopPeerPresence();
     this.lastPeerMessageAt = now();
-    this.heartbeatTimer = window.setInterval(() => {
+    const sendHeartbeat = () => {
       this.send(createHeartbeatMessage(now()));
       this.checkPeerStale();
-    }, HEARTBEAT_INTERVAL_MS);
+    };
+    sendHeartbeat();
+    this.heartbeatTimer = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
   }
 
   private stopPeerPresence() {
@@ -1148,18 +1149,22 @@ export class MultiplayerSession {
     this.lastOpponentStateSnapshotAt = 0;
     this.lastSelfStateSnapshotAt = 0;
     this.patchSnapshot({
-      status: this.snapshot.opponentPlayer ? "connected" : this.role === "host" ? "waiting" : "disconnected",
+      status: this.role === "host" ? "waiting" : "disconnected",
       connectionState: "reconnecting",
       errorMessage: message,
       selfReady: false,
       match: null,
       countdown: null,
       selfState: null,
+      opponentPlayer: null,
       opponentState: null,
       selfResult: null,
       opponentResult: null,
       opponentJoining: false,
       homeworldState: this.snapshot.homeworldState,
+      opponentHomeworldPresence: null,
+      opponentLevelSelectPresence: null,
+      roomScore: null,
       opponentReady: false,
     });
   }
