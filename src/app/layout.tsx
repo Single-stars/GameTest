@@ -55,7 +55,9 @@ export default function RootLayout({
       <body>
         {process.env.NODE_ENV === "development" ? (
           <>
+            {/* eslint-disable-next-line @next/next/no-css-tags */}
             <link rel="stylesheet" href="/local-only/styles/homeworld.css" />
+            {/* eslint-disable-next-line @next/next/no-css-tags */}
             <link rel="stylesheet" href="/local-only/styles/outdoor-adventure.css" />
           </>
         ) : null}

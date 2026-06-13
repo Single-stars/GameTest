@@ -211,7 +211,6 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.match(heartIconSource, /<svg[\s\S]*<\/svg>/);
   assert.match(heartIconSource, /viewBox="1\.15 1\.15 7\.7 7\.7"/);
   assert.doesNotMatch(runtimeSource, /endless-debug-energy-control/);
-  assert.doesNotMatch(runtimeSource, /\{debugToolsVisible \? \(/);
   assert.doesNotMatch(runtimeSource, /width: `\$\{api\.energyPercent\}%`/);
   assert.match(runtimeSource, /const shielded = avatarEffect === "shield" \|\| api\.shieldCharges > 0;/);
   assert.doesNotMatch(runtimeSource, /shielded=\{avatarEffect === "shield" \|\| api\.shieldCharges > 0 \|\| api\.damageInvincible\}/);
@@ -232,6 +231,22 @@ test("endless HUD uses manual heal, skill, and debug energy controls instead of 
   assert.doesNotMatch(cssSource, /\.endless-debug-energy-control\s*{/);
   assert.match(cssSource, /\.endless-debug-energy-button\s*{/);
   assert.doesNotMatch(energyCss, /linear-gradient|endless-shield-pulse|\.endless-hud\.shielded/);
+});
+
+test("endless debug energy lock button is gated by debug tools visibility", () => {
+  const runtimeSource = readFileSync(new URL("../features/endless/endless-round-player.tsx", import.meta.url), "utf8");
+  const hudSource = sourceBetween(runtimeSource, "function EndlessHud", "function EndlessReviveCoinBank");
+  const playerSource = sourceBetween(runtimeSource, "export function EndlessRoundPlayer", "const api = useEndlessRun");
+  const hudCallSource = sourceBetween(runtimeSource, "<EndlessHud", "<EndlessReviveCoinBank");
+
+  assert.match(playerSource, /debugToolsVisible,/);
+  assert.match(hudSource, /debugToolsVisible,[\s\S]*debugToolsVisible: boolean;/);
+  assert.match(hudCallSource, /debugToolsVisible=\{debugToolsVisible\}/);
+  assert.match(hudSource, /const handleDebugEnergyClick = useCallback\([\s\S]*api\.toggleDebugEnergyLock\(\);/);
+  assert.match(
+    hudSource,
+    /debugToolsVisible \? \(\s*<button[\s\S]*endless-debug-energy-button[\s\S]*onClick=\{handleDebugEnergyClick\}[\s\S]*<\/button>\s*\) : null/,
+  );
 });
 
 test("endless feedback uses per-round skill names, longer colored popups, and life recovery copy", () => {

@@ -827,10 +827,12 @@ function useEndlessRun({
 function EndlessHud({
   api,
   bestScore,
+  debugToolsVisible,
   targetScore,
 }: {
   api: EndlessRunApi;
   bestScore: number;
+  debugToolsVisible: boolean;
   targetScore?: number;
 }) {
   const activeEnergySegments = clamp(
@@ -985,19 +987,21 @@ function EndlessHud({
         >
           <span className="endless-skill-icon" aria-hidden="true" />
         </button>
-        <button
-          className={`endless-action-button endless-debug-energy-button ${api.debugEnergyLocked ? "active" : ""}`}
-          type="button"
-          aria-pressed={api.debugEnergyLocked}
-          aria-label="Lock energy at 10"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClick={handleDebugEnergyClick}
-        >
-          <span aria-hidden="true">10</span>
-        </button>
+        {debugToolsVisible ? (
+          <button
+            className={`endless-action-button endless-debug-energy-button ${api.debugEnergyLocked ? "active" : ""}`}
+            type="button"
+            aria-pressed={api.debugEnergyLocked}
+            aria-label="Lock energy at 10"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onClick={handleDebugEnergyClick}
+          >
+            <span aria-hidden="true">10</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -1152,6 +1156,7 @@ function EndlessGameByRound({
 export function EndlessRoundPlayer({
   avatarSkin,
   bestScore,
+  debugToolsVisible,
   onComplete,
   onSkillUse,
   onUseReviveCoin,
@@ -1207,6 +1212,7 @@ export function EndlessRoundPlayer({
         <EndlessHud
           api={api}
           bestScore={bestScore}
+          debugToolsVisible={debugToolsVisible}
           targetScore={targetScore}
         />
         <EndlessReviveCoinBank api={api} />
