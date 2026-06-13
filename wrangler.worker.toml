@@ -1,4 +1,5 @@
 name = "208848"
+account_id = "ba76f40bc468add7c3b716f4916e656d"
 main = "cloudflare/worker.ts"
 compatibility_date = "2026-05-22"
 routes = [
@@ -18,8 +19,10 @@ class_name = "RoomDurableObject"
 binding = "FEEDBACK_DB"
 database_name = "game_feedback"
 database_id = "e919fa46-c72f-46d1-a021-91c8e1638f46"
+migrations_dir = "cloudflare/migrations"
 
 [vars]
+ALLOWED_ORIGIN = "https://208848.xyz"
 CLOUDFLARE_ZONE_ID = "80295a57107a9876fd4dd31911cdfecf"
 
 [[migrations]]
