@@ -17,6 +17,7 @@ class_name = "RoomDurableObject"
 binding = "FEEDBACK_DB"
 database_name = "game_feedback"
 database_id = "e919fa46-c72f-46d1-a021-91c8e1638f46"
+migrations_dir = "cloudflare/migrations"
 
 [vars]
 CLOUDFLARE_ZONE_ID = "80295a57107a9876fd4dd31911cdfecf"

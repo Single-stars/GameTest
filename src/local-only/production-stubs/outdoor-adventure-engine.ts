@@ -33,18 +33,23 @@ export function createDefaultOutdoorAdventureState(): OutdoorAdventureState {
 }
 
 export function getOutdoorMiniGameReviveCharges(_state: OutdoorAdventureState) {
+  void _state;
   return 0;
 }
 
 export function readPersistedOutdoorAdventureState(_storage: Pick<Storage, "getItem">) {
+  void _storage;
   return null;
 }
 
 export function writePersistedOutdoorAdventureState(_storage: Pick<Storage, "setItem">, _state: OutdoorAdventureState) {
+  void _storage;
+  void _state;
   return undefined;
 }
 
 export function clearPersistedOutdoorAdventureState(_storage: Pick<Storage, "removeItem">) {
+  void _storage;
   return undefined;
 }
 

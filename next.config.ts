@@ -10,6 +10,7 @@ const outdoorAdventureEngineStub = join(projectRoot, "src/local-only/production-
 
 const nextConfig: NextConfig = {
   output: "export",
+  outputFileTracingRoot: projectRoot,
   trailingSlash: true,
   images: {
     unoptimized: true,

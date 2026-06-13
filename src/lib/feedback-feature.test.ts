@@ -27,6 +27,7 @@ test("Cloudflare feedback endpoint stores validated text feedback without result
   assert.doesNotMatch(workerSource, /includeResultData|include_result_data|rank_name|scores_json|total_score|feedback_result_json/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/feedback"/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/feedback\/\*"/);
+  assert.match(wranglerSource, /migrations_dir = "cloudflare\/migrations"/);
   assert.match(wranglerSource, /\[\[d1_databases\]\]/);
   assert.match(wranglerSource, /binding = "FEEDBACK_DB"/);
   assert.match(readFileSync(migrationUrl, "utf8"), /CREATE TABLE IF NOT EXISTS feedback/);

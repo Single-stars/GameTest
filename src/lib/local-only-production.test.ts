@@ -108,6 +108,7 @@ test("production build aliases local-only implementations to lightweight stubs",
 
   assert.match(packageJson.scripts?.build ?? "", /next build --webpack/);
   assert.match(packageJson.scripts?.build ?? "", /verify-production-local-only-pruned/);
+  assert.match(configSource, /outputFileTracingRoot:\s*projectRoot/);
   assert.match(configSource, /dev\)\s*\{/);
   assert.match(configSource, /NormalModuleReplacementPlugin/);
   assert.match(configSource, /@\/features\/homeworld\/homeworld-screen/);

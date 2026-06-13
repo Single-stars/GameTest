@@ -12,7 +12,15 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".wrangler/**",
+    ".worktrees/**",
   ]),
+  {
+    files: ["src/app/layout.tsx"],
+    rules: {
+      "@next/next/no-css-tags": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

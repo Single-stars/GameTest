@@ -48,21 +48,27 @@ export function createDefaultHomeworldState(updatedAt = new Date(0).toISOString(
 }
 
 export function readPersistedHomeworldState(_storage: Pick<Storage, "getItem">, updatedAt = new Date(0).toISOString()) {
+  void _storage;
   return createDefaultHomeworldState(updatedAt);
 }
 
 export function writePersistedHomeworldState(_storage: Pick<Storage, "setItem">, _state: HomeworldState) {
+  void _storage;
+  void _state;
   return undefined;
 }
 
 export function mergeHomeworldHarvest(state: HomeworldState, _materials: HomeworldHarvestStorage) {
+  void _materials;
   return state;
 }
 
 export function isHomeworldState(_value: unknown): _value is HomeworldState {
+  void _value;
   return false;
 }
 
 export function isHomeworldPresence(_value: unknown): _value is HomeworldPresence {
+  void _value;
   return false;
 }
