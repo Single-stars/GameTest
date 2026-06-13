@@ -400,9 +400,9 @@ function MultiplayerPageContent() {
   const nicknamePromptRef = useRef<Promise<string | null> | null>(null);
   const nicknameResolveRef = useRef<((name: string | null) => void) | null>(null);
   const advancedProgressRef = useRef(advancedProgress);
+  const queuedMultiplayerFivePointRoomLeadRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const selectedSkinRef = useRef<PlayerAvatarSkin>(selectedSkin);
   const lastScoredMatchIdRef = useRef<string | null>(null);
-  const pendingMultiplayerFivePointRoomLeadRewardRef = useRef(false);
   const matchWinsRoomIdRef = useRef<string | null>(null);
   const lastValidRoomScoreRef = useRef<{ roomId: string | null; score: MultiplayerRoomScore } | null>(null);
   const autoJoinRoomRef = useRef<string | null>(null);
@@ -436,6 +436,21 @@ function MultiplayerPageContent() {
     if (items.length === 0) return;
     setRewardQueue((current) => [...current, ...items]);
   }, []);
+
+  const queueMultiplayerFivePointRoomLeadRewardItems = useCallback((items: RewardOverlayItem[]) => {
+    if (items.length === 0) return;
+    queuedMultiplayerFivePointRoomLeadRewardItemsRef.current = [
+      ...queuedMultiplayerFivePointRoomLeadRewardItemsRef.current,
+      ...items,
+    ];
+  }, []);
+
+  const revealQueuedMultiplayerFivePointRoomLeadRewardItems = useCallback(() => {
+    const items = queuedMultiplayerFivePointRoomLeadRewardItemsRef.current;
+    if (items.length === 0) return;
+    queuedMultiplayerFivePointRoomLeadRewardItemsRef.current = [];
+    enqueueRewardItems(items);
+  }, [enqueueRewardItems]);
 
   const dismissRewardItem = useCallback(() => {
     setRewardQueue((current) => current.slice(1));
@@ -548,7 +563,6 @@ function MultiplayerPageContent() {
       setStandaloneLevelSelectAutoMoveRequest(null);
       setStandaloneJoinDialogOpen(false);
       setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
-      pendingMultiplayerFivePointRoomLeadRewardRef.current = false;
       lastValidRoomScoreRef.current = null;
       lastScoredMatchIdRef.current = null;
       setCopyStatus("idle");
@@ -610,7 +624,6 @@ function MultiplayerPageContent() {
       if (!resolvedName) return;
       cleanupSession();
       setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
-      pendingMultiplayerFivePointRoomLeadRewardRef.current = false;
       lastValidRoomScoreRef.current = null;
       lastScoredMatchIdRef.current = null;
       setSnapshot(buildInitialSnapshot());
@@ -944,16 +957,18 @@ function MultiplayerPageContent() {
     sessionRef.current?.requestRematch();
   }, []);
 
-  const revealPendingMultiplayerFivePointRoomLeadReward = useCallback(() => {
-    if (!pendingMultiplayerFivePointRoomLeadRewardRef.current) return;
-    pendingMultiplayerFivePointRoomLeadRewardRef.current = false;
-    persistAdvancedProgress((progress) => markMultiplayerFivePointLeadSkinUnlocked(progress), "multiplayer-five-point-room-lead");
-  }, [persistAdvancedProgress]);
+  const unlockMultiplayerFivePointRoomLeadReward = useCallback((wins: { self: number; opponent: number }) => {
+    if (!hasMultiplayerFivePointRoomLead(wins)) return;
+    if (advancedProgressRef.current.multiplayerFivePointLeadSkinUnlocked) return;
+    const previousProgress = advancedProgressRef.current;
+    const nextProgress = persistAdvancedProgress((progress) => markMultiplayerFivePointLeadSkinUnlocked(progress));
+    const items = createSkinRewardItems(previousProgress, nextProgress, "multiplayer-five-point-room-lead");
+    queueMultiplayerFivePointRoomLeadRewardItems(items);
+  }, [persistAdvancedProgress, queueMultiplayerFivePointRoomLeadRewardItems]);
 
   const handleReturnRoom = useCallback(() => {
     sessionRef.current?.returnToRoom();
-    revealPendingMultiplayerFivePointRoomLeadReward();
-  }, [revealPendingMultiplayerFivePointRoomLeadReward]);
+  }, []);
 
   const handleForfeit = useCallback(() => {
     sessionRef.current?.forfeit();
@@ -1412,26 +1427,25 @@ function MultiplayerPageContent() {
     const comparison = compareMultiplayerResults(snapshot.selfResult, snapshot.opponentResult);
     if (comparison < 0) {
       const next = { ...matchWins, self: matchWins.self + 1 };
-      pendingMultiplayerFivePointRoomLeadRewardRef.current = hasMultiplayerFivePointRoomLead(next) && !advancedProgressRef.current.multiplayerFivePointLeadSkinUnlocked;
+      unlockMultiplayerFivePointRoomLeadReward(next);
       setMatchWins(next);
       sessionRef.current?.reportRoomScore(localWinsToRoomScore(next, snapshot.role, matchId));
       return;
     }
     if (comparison > 0) {
       const next = { ...matchWins, opponent: matchWins.opponent + 1 };
-      pendingMultiplayerFivePointRoomLeadRewardRef.current = hasMultiplayerFivePointRoomLead(next) && !advancedProgressRef.current.multiplayerFivePointLeadSkinUnlocked;
+      unlockMultiplayerFivePointRoomLeadReward(next);
       setMatchWins(next);
       sessionRef.current?.reportRoomScore(localWinsToRoomScore(next, snapshot.role, matchId));
       return;
     }
-    pendingMultiplayerFivePointRoomLeadRewardRef.current = hasMultiplayerFivePointRoomLead(matchWins) && !advancedProgressRef.current.multiplayerFivePointLeadSkinUnlocked;
-  }, [activePlayMode, matchWins, snapshot.match?.matchId, snapshot.opponentResult, snapshot.role, snapshot.selfResult, snapshot.status]);
+    unlockMultiplayerFivePointRoomLeadReward(matchWins);
+  }, [activePlayMode, matchWins, snapshot.match?.matchId, snapshot.opponentResult, snapshot.role, snapshot.selfResult, snapshot.status, unlockMultiplayerFivePointRoomLeadReward]);
 
   useEffect(() => {
     if (!showGameShell && !standalonePeerConnected) {
       lastScoredMatchIdRef.current = null;
       lastValidRoomScoreRef.current = null;
-      pendingMultiplayerFivePointRoomLeadRewardRef.current = false;
       setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
       return;
     }
@@ -1458,6 +1472,7 @@ function MultiplayerPageContent() {
       lastValidRoomScoreRef.current = { roomId: snapshot.roomId, score: snapshot.roomScore };
       const nextWins = roomScoreToLocalWins(snapshot.roomScore, snapshot.role);
       lastScoredMatchIdRef.current = snapshot.roomScore.lastMatchId ?? lastScoredMatchIdRef.current;
+      unlockMultiplayerFivePointRoomLeadReward(nextWins);
       setMatchWins((current) => (sameMatchWins(current, nextWins) ? current : nextWins));
       return;
     }
@@ -1465,7 +1480,12 @@ function MultiplayerPageContent() {
       lastScoredMatchIdRef.current = null;
       setMatchWins((current) => (current.self === 0 && current.opponent === 0 ? current : { self: 0, opponent: 0 }));
     }
-  }, [showGameShell, snapshot.connectionState, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.roomScore, standalonePeerConnected]);
+  }, [showGameShell, snapshot.connectionState, snapshot.opponentPlayer, snapshot.role, snapshot.roomId, snapshot.roomScore, standalonePeerConnected, unlockMultiplayerFivePointRoomLeadReward]);
+
+  useEffect(() => {
+    if (snapshot.status !== "finished" && (snapshot.status !== "connected" || showGameShell)) return;
+    revealQueuedMultiplayerFivePointRoomLeadRewardItems();
+  }, [revealQueuedMultiplayerFivePointRoomLeadRewardItems, showGameShell, snapshot.status]);
 
   useEffect(() => {
     if (snapshot.role !== "host" || !snapshot.opponentPlayer || !lastValidRoomScoreRef.current) return;

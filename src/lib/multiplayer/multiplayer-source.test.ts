@@ -1039,13 +1039,21 @@ test("multiplayer room link copy falls back when Clipboard API is blocked", () =
   assert.match(hostRoomSource, /房间已失效，已刷新房间码和邀请链接。/);
 });
 
-test("multiplayer invite actions and five-point room score leads persist avatar unlock progress on return", () => {
+test("multiplayer invite actions and five-point room score leads persist avatar unlock progress immediately", () => {
   const pageSource = readSource("../../app/multiplayer/page.tsx");
   const linkCopySource = pageSource.slice(pageSource.indexOf("const handleCopyLink"), pageSource.indexOf("const handleCopyRoomCode"));
   const codeCopySource = pageSource.slice(pageSource.indexOf("const handleCopyRoomCode"), pageSource.indexOf("const handleExitHomeworldRoom"));
   const finishedEffectSource = pageSource.slice(
     pageSource.indexOf('if (activePlayMode !== "versus") return;'),
     pageSource.indexOf("useEffect(() => {", pageSource.indexOf('if (activePlayMode !== "versus") return;') + 1),
+  );
+  const roomScoreEffectSource = pageSource.slice(
+    pageSource.indexOf("if (snapshot.roomScore) {"),
+    pageSource.indexOf("if (!snapshot.roomId && snapshot.connectionState", pageSource.indexOf("if (snapshot.roomScore) {")),
+  );
+  const unlockLeadRewardSource = pageSource.slice(
+    pageSource.indexOf("const unlockMultiplayerFivePointRoomLeadReward = useCallback"),
+    pageSource.indexOf("const handleReturnRoom = useCallback", pageSource.indexOf("const unlockMultiplayerFivePointRoomLeadReward = useCallback")),
   );
 
   assert.match(pageSource, /writePersistedGameState/);
@@ -1057,20 +1065,27 @@ test("multiplayer invite actions and five-point room score leads persist avatar 
   assert.match(pageSource, /const \[rewardQueue, setRewardQueue\] = useState<RewardOverlayItem\[\]>\(\[\]\);/);
   assert.match(pageSource, /function hasMultiplayerFivePointRoomLead\(wins: \{ self: number; opponent: number }\)/);
   assert.doesNotMatch(pageSource, /selfWinStreak/);
-  assert.match(pageSource, /const pendingMultiplayerFivePointRoomLeadRewardRef = useRef\(false\);/);
+  assert.match(pageSource, /const unlockMultiplayerFivePointRoomLeadReward = useCallback/);
+  assert.match(pageSource, /const queueMultiplayerFivePointRoomLeadRewardItems = useCallback/);
+  assert.match(pageSource, /const revealQueuedMultiplayerFivePointRoomLeadRewardItems = useCallback/);
+  assert.match(pageSource, /const queuedMultiplayerFivePointRoomLeadRewardItemsRef = useRef<RewardOverlayItem\[\]>\(\[\]\);/);
+  assert.doesNotMatch(pageSource, /pendingMultiplayerFivePointRoomLeadRewardRef/);
   assert.match(pageSource, /const activeRewardItem = rewardQueue\[0\] \?\? null;/);
   assert.match(linkCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\), "multiplayer-link-copy"\)/);
   assert.match(codeCopySource, /persistAdvancedProgress\(\(progress\) => recordShareInviteAction\(progress\), "multiplayer-code-copy"\)/);
   assert.doesNotMatch(pageSource, /getMultiplayerScoreLead/);
   assert.doesNotMatch(finishedEffectSource, /scoreLead >= 5/);
-  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(next\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
-  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(next\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
-  assert.match(finishedEffectSource, /pendingMultiplayerFivePointRoomLeadRewardRef\.current = hasMultiplayerFivePointRoomLead\(matchWins\) && !advancedProgressRef\.current\.multiplayerFivePointLeadSkinUnlocked;/);
-  assert.match(pageSource, /if \(!showGameShell && !standalonePeerConnected\) \{[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;/);
+  assert.match(unlockLeadRewardSource, /const previousProgress = advancedProgressRef\.current;/);
+  assert.match(unlockLeadRewardSource, /const nextProgress = persistAdvancedProgress\(\(progress\) => markMultiplayerFivePointLeadSkinUnlocked\(progress\)\);/);
+  assert.match(unlockLeadRewardSource, /createSkinRewardItems\(previousProgress, nextProgress, "multiplayer-five-point-room-lead"\)/);
+  assert.doesNotMatch(unlockLeadRewardSource, /persistAdvancedProgress\(\(progress\) => markMultiplayerFivePointLeadSkinUnlocked\(progress\), "multiplayer-five-point-room-lead"\)/);
+  assert.match(unlockLeadRewardSource, /queueMultiplayerFivePointRoomLeadRewardItems\(items\);/);
+  assert.match(pageSource, /useEffect\(\(\) => \{[\s\S]{0,180}if \(snapshot\.status !== "finished" && \(snapshot\.status !== "connected" \|\| showGameShell\)\) return;[\s\S]{0,180}revealQueuedMultiplayerFivePointRoomLeadRewardItems\(\);/);
+  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, self: matchWins\.self \+ 1 \};[\s\S]{0,220}unlockMultiplayerFivePointRoomLeadReward\(next\);[\s\S]{0,220}setMatchWins\(next\);/);
+  assert.match(finishedEffectSource, /const next = \{ \.\.\.matchWins, opponent: matchWins\.opponent \+ 1 \};[\s\S]{0,220}unlockMultiplayerFivePointRoomLeadReward\(next\);[\s\S]{0,220}setMatchWins\(next\);/);
+  assert.match(finishedEffectSource, /unlockMultiplayerFivePointRoomLeadReward\(matchWins\);/);
+  assert.match(roomScoreEffectSource, /const nextWins = roomScoreToLocalWins\(snapshot\.roomScore, snapshot\.role\);[\s\S]{0,260}unlockMultiplayerFivePointRoomLeadReward\(nextWins\);/);
   assert.doesNotMatch(pageSource, /if \(!standalonePeerConnected\) \{[\s\S]{0,220}pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;/);
-  assert.match(pageSource, /const revealPendingMultiplayerFivePointRoomLeadReward = useCallback/);
-  assert.match(pageSource, /pendingMultiplayerFivePointRoomLeadRewardRef\.current = false;[\s\S]{0,220}markMultiplayerFivePointLeadSkinUnlocked\(progress\), "multiplayer-five-point-room-lead"/);
-  assert.match(pageSource, /const handleReturnRoom = useCallback\(\(\) => \{[\s\S]{0,120}sessionRef\.current\?\.returnToRoom\(\);[\s\S]{0,120}revealPendingMultiplayerFivePointRoomLeadReward\(\);/);
   assert.match(pageSource, /<RewardOverlay[\s\S]{0,180}item=\{activeRewardItem\}[\s\S]{0,180}onDismiss=\{dismissRewardItem\}[\s\S]{0,180}onOpenAvatarLabSkin=\{openAvatarLabWithSkin\}/);
 });
 
