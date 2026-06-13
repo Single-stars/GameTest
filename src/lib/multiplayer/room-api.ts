@@ -1,6 +1,11 @@
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,8}$/;
 const LOCAL_DEV_SIGNALING_FALLBACK = "https://208848.xyz";
 const ACTIVE_MULTIPLAYER_ROOM_TTL_MS = 30 * 60 * 1000;
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
 
 export const ACTIVE_MULTIPLAYER_ROOM_STORAGE_KEY = "game-rank-test/multiplayer/active-room";
 
@@ -30,9 +35,11 @@ export type RoomStatusResponse = {
 
 export type IceServersResponse = {
   iceServers: RTCIceServer[];
+  fallbackReason?: string;
   turnEnabled?: boolean;
   relayEnabled?: boolean;
   iceTransportPolicy?: RTCIceTransportPolicy;
+  source?: "remote" | "fallback";
 };
 
 export function isRoomStatusActiveForRole(status: RoomStatusResponse, role: SignalingRole) {
@@ -148,6 +155,21 @@ function normalizeIceServer(server: RTCIceServer): RTCIceServer {
   };
 }
 
+function fallbackIceServersResponse(fallbackReason: string): IceServersResponse {
+  return {
+    fallbackReason,
+    iceServers: FALLBACK_ICE_SERVERS.map(normalizeIceServer),
+    iceTransportPolicy: "all",
+    relayEnabled: false,
+    source: "fallback",
+    turnEnabled: false,
+  };
+}
+
+function readIceServersFallbackReason(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function createSignalingRoom(fetchImpl: typeof fetch = fetch) {
   const response = await fetchImpl(buildRoomApiUrl("/api/rooms"), {
     method: "POST",
@@ -173,21 +195,33 @@ export async function createSignalingRoom(fetchImpl: typeof fetch = fetch) {
 }
 
 export async function getSignalingIceServers(fetchImpl: typeof fetch = fetch): Promise<IceServersResponse> {
-  const response = await fetchImpl(buildRoomApiUrl("/api/ice-servers"), {
-    method: "GET",
-    headers: {
-      "cache-control": "no-store",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(buildRoomApiUrl("/api/ice-servers"), {
+      method: "GET",
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    return fallbackIceServersResponse(readIceServersFallbackReason(error));
+  }
 
-  if (!response.ok) throw new Error(`ice-servers-failed:${response.status}`);
-  const payload: unknown = await response.json();
-  if (!isIceServersResponse(payload)) throw new Error("ice-servers-invalid-response");
+  if (!response.ok) return fallbackIceServersResponse(`ice-servers-failed:${response.status}`);
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    return fallbackIceServersResponse(readIceServersFallbackReason(error));
+  }
+  if (!isIceServersResponse(payload)) return fallbackIceServersResponse("ice-servers-invalid-response");
   return {
     iceServers: payload.iceServers.map(normalizeIceServer),
     turnEnabled: payload.turnEnabled === true,
     relayEnabled: payload.relayEnabled === true,
     iceTransportPolicy: payload.iceTransportPolicy === "relay" ? "relay" : "all",
+    source: "remote",
   };
 }
 

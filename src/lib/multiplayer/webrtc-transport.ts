@@ -407,7 +407,8 @@ export class RoomSignalTransport {
     try {
       const response = await getSignalingIceServers();
       this.iceServers = response.iceServers.length > 0 ? response.iceServers : ICE_SERVERS;
-      this.logIceDiagnostic("ice-servers-loaded", {
+      this.logIceDiagnostic(response.source === "fallback" ? "ice-servers-fallback" : "ice-servers-loaded", {
+        ...(response.fallbackReason ? { fallbackReason: response.fallbackReason } : {}),
         iceServerCount: this.iceServers.length,
         iceTransportPolicy: response.iceTransportPolicy ?? "all",
         relayEnabled: response.relayEnabled === true,

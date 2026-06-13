@@ -5,6 +5,7 @@ routes = [
   { pattern = "208848.xyz/api/rooms", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/rooms/*", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/ice-servers", zone_name = "208848.xyz" },
+  { pattern = "208848.xyz/api/ice-servers/*", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/feedback", zone_name = "208848.xyz" },
   { pattern = "208848.xyz/api/feedback/*", zone_name = "208848.xyz" },
 ]

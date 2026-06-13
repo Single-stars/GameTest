@@ -2356,6 +2356,7 @@ test("Cloudflare Pages and Worker configs are split for native Pages Git integra
   assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
   assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
   assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/ice-servers"/);
+  assert.match(workerWranglerSource, /pattern = "208848\.xyz\/api\/ice-servers\/\*"/);
 });
 
 test("Cloudflare multiplayer uses short room codes and native WebRTC transport", () => {
@@ -2436,6 +2437,7 @@ test("Cloudflare Worker Durable Object signaling queues ICE and exposes STUN-onl
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms"/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/rooms\/\*"/);
   assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/ice-servers"/);
+  assert.match(wranglerSource, /pattern = "208848\.xyz\/api\/ice-servers\/\*"/);
 });
 
 test("Cloudflare signaling stays off the hot gameplay state path", () => {

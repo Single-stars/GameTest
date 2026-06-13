@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   clearActiveMultiplayerRoom,
+  getSignalingIceServers,
   readActiveMultiplayerRoom,
   writeActiveMultiplayerRoom,
   isRoomStatusActiveForRole,
@@ -61,6 +62,46 @@ test("local and LAN development origins use the shared signaling service", () =>
   assert.equal(resolveSignalingHttpBase("http://172.16.4.9:3000"), "https://208848.xyz");
   assert.equal(resolveSignalingHttpBase("http://172.31.4.9:3000"), "https://208848.xyz");
   assert.equal(resolveSignalingHttpBase("http://208848.xyz"), "http://208848.xyz");
+});
+
+test("ice server lookup preserves a healthy signaling endpoint response", async () => {
+  const fetchIceServers: typeof fetch = async () =>
+    new Response(
+      JSON.stringify({
+        iceServers: [{ urls: " stun:example.com:3478 " }, { urls: [" stun:backup.example.com:3478 "] }],
+        iceTransportPolicy: "all",
+        relayEnabled: false,
+        turnEnabled: false,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+
+  const response = await getSignalingIceServers(fetchIceServers);
+
+  assert.equal(response.source, "remote");
+  assert.deepEqual(response.iceServers, [{ urls: "stun:example.com:3478" }, { urls: ["stun:backup.example.com:3478"] }]);
+  assert.equal(response.iceTransportPolicy, "all");
+});
+
+test("ice server lookup falls back to built-in STUN when the endpoint is unavailable", async () => {
+  const fetchUnavailable: typeof fetch = async () =>
+    new Response("<!doctype html><title>Not found</title>", {
+      status: 404,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+
+  const response = await getSignalingIceServers(fetchUnavailable);
+
+  assert.equal(response.source, "fallback");
+  assert.match(response.fallbackReason ?? "", /ice-servers-failed:404/);
+  assert.deepEqual(response.iceServers, [
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ]);
+  assert.equal(response.iceTransportPolicy, "all");
+  assert.equal(response.relayEnabled, false);
+  assert.equal(response.turnEnabled, false);
 });
 
 test("active multiplayer room storage recovers only fresh non-left rooms", () => {
