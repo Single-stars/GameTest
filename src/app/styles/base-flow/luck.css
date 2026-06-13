@@ -241,8 +241,10 @@
 .luck-coin-test {
   position: relative;
   width: 100%;
+  box-sizing: border-box;
   display: grid;
   justify-items: center;
+  justify-self: stretch;
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -255,7 +257,7 @@
 
 .luck-coin-test-layout {
   position: relative;
-  width: min(100%, 640px);
+  width: 100%;
   max-width: 100%;
   display: grid;
   grid-template-columns: minmax(96px, 0.46fr) minmax(0, 1fr);
@@ -276,8 +278,9 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  min-height: clamp(176px, 27vw, 210px);
-  aspect-ratio: 1.42 / 1;
+  height: clamp(176px, 29vh, 210px);
+  min-height: 0;
+  aspect-ratio: auto;
   box-sizing: border-box;
   display: grid;
   place-items: center;
@@ -388,7 +391,7 @@
 }
 
 .luck-coin-test-caption {
-  width: min(100%, 640px);
+  width: 100%;
   min-height: 22px;
   margin: 0;
   color: rgba(36, 46, 62, 0.72);
@@ -640,10 +643,10 @@
 
 .luck-revive-exchange-list {
   position: relative;
-  width: min(100%, 640px);
+  width: 100%;
   display: grid;
   gap: 10px;
-  justify-self: center;
+  justify-self: stretch;
 }
 
 .luck-revive-exchange-card {

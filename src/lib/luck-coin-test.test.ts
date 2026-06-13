@@ -306,6 +306,35 @@ test("luck screen keeps revive coin exchange and test cards visible under the lu
   assert.match(cssSource, /@keyframes luck-revive-exchange-toast-pop/);
 });
 
+test("luck screen modules share the page-card width with the hero", () => {
+  const screenSource = readFileSync(new URL("../features/results/luck-draw-screen.tsx", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../app/styles/base-flow/luck.css", import.meta.url), "utf8");
+  const advancedCssSource = readFileSync(new URL("../app/styles/base-flow/advanced.css", import.meta.url), "utf8");
+  const testCardRenderSource = screenSource.slice(screenSource.indexOf("<section className={`luck-coin-test"), screenSource.indexOf("function ReviveCoinExchangeCards"));
+  const exchangeCardSource = screenSource.slice(screenSource.indexOf("function ReviveCoinExchangeCards"), screenSource.indexOf("function LegacyLuckSlotMachine"));
+  const luckCardRule = cssRule(cssSource, ".luck-coin-test");
+  const layoutRule = cssRule(cssSource, ".luck-coin-test-layout");
+  const captionRule = cssRule(cssSource, ".luck-coin-test-caption");
+  const scoreRule = cssRule(cssSource, ".luck-coin-test-score-card");
+  const exchangeListRule = cssRule(cssSource, ".luck-revive-exchange-list");
+
+  assert.match(advancedCssSource, /\.advanced-screen,\s*\.luck-screen\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*min\(100%,\s*760px\)\);/);
+  assert.doesNotMatch(cssSource, /--luck-module-content-width/);
+  assert.doesNotMatch(screenSource, /luck-module-width/);
+  assert.match(luckCardRule, /width:\s*100%;/);
+  assert.match(luckCardRule, /justify-items:\s*center;/);
+  assert.match(luckCardRule, /justify-self:\s*stretch;/);
+  assert.match(layoutRule, /width:\s*100%;/);
+  assert.match(captionRule, /width:\s*100%;/);
+  assert.match(scoreRule, /height:\s*clamp\(176px,\s*29vh,\s*210px\);/);
+  assert.match(scoreRule, /aspect-ratio:\s*auto;/);
+  assert.match(exchangeListRule, /width:\s*100%;/);
+  assert.match(exchangeListRule, /justify-self:\s*stretch;/);
+  assert.match(testCardRenderSource, /className="luck-coin-test-layout"/);
+  assert.match(testCardRenderSource, /className="luck-coin-test-caption"/);
+  assert.match(exchangeCardSource, /className="luck-revive-exchange-list"/);
+});
+
 test("app page persists revive coin exchange, test grants, and endless consumption", () => {
   const appPageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const advancedScreenSource = readFileSync(new URL("../features/advanced/advanced-challenge-screen.tsx", import.meta.url), "utf8");

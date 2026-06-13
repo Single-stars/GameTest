@@ -310,6 +310,9 @@ test("donation flow uses feed choices with personal collection-code guidance", (
 test("result cards become full-card advanced and luck entry buttons after king unlock", () => {
   const resultSource = readSource("../features/results/result-screen.tsx");
   const resultCss = readSource("../app/styles/base-flow/results.css");
+  const responsiveCss = readSource("../app/styles/overlays-responsive.css");
+  const luckScoreItemRule = resultCss.slice(resultCss.indexOf(".luck-score-item {"), resultCss.indexOf("\n}", resultCss.indexOf(".luck-score-item {")));
+  const mobileResultRule = responsiveCss.slice(responsiveCss.indexOf("@media (max-width: 760px)"), responsiveCss.indexOf("@media (max-width: 430px)"));
 
   assert.match(resultSource, /const ScoreEntryTag = advancedUnlocked \? "button" : "div";/);
   assert.match(resultSource, /className=\{`score-item score-item-button/);
@@ -318,6 +321,9 @@ test("result cards become full-card advanced and luck entry buttons after king u
   assert.doesNotMatch(resultSource, /className=\{`advanced-entry-button \$\{getAdvancedLevelTone/);
   assert.match(resultSource, /id:\s*"feedback"[\s\S]*id:\s*"donate"[\s\S]*homeworldEntryVisible/);
   assert.match(resultCss, /\.score-item-button/);
+  assert.match(luckScoreItemRule, /grid-column:\s*2\s*\/\s*span\s*2;/);
+  assert.match(luckScoreItemRule, /justify-self:\s*stretch;/);
+  assert.match(mobileResultRule, /\.luck-score-item\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1;/);
   assert.doesNotMatch(resultCss, /(?<!advanced-unlock-pulse )\.score-item-button\.with-advanced::after/);
   assert.match(resultCss, /\.advanced-unlock-pulse \.score-item-button\.with-advanced::after/);
   assert.match(resultCss, /@keyframes advanced-card-breath/);

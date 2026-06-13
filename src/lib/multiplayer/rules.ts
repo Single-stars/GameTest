@@ -24,8 +24,12 @@ export type MultiplayerSettlementAdjustmentKey =
 
 export type MultiplayerSettlementUnit = "ms" | "point" | "count" | "note";
 
-export type MultiplayerSettlementMetric = {
-  key: MultiplayerSettlementBaseKey | MultiplayerSettlementAdjustmentKey;
+export type MultiplayerSettlementMetric<
+  Key extends MultiplayerSettlementBaseKey | MultiplayerSettlementAdjustmentKey =
+    | MultiplayerSettlementBaseKey
+    | MultiplayerSettlementAdjustmentKey,
+> = {
+  key: Key;
   label: string;
   unit: MultiplayerSettlementUnit;
   description: string;
@@ -33,13 +37,16 @@ export type MultiplayerSettlementMetric = {
   displayOnly?: boolean;
 };
 
+export type MultiplayerSettlementBaseMetric = MultiplayerSettlementMetric<MultiplayerSettlementBaseKey>;
+export type MultiplayerSettlementAdjustmentMetric = MultiplayerSettlementMetric<MultiplayerSettlementAdjustmentKey>;
+
 export type MultiplayerSettlementRules = {
   kind: MultiplayerSettlementKind;
   primaryMetric: string;
   resultTitle: string;
   winnerText: string;
-  baseMetrics: MultiplayerSettlementMetric[];
-  adjustments: MultiplayerSettlementMetric[];
+  baseMetrics: MultiplayerSettlementBaseMetric[];
+  adjustments: MultiplayerSettlementAdjustmentMetric[];
   tiebreakerText?: string;
 };
 
@@ -52,7 +59,7 @@ export type MultiplayerLevelRules = {
 
 export const MULTIPLAYER_VERSUS_RULE_TEXT = "按本关规则结算：跑图先到终点，收集和失误在结算面板单独计算。";
 
-const reviveAdjustment: MultiplayerSettlementMetric = {
+const reviveAdjustment: MultiplayerSettlementAdjustmentMetric = {
   key: "revive-count",
   label: "复活次数",
   unit: "count",
@@ -60,7 +67,7 @@ const reviveAdjustment: MultiplayerSettlementMetric = {
   displayOnly: true,
 };
 
-const collectibleTimeBonus: MultiplayerSettlementMetric = {
+const collectibleTimeBonus: MultiplayerSettlementAdjustmentMetric = {
   key: "collectible-time-bonus",
   label: "道具奖励",
   unit: "ms",
@@ -68,7 +75,7 @@ const collectibleTimeBonus: MultiplayerSettlementMetric = {
   description: "每个成功收集的道具让最终用时减少 2 秒，所有已收集道具都结算。",
 };
 
-const aimMissPenalty: MultiplayerSettlementMetric = {
+const aimMissPenalty: MultiplayerSettlementAdjustmentMetric = {
   key: "aim-miss-penalty",
   label: "射空",
   unit: "point",
@@ -76,7 +83,7 @@ const aimMissPenalty: MultiplayerSettlementMetric = {
   description: "每次射空扣 2 分。",
 };
 
-const aimFlyOutPenalty: MultiplayerSettlementMetric = {
+const aimFlyOutPenalty: MultiplayerSettlementAdjustmentMetric = {
   key: "aim-flyout-penalty",
   label: "漏靶",
   unit: "point",
@@ -84,7 +91,7 @@ const aimFlyOutPenalty: MultiplayerSettlementMetric = {
   description: "逃逸靶飞出屏幕扣 3 分。",
 };
 
-const aimDecoyPenalty: MultiplayerSettlementMetric = {
+const aimDecoyPenalty: MultiplayerSettlementAdjustmentMetric = {
   key: "aim-decoy-penalty",
   label: "打中干扰靶",
   unit: "point",
@@ -92,7 +99,7 @@ const aimDecoyPenalty: MultiplayerSettlementMetric = {
   description: "打中干扰靶扣 5 分。",
 };
 
-const aimHitScore: MultiplayerSettlementMetric = {
+const aimHitScore: MultiplayerSettlementBaseMetric = {
   key: "aim-hit-score",
   label: "命中",
   unit: "point",
@@ -100,7 +107,7 @@ const aimHitScore: MultiplayerSettlementMetric = {
   description: "每次命中目标靶加 10 分。",
 };
 
-const knifeHitScore: MultiplayerSettlementMetric = {
+const knifeHitScore: MultiplayerSettlementAdjustmentMetric = {
   key: "knife-hit-score",
   label: "安全插中",
   unit: "point",
@@ -108,7 +115,7 @@ const knifeHitScore: MultiplayerSettlementMetric = {
   description: "每次安全插中加 1 分。",
 };
 
-const knifeTimeoutPenalty: MultiplayerSettlementMetric = {
+const knifeTimeoutPenalty: MultiplayerSettlementAdjustmentMetric = {
   key: "knife-timeout-penalty",
   label: "倒计时超时",
   unit: "point",
@@ -158,7 +165,7 @@ function aimMode(level: MiniGameLevelConfig) {
   return typeof mode === "string" ? mode : "";
 }
 
-function finishTimeSettlement(adjustments: MultiplayerSettlementMetric[] = []): MultiplayerSettlementRules {
+function finishTimeSettlement(adjustments: MultiplayerSettlementAdjustmentMetric[] = []): MultiplayerSettlementRules {
   return {
     kind: "finish-time",
     primaryMetric: "finish-time",
