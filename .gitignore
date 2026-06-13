@@ -33,6 +33,7 @@ yarn-error.log*
 .pnpm-debug.log*
 dev-server*.log
 .dev-server.json
+.worktrees/
 .wrangler/
 .codex-logs/
 .codex-screenshots/
