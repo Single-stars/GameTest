@@ -104,7 +104,7 @@ test("advanced clears show lucky coin rewards while rank changes use the full-sc
   assert.match(advancedCss, /\.advanced-luck-coin-card strong\s*{[\s\S]*text-align:\s*left;/);
 });
 
-test("rank, endless, and skin rewards share a full-screen overlay queue in fixed priority order", () => {
+test("rank, endless, and skin rewards share a full-screen overlay queue in fixed priority order while revive coins use toast feedback", () => {
   const rewardOverlaySource = readSource("../features/rewards/reward-overlay.tsx");
   const pageSource = readSource("../app/page.tsx");
   const rewardCss = readSource("../app/styles/base-flow/rewards.css");
@@ -114,6 +114,8 @@ test("rank, endless, and skin rewards share a full-screen overlay queue in fixed
   assert.match(rewardOverlaySource, /kind:\s*"skin"/);
   assert.match(rewardOverlaySource, /kind:\s*"rank"/);
   assert.match(rewardOverlaySource, /kind:\s*"endless"/);
+  assert.doesNotMatch(rewardOverlaySource, /kind:\s*"revive-coin"/);
+  assert.doesNotMatch(rewardOverlaySource, /ownedCount:\s*number/);
   assert.match(rewardOverlaySource, /roundTitle:\s*string/);
   assert.match(rewardOverlaySource, /PlayerAvatar[\s\S]*skin=\{item\.skin\}[\s\S]*size=\{160\}/);
   assert.match(rewardOverlaySource, /useEffect\(\(\)\s*=>\s*\{[\s\S]*setSkinCelebrating\(true\)/);
@@ -142,6 +144,7 @@ test("rank, endless, and skin rewards share a full-screen overlay queue in fixed
   assert.match(rewardOverlaySource, /<RewardSkinCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardRankCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /<RewardEndlessCard key=\{item\.id\}/);
+  assert.doesNotMatch(rewardOverlaySource, /<RewardReviveCoinCard key=\{item\.id\}/);
   assert.match(rewardOverlaySource, /onOpenAvatarLabSkin\(item\.skin\)/);
   assert.doesNotMatch(rewardOverlaySource, /onOpenLuckDraw\(\)/);
   assert.doesNotMatch(rewardOverlaySource, /reward-overlay-actions/);
@@ -156,19 +159,29 @@ test("rank, endless, and skin rewards share a full-screen overlay queue in fixed
   assert.doesNotMatch(rewardOverlaySource, /reward-endless-symbol/);
   assert.match(rewardOverlaySource, /item\.roundTitle/);
   assert.match(rewardOverlaySource, /段位提升！/);
+  assert.doesNotMatch(rewardOverlaySource, /function RewardReviveCoinCard/);
+  assert.doesNotMatch(rewardOverlaySource, /复活币\+1，已拥有\{item\.ownedCount\}个/);
 
   assert.match(pageSource, /const \[rewardQueue,\s*setRewardQueue\] = useState<RewardOverlayItem\[\]>\(\[\]\);/);
   assert.match(pageSource, /const activeRewardItem = rewardQueue\[0\] \?\? null;/);
   assert.match(pageSource, /createSkinRewardItems\(previousProgress,\s*nextProgress/);
+  assert.match(pageSource, /const claimEndlessReviveCoinReward = useCallback/);
+  assert.match(pageSource, /claimEndlessReviveCoin\(previousProgress,\s*roundId\)/);
+  assert.match(pageSource, /showReviveCoinRewardNotice\("复活币\+1"\)/);
+  assert.match(pageSource, /startUnlockedEndlessChallenge[\s\S]*claimEndlessReviveCoinReward\(roundId\)/);
+  assert.match(pageSource, /pickAdvancedLevel[\s\S]*claimEndlessReviveCoinReward\(current\.roundId\)/);
   assert.match(pageSource, /function sortRewardItemsByPriority/);
   assert.match(pageSource, /const REWARD_ITEM_KIND_PRIORITY/);
   assert.match(pageSource, /rank:\s*0/);
   assert.match(pageSource, /endless:\s*1/);
   assert.match(pageSource, /skin:\s*2/);
+  assert.doesNotMatch(pageSource, /"revive-coin":\s*2/);
   assert.match(pageSource, /setRewardQueue\(\(current\) => \[\.\.\.current, \.\.\.sortRewardItemsByPriority\(items\)\]\)/);
   assert.match(pageSource, /function createEndlessRewardItem\(previousProgress: AdvancedProgress, nextProgress: AdvancedProgress, roundId: RoundId, source: string\): RewardOverlayItem \| null/);
+  assert.doesNotMatch(pageSource, /function createReviveCoinRewardItem\(ownedCount: number, source: string\): RewardOverlayItem/);
   assert.match(pageSource, /!isEndlessModeUnlocked\(previousProgress, roundId\) && isEndlessModeUnlocked\(nextProgress, roundId\)/);
   assert.match(pageSource, /kind:\s*"endless"/);
+  assert.doesNotMatch(pageSource, /kind:\s*"revive-coin"/);
   assert.doesNotMatch(pageSource, /\.\.\.createSkinRewardItems\([\s\S]*\.\.\.compactRewardItems\(\[rankReward\]\),[\s\S]*\.\.\.compactRewardItems\(\[endlessReward\]\),/);
   assert.match(pageSource, /enqueueRewardItems\(compactRewardItems\(\[[\s\S]*rankReward,[\s\S]*endlessReward,[\s\S]*\.\.\.createSkinRewardItems/);
   assert.match(pageSource, /pendingLuckRewardItemsRef/);
@@ -203,6 +216,8 @@ test("rank, endless, and skin rewards share a full-screen overlay queue in fixed
   assert.match(rewardCss, /\.reward-rank-value\s*{[^}]*text-shadow:/);
   assert.match(rewardCss, /\.reward-endless-card/);
   assert.match(rewardCss, /\.reward-endless-card\s*{[^}]*background:\s*transparent;/);
+  assert.doesNotMatch(rewardCss, /\.reward-revive-coin-card/);
+  assert.doesNotMatch(rewardCss, /\.reward-revive-coin-count/);
   assert.match(rewardCss, /\.reward-endless-switch/);
   assert.match(rewardCss, /@keyframes reward-endless-unlock-drop/);
   assert.match(rewardCss, /@keyframes reward-endless-title-reveal/);

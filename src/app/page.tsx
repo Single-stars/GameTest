@@ -26,6 +26,8 @@ import {
 } from "@/lib/scoring";
 import {
   clearPersistedCurrentResult,
+  claimDailyReviveCoin,
+  claimEndlessReviveCoin,
   consumeReviveCoin,
   createDefaultAdvancedProgress,
   createDefaultPersistedGameState,
@@ -146,7 +148,34 @@ const APP_TITLE = "测测你的游戏段位";
 const APP_TAGLINE = "8个小游戏测测你的段位";
 const SHARE_COPY_TOAST_DELAY_MS = 500;
 const DEFAULT_OUTDOOR_ADVENTURE_EVENT_ID = process.env.NODE_ENV === "development" ? "event_piggy_block" : "";
+const FEEDBACK_ADMIN_TOKEN_STORAGE_KEY = "feedback-admin-token";
 type LuckDrawDisplayOutcome = LuckDrawOutcome & { displayScores?: number[] };
+
+function getFeedbackAdminApiUrl(path = "") {
+  const route = `/api/feedback/admin${path}`;
+  if (typeof window === "undefined") return route;
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return `https://208848.xyz${route}`;
+  }
+  return route;
+}
+
+async function verifyFeedbackAdminTokenForDebug() {
+  if (typeof window === "undefined") return false;
+  const token = window.localStorage.getItem(FEEDBACK_ADMIN_TOKEN_STORAGE_KEY)?.trim() ?? "";
+  if (!token) return false;
+  try {
+    const response = await fetch(getFeedbackAdminApiUrl(), {
+      cache: "no-store",
+      headers: {
+        "x-admin-token": token,
+      },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 function hasOutdoorAdventureProgress(state: OutdoorAdventureState) {
   if (state.status === "settled" || state.status === "failed") return false;
@@ -278,6 +307,7 @@ export default function Home() {
   const [pendingEndlessChallenge, setPendingEndlessChallenge] = useState<EndlessChallengePayload | null>(null);
   const [challengeInviteVisible, setChallengeInviteVisible] = useState(false);
   const [challengeNoticeVisible, setChallengeNoticeVisible] = useState(false);
+  const [reviveCoinRewardNotice, setReviveCoinRewardNotice] = useState<{ id: number; text: string } | null>(null);
   const [luckDrawOutcome, setLuckDrawOutcome] = useState<LuckDrawOutcome | null>(null);
   const [rewardQueue, setRewardQueue] = useState<RewardOverlayItem[]>([]);
   const [selectedAvatarSkin, setSelectedAvatarSkin] = useState<PlayerAvatarSkin>("cyan");
@@ -304,6 +334,8 @@ export default function Home() {
   const pendingEndlessSkillRewardItemsRef = useRef<RewardOverlayItem[]>([]);
   const shareAvatarCaptureRef = useRef<HTMLSpanElement | null>(null);
   const shareCopyToastTimerRef = useRef<number | null>(null);
+  const reviveCoinRewardNoticeIdRef = useRef(0);
+  const reviveCoinRewardNoticeTimerRef = useRef<number | null>(null);
   const appHistoryActiveRef = useRef(false);
   const appHistoryUserArmedRef = useRef(false);
   const appHistoryLayerRef = useRef<AppBackHistoryLayer>(0);
@@ -457,14 +489,6 @@ export default function Home() {
     };
   }, [writeHistoryGuard]);
 
-  const startUnlockedEndlessChallenge = useCallback((roundId: RoundId) => {
-    if (!isEndlessModeUnlocked(advancedProgressRef.current, roundId)) return;
-    writeUserInitiatedHistoryGuard(1);
-    setRewardQueue((current) => current.slice(1));
-    setAdvancedChallenge({ mode: "intro", roundId, level: ENDLESS_MODE_LEVEL });
-    void transitionToStage("advanced");
-  }, [transitionToStage, writeUserInitiatedHistoryGuard]);
-
   const persistGameState = useCallback((currentTrials: TrialEvent[] | null, progress: AdvancedProgress) => {
     const storage = getBrowserStorage();
     if (!storage) return;
@@ -596,6 +620,12 @@ export default function Home() {
   }, [advancedChallenge]);
 
   useEffect(() => {
+    return () => {
+      if (reviveCoinRewardNoticeTimerRef.current !== null) window.clearTimeout(reviveCoinRewardNoticeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     pendingEndlessChallengeRef.current = pendingEndlessChallenge;
   }, [pendingEndlessChallenge]);
 
@@ -647,12 +677,20 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let cancelled = false;
     const nextHomeworldEntryVisible = shouldShowHomeworldEntry({ nodeEnv: process.env.NODE_ENV, search: window.location.search });
     const challengeParam = new URLSearchParams(window.location.search).get("challenge");
     const decodedChallenge = decodeEndlessChallengePayload(challengeParam);
     const currentSearch = sanitizeHomeworldQuery(nextHomeworldEntryVisible);
     if (challengeParam !== null) cleanChallengeQuery();
-    setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: window.location.search }));
+    const debugSearch = window.location.search;
+    setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: debugSearch, adminAuthorized: false }));
+    if (process.env.NODE_ENV !== "development") {
+      void verifyFeedbackAdminTokenForDebug().then((adminAuthorized) => {
+        if (cancelled) return;
+        setDebugToolsVisible(getDebugToolsVisibility({ nodeEnv: process.env.NODE_ENV, search: debugSearch, adminAuthorized }));
+      });
+    }
     setHomeworldEntryVisible(nextHomeworldEntryVisible);
     const shouldOpenHomeworldFromQuery = nextHomeworldEntryVisible && new URLSearchParams(currentSearch).get("homeworld") === "1";
 
@@ -696,6 +734,10 @@ export default function Home() {
       persistGameState(storedTrials.length > 0 ? storedTrials : null, nextProgress);
       enqueueRewardItems(createSkinRewardItems(stored.advancedProgress, nextProgress, "stored-result"));
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [enqueueRewardItems, persistGameState]);
 
   const captureShareAvatarDataUrl = useCallback(async () => {
@@ -994,13 +1036,56 @@ export default function Home() {
   const exchangeReviveCoin = useCallback(() => {
     const previousProgress = advancedProgressRef.current;
     const result = exchangeLuckCoinForReviveCoin(previousProgress);
-    if (!result.exchanged) return false;
+    if (!result.exchanged) return null;
     const nextProgress = result.progress;
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
-    return true;
+    return nextProgress.reviveCoins;
   }, [persistGameState]);
+
+  const claimDailyReviveCoinReward = useCallback(() => {
+    const previousProgress = advancedProgressRef.current;
+    const result = claimDailyReviveCoin(previousProgress);
+    if (!result.claimed) return null;
+    const nextProgress = result.progress;
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    return nextProgress.reviveCoins;
+  }, [persistGameState]);
+
+  const showReviveCoinRewardNotice = useCallback((text: string) => {
+    reviveCoinRewardNoticeIdRef.current += 1;
+    const nextNotice = { id: reviveCoinRewardNoticeIdRef.current, text };
+    setReviveCoinRewardNotice(nextNotice);
+    if (reviveCoinRewardNoticeTimerRef.current !== null) window.clearTimeout(reviveCoinRewardNoticeTimerRef.current);
+    reviveCoinRewardNoticeTimerRef.current = window.setTimeout(() => {
+      reviveCoinRewardNoticeTimerRef.current = null;
+      setReviveCoinRewardNotice((current) => (current?.id === nextNotice.id ? null : current));
+    }, 1280);
+  }, []);
+
+  const claimEndlessReviveCoinReward = useCallback((roundId: RoundId) => {
+    const previousProgress = advancedProgressRef.current;
+    const result = claimEndlessReviveCoin(previousProgress, roundId);
+    if (!result.claimed) return null;
+    const nextProgress = result.progress;
+    advancedProgressRef.current = nextProgress;
+    setAdvancedProgress(nextProgress);
+    persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    showReviveCoinRewardNotice("复活币+1");
+    return nextProgress.reviveCoins;
+  }, [persistGameState, showReviveCoinRewardNotice]);
+
+  const startUnlockedEndlessChallenge = useCallback((roundId: RoundId) => {
+    if (!isEndlessModeUnlocked(advancedProgressRef.current, roundId)) return;
+    writeUserInitiatedHistoryGuard(1);
+    setRewardQueue((current) => current.slice(1));
+    claimEndlessReviveCoinReward(roundId);
+    setAdvancedChallenge({ mode: "intro", roundId, level: ENDLESS_MODE_LEVEL });
+    void transitionToStage("advanced");
+  }, [claimEndlessReviveCoinReward, transitionToStage, writeUserInitiatedHistoryGuard]);
 
   const grantReviveCoinForTest = useCallback(() => {
     const previousProgress = advancedProgressRef.current;
@@ -1008,6 +1093,7 @@ export default function Home() {
     advancedProgressRef.current = nextProgress;
     setAdvancedProgress(nextProgress);
     persistGameState(trialsRef.current.length > 0 ? trialsRef.current : null, nextProgress);
+    return nextProgress.reviveCoins;
   }, [persistGameState]);
 
   const debugMoveReviveCoinExchangeDayForTest = useCallback(() => {
@@ -1069,12 +1155,13 @@ export default function Home() {
     const currentLevel = getAdvancedDimensionLevel(advancedProgressRef.current, current.roundId);
     if (level === ENDLESS_MODE_LEVEL) {
       if (!isEndlessModeUnlocked(advancedProgressRef.current, current.roundId)) return;
+      claimEndlessReviveCoinReward(current.roundId);
       setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level });
       return;
     }
     if (getAdvancedLevelState(currentLevel, level) === "locked") return;
     setAdvancedChallenge({ mode: "intro", roundId: current.roundId, level });
-  }, []);
+  }, [claimEndlessReviveCoinReward]);
 
   const startAdvancedLevel = useCallback((level?: number) => {
     const current = advancedChallengeRef.current;
@@ -1549,6 +1636,7 @@ export default function Home() {
           debugToolsVisible={debugToolsVisible}
           lastOutcome={luckDrawOutcome}
           onBack={requestAppBack}
+          onClaimDailyReviveCoin={claimDailyReviveCoinReward}
           onDebugClearAllAdvancedChallenges={debugClearAllAdvancedChallengesForTest}
           onDebugMoveReviveCoinExchangeToPreviousDay={debugMoveReviveCoinExchangeDayForTest}
           onDraw={drawLuck}
@@ -1710,6 +1798,11 @@ export default function Home() {
       {challengeNoticeVisible && pendingEndlessChallenge && !challengeInviteVisible ? (
         <div className="endless-challenge-notice" role="status">
           完成段位评定后即可挑战
+        </div>
+      ) : null}
+      {reviveCoinRewardNotice ? (
+        <div key={reviveCoinRewardNotice.id} className="revive-coin-reward-toast claim" role="status" aria-live="polite">
+          {reviveCoinRewardNotice.text}
         </div>
       ) : null}
       {challengeInviteVisible && pendingEndlessChallenge ? (

@@ -38,6 +38,7 @@ import { type RoundId, type TrialEvent } from "@/lib/scoring";
 import { EndlessRoundPlayer, type EndlessRoundCompletion } from "@/features/endless/endless-round-player";
 import { rounds } from "@/features/game-flow/round-config";
 import { type PlayerAvatarSkin } from "@/features/player-avatar/player-avatar-skin";
+import { DonateIcon } from "@/features/results/result-icons";
 
 export type AdvancedChallengeState =
   | { mode: "select"; roundId: RoundId }
@@ -556,6 +557,7 @@ function AdvancedLevelSelectionPanel({
   challenge,
   currentLevel,
   endlessBestScore,
+  reviveCoins,
   selectedLevel,
   unlockedLevel,
   onPickLevel,
@@ -566,6 +568,7 @@ function AdvancedLevelSelectionPanel({
   challenge: Exclude<AdvancedLobbyChallengeState, { mode: "complete" }>;
   currentLevel: number;
   endlessBestScore: number;
+  reviveCoins: number;
   selectedLevel: number;
   unlockedLevel: number;
   onPickLevel: (level: number) => void;
@@ -834,6 +837,12 @@ function AdvancedLevelSelectionPanel({
         onPointerMove={handleLobbyPointerMove}
         onPointerUp={handleLobbyPointerUp}
       >
+        <span className={`advanced-endless-revive-bank ${selectedIsEndless ? "visible" : ""}`} aria-label={`复活币 ${reviveCoins}`}>
+          <span className="advanced-endless-revive-bank-icon" aria-hidden="true">
+            <DonateIcon />
+          </span>
+          <strong>{reviveCoins}</strong>
+        </span>
         <div className="advanced-lobby-track" style={lobbyTrackStyle}>
           {levelItems.map((item) => {
             const selected = item.position === "selected";
@@ -955,6 +964,7 @@ function AdvancedLobbyContent({
   challenge,
   currentLevel,
   endlessBestScore,
+  reviveCoins,
   round,
   shareCopyNoticeId,
   unlockedLevel,
@@ -968,6 +978,7 @@ function AdvancedLobbyContent({
   challenge: AdvancedLobbyChallengeState;
   currentLevel: number;
   endlessBestScore: number;
+  reviveCoins: number;
   round: AdvancedRoundConfig;
   shareCopyNoticeId: number;
   unlockedLevel: number;
@@ -1064,6 +1075,7 @@ function AdvancedLobbyContent({
           challenge={challenge}
           currentLevel={currentLevel}
           endlessBestScore={endlessBestScore}
+          reviveCoins={reviveCoins}
           selectedLevel={selectedLevel}
           unlockedLevel={unlockedLevel}
           onPickLevel={onPickLevel}
@@ -1362,6 +1374,7 @@ export function AdvancedChallengeScreen({
       challenge={challenge}
       currentLevel={currentLevel}
       endlessBestScore={endlessBestScore}
+      reviveCoins={reviveCoins}
       round={round}
       shareCopyNoticeId={shareCopyNoticeId}
       unlockedLevel={unlockedLevel}

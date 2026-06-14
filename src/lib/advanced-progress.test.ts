@@ -7,6 +7,8 @@ import {
   canExchangeLuckCoinForReviveCoin,
   canUseLuckDraw,
   canUseLuckDrawBatch,
+  claimDailyReviveCoin,
+  claimEndlessReviveCoin,
   consumeReviveCoin,
   debugClearAllAdvancedChallenges,
   debugMoveReviveCoinExchangeToPreviousDay,
@@ -32,6 +34,8 @@ import {
   getAppBackHistoryLayer,
   getRestartDestinationAfterClearingCurrentResult,
   grantReviveCoins,
+  hasClaimedDailyReviveCoinToday,
+  hasClaimedEndlessReviveCoin,
   markAuthorDonated,
   readAppBackHistoryLayer,
   recordEndlessSkillUse,
@@ -122,9 +126,11 @@ test("default advanced progress starts locked with 0 shown for every metric", ()
   assert.equal(progress.reviveCoins, 0);
   assert.equal(progress.reviveCoinExchangeCount, 0);
   assert.equal(progress.lastReviveCoinExchangeDate, null);
+  assert.equal(progress.lastDailyReviveCoinClaimDate, null);
   for (const roundId of ["reaction", "aim", "search", "stroop", "rhythm", "memory", "braking", "patience"] as const) {
     assert.equal(getAdvancedDimensionLevel(progress, roundId), 0);
     assert.equal(progress.endlessSkillUsedRounds[roundId], false);
+    assert.equal(progress.endlessReviveCoinClaimedRounds[roundId], false);
   }
 });
 
@@ -532,6 +538,64 @@ test("revive coins use real inventory and exchange spare luck coins only after 1
   assert.equal(afterNewClear.luckDrawChances, 3);
 });
 
+test("daily revive coin reward can be claimed once per local day", () => {
+  const empty = createDefaultAdvancedProgress("2026-06-14T00:00:00.000Z");
+  assert.equal(hasClaimedDailyReviveCoinToday(empty, "2026-06-14T09:00:00"), false);
+
+  const claimed = claimDailyReviveCoin(empty, "2026-06-14T09:00:00");
+  assert.equal(claimed.claimed, true);
+  assert.equal(claimed.progress.reviveCoins, 1);
+  assert.equal(claimed.progress.lastDailyReviveCoinClaimDate, "2026-06-14");
+  assert.equal(claimed.progress.updatedAt, "2026-06-14T09:00:00");
+  assert.equal(hasClaimedDailyReviveCoinToday(claimed.progress, "2026-06-14T23:59:59"), true);
+
+  const sameDayBlocked = claimDailyReviveCoin(claimed.progress, "2026-06-14T23:59:59");
+  assert.equal(sameDayBlocked.claimed, false);
+  assert.equal(sameDayBlocked.progress.reviveCoins, 1);
+  assert.equal(sameDayBlocked.progress.lastDailyReviveCoinClaimDate, "2026-06-14");
+
+  const nextDayClaimed = claimDailyReviveCoin(sameDayBlocked.progress, "2026-06-15T00:00:00");
+  assert.equal(nextDayClaimed.claimed, true);
+  assert.equal(nextDayClaimed.progress.reviveCoins, 2);
+  assert.equal(nextDayClaimed.progress.lastDailyReviveCoinClaimDate, "2026-06-15");
+});
+
+test("each endless mode grants one revive coin the first time it is selected", () => {
+  const empty = createDefaultAdvancedProgress("2026-06-14T00:00:00.000Z");
+  assert.equal(hasClaimedEndlessReviveCoin(empty, "reaction"), false);
+
+  const firstReaction = claimEndlessReviveCoin(empty, "reaction", "2026-06-14T09:00:00");
+  assert.equal(firstReaction.claimed, true);
+  assert.equal(firstReaction.progress.reviveCoins, 1);
+  assert.equal(firstReaction.progress.endlessReviveCoinClaimedRounds.reaction, true);
+  assert.equal(hasClaimedEndlessReviveCoin(firstReaction.progress, "reaction"), true);
+
+  const repeatedReaction = claimEndlessReviveCoin(firstReaction.progress, "reaction", "2026-06-14T09:01:00");
+  assert.equal(repeatedReaction.claimed, false);
+  assert.equal(repeatedReaction.progress.reviveCoins, 1);
+  assert.equal(repeatedReaction.progress.endlessReviveCoinClaimedRounds.reaction, true);
+
+  const firstAim = claimEndlessReviveCoin(repeatedReaction.progress, "aim", "2026-06-14T09:02:00");
+  assert.equal(firstAim.claimed, true);
+  assert.equal(firstAim.progress.reviveCoins, 2);
+  assert.equal(firstAim.progress.endlessReviveCoinClaimedRounds.reaction, true);
+  assert.equal(firstAim.progress.endlessReviveCoinClaimedRounds.aim, true);
+
+  const parsed = parsePersistedGameState(JSON.stringify({
+    schemaVersion: 1,
+    currentResult: null,
+    advancedProgress: {
+      ...firstAim.progress,
+      endlessReviveCoinClaimedRounds: { reaction: true, invalid: true },
+      lastDailyReviveCoinClaimDate: "not-a-date",
+    },
+  }));
+  assert.equal(parsed.advancedProgress.endlessReviveCoinClaimedRounds.reaction, true);
+  assert.equal(parsed.advancedProgress.endlessReviveCoinClaimedRounds.aim, false);
+  assert.equal(parsed.advancedProgress.endlessReviveCoinClaimedRounds.patience, false);
+  assert.equal(parsed.advancedProgress.lastDailyReviveCoinClaimDate, null);
+});
+
 test("debug helpers reset revive exchange day and clear every advanced challenge idempotently", () => {
   const exchanged = exchangeLuckCoinForReviveCoin(
     advancedProgressWithClearedLevels(5, {
@@ -545,7 +609,9 @@ test("debug helpers reset revive exchange day and clear every advanced challenge
   assert.equal(hasExchangedReviveCoinToday(exchanged, "2026-06-11T09:00:00.000Z"), true);
   const previousDay = debugMoveReviveCoinExchangeToPreviousDay(exchanged, "2026-06-11T09:00:00.000Z");
   assert.equal(previousDay.lastReviveCoinExchangeDate, "2026-06-10");
+  assert.equal(previousDay.lastDailyReviveCoinClaimDate, "2026-06-10");
   assert.equal(hasExchangedReviveCoinToday(previousDay, "2026-06-11T09:00:00.000Z"), false);
+  assert.equal(hasClaimedDailyReviveCoinToday(previousDay, "2026-06-11T09:00:00.000Z"), false);
   assert.equal(canExchangeLuckCoinForReviveCoin(previousDay, "2026-06-11T09:00:00.000Z"), true);
 
   const cleared = debugClearAllAdvancedChallenges(createDefaultAdvancedProgress("2026-06-11T00:00:00.000Z"), "2026-06-11T09:00:00.000Z");

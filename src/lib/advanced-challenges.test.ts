@@ -1089,9 +1089,12 @@ test("advanced completion maps mini-game advanced goals into ordered goal checks
   assert.deepEqual(knifeResult.goalChecks, [true, false, true]);
 });
 
-test("debug tools are hidden unless explicitly enabled by development mode or URL flag", () => {
+test("debug tools require admin authorization outside development mode", () => {
   assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "" }), false);
-  assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1" }), true);
+  assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1" }), false);
+  assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1&debugAdmin=1" }), false);
+  assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1&debugAdmin=1", adminAuthorized: false }), false);
+  assert.equal(getDebugToolsVisibility({ nodeEnv: "production", search: "?debug=1&debugAdmin=1", adminAuthorized: true }), true);
   assert.equal(getDebugToolsVisibility({ nodeEnv: "development", search: "" }), true);
 });
 

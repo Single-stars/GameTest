@@ -672,6 +672,15 @@
   border-color: rgba(47, 128, 237, 0.22);
 }
 
+.luck-revive-exchange-card.daily {
+  border-color: rgba(47, 127, 89, 0.2);
+}
+
+.luck-revive-debug-actions .luck-revive-exchange-card.test {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .luck-revive-exchange-icon {
   width: 38px;
   height: 38px;
@@ -685,6 +694,11 @@
 .luck-revive-exchange-card.test .luck-revive-exchange-icon {
   background: rgba(47, 128, 237, 0.1);
   color: #2f80ed;
+}
+
+.luck-revive-exchange-card.daily .luck-revive-exchange-icon {
+  background: rgba(47, 127, 89, 0.1);
+  color: #2f7f59;
 }
 
 .luck-revive-exchange-icon svg {
@@ -741,7 +755,8 @@
   cursor: pointer;
 }
 
-.luck-revive-exchange-action[aria-disabled="true"] {
+.luck-revive-exchange-action[aria-disabled="true"],
+.luck-revive-exchange-action.unavailable {
   cursor: default;
   opacity: 0.42;
 }
@@ -766,11 +781,11 @@
   cursor: pointer;
 }
 
-.luck-revive-exchange-toast {
+.revive-coin-reward-toast {
   position: absolute;
-  z-index: 3;
+  z-index: 45;
   left: 50%;
-  top: -8px;
+  top: 0;
   max-width: calc(100% - 20px);
   box-sizing: border-box;
   min-height: 34px;
@@ -789,20 +804,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
-  animation: luck-revive-exchange-toast-pop 1280ms ease both;
+  animation: app-revive-coin-reward-toast-pop 1280ms ease both;
 }
 
-.luck-revive-exchange-toast.claim {
+.revive-coin-reward-toast.claim {
   border-color: rgba(47, 128, 237, 0.2);
   color: #185f93;
 }
 
-.luck-revive-exchange-toast.limit {
+.revive-coin-reward-toast.limit {
   border-color: rgba(185, 118, 38, 0.24);
   color: #8a5a16;
 }
 
-@keyframes luck-revive-exchange-toast-pop {
+.app-shell > .revive-coin-reward-toast {
+  position: fixed;
+  top: min(50vh, 416px);
+  max-width: min(360px, calc(100vw - 32px));
+  animation: app-revive-coin-reward-toast-pop 1280ms ease both;
+}
+
+@keyframes app-revive-coin-reward-toast-pop {
   0% {
     opacity: 0;
     transform: translate(-50%, -72%) scale(0.92);

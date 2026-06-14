@@ -62,6 +62,8 @@ export type AdvancedProgress = {
   reviveCoins: number;
   reviveCoinExchangeCount: number;
   lastReviveCoinExchangeDate: string | null;
+  lastDailyReviveCoinClaimDate: string | null;
+  endlessReviveCoinClaimedRounds: Record<RoundId, boolean>;
   updatedAt: string;
 };
 
@@ -143,6 +145,11 @@ export type LuckDrawResult = {
 
 export type ReviveCoinExchangeResult = {
   exchanged: boolean;
+  progress: AdvancedProgress;
+};
+
+export type ReviveCoinClaimResult = {
+  claimed: boolean;
   progress: AdvancedProgress;
 };
 
@@ -275,6 +282,11 @@ function sanitizeEndlessSkillUsedRounds(value: unknown): Record<RoundId, boolean
   return Object.fromEntries(ADVANCED_ROUND_IDS.map((roundId) => [roundId, source[roundId] === true])) as Record<RoundId, boolean>;
 }
 
+function sanitizeEndlessReviveCoinClaimedRounds(value: unknown): Record<RoundId, boolean> {
+  const source = typeof value === "object" && value !== null ? (value as Partial<Record<RoundId, unknown>>) : {};
+  return Object.fromEntries(ADVANCED_ROUND_IDS.map((roundId) => [roundId, source[roundId] === true])) as Record<RoundId, boolean>;
+}
+
 function countClearedAdvancedLevels(dimensions: Record<RoundId, AdvancedDimensionProgress>) {
   return ADVANCED_ROUND_IDS.reduce((sum, roundId) => sum + dimensions[roundId].clearedLevels.filter(Boolean).length, 0);
 }
@@ -317,6 +329,8 @@ function sanitizeAdvancedProgress(value: unknown, updatedAt = timestamp(), repai
     reviveCoins: clampInteger(source.reviveCoins, 0, Number.MAX_SAFE_INTEGER),
     reviveCoinExchangeCount,
     lastReviveCoinExchangeDate: sanitizeDateKey(source.lastReviveCoinExchangeDate),
+    lastDailyReviveCoinClaimDate: sanitizeDateKey(source.lastDailyReviveCoinClaimDate),
+    endlessReviveCoinClaimedRounds: sanitizeEndlessReviveCoinClaimedRounds(source.endlessReviveCoinClaimedRounds),
     updatedAt: typeof source.updatedAt === "string" && source.updatedAt ? source.updatedAt : updatedAt,
   };
 }
@@ -367,6 +381,8 @@ export function createDefaultAdvancedProgress(updatedAt = timestamp()): Advanced
     reviveCoins: 0,
     reviveCoinExchangeCount: 0,
     lastReviveCoinExchangeDate: null,
+    lastDailyReviveCoinClaimDate: null,
+    endlessReviveCoinClaimedRounds: sanitizeEndlessReviveCoinClaimedRounds(null),
     updatedAt,
   };
 }
@@ -474,9 +490,11 @@ export function recordEndlessSkillUse(progress: AdvancedProgress, roundId: Round
 
 export function debugMoveReviveCoinExchangeToPreviousDay(progress: AdvancedProgress, updatedAt = timestamp()): AdvancedProgress {
   const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  const previousDateKey = getShiftedLocalDateKey(updatedAt, -1);
   return {
     ...sanitized,
-    lastReviveCoinExchangeDate: getShiftedLocalDateKey(updatedAt, -1),
+    lastReviveCoinExchangeDate: previousDateKey,
+    lastDailyReviveCoinClaimDate: previousDateKey,
     updatedAt,
   };
 }
@@ -807,6 +825,54 @@ export function hasExchangedReviveCoinToday(progress: AdvancedProgress, updatedA
 export function canExchangeLuckCoinForReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()) {
   const sanitized = sanitizeAdvancedProgress(progress);
   return sanitized.luckBestScore >= 100 && sanitized.luckDrawChances > 0 && !hasExchangedReviveCoinToday(sanitized, updatedAt);
+}
+
+export function hasClaimedDailyReviveCoinToday(progress: AdvancedProgress, updatedAt = timestamp()) {
+  const todayKey = getLocalDateKey(updatedAt);
+  if (!todayKey) return false;
+  return sanitizeAdvancedProgress(progress, updatedAt).lastDailyReviveCoinClaimDate === todayKey;
+}
+
+export function claimDailyReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()): ReviveCoinClaimResult {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  if (hasClaimedDailyReviveCoinToday(sanitized, updatedAt)) {
+    return { claimed: false, progress: sanitized };
+  }
+  const claimDateKey = getLocalDateKey(updatedAt);
+
+  return {
+    claimed: true,
+    progress: {
+      ...sanitized,
+      lastDailyReviveCoinClaimDate: claimDateKey,
+      reviveCoins: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoins + 1),
+      updatedAt,
+    },
+  };
+}
+
+export function hasClaimedEndlessReviveCoin(progress: AdvancedProgress, roundId: RoundId) {
+  return sanitizeAdvancedProgress(progress).endlessReviveCoinClaimedRounds[roundId] === true;
+}
+
+export function claimEndlessReviveCoin(progress: AdvancedProgress, roundId: RoundId, updatedAt = timestamp()): ReviveCoinClaimResult {
+  const sanitized = sanitizeAdvancedProgress(progress, updatedAt);
+  if (sanitized.endlessReviveCoinClaimedRounds[roundId]) {
+    return { claimed: false, progress: sanitized };
+  }
+
+  return {
+    claimed: true,
+    progress: {
+      ...sanitized,
+      endlessReviveCoinClaimedRounds: {
+        ...sanitized.endlessReviveCoinClaimedRounds,
+        [roundId]: true,
+      },
+      reviveCoins: Math.min(Number.MAX_SAFE_INTEGER, sanitized.reviveCoins + 1),
+      updatedAt,
+    },
+  };
 }
 
 export function exchangeLuckCoinForReviveCoin(progress: AdvancedProgress, updatedAt = timestamp()): ReviveCoinExchangeResult {

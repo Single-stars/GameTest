@@ -15,6 +15,7 @@ import {
   formatLuckDrawOutcomeText,
   getLuckDrawStatusText,
   getLuckScoreTone,
+  hasClaimedDailyReviveCoinToday,
   hasExchangedReviveCoinToday,
   type AdvancedProgress,
   type LuckDrawOutcome,
@@ -37,6 +38,7 @@ export function LuckDrawScreen({
   debugToolsVisible,
   lastOutcome,
   onBack,
+  onClaimDailyReviveCoin,
   onDebugClearAllAdvancedChallenges,
   onDebugMoveReviveCoinExchangeToPreviousDay,
   onDraw,
@@ -49,12 +51,13 @@ export function LuckDrawScreen({
   debugToolsVisible: boolean;
   lastOutcome: LuckDrawOutcome | null;
   onBack: () => void;
+  onClaimDailyReviveCoin: () => number | null;
   onDebugClearAllAdvancedChallenges: () => void;
   onDebugMoveReviveCoinExchangeToPreviousDay: () => void;
   onDraw: () => LuckDrawOutcome | null;
   onDrawBatch: () => LuckDrawOutcome | null;
-  onExchangeReviveCoin: () => boolean;
-  onGrantReviveCoinForTest: () => void;
+  onExchangeReviveCoin: () => number | null;
+  onGrantReviveCoinForTest: () => number;
   onRevealRewards?: (outcome: LuckDrawOutcome) => void;
 }) {
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -140,6 +143,7 @@ export function LuckDrawScreen({
       <ReviveCoinExchangeCards
         advancedProgress={advancedProgress}
         debugToolsVisible={debugToolsVisible}
+        onClaimDailyReviveCoin={onClaimDailyReviveCoin}
         onDebugClearAllAdvancedChallenges={onDebugClearAllAdvancedChallenges}
         onDebugMoveReviveCoinExchangeToPreviousDay={onDebugMoveReviveCoinExchangeToPreviousDay}
         onExchangeReviveCoin={onExchangeReviveCoin}
@@ -381,6 +385,7 @@ function LuckCoinTestCard({
 function ReviveCoinExchangeCards({
   advancedProgress,
   debugToolsVisible,
+  onClaimDailyReviveCoin,
   onDebugClearAllAdvancedChallenges,
   onDebugMoveReviveCoinExchangeToPreviousDay,
   onExchangeReviveCoin,
@@ -388,13 +393,16 @@ function ReviveCoinExchangeCards({
 }: {
   advancedProgress: AdvancedProgress;
   debugToolsVisible: boolean;
+  onClaimDailyReviveCoin: () => number | null;
   onDebugClearAllAdvancedChallenges: () => void;
   onDebugMoveReviveCoinExchangeToPreviousDay: () => void;
-  onExchangeReviveCoin: () => boolean;
-  onGrantReviveCoinForTest: () => void;
+  onExchangeReviveCoin: () => number | null;
+  onGrantReviveCoinForTest: () => number;
 }) {
   const exchangeUnlocked = advancedProgress.luckBestScore >= 100;
   const exchangeUsedToday = hasExchangedReviveCoinToday(advancedProgress);
+  const dailyRewardUsedToday = hasClaimedDailyReviveCoinToday(advancedProgress);
+  const showExchangeCard = !exchangeUsedToday;
   const canExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0 && !exchangeUsedToday;
   const canClickExchange = exchangeUnlocked && advancedProgress.luckDrawChances > 0;
   const feedbackTimerRef = useRef<number | null>(null);
@@ -421,60 +429,96 @@ function ReviveCoinExchangeCards({
   const exchange = () => {
     if (!canClickExchange) return;
     const exchangeResult = onExchangeReviveCoin();
-    if (!exchangeResult) {
+    if (exchangeResult === null) {
       showReviveCoinFeedback("每日限兑换一次", "limit");
       return;
     }
-    showReviveCoinFeedback("兑换成功，复活币 +1", "exchange");
+    showReviveCoinFeedback("复活币+1", "exchange");
+  };
+
+  const claimDailyReward = () => {
+    if (dailyRewardUsedToday) {
+      showReviveCoinFeedback("今日已领取", "limit");
+      return;
+    }
+    const dailyClaimResult = onClaimDailyReviveCoin();
+    if (dailyClaimResult === null) {
+      showReviveCoinFeedback("今日已领取", "limit");
+      return;
+    }
+    showReviveCoinFeedback("复活币+1", "claim");
   };
 
   const claimTestCoin = () => {
     onGrantReviveCoinForTest();
-    showReviveCoinFeedback("领取成功，复活币 +1", "claim");
+    showReviveCoinFeedback("复活币+1", "claim");
   };
 
   return (
     <section className="luck-revive-exchange-list" aria-label="复活币">
-      <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"}`}>
+      {showExchangeCard ? (
+        <article className={`luck-revive-exchange-card exchange ${exchangeUnlocked ? "unlocked" : "locked"}`}>
+          <span className="luck-revive-exchange-icon" aria-hidden="true">
+            <DonateIcon />
+          </span>
+          <div className="luck-revive-exchange-copy">
+            <strong>复活币</strong>
+            <span>{exchangeUnlocked ? "消耗一个幸运币兑换" : "运气 100 解锁"}</span>
+          </div>
+          <div className="luck-revive-exchange-balance">
+            <span>持有</span>
+            <strong>{advancedProgress.reviveCoins}</strong>
+          </div>
+          <button
+            aria-label={canExchange ? "兑换复活币" : exchangeUsedToday ? "每日限兑换一次" : undefined}
+            aria-disabled={!canExchange ? true : undefined}
+            className={`luck-revive-exchange-action ${!canExchange ? "unavailable" : ""}`}
+            type="button"
+            onClick={exchange}
+          >
+            兑换
+          </button>
+        </article>
+      ) : null}
+      <article className="luck-revive-exchange-card daily">
         <span className="luck-revive-exchange-icon" aria-hidden="true">
           <DonateIcon />
         </span>
         <div className="luck-revive-exchange-copy">
-          <strong>复活币</strong>
-          <span>{exchangeUnlocked ? "消耗一个幸运币兑换" : "运气 100 解锁"}</span>
-        </div>
-        <div className="luck-revive-exchange-balance">
-          <span>持有</span>
-          <strong>{advancedProgress.reviveCoins}</strong>
-        </div>
-        <button
-          aria-label={canExchange ? "兑换复活币" : exchangeUsedToday ? "每日限兑换一次" : undefined}
-          aria-disabled={!canClickExchange ? true : undefined}
-          className="luck-revive-exchange-action"
-          type="button"
-          onClick={exchange}
-        >
-          兑换
-        </button>
-      </article>
-      <article className="luck-revive-exchange-card test">
-        <span className="luck-revive-exchange-icon" aria-hidden="true">
-          <DonateIcon />
-        </span>
-        <div className="luck-revive-exchange-copy">
-          <strong>测试领取</strong>
+          <strong>每日奖励</strong>
           <span>+1 复活币</span>
         </div>
         <div className="luck-revive-exchange-balance">
           <span>持有</span>
           <strong>{advancedProgress.reviveCoins}</strong>
         </div>
-        <button className="luck-revive-exchange-action" type="button" onClick={claimTestCoin}>
+        <button
+          aria-disabled={dailyRewardUsedToday ? true : undefined}
+          className={`luck-revive-exchange-action ${dailyRewardUsedToday ? "unavailable" : ""}`}
+          type="button"
+          onClick={claimDailyReward}
+        >
           领取
         </button>
       </article>
       {debugToolsVisible ? (
         <div className="luck-revive-debug-actions" aria-label="复活币调试">
+          <article className="luck-revive-exchange-card test">
+            <span className="luck-revive-exchange-icon" aria-hidden="true">
+              <DonateIcon />
+            </span>
+            <div className="luck-revive-exchange-copy">
+              <strong>测试领取</strong>
+              <span>+1 复活币</span>
+            </div>
+            <div className="luck-revive-exchange-balance">
+              <span>持有</span>
+              <strong>{advancedProgress.reviveCoins}</strong>
+            </div>
+            <button className="luck-revive-exchange-action" type="button" onClick={claimTestCoin}>
+              领取
+            </button>
+          </article>
           <button className="luck-revive-debug-action" type="button" onClick={onDebugMoveReviveCoinExchangeToPreviousDay}>
             模拟明天
           </button>
@@ -484,7 +528,7 @@ function ReviveCoinExchangeCards({
         </div>
       ) : null}
       {feedback ? (
-        <div key={feedback.id} className={`luck-revive-exchange-toast ${feedback.tone}`} role="status" aria-live="polite">
+        <div key={feedback.id} className={`revive-coin-reward-toast luck-revive-exchange-toast ${feedback.tone}`} role="status" aria-live="polite">
           {feedback.text}
         </div>
       ) : null}
